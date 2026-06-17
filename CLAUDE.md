@@ -1,7 +1,7 @@
 # CLAUDE.md — SchemaShift-GRPO 项目 AI 协作约定
 
 > 给下次会话的自己看。读完这一份，能直接接着干，不要再去摸索环境、跑通逻辑、踩配置坑。
-> 最后更新：2026-06-16
+> 最后更新：2026-06-17
 
 ---
 
@@ -173,6 +173,32 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 N_GPUS=4 MICRO_BATCH_PER_GPU=1 \
 - **改代码必须跑测试**（最少跑一次 `pytest tests/`）
 - **绝不**为让代码跑起来注释掉报错或加绕过标记，找根本原因
 - 改完后写一句"改了什么 + 跑了什么验证"，不要默默结束
+
+---
+
+## Git Commit 规范
+
+远端：`https://github.com/liuzy1019/SchemaShift-GRPO`，主分支 `main`，author `liuzy1019 <liuzy1019@buaa.edu.cn>`。
+
+提交信息走 **Conventional Commits**，格式 `<type>: <subject>`，subject 用英文、祈使句、首字母小写、不加句号。可选 body 用空行隔开，写"为什么改"而不是"改了什么"。
+
+| type | 用途 | 例 |
+|---|---|---|
+| `feat` | 新功能 / 新实验 / 新 estimator | `feat: add E6 regularization baseline` |
+| `fix` | bug 修复 / 回归修复 | `fix: bounded parser O(N) on malformed input` |
+| `docs` | 只动文档（README / CLAUDE.md / docs/） | `docs: update ablation plan with E5 results` |
+| `refactor` | 不改行为的重构 | `refactor: extract bfcl_parser to src/envs/` |
+| `test` | 只动 tests/ | `test: add length_check edge cases` |
+| `chore` | 配置 / 构建 / 依赖 / .gitignore | `chore: pin flashinfer to 0.6.4` |
+| `perf` | 性能优化 | `perf: vectorize stratified z-score` |
+
+红线（命中先问用户，见上方红线条款）：
+- `git push --force` / `git push -f`
+- `git rebase` / `git reset --hard`
+- 删 commit / 改 git 历史
+- 推到非 `main` 的 protected 分支
+
+常规推送流程：`pytest tests/` → `git add -A` → `git commit -m "<type>: ..."` → `git push origin main`。**漏跑 pytest 不要 push**。
 
 ---
 
