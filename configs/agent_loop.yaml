@@ -1,0 +1,4 @@
+# Agent loop 注册表：verl worker 进程通过 agent_loop_config_path 加载
+# 配合 actor_rollout_ref.rollout.agent.default_agent_loop=bfcl_agent
+- name: bfcl_agent
+  _target_: src.agent_loop.bfcl_agent_loop.BFCLAgentLoop

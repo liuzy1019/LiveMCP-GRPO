@@ -1,0 +1,29 @@
+# Smoke 配置：只验证训练链路能跑通，5 step 内退出
+exp:
+  name: exp2_sft_smoke
+
+model:
+  path: /mnt/data1/zhanyiliu/liuzhanyi/llm_rl/grpo_from_scratch/models/Qwen2.5-1.5B-Instruct
+
+data:
+  train_file: data/verl/exp2_sft/train.parquet
+  val_file: data/verl/exp2_sft/val.parquet
+  max_seq_len: 2048
+
+train:
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 1
+  num_train_epochs: 1
+  learning_rate: 2.0e-5
+  warmup_ratio: 0.0
+  logging_steps: 1
+  save_steps: 50
+  eval_steps: 50
+  bf16: true
+  gradient_checkpointing: true
+  dataloader_num_workers: 2
+
+logging:
+  report_to: none
+  project: schemashift-grpo

@@ -1,0 +1,41 @@
+# Vanilla GRPO（E3）配置：原始 schema + 标准 GRPO，作为 baseline
+# scripts/train/grpo/run_vanilla_grpo.sh 通过 env var 读取并注入到 verl hydra override
+exp:
+  name: exp3_grpo_baseline_v1
+
+model:
+  path: /mnt/data1/zhanyiliu/liuzhanyi/llm_rl/grpo_from_scratch/models/Qwen2.5-1.5B-Instruct
+
+data:
+  train_file: data/verl/exp3_grpo/train.parquet
+  val_file: data/verl/exp3_grpo/val.parquet
+  max_prompt_length: 10240    # BFCL prompt 实测 p99≈8800（带工具 schema），需 10k+
+  max_response_length: 4096
+
+rollout:
+  group_size: 9
+  max_turns: 10
+  agent_loop: bfcl_agent
+  agent_loop_config: configs/agent_loop.yaml
+  tensor_parallel_size: 1
+
+actor:
+  ppo_micro_batch_size_per_gpu: 2
+  ppo_epochs: 1
+  clip_ratio: 0.2
+  use_kl_loss: true
+  kl_loss_coef: 0.04
+  loss_agg_mode: token-mean
+  enable_gradient_checkpointing: true
+
+algorithm:
+  adv_estimator: grpo
+  norm_adv_by_std_in_grpo: true
+
+trainer:
+  total_epochs: 1
+  total_training_steps: 300
+  save_freq: 50
+  test_freq: 50
+  val_before_train: true
+  project_name: schemashift-grpo

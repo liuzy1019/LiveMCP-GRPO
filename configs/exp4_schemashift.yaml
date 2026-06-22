@@ -1,0 +1,46 @@
+# SchemaShift-GRPO（E4）：扰动数据 + 分层 advantage
+#
+# 注意：当前 `scripts/train/grpo/run_schemashift.sh` 不会读取本文件，
+#       所有训练参数直接由 sh 通过 hydra override 注入到 verl。
+#       本 yaml 仅作为参数清单参考，修改后请同步 sh。
+exp:
+  name: exp4_schemashift_v3   # 与 sh 的默认 EXP_NAME 一致
+
+model:
+  path: /mnt/data1/zhanyiliu/liuzhanyi/llm_rl/grpo_from_scratch/models/Qwen2.5-1.5B-Instruct
+
+data:
+  train_file: data/verl/exp4_schemashift/train.parquet
+  val_file: data/verl/exp4_schemashift/val.parquet
+  max_prompt_length: 10240    # BFCL prompt 实测 p99≈8800（带工具 schema），需 10k+
+  max_response_length: 4096
+
+rollout:
+  group_size: 1               # E4: 9 records/task × rollout.n=1（数据侧分层）
+  max_turns: 10
+  agent_loop: bfcl_agent
+  agent_loop_config: configs/agent_loop.yaml
+  tensor_parallel_size: 1
+
+actor:
+  ppo_micro_batch_size_per_gpu: 3   # 与 sh 默认 MICRO_BATCH_PER_GPU 一致
+  ppo_epochs: 1
+  clip_ratio: 0.2
+  use_kl_loss: true
+  kl_loss_coef: 0.04
+  loss_agg_mode: token-mean
+  enable_gradient_checkpointing: true
+
+algorithm:
+  adv_estimator: schemashift_grpo
+  norm_adv_by_std_in_grpo: true
+  schemashift:
+    beta: 0.25                # 与 sh 默认 BETA 一致；分层 z-score + global 残差
+
+trainer:
+  total_epochs: 1
+  total_training_steps: 300
+  save_freq: 50
+  test_freq: 50
+  val_before_train: true
+  project_name: schemashift-grpo
