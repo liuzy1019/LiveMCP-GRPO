@@ -86,3 +86,10 @@ pytest_output.txt
 
 # 配图：实验未跑完前不挂占位图
 docs/figures/
+
+# 内部工程文档（不公开）
+AGENTS.md
+CLAUDE.md
+docs/project_plan.md
+docs/toucan_fallback_decision.md
+docs/live_mcp_spec.md
