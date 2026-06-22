@@ -2,60 +2,60 @@
 # 用途：基于 replay executor 的 schema perturbation RL 训练
 
 model:
-  path: outputs/sft_cold_start_4b/final  # SFT cold-start 产出的权重
+  path: outputs/sft_cold_start_4b/final                           # SFT cold-start 产出的权重
 
 data:
-  train_file: data/grpo_train.parquet  # 训练集（EpisodeSeed 派生）
-  val_file: data/grpo_val.parquet  # 验证集
+  train_file: data/grpo_train.parquet                             # 训练集（EpisodeSeed 派生）
+  val_file: data/grpo_val.parquet                                 # 验证集
 
 reward:
-  function_path: src/reward/schemashift_reward_fn.py  # 五组件 reward 入口
+  function_path: src/reward/schemashift_reward_fn.py              # 五组件 reward 入口
 
 resources:
-  n_gpus: 8  # GPU 数量
+  n_gpus: 8                                                       # GPU 数量
   cuda_visible_devices: 0,1,2,3,4,5,6,7
 
 trainer:
-  total_epochs: 3  # 总 epoch
-  total_steps: -1  # -1 表示由 epoch 控制
-  save_freq: 50  # 每 50 步保存 checkpoint
-  test_freq: 25  # 每 25 步跑验证
+  total_epochs: 3                                                 # 总 epoch
+  total_steps: -1                                                 # -1 表示由 epoch 控制
+  save_freq: 100                                                  # 每 100 步保存 checkpoint
+  test_freq: 50                                                   # 每 50 步跑验证
 
 optimization:
-  lr: 5.0e-7  # RL 阶段学习率（远小于 SFT）
+  lr: 1.0e-6                                                      # RL 阶段学习率（对齐 PROVE Qwen3-4B）
   lr_warmup_ratio: 0.05
-  kl_coef: 0.01  # KL 散度惩罚系数
-  ppo_epochs: 1  # 每批数据的 PPO 更新轮数
+  kl_coef: 0.01                                                   # KL 散度惩罚系数
+  ppo_epochs: 1                                                   # 每批数据的 PPO 更新轮数
   grad_clip: 1.0
 
 batch:
-  train_batch_size: 32  # 全局 batch（所有 GPU 合计）
+  train_batch_size: 16                                            # 全局 batch（对齐 PROVE：16 prompts/step）
   val_batch_size: 16
-  mini_batch_size: 8  # PPO mini-batch
-  micro_batch_size_per_gpu: 4  # 每卡 micro-batch（显存瓶颈）
-  log_prob_micro_batch_size_per_gpu: 4  # log_prob 计算时的 micro-batch
+  mini_batch_size: 8                                              # PPO mini-batch
+  micro_batch_size_per_gpu: 4                                     # 每卡 micro-batch（显存瓶颈）
+  log_prob_micro_batch_size_per_gpu: 4                            # log_prob 计算时的 micro-batch
 
 rollout:
-  n: 4  # 每个 prompt 采样 4 条 response
-  temperature: 0.7  # 采样温度
+  n: 16                                                           # 每个 prompt 采样 16 条 response（对齐 PROVE）
+  temperature: 0.7                                                # 采样温度
   top_p: 0.95
-  tensor_model_parallel_size: 1  # TP=1（4B 模型单卡放得下）
-  gpu_memory_utilization: 0.60  # vLLM GPU 显存占用比例
-  free_cache_engine: true  # rollout 后释放 KV cache
-  enforce_eager: false  # 允许 CUDA graph
-  prompt_length: 10240  # 最大 prompt 长度（不得低于 10240）
-  response_length: 2048  # 最大生成长度
-  max_num_seqs: 64  # vLLM 最大并发序列数
+  tensor_model_parallel_size: 1                                   # TP=1（4B 模型单卡放得下）
+  gpu_memory_utilization: 0.60                                    # vLLM GPU 显存占用比例
+  free_cache_engine: true                                         # rollout 后释放 KV cache
+  enforce_eager: false                                            # 允许 CUDA graph
+  prompt_length: 10240                                            # 最大 prompt 长度（不得低于 10240）
+  response_length: 2048                                           # 最大生成长度
+  max_num_seqs: 64                                                # vLLM 最大并发序列数
 
 offload:
-  ref_param_offload: false  # reference model 不 offload（显存够）
-  actor_param_offload: false  # actor 不 offload
+  ref_param_offload: false                                        # reference model 不 offload（显存够）
+  actor_param_offload: false                                      # actor 不 offload
 
 wandb:
-  project: schemashift_grpo  # wandb 项目名
-  run_name: grpo_4b_yaml  # 运行标识
+  project: schemashift_grpo                                       # wandb 项目名
+  run_name: grpo_qwen3-4b_lr1e-6_n16_p16_ep3                          # wandb 运行标识
 
 terminal:
-  log_mode: compact  # 终端日志模式：compact / verbose
-  val_examine: 0  # 验证时打印的样本数（0=不打印）
+  log_mode: compact                                               # 终端日志模式：compact / verbose
+  val_examine: 0                                                  # 验证时打印的样本数（0=不打印）
   verbose_validation: false

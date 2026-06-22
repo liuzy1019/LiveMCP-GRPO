@@ -2,49 +2,49 @@
 # 用途：格式对齐 + schema-following 初始能力，非正式 RL 训练
 
 model:
-  name_or_path: models/Qwen3-4B  # BF16 ~8GB，本地路径
+  name_or_path: models/Qwen3-4B                    # BF16 ~8GB，本地路径
 
 data:
-  train_path: data/sft/sft_train.jsonl  # SFT 训练数据（由 sft_step_exporter 生成）
-  eval_split_ratio: 0.05  # 从训练集中切 5% 作验证
+  train_path: data/sft/sft_train.jsonl             # SFT 训练数据（由 sft_step_exporter 生成）
+  eval_split_ratio: 0.05                           # 从训练集中切 5% 作验证
 
 output:
-  dir: outputs/sft_cold_start_4b  # 输出目录，最终权重在 final/ 子目录
+  dir: outputs/sft_cold_start_4b                   # 输出目录，最终权重在 final/ 子目录
 
 training:
-  epochs: 3  # 总 epoch 数
-  per_device_train_batch_size: 4  # 每卡 batch（effective_batch = 4 × 4 × 8 = 128）
+  epochs: 3                                        # 总 epoch 数
+  per_device_train_batch_size: 4                   # 每卡 batch（effective_batch = 4 × 4 × 8 = 128）
   per_device_eval_batch_size: 1
-  gradient_accumulation_steps: 4  # 梯度累积步数
-  learning_rate: 2.0e-5  # 峰值学习率
-  lr_scheduler_type: cosine  # 余弦退火
-  warmup_ratio: 0.05  # warmup 占总步数比例
+  gradient_accumulation_steps: 4                   # 梯度累积步数
+  learning_rate: 2.0e-5                            # 峰值学习率
+  lr_scheduler_type: cosine                        # 余弦退火
+  warmup_ratio: 0.05                               # warmup 占总步数比例
   weight_decay: 0.01
-  max_grad_norm: 1.0  # 梯度裁剪
-  max_seq_length: 2560  # 最大序列长度（SFT 数据 p99 < 2500）
-  bf16: true  # 混合精度
-  gradient_checkpointing: true  # 节省显存，牺牲约 20% 速度
+  max_grad_norm: 1.0                               # 梯度裁剪
+  max_seq_length: 2560                             # 最大序列长度（SFT 数据 p99 < 2500）
+  bf16: true                                       # 混合精度
+  gradient_checkpointing: true                     # 节省显存，牺牲约 20% 速度
 
 logging:
-  logging_steps: 5  # 每 5 步打印 loss
+  logging_steps: 5                                 # 每 5 步打印 loss
   eval_strategy: steps
-  eval_steps: 50  # 每 50 步跑验证
-  save_steps: 999999  # 不中间保存（只保留最终权重）
-  save_total_limit: 1  # 最多保留 1 个 checkpoint
+  eval_steps: 50                                   # 每 50 步跑验证
+  save_steps: 999999                               # 不中间保存（只保留最终权重）
+  save_total_limit: 1                              # 最多保留 1 个 checkpoint
   report_to: tensorboard
 
 runtime:
-  deepspeed: configs/ds_zero2.json  # ZeRO-2，不 offload optimizer
+  deepspeed: configs/ds_zero2.json                 # ZeRO-2，不 offload optimizer
   dataloader_num_workers: 4
   seed: 42
 
 smoke:
-  enabled: false  # 设为 true 时只跑少量样本用于调试
+  enabled: false                                   # 设为 true 时只跑少量样本用于调试
   max_samples: 100
   max_steps: 30
 
 lora:
-  enabled: false  # 当前全参数微调，不用 LoRA
+  enabled: false                                   # 当前全参数微调，不用 LoRA
   r: 64
   alpha: 128
   dropout: 0.05

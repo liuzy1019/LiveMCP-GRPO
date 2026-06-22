@@ -2,7 +2,7 @@
 # 验收标准：step 1 完成 + loss finite + 无 traceback
 
 model:
-  path: outputs/sft_cold_start_4b/final  # SFT 产出权重
+  path: outputs/sft_cold_start_4b/final                           # SFT 产出权重
 
 data:
   train_file: data/grpo_train.parquet
@@ -16,10 +16,10 @@ resources:
   cuda_visible_devices: 0,1,2,3,4,5,6,7
 
 trainer:
-  total_steps: 2  # 只跑 2 步，验证链路
+  total_steps: 2                                                  # 只跑 2 步，验证链路
 
 optimization:
-  lr: 1.0e-6  # smoke 用稍大 lr 加速收敛观察
+  lr: 1.0e-6                                                      # smoke 用稍大 lr 加速收敛观察
   lr_warmup_ratio: 0.1
   kl_coef: 0.01
   ppo_epochs: 1
@@ -40,8 +40,8 @@ rollout:
   gpu_memory_utilization: 0.60
   free_cache_engine: true
   enforce_eager: false
-  prompt_length: 10240  # 不得低于 10240
-  response_length: 1024  # smoke 用较短 response 加速
+  prompt_length: 10240                                            # 不得低于 10240
+  response_length: 1024                                           # smoke 用较短 response 加速
   max_num_seqs: 64
 
 offload:

@@ -20,12 +20,13 @@ sys.path.insert(0, PROJECT_ROOT)
 os.environ.pop("PYTORCH_CUDA_ALLOC_CONF", None)
 
 # ---- 抑制已知无害警告 ----
-# 1. transformers logger: fix_mistral_regex 对 Qwen2 tokenizer 的误报
+# 1. transformers: fix_mistral_regex 对 Qwen2 tokenizer 的误报（vLLM 内部加载不走 hf_tokenizer）
+#    用 warnings filter 而非仅 logging filter，确保 Ray worker 子进程也生效
+warnings.filterwarnings("ignore", message=r".*incorrect regex pattern.*")
 # 2. transformers logger: torch_dtype deprecated（verl 上游兼容性代码）
 # 3. torch profiler tool config warning
 class _SuppressKnownWarnings(logging.Filter):
     _suppressed = (
-        "incorrect regex pattern",
         "`torch_dtype` is deprecated",
         "Torch profiler tool config is not fully supported",
     )

@@ -29,10 +29,14 @@ mkdir -p "${TMPDIR}" "${RAY_TMPDIR}" outputs
 
 # ---- wandb 配置 ----
 export WANDB_PROJECT="${WANDB_PROJECT:-schemashift_grpo}"
-export WANDB_RUN_NAME="${WANDB_RUN_NAME:-grpo_4b_$(date +%m%d_%H%M)}"
+export WANDB_RUN_NAME="${WANDB_RUN_NAME:-schemashift_grpo_$(date +%m%d_%H%M)}"
 # 如果需要指定 entity（团队/用户名），取消下面的注释：
 # export WANDB_ENTITY="your_entity"
 # 离线模式（无网络时）：export WANDB_MODE=offline
+
+# ---- 抑制 wandb atexit BrokenPipeError ----
+# wandb 在 Ray worker 退出时偶尔触发 atexit 清理 BrokenPipe，无害但噪音大
+export WANDB_CONSOLE="${WANDB_CONSOLE:-off}"
 
 # ---- YAML 配置（命令行参数会覆盖 YAML） ----
 CONFIG_PATH="${GRPO_CONFIG:-}"
@@ -137,16 +141,22 @@ VAL_FILE="${VAL_FILE:-data/grpo_val.parquet}"
 REWARD_FN_PATH="${REWARD_FN_PATH:-src/reward/schemashift_reward_fn.py}"
 
 # 训练超参
-TOTAL_EPOCHS="${TOTAL_EPOCHS:-3}"
-TOTAL_STEPS="${TOTAL_STEPS:--1}"
-SAVE_FREQ="${SAVE_FREQ:-50}"
-TEST_FREQ="${TEST_FREQ:-25}"
-LR="${LR:-5e-7}"
+TOTAL_EPOCHS="${TOTAL_EPOCHS:--1}"
+TOTAL_STEPS="${TOTAL_STEPS:-350}"
+
+# 保证 epoch 循环非空：verl 用 total_epochs 控制外层 for 循环，
+# total_training_steps 控制提前退出。当只设步数不设 epoch 时，给一个安全的大值
+if [ "${TOTAL_EPOCHS}" = "-1" ] && [ "${TOTAL_STEPS}" -gt 0 ]; then
+    TOTAL_EPOCHS=1000
+fi
+SAVE_FREQ="${SAVE_FREQ:-100}"
+TEST_FREQ="${TEST_FREQ:-50}"
+LR="${LR:-1e-6}"
 LR_WARMUP_RATIO="${LR_WARMUP_RATIO:-0.05}"
 KL_COEF="${KL_COEF:-0.01}"
 PPO_EPOCHS="${PPO_EPOCHS:-1}"
 GRAD_CLIP="${GRAD_CLIP:-1.0}"
-ROLLOUT_N="${ROLLOUT_N:-4}"
+ROLLOUT_N="${ROLLOUT_N:-16}"
 TEMPERATURE="${TEMPERATURE:-0.7}"
 TOP_P="${TOP_P:-0.95}"
 
@@ -288,7 +298,7 @@ else
 fi
 
 # batch size 随卡数线性扩展
-TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-$((N_GPUS * 4))}"
+TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-16}"
 VAL_BATCH_SIZE="${VAL_BATCH_SIZE:-$((N_GPUS * 2))}"
 MINI_BATCH_SIZE="${MINI_BATCH_SIZE:-${N_GPUS}}"
 
@@ -339,6 +349,11 @@ echo "=== Starting GRPO Training ==="
 echo "Log: ${LOG_FILE}"
 echo ""
 
+# 条件化 total_training_steps：-1 表示不设步数限制，走 epoch 控制
+if [ "${TOTAL_STEPS}" != "-1" ]; then
+    HYDRA_OVERRIDES+=("trainer.total_training_steps=${TOTAL_STEPS}")
+fi
+
 "${CONDA_PYTHON}" "scripts/train_grpo.py" \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${VAL_FILE}" \
@@ -388,7 +403,6 @@ echo ""
     trainer.experiment_name="${WANDB_RUN_NAME}" \
     trainer.logger='["console","wandb"]' \
     trainer.total_epochs="${TOTAL_EPOCHS}" \
-    trainer.total_training_steps="${TOTAL_STEPS}" \
     trainer.nnodes=1 \
     trainer.n_gpus_per_node="${N_GPUS}" \
     trainer.save_freq="${SAVE_FREQ}" \
