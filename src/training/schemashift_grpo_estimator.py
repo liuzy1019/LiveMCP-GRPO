@@ -52,6 +52,34 @@ def _diagnose_batch(index, non_tensor_batch, task_ids, levels, scenario_types, s
         f"score_range=[{scores.min().item():.4f}, {scores.max().item():.4f}]"
     )
 
+    # 运行时 group 完整性检查：每个 group 应有 9 条（3:3:3）
+    # 如果大量 group 不完整，说明 shuffle 或 batch_size 配置错误
+    from collections import Counter
+    group_sizes = Counter(task_ids)
+    incomplete = {g: c for g, c in group_sizes.items() if c != 9}
+    if incomplete:
+        n_incomplete = len(incomplete)
+        logger.warning(
+            f"[schemashift_grpo] {n_incomplete}/{nunique_task} groups 记录数 != 9。"
+            f"StratAdv 可能退化（请确认 data.shuffle=False 且 train_batch_size 为 9 的倍数）。"
+            f"不完整 group 示例 (前3): "
+            + ", ".join(f"{g}:{c}" for g, c in list(incomplete.items())[:3])
+        )
+    else:
+        # 检查 3:3:3 分布
+        level_distribution_ok = True
+        for gid in set(task_ids):
+            g_levels = [levels[i] for i, tid in enumerate(task_ids) if tid == gid]
+            lc = Counter(g_levels)
+            if lc != {"none": 3, "mild": 3, "strong": 3}:
+                level_distribution_ok = False
+                break
+        if not level_distribution_ok:
+            logger.warning(
+                "[schemashift_grpo] group 内 perturbation_level 分布非 3:3:3，"
+                "StratAdv 分层可能异常"
+            )
+
 
 @register_adv_est("schemashift_grpo")
 def compute_schemashift_grpo_advantage(
@@ -75,7 +103,19 @@ def compute_schemashift_grpo_advantage(
     - stratum = (perturbation_level, scenario_type)
     - fallback: stratum 内 < 3 样本时逐级回退（scenario → global）
     """
-    beta = float(config.get("beta", 0.25) if config else 0.25)
+    # P1-3: 支持 config.beta 和 config.schemashift.beta 两种路径
+    if config:
+        beta_val = config.get("beta", None)
+        if beta_val is None:
+            # fallback: nested path
+            ss_cfg = config.get("schemashift", {})
+            if isinstance(ss_cfg, dict):
+                beta_val = ss_cfg.get("beta", 0.25)
+            else:
+                beta_val = 0.25
+        beta = float(beta_val)
+    else:
+        beta = 0.25
     min_stratum_size = int(config.get("min_stratum_size", 3) if config else 3)
 
     scores = token_level_rewards.sum(dim=-1)
@@ -147,6 +187,14 @@ def compute_schemashift_grpo_advantage(
             scenario_types.append(scenario)
         source = "uid (fallback)"
 
+    # P1-8: 校验 metadata 数组长度等于 batch size
+    if len(task_ids) != bsz or len(levels) != bsz or len(scenario_types) != bsz:
+        raise ValueError(
+            f"[schemashift_grpo] metadata 长度不匹配 batch size: "
+            f"task_ids={len(task_ids)}, levels={len(levels)}, "
+            f"scenario_types={len(scenario_types)}, bsz={bsz}, source={source}"
+        )
+
     with torch.no_grad():
         advantages = torch.zeros(bsz, device=scores.device)
 
@@ -155,70 +203,91 @@ def compute_schemashift_grpo_advantage(
         for i, tid in enumerate(task_ids):
             task2indices[tid].append(i)
 
-        for tid, indices in task2indices.items():
-            idx_tensor = torch.tensor(indices, device=scores.device)
-            group_scores = scores[idx_tensor]
-            group_levels = [levels[i] for i in indices]
-            group_scenarios = [scenario_types[i] for i in indices]
-            n_group = len(group_scores)
+        # 检测是否所有 group 都是 size=1（当前数据无 E4 分组结构）
+        # 此时 fallback 到 batch-level GRPO（整个 batch 做 z-score）
+        max_group_size = max(len(v) for v in task2indices.values())
+        if max_group_size == 1:
+            # Batch-level GRPO fallback：所有样本在 batch 内比较
+            if norm_adv_by_std_in_grpo and bsz >= 2:
+                batch_mean = scores.mean()
+                batch_std = scores.std(unbiased=False).clamp(min=epsilon)
+                advantages = (scores - batch_mean) / batch_std
+            elif bsz >= 2:
+                advantages = scores - scores.mean()
+            # else: bsz=1, advantage=0（无法比较）
 
-            # 按 (perturbation_level, scenario_type) 2 维分层
-            stratum2local = defaultdict(list)
-            scenario2local = defaultdict(list)
-            for local_i, (level, scenario) in enumerate(zip(group_levels, group_scenarios)):
-                stratum2local[(level, scenario)].append(local_i)
-                scenario2local[scenario].append(local_i)
+            if not hasattr(compute_schemashift_grpo_advantage, '_fallback_warned'):
+                logger.warning(
+                    f"[schemashift_grpo] 所有 group 均为 size=1 (n_groups={len(task2indices)})，"
+                    f"fallback 到 batch-level GRPO。如需 StratAdv，请确保数据包含 E4 分组结构。"
+                )
+                compute_schemashift_grpo_advantage._fallback_warned = True
+        else:
+            # 正常 E4 分层逻辑
+            for tid, indices in task2indices.items():
+                idx_tensor = torch.tensor(indices, device=scores.device)
+                group_scores = scores[idx_tensor]
+                group_levels = [levels[i] for i in indices]
+                group_scenarios = [scenario_types[i] for i in indices]
+                n_group = len(group_scores)
 
-            # Step 1: 层内归一化（带 fallback）
-            strat_advs = torch.zeros(n_group, device=scores.device)
-            for stratum_key, loc_indices in stratum2local.items():
-                loc_tensor = torch.tensor(loc_indices, device=scores.device)
-                stratum_scores = group_scores[loc_tensor]
-                n_stratum = len(loc_indices)
+                # 按 (perturbation_level, scenario_type) 2 维分层
+                stratum2local = defaultdict(list)
+                scenario2local = defaultdict(list)
+                for local_i, (level, scenario) in enumerate(zip(group_levels, group_scenarios)):
+                    stratum2local[(level, scenario)].append(local_i)
+                    scenario2local[scenario].append(local_i)
 
-                if n_stratum >= min_stratum_size:
-                    # 正常 z-score
-                    if norm_adv_by_std_in_grpo:
-                        s_mean = stratum_scores.mean()
-                        s_std = stratum_scores.std(unbiased=False).clamp(min=epsilon)
-                        strat_advs[loc_tensor] = (stratum_scores - s_mean) / s_std
-                    else:
+                # Step 1: 层内归一化（带 fallback）
+                strat_advs = torch.zeros(n_group, device=scores.device)
+                for stratum_key, loc_indices in stratum2local.items():
+                    loc_tensor = torch.tensor(loc_indices, device=scores.device)
+                    stratum_scores = group_scores[loc_tensor]
+                    n_stratum = len(loc_indices)
+
+                    if n_stratum >= min_stratum_size:
+                        # 正常 z-score
+                        if norm_adv_by_std_in_grpo:
+                            s_mean = stratum_scores.mean()
+                            s_std = stratum_scores.std(unbiased=False).clamp(min=epsilon)
+                            strat_advs[loc_tensor] = (stratum_scores - s_mean) / s_std
+                        else:
+                            strat_advs[loc_tensor] = stratum_scores - stratum_scores.mean()
+                    elif n_stratum == 2:
+                        # 只减均值，不除 std
                         strat_advs[loc_tensor] = stratum_scores - stratum_scores.mean()
-                elif n_stratum == 2:
-                    # 只减均值，不除 std
-                    strat_advs[loc_tensor] = stratum_scores - stratum_scores.mean()
-                elif n_stratum == 1:
-                    # 回退到 scenario-level
-                    scenario = stratum_key[1]
-                    sc_indices = scenario2local[scenario]
-                    if len(sc_indices) >= 2:
-                        sc_tensor = torch.tensor(sc_indices, device=scores.device)
-                        sc_scores = group_scores[sc_tensor]
-                        sc_mean = sc_scores.mean()
-                        if len(sc_indices) >= min_stratum_size and norm_adv_by_std_in_grpo:
-                            sc_std = sc_scores.std(unbiased=False).clamp(min=epsilon)
-                            strat_advs[loc_tensor] = (stratum_scores - sc_mean) / sc_std
+                    elif n_stratum == 1:
+                        # 回退到 scenario-level
+                        scenario = stratum_key[1]
+                        sc_indices = scenario2local[scenario]
+                        if len(sc_indices) >= 2:
+                            sc_tensor = torch.tensor(sc_indices, device=scores.device)
+                            sc_scores = group_scores[sc_tensor]
+                            sc_mean = sc_scores.mean()
+                            if len(sc_indices) >= min_stratum_size and norm_adv_by_std_in_grpo:
+                                sc_std = sc_scores.std(unbiased=False).clamp(min=epsilon)
+                                strat_advs[loc_tensor] = (stratum_scores - sc_mean) / sc_std
+                            else:
+                                strat_advs[loc_tensor] = stratum_scores - sc_mean
                         else:
-                            strat_advs[loc_tensor] = stratum_scores - sc_mean
-                    else:
-                        # 回退到 group-level global
-                        g_mean = group_scores.mean()
-                        if n_group >= min_stratum_size and norm_adv_by_std_in_grpo:
-                            g_std = group_scores.std(unbiased=False).clamp(min=epsilon)
-                            strat_advs[loc_tensor] = (stratum_scores - g_mean) / g_std
-                        else:
-                            strat_advs[loc_tensor] = stratum_scores - g_mean
+                            # 回退到 group-level global
+                            g_mean = group_scores.mean()
+                            if n_group >= min_stratum_size and norm_adv_by_std_in_grpo:
+                                g_std = group_scores.std(unbiased=False).clamp(min=epsilon)
+                                strat_advs[loc_tensor] = (stratum_scores - g_mean) / g_std
+                            else:
+                                strat_advs[loc_tensor] = stratum_scores - g_mean
 
-            # Step 2: 全局 z-score 用作残差
-            group_mean = group_scores.mean()
-            if norm_adv_by_std_in_grpo and n_group >= 2:
-                group_std = group_scores.std(unbiased=False).clamp(min=epsilon)
-                global_z = (group_scores - group_mean) / group_std
-            else:
-                global_z = group_scores - group_mean
+                # Step 2: 全局 z-score 用作残差
+                group_mean = group_scores.mean()
+                if norm_adv_by_std_in_grpo and n_group >= 2:
+                    group_std = group_scores.std(unbiased=False).clamp(min=epsilon)
+                    global_z = (group_scores - group_mean) / group_std
+                else:
+                    global_z = group_scores - group_mean
 
-            # Step 3: A = strat_z + beta * global_z
-            advantages[idx_tensor] = strat_advs + beta * global_z
+                # Step 3: A = strat_z + beta * global_z
+                advantages[idx_tensor] = strat_advs + beta * global_z
 
         # 首次执行时打诊断日志
         if not hasattr(compute_schemashift_grpo_advantage, '_diagnosed'):

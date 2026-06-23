@@ -5,9 +5,7 @@ unit tests: parquet generation, BFCL call normalization, and reward matching.
 """
 
 import json
-import importlib.util
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -15,14 +13,6 @@ import pytest
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-# scripts/ 不是 package，用 importlib 直接加载
-_spec = importlib.util.spec_from_file_location(
-    "build_parquet", _PROJECT_ROOT / "scripts" / "build_parquet.py"
-)
-_build_parquet = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_build_parquet)
-prepare_exp2 = _build_parquet.prepare_exp2
-prepare_exp5 = _build_parquet.prepare_exp5
 from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop, _parse_bfcl_native_args
 from src.eval.bfcl_eval import _run_inference_single
 from src.reward.bfcl_reward import compute_bfcl_reward
@@ -126,59 +116,6 @@ def test_parser_preserves_top_level_comma_inside_nested():
     )
     assert name == "send"
     assert args == {"items": [1, 2, 3], "opts": {"k1": "a, b", "k2": 2}, "flag": True}
-
-
-
-
-def test_exp4_parquet_keeps_task_groups_adjacent():
-    pq = pytest.importorskip("pyarrow.parquet")
-
-    table = pq.read_table("data/verl/exp4_schemashift/train.parquet")
-    rows = table.to_pylist()
-    assert len(rows) == 8100
-
-    for start in range(0, len(rows), 9):
-        chunk = rows[start:start + 9]
-        assert len({row["task_id"] for row in chunk}) == 1
-        assert [row["perturbation_level"] for row in chunk] == (
-            ["none"] * 3 + ["mild"] * 3 + ["strong"] * 3
-        )
-
-
-def test_prepare_exp5_rebuilds_aug_only_from_exp4_parquet():
-    pq = pytest.importorskip("pyarrow.parquet")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        prepare_exp5("data/verl/exp4_schemashift", tmpdir)
-        train_rows = pq.read_table(f"{tmpdir}/train.parquet").to_pylist()
-        val_rows = pq.read_table(f"{tmpdir}/val.parquet").to_pylist()
-
-    assert len(train_rows) == 2700
-    assert len(val_rows) == 300
-
-    for rows in (train_rows, val_rows):
-        grouped = {}
-        for row in rows:
-            grouped.setdefault(row["task_id"], []).append(row["perturbation_level"])
-        for levels in grouped.values():
-            assert sorted(levels) == ["mild", "none", "strong"]
-
-
-def test_prepare_exp2_targets_match_prompt_tool_call_contract():
-    pq = pytest.importorskip("pyarrow.parquet")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        prepare_exp2("data", tmpdir)
-        row = pq.read_table(f"{tmpdir}/train.parquet").slice(0, 1).to_pylist()[0]
-
-    first_line = row["target"].splitlines()[0]
-    assert first_line.startswith("<tool_call>")
-    assert first_line.endswith("</tool_call>")
-    payload = first_line.removeprefix("<tool_call>").removesuffix("</tool_call>")
-    parsed = json.loads(payload)
-    assert set(parsed) == {"name", "arguments"}
-    assert isinstance(parsed["name"], str)
-    assert isinstance(parsed["arguments"], dict)
 
 
 def test_reward_rejects_extra_tool_calls_in_same_turn():

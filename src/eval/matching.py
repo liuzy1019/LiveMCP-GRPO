@@ -176,7 +176,13 @@ def _normalize_value(v) -> str:
             return str(int(v))
         return str(v)
     if isinstance(v, list):
-        return str(v)
+        # 无序匹配：对 list 元素排序后再字符串化
+        # 对齐 ComponentReward._values_match 的 multiset 语义
+        try:
+            sorted_list = sorted(v, key=lambda x: str(x))
+            return str(sorted_list)
+        except TypeError:
+            return str(v)
     s = str(v)
     try:
         num = float(s)
@@ -190,12 +196,298 @@ def _normalize_value(v) -> str:
     return s
 
 
-def _args_match(agent_args: dict, gt_args: dict) -> bool:
-    """AST 宽松匹配：比较两个参数字典。"""
+def _is_null_equivalent(val) -> bool:
+    """判断值是否为 null 等价。"""
+    if val is None:
+        return True
+    if isinstance(val, str) and val.strip().lower() in ("", "null", "none"):
+        return True
+    return False
+
+
+def _to_bool(v) -> bool | None:
+    """尝试将值转为布尔（宽松，用于 values_match）。"""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        low = v.strip().lower()
+        if low in ("true", "1", "yes"):
+            return True
+        if low in ("false", "0", "no"):
+            return False
+    if isinstance(v, (int, float)):
+        return bool(v)
+    return None
+
+
+def _to_bool_strict(v) -> bool | None:
+    """严格布尔转换（用于 exact match + schema 校验）。
+
+    只接受：
+    - 实际 bool 值
+    - 字符串 "true" / "false"（大小写不敏感）
+    不接受 int(2)、"yes"、"no" 等任意 truthy/falsy 值。
+    """
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        low = v.strip().lower()
+        if low == "true":
+            return True
+        if low == "false":
+            return False
+    return None
+
+
+def type_compatible(model_val: Any, oracle_val: Any) -> bool:
+    """检查 model 值与 oracle 值的类型是否兼容（共享实现）。
+
+    用于 exact match 判定：只有类型兼容 + 值匹配才算 exact success。
+    规则：
+    - None: model 也必须是 None
+    - str: model 也必须是 str
+    - bool: model 必须是 bool 或 "true"/"false" 字符串
+    - int/float: model 必须是 int/float 或可解析为数字的字符串
+    - list: model 必须是 list
+    - dict: model 必须是 dict
+    """
+    if model_val is None:
+        return oracle_val is None
+    if oracle_val is None:
+        return True  # oracle 允许 null
+
+    # 字符串类型
+    if isinstance(oracle_val, str):
+        return isinstance(model_val, str)
+    # 布尔类型（必须在 int/float 之前，因为 bool 是 int 的子类）
+    if isinstance(oracle_val, bool):
+        return isinstance(model_val, bool) or (
+            isinstance(model_val, str) and model_val.strip().lower() in ("true", "false")
+        )
+    # 数值类型（int/float 互通）
+    if isinstance(oracle_val, (int, float)) and not isinstance(oracle_val, bool):
+        # P1-1: 排除 bool model_val（bool 是 int 子类，但 schema 语义不同）
+        if isinstance(model_val, bool):
+            return False
+        if isinstance(model_val, (int, float)):
+            return True
+        # 字符串形式的数字也接受
+        if isinstance(model_val, str):
+            try:
+                float(model_val)
+                return True
+            except (ValueError, TypeError):
+                return False
+        return False
+    # 列表类型
+    if isinstance(oracle_val, list):
+        return isinstance(model_val, list)
+    # 字典类型
+    if isinstance(oracle_val, dict):
+        return isinstance(model_val, dict)
+    return True
+
+
+def recursive_type_compatible(model_val: Any, oracle_val: Any) -> bool:
+    """递归检查 model 值与 oracle 值的类型是否兼容。
+
+    与 type_compatible 的区别：对 list/dict 容器递归检查内部元素的类型兼容性。
+    用于 schema_valid 组件的递归类型校验。
+    """
+    # null-equivalence
+    if _is_null_equivalent(model_val) and _is_null_equivalent(oracle_val):
+        return True
+    if _is_null_equivalent(model_val) or _is_null_equivalent(oracle_val):
+        # 一侧 null 另一侧非 null：顶层 type_compatible 允许 oracle=None 时 model 任意
+        return type_compatible(model_val, oracle_val)
+
+    # 顶层类型检查
+    if not type_compatible(model_val, oracle_val):
+        return False
+
+    # 列表：递归检查每个元素（使用 multiset 匹配找最佳配对）
+    if isinstance(oracle_val, list) and isinstance(model_val, list):
+        if len(model_val) != len(oracle_val):
+            return False
+        remaining = list(model_val)
+        for o_elem in oracle_val:
+            found = False
+            for i, m_elem in enumerate(remaining):
+                if recursive_type_compatible(m_elem, o_elem):
+                    remaining.pop(i)
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
+
+    # Dict：递归检查每个 value
+    if isinstance(oracle_val, dict) and isinstance(model_val, dict):
+        if set(model_val.keys()) != set(oracle_val.keys()):
+            return False
+        return all(
+            recursive_type_compatible(model_val[k], oracle_val[k])
+            for k in oracle_val
+        )
+
+    return True
+
+
+def values_match(model_val, oracle_val) -> bool:
+    """递归值匹配（共享实现，replay/reward/eval 统一使用）。
+
+    规则：
+    - None / null / "" / "null" 视为等价（null-equivalence）
+    - 字符串比较：strip() + lower()
+    - 数值比较：float(a) == float(b) with tolerance 1e-9
+    - 布尔比较：两侧 cast 到 bool（宽松）
+    - 列表比较：sorted element-wise（无序 multiset 匹配）
+    - Dict/object 比较：递归 key-value match
+    """
+    # null-equivalence
+    if _is_null_equivalent(model_val) and _is_null_equivalent(oracle_val):
+        return True
+    if _is_null_equivalent(model_val) or _is_null_equivalent(oracle_val):
+        return False
+
+    # 布尔比较（必须在数值之前，因为 bool 是 int 子类）
+    if isinstance(oracle_val, bool) or isinstance(model_val, bool):
+        mb = _to_bool(model_val)
+        ob = _to_bool(oracle_val)
+        if mb is None or ob is None:
+            return False
+        return mb == ob
+
+    # 数值比较
+    if isinstance(oracle_val, (int, float)) or isinstance(model_val, (int, float)):
+        try:
+            return abs(float(model_val) - float(oracle_val)) < 1e-9
+        except (ValueError, TypeError):
+            return False
+
+    # 字符串比较
+    if isinstance(oracle_val, str) and isinstance(model_val, str):
+        return model_val.strip().lower() == oracle_val.strip().lower()
+
+    # 列表比较（无序，recursive multiset matching）
+    if isinstance(oracle_val, list) and isinstance(model_val, list):
+        if len(model_val) != len(oracle_val):
+            return False
+        remaining = list(model_val)
+        for o_elem in oracle_val:
+            found = False
+            for i, m_elem in enumerate(remaining):
+                if values_match(m_elem, o_elem):
+                    remaining.pop(i)
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
+
+    # Dict 递归比较
+    if isinstance(oracle_val, dict) and isinstance(model_val, dict):
+        if set(model_val.keys()) != set(oracle_val.keys()):
+            return False
+        return all(
+            values_match(model_val[k], oracle_val[k])
+            for k in oracle_val
+        )
+
+    # 字符串化 fallback
+    return str(model_val).strip().lower() == str(oracle_val).strip().lower()
+
+
+def strict_values_match(model_val, oracle_val) -> bool:
+    """严格值匹配：递归要求 type_compatible + 值匹配。
+
+    用于 exact match 判定（replay 释放 observation、reward exact_success）。
+    与 values_match 的区别：
+    - boolean 场景下不接受 int(2)、"yes" 等任意 truthy/falsy 值
+    - 要求类型兼容性（schema 层面合法）
+    - 对 list/dict 容器递归使用 strict_values_match（而非宽松的 values_match）
+    """
+    # null-equivalence（两侧都是 null 等价）
+    if _is_null_equivalent(model_val) and _is_null_equivalent(oracle_val):
+        return True
+    if _is_null_equivalent(model_val) or _is_null_equivalent(oracle_val):
+        return False
+
+    # 先检查顶层类型兼容性
+    if not type_compatible(model_val, oracle_val):
+        return False
+
+    # 布尔：使用严格转换
+    if isinstance(oracle_val, bool) or isinstance(model_val, bool):
+        mb = _to_bool_strict(model_val)
+        ob = _to_bool_strict(oracle_val)
+        if mb is None or ob is None:
+            return False
+        return mb == ob
+
+    # 列表：递归 strict matching（无序 multiset）
+    if isinstance(oracle_val, list):
+        if not isinstance(model_val, list) or len(model_val) != len(oracle_val):
+            return False
+        remaining = list(model_val)
+        for o_elem in oracle_val:
+            found = False
+            for i, m_elem in enumerate(remaining):
+                if strict_values_match(m_elem, o_elem):
+                    remaining.pop(i)
+                    found = True
+                    break
+            if not found:
+                return False
+        return True
+
+    # Dict：递归 strict matching
+    if isinstance(oracle_val, dict):
+        if not isinstance(model_val, dict) or set(model_val.keys()) != set(oracle_val.keys()):
+            return False
+        return all(
+            strict_values_match(model_val[k], oracle_val[k])
+            for k in oracle_val
+        )
+
+    # 数值比较（type_compatible 已确保类型合法）
+    if isinstance(oracle_val, (int, float)) or isinstance(model_val, (int, float)):
+        try:
+            return abs(float(model_val) - float(oracle_val)) < 1e-9
+        except (ValueError, TypeError):
+            return False
+
+    # 字符串比较
+    if isinstance(oracle_val, str) and isinstance(model_val, str):
+        return model_val.strip().lower() == oracle_val.strip().lower()
+
+    # 字符串化 fallback
+    return str(model_val).strip().lower() == str(oracle_val).strip().lower()
+
+
+def strict_args_match(agent_args: dict, gt_args: dict) -> bool:
+    """严格参数匹配：每个参数都要求 type_compatible + values_match。
+
+    用于 exact match 判定（replay 释放 observation、reward exact_success）。
+    """
     if set(agent_args.keys()) != set(gt_args.keys()):
         return False
     for k in gt_args:
-        if _normalize_value(agent_args[k]) != _normalize_value(gt_args[k]):
+        if not strict_values_match(agent_args[k], gt_args[k]):
+            return False
+    return True
+
+
+def _args_match(agent_args: dict, gt_args: dict) -> bool:
+    """AST 宽松匹配：比较两个参数字典。
+
+    使用 values_match 进行递归值比较，支持嵌套 dict/list、
+    数值/字符串归一化、大小写不敏感等语义。
+    """
+    if set(agent_args.keys()) != set(gt_args.keys()):
+        return False
+    for k in gt_args:
+        if not values_match(agent_args[k], gt_args[k]):
             return False
     return True
 

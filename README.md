@@ -2,7 +2,13 @@
 
 > MCP-Tools-Aware Tool-Use RL — Schema Robustness via Online Rollout + Verifiable Reward
 
-通过 Schema Perturbation + Distractor Injection + Shaped Reward + Stratified Advantage，让模型在陌生 schema、多工具干扰下学会稳定的 tool-use 决策。
+通过 Schema Perturbation + Multi-Step Reward + Stratified Advantage，让模型在陌生 schema、多工具干扰下学会稳定的 tool-use 决策。
+
+当前方案：
+- **数据**: Toucan EpisodeSeed → `prepare_grpo_data.py` → parquet（含 `replay_observation`）
+- **SFT Cold-Start**: Qwen3-4B, 格式对齐, 9146 条样本
+- **GRPO**: verl + SchemaShiftReplayLoop (交互式静态 replay) + 五组件 Reward + 多步奖励 + StratAdv
+- **硬件**: 8×L20 44GB（colocated 模式）
 
 ---
 
@@ -10,14 +16,11 @@
 
 | 阶段 | 状态 | 说明 |
 |------|------|------|
-| 数据准备 | ✅ 完成 | Toucan inspection + EpisodeSeed 构建 + SFT 样本导出 (9146条) |
-| SFT Cold-Start (4B) | 🔄 待重跑 | Qwen3-4B, 8×L20 44GB, DeepSpeed ZeRO-2, effective_batch=128 |
-| SFT 生成验证 | ⬜ 待 SFT 完成 | 需重新验证 |
-| RL 闭环 | 🔄 smoke 调试中 | ReplayMCPExecutor / MCPToolEnvironment / TrajectoryVerifier 已实现，verl GRPO smoke 待重跑 |
-| Live MCP MVP | ✅ smoke 可运行 | calendar/shopping subprocess stdio server + LiveTask 生成 + offline agent loop + 五组件 reward |
-| 评测 | ⬜ 待实现 | Self MCP Robustness Set + BFCL V3 |
-
-**下一步**：在 L20 上跑 Qwen3-4B SFT cold-start，然后重跑 verl GRPO smoke。Live MCP 当前只作为显式 smoke/offline 后端，不替换默认 replay 训练链路。
+| 数据准备 | ✅ 完成 | Toucan inspection + EpisodeSeed 构建 + SFT 样本导出 (9146条) + GRPO parquet |
+| SFT Cold-Start | ✅ 完成 | Qwen3-4B, 8×L20 44GB, DeepSpeed ZeRO-2 |
+| RL 训练 | ✅ 正式训练 | 300 step, group_size=1, 9 records/task, max_turns=5, StratAdv beta=0.25 |
+| Live MCP MVP | ✅ smoke 可运行 | calendar/shopping subprocess stdio server |
+| 评测 | ⏳ 待构建 | Self MCP Robustness Set |
 
 ---
 
@@ -25,22 +28,28 @@
 
 ```
 schemashift-grpo/
-├── mcp_tools_rl_project_plan.md   # 权威方案文档
-├── CLAUDE.md                       # AI 工作入口
-├── AGENTS.md                       # AI 协作约定
 ├── src/
-│   ├── envs/                       # schema_perturber + api_mapper
-│   ├── data/                       # episode_seed_builder + sft_step_exporter + distractor_sampler
-│   ├── reward/                     # action_parser + component_reward
-│   ├── eval/                       # matching
-│   ├── training/                   # schemashift_advantage + grpo_estimator + register + length_check
-│   ├── live_mcp/                   # live MCP MVP: subprocess stdio servers + offline rollout/reward
-│   └── agent_loop/                 # 默认 GRPO 多轮 agent loop 待接入
+│   ├── envs/                       # schema_perturber + api_mapper + replay_mcp_executor + mcp_tool_environment
+│   ├── data/                       # episode_seed_builder + conditioned_builder + distractor_sampler + sft_step_exporter
+│   ├── reward/                     # action_parser + component_reward + schemashift_reward_fn (多步奖励)
+│   ├── eval/                       # bfcl_eval + matching
+│   ├── training/                   # schemashift_advantage + grpo_estimator + register_estimator + length_check
+│   ├── agent_loop/                 # schemashift_replay_loop (正式) + bfcl_agent_loop (legacy)
+│   └── live_mcp/                   # live MCP MVP: subprocess stdio servers + offline rollout/reward
 ├── scripts/                        # 训练/数据/环境脚本
-├── configs/                        # DeepSpeed 配置
+│   ├── run_grpo.sh                 # 路由入口 → run_schemashift.sh
+│   ├── run_grpo_smoke.sh           # smoke test shell
+│   ├── sft_cold_start.py           # SFT cold-start
+│   ├── prepare_grpo_data.py        # EpisodeSeed → verl parquet
+│   └── train/grpo/run_schemashift.sh  # E4 正式训练脚本
+├── configs/
+│   ├── exp4_schemashift.yaml       # E4 直接 GRPO 配置
+│   ├── exp4_schemashift_cold.yaml   # E4 SFT冷启动→GRPO 配置
+│   ├── grpo_smoke.yaml             # smoke test 配置
+│   ├── sft_cold_start_4b.yaml      # SFT 配置
+│   └── live_mcp/                   # Live MCP 配置
 ├── data/                           # 训练/评测数据 (gitignored)
-├── tests/                          # 单元测试 (240+ passed)
-├── verl/                           # verl 源码 (editable)
+├── tests/                          # 单元测试
 ├── requirements.txt
 └── pyproject.toml
 ```
@@ -50,62 +59,70 @@ schemashift-grpo/
 ## 环境搭建
 
 ```bash
-# 已有 conda env: arl
 conda activate arl
-python -m pip install -e ./verl
 python -m pip install -e .
 python scripts/check_dependency_conflicts.py
 ```
 
-**硬件要求**：8×L20 (44GB)；A10 (23GB) 可用于 SFT（batch=1 + ZeRO-2）但不建议跑 GRPO。
+**硬件要求**：8×L20 (44GB) 用于 GRPO；SFT 可在 4×A10 (23GB) 上运行（batch=1 + ZeRO-2）。
 
 ---
 
 ## 测试
 
 ```bash
-pytest tests/  # 240+ passed
+pytest tests/  # 100+ passed
 ```
 
-## GRPO Smoke
+## SFT Cold-Start
 
 ```bash
-# SFT cold-start（8×L20）
 torchrun --nproc_per_node=8 scripts/sft_cold_start.py \
     --config configs/sft_cold_start_4b.yaml
+```
 
-# 数据准备
+输出：`outputs/sft_cold_start_4b/final`
+
+## GRPO 数据准备
+
+```bash
 python scripts/prepare_grpo_data.py \
     --episode_seeds data/toucan/episode_seeds.jsonl \
-    --output data/grpo_train.parquet \
-    --val_output data/grpo_val.parquet
+    --output data/grpo_train_replay.parquet \
+    --val_output data/grpo_val_replay.parquet
+```
 
-# Smoke test
+## GRPO 训练
+
+```bash
+# 直接 GRPO（默认）
+bash scripts/run_grpo.sh
+
+# SFT 冷启动 → GRPO
+MODE=cold bash scripts/run_grpo.sh
+
+# 可通过环境变量覆盖参数
+N_GPUS=4 BETA=0.3 TOTAL_STEPS=300 bash scripts/run_grpo.sh
+```
+
+当前正式训练配置（[exp4_schemashift.yaml](configs/exp4_schemashift.yaml)）：
+
+| 参数 | 值 |
+|------|-----|
+| 模型 | Qwen3-4B |
+| 学习率 | 由 verl 默认 |
+| 训练步数 | 300 |
+| rollout.n | 1（数据侧 9 条/task） |
+| max_turns | 5（交互式 replay） |
+| StratAdv beta | 0.25 |
+| KL coef | 0.04 |
+| max prompt length | 10240 |
+| max response length | 4096 |
+
+## GRPO Smoke Test
+
+```bash
 bash scripts/run_grpo_smoke.sh --config configs/grpo_smoke.yaml
-```
-
-脚本默认以项目根目录为锚点，`data/...`、`outputs/...`、`src/...` 均使用相对路径。常用超参可以通过命令行注入，未知参数会继续透传为 Hydra overrides：
-
-```bash
-bash scripts/run_grpo_smoke.sh \
-    --config configs/grpo_smoke.yaml \
-    --n-gpus 4 \
-    --cuda-visible-devices 0,1,2,3 \
-    --total-steps 2 \
-    --lr 1e-6 \
-    --rollout-n 2 \
-    --prompt-length 10240 \
-    --response-length 1024 \
-    --micro-batch 1
-```
-
-正式 GRPO 也支持 YAML，并且命令行参数会覆盖 YAML：
-
-```bash
-bash scripts/run_grpo.sh \
-    --config configs/grpo_train.yaml \
-    --lr 5e-7 \
-    --rollout-n 4
 ```
 
 ---
@@ -129,18 +146,16 @@ python scripts/run_live_mcp_smoke.py \
     --seed 42
 ```
 
-第一版 live MVP 覆盖 calendar/shopping 两个 stateful subprocess stdio server、session deterministic reset、grounded task sampling、oracle validation、trace 落盘和五组件 execution-aware reward。
-
 ---
 
 ## 文档
 
 | 文档 | 内容 |
 |------|------|
-| [`mcp_tools_rl_project_plan.md`](./mcp_tools_rl_project_plan.md) | 权威方案：架构、数据、reward、评测、阶段计划 |
-| [`docs/live_mcp_branch.md`](./docs/live_mcp_branch.md) | Live MCP 并行分支：API、CLI、边界 |
-| [`CLAUDE.md`](./CLAUDE.md) | AI 工作入口：读取顺序、开发边界、验证命令 |
-| [`AGENTS.md`](./AGENTS.md) | AI 协作约定：环境、红线、git、代码约束 |
+| [docs/project_status.md](docs/project_status.md) | 项目设计文档：算法方案、训练路线、参数配置、组件状态 |
+| [docs/live_mcp_branch.md](docs/live_mcp_branch.md) | Live MCP 并行分支（未接入主训练路线） |
+| [configs/README.md](configs/README.md) | 配置文件清单与参数说明 |
+| [data/README.md](data/README.md) | 数据目录结构与复现 |
 
 ---
 

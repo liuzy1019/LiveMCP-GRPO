@@ -1,0 +1,44 @@
+# SchemaShift-GRPO（E4-Cold）：SFT 冷启动 → GRPO，扰动数据 + 分层 advantage
+#
+# 与 exp4_schemashift.yaml 唯一区别：model.path 指向 SFT cold-start 产出权重
+exp:
+  name: exp4_schemashift_cold_v1
+
+model:
+  path: outputs/sft_cold_start_4b/final
+
+data:
+  train_file: data/grpo_train_replay.parquet
+  val_file: data/grpo_val_replay.parquet
+  max_prompt_length: 10240
+  max_response_length: 4096
+
+rollout:
+  group_size: 1
+  max_turns: 5
+  agent_loop: schemashift_replay
+  agent_loop_config: configs/agent_loop.yaml
+  tensor_parallel_size: 1
+
+actor:
+  ppo_micro_batch_size_per_gpu: 3
+  ppo_epochs: 1
+  clip_ratio: 0.2
+  use_kl_loss: true
+  kl_loss_coef: 0.04
+  loss_agg_mode: token-mean
+  enable_gradient_checkpointing: true
+
+algorithm:
+  adv_estimator: schemashift_grpo
+  norm_adv_by_std_in_grpo: true
+  schemashift:
+    beta: 0.25
+
+trainer:
+  total_epochs: 1
+  total_training_steps: 300
+  save_freq: 50
+  test_freq: 50
+  val_before_train: true
+  project_name: schemashift-grpo

@@ -52,8 +52,14 @@ def main() -> None:
     _maybe_run_pre_check()
 
     # 注册 agent loop（必须在 verl 启动前 import）
-    from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
-    print("  Agent loop BFCLAgentLoop 已注册")
+    from src.agent_loop.schemashift_replay_loop import SchemaShiftReplayLoop  # noqa: F401
+    print("  Agent loop SchemaShiftReplayLoop 已注册")
+
+    # 保留 BFCLAgentLoop 注册（兼容旧配置）
+    try:
+        from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
+    except ImportError:
+        pass
 
     # 注册 schemashift_grpo estimator + patch verl 传递 non_tensor_batch
     # 主进程注册一次，便于 fail-fast；ray actor 内还需重新注册（见下面 SchemaShiftTaskRunner）
@@ -68,13 +74,35 @@ def main() -> None:
 
     class SchemaShiftTaskRunner(TaskRunner):
         def run(self, config):
-            from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
+            from src.agent_loop.schemashift_replay_loop import SchemaShiftReplayLoop  # noqa: F401
+            try:
+                from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
+            except ImportError:
+                pass
             from src.training.register_estimator import register_schemashift_estimator
             register_schemashift_estimator()
             return super().run(config)
 
     @hydra.main(config_path="../../verl/verl/trainer/config", config_name="ppo_trainer", version_base=None)
     def _entry(config):
+        # 防止系统默认 temp dir 路径过长导致 AF_UNIX socket path 超限
+        import tempfile
+        ray_tmp_dir = os.environ.get("SCHEMASHIFT_RAY_TMPDIR", "/tmp/ssgrpo_ray")
+        os.makedirs(ray_tmp_dir, exist_ok=True)
+        os.environ.setdefault("TMPDIR", "/tmp/ssgrpo_tmp")
+        os.environ.setdefault("RAY_TMPDIR", ray_tmp_dir)
+        os.makedirs(os.environ["TMPDIR"], exist_ok=True)
+        tempfile.tempdir = os.environ["TMPDIR"]
+
+        from omegaconf import OmegaConf, open_dict
+        ray_init = config.ray_kwargs.get("ray_init", {})
+        if not ray_init.get("_temp_dir"):
+            with open_dict(config):
+                OmegaConf.update(
+                    config, "ray_kwargs.ray_init._temp_dir",
+                    ray_tmp_dir, merge=True, force_add=True,
+                )
+
         task_runner_class = ray.remote(num_cpus=1)(SchemaShiftTaskRunner)
         run_ppo(config, task_runner_class=task_runner_class)
 

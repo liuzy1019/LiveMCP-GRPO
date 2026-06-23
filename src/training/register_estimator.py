@@ -46,6 +46,11 @@ def _normalize_schemashift_non_tensor_batch(non_tensor_batch, batch_size: int):
     else:
         extras = [extra_infos] * batch_size
 
+    # P1-2: extra_info 元素可能是 JSON 字符串（pyarrow 序列化后）
+    from src.utils import normalize_extra_info
+    normalized_extras = [normalize_extra_info(e) for e in extras]
+    extras = normalized_extras
+
     if not extras or not isinstance(extras[0], dict):
         return non_tensor_batch
     if len(extras) == 1 and batch_size > 1:

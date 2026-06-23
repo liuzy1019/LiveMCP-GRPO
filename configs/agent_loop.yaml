@@ -1,4 +1,10 @@
 # Agent loop 注册表：verl worker 进程通过 agent_loop_config_path 加载
-# 配合 actor_rollout_ref.rollout.agent.default_agent_loop=bfcl_agent
+# 配合 actor_rollout_ref.rollout.agent.default_agent_loop 选择默认 loop
+
+# 交互式静态 replay（推荐，对齐 COVERT mock server）
+- name: schemashift_replay
+  _target_: src.agent_loop.schemashift_replay_loop.SchemaShiftReplayLoop
+
+# BFCL 真实执行（需要 bfcl_eval 依赖）
 - name: bfcl_agent
   _target_: src.agent_loop.bfcl_agent_loop.BFCLAgentLoop

@@ -17,6 +17,10 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from src.reward.action_parser import ActionParser, ParsedAction, parse_action
+from src.eval.matching import values_match as _shared_values_match
+from src.eval.matching import strict_values_match as _strict_values_match
+from src.eval.matching import type_compatible as _shared_type_compatible
+from src.eval.matching import recursive_type_compatible as _recursive_type_compatible
 
 
 @dataclass
@@ -123,6 +127,8 @@ class ComponentReward:
             # 如果 arguments 类型无效，schema_valid 强制为 0
             if has_invalid_args:
                 result.components["schema_valid"] = 0.0
+                # arguments 类型无效 → 不可能是 exact match
+                result.exact_success = False
                 # 重新计算 partial reward 和 effective reward
                 weight_sum = sum(self.weights.values())
                 partial_reward = sum(
@@ -130,10 +136,7 @@ class ComponentReward:
                 ) / weight_sum if weight_sum > 0 else 0.0
                 result.diagnostics["partial_reward"] = partial_reward
                 result.diagnostics["args_type_invalid"] = True
-                if result.exact_success:
-                    result.total_reward = 1.0 + 0.05 * partial_reward
-                else:
-                    result.total_reward = 0.3 * partial_reward
+                result.total_reward = 0.3 * partial_reward
             return result
         elif oracle.action_type == "final_answer":
             return self._compute_final_answer_reward(parsed, oracle, metadata)
@@ -400,14 +403,14 @@ class ComponentReward:
                 total_score += 1.0
                 continue
 
-            # 检查 required keys 是否都存在且值类型合理
+            # 检查 required keys 是否都存在且值类型合理（递归检查）
             valid_count = 0
             for key, oracle_val in oracle_args.items():
                 if key not in model_args:
                     continue
                 model_val = model_args[key]
-                # 类型兼容性检查
-                if self._type_compatible(model_val, oracle_val):
+                # 递归类型兼容性检查（包括嵌套 list/dict 内部元素）
+                if _recursive_type_compatible(model_val, oracle_val):
                     valid_count += 1
 
             score = valid_count / len(oracle_args) if oracle_args else 1.0
@@ -416,39 +419,8 @@ class ComponentReward:
         return total_score / len(oracle_calls) if oracle_calls else 1.0
 
     def _type_compatible(self, model_val: Any, oracle_val: Any) -> bool:
-        """检查 model 值与 oracle 值的类型是否兼容。"""
-        if model_val is None:
-            return oracle_val is None
-        if oracle_val is None:
-            return True  # oracle 允许 null
-
-        # 字符串类型
-        if isinstance(oracle_val, str):
-            return isinstance(model_val, str)
-        # 布尔类型（必须在 int/float 之前，因为 bool 是 int 的子类）
-        if isinstance(oracle_val, bool):
-            return isinstance(model_val, bool) or (
-                isinstance(model_val, str) and model_val.lower() in ("true", "false")
-            )
-        # 数值类型（int/float 互通）
-        if isinstance(oracle_val, (int, float)):
-            if isinstance(model_val, (int, float)):
-                return True
-            # 字符串形式的数字也接受
-            if isinstance(model_val, str):
-                try:
-                    float(model_val)
-                    return True
-                except (ValueError, TypeError):
-                    return False
-            return False
-        # 列表类型
-        if isinstance(oracle_val, list):
-            return isinstance(model_val, list)
-        # 字典类型
-        if isinstance(oracle_val, dict):
-            return isinstance(model_val, dict)
-        return True
+        """检查 model 值与 oracle 值的类型是否兼容（委托给共享实现）。"""
+        return _shared_type_compatible(model_val, oracle_val)
 
     def _compute_tool_selection(
         self,
@@ -636,7 +608,7 @@ class ComponentReward:
                 canonical_model_val = self._map_enum_value(
                     tool_name, key, model_val, metadata.enum_map
                 )
-                if not self._values_match(canonical_model_val, oracle_val):
+                if not _strict_values_match(canonical_model_val, oracle_val):
                     return False
 
         return True
@@ -721,105 +693,53 @@ class ComponentReward:
         value: Any,
         enum_map: dict,
     ) -> Any:
-        """通过 enum_map 将 perturbed value 映射回 canonical。"""
+        """通过 enum_map 将 perturbed value 映射回 canonical。
+
+        语义对齐 src.eval.matching.map_enum_values：
+        - perturbed value → 映射回 canonical（合法）
+        - original value（在 perturbed schema 下非法）→ 标记为 __INVALID__
+        - 非 enum 参数值不受影响
+
+        支持两种格式：
+        1. nested: {tool_name: {param_name: {perturbed: original}}}
+        2. flat: {perturbed: original}（兼容旧数据）
+        """
         if not enum_map:
             return value
-        tool_map = enum_map.get(tool_name, {})
-        param_map = tool_map.get(param_name, {})
-        if isinstance(value, str) and value in param_map:
-            return param_map[value]
+
+        # 判断格式：如果第一个 value 是 dict，则为 nested 格式
+        first_val = next(iter(enum_map.values()), None) if enum_map else None
+        is_nested = isinstance(first_val, dict)
+
+        if is_nested:
+            tool_map = enum_map.get(tool_name, {})
+            param_map = tool_map.get(param_name, {})
+            if not param_map:
+                return value
+        else:
+            # flat 格式：全局映射，不区分 tool/param
+            param_map = enum_map
+
+        v_str = str(value) if not isinstance(value, str) else value
+
+        if v_str in param_map:
+            # 合法 perturbed value → 映射回 canonical
+            return param_map[v_str]
+
+        # 检查是否为 original value（在 perturbed schema 下非法）
+        # param_map: {perturbed_val: original_val}
+        # reverse: {original_val: perturbed_val}
+        reverse = {orig: pert for pert, orig in param_map.items()}
+        if v_str in reverse:
+            # 模型输出了 original value，perturbed schema 下非法
+            return f"__INVALID_ENUM_{v_str}__"
+
         return value
 
     def _values_match(self, model_val: Any, oracle_val: Any) -> bool:
-        """Canonical 值匹配（递归实现）。
+        """Canonical 值匹配（委托给共享递归实现）。
 
-        规则（mcp_tools_rl_project_plan.md §10.1.1）：
-        - None / null / "" / "null" 视为等价（null-equivalence）
-        - 字符串比较：strip() + lower()
-        - 数值比较：float(a) == float(b) with tolerance 1e-9
-        - 布尔比较：两侧 cast 到 bool
-        - 列表比较：sorted element-wise（无序匹配）
-        - Dict/object 比较：递归 key-value match
+        统一使用 src.eval.matching.values_match，确保 replay/reward/eval
+        三处的值匹配语义完全一致。
         """
-        # null-equivalence
-        if self._is_null_equivalent(model_val) and self._is_null_equivalent(oracle_val):
-            return True
-        if self._is_null_equivalent(model_val) or self._is_null_equivalent(oracle_val):
-            return False
-
-        # 布尔比较（必须在数值之前，因为 bool 是 int 子类）
-        if isinstance(oracle_val, bool):
-            return self._bool_match(model_val, oracle_val)
-        if isinstance(model_val, bool):
-            return self._bool_match(model_val, oracle_val)
-
-        # 数值比较
-        if isinstance(oracle_val, (int, float)) or isinstance(model_val, (int, float)):
-            try:
-                return abs(float(model_val) - float(oracle_val)) < 1e-9
-            except (ValueError, TypeError):
-                return False
-
-        # 字符串比较
-        if isinstance(oracle_val, str) and isinstance(model_val, str):
-            return model_val.strip().lower() == oracle_val.strip().lower()
-
-        # 列表比较（无序，recursive multiset matching）
-        if isinstance(oracle_val, list) and isinstance(model_val, list):
-            if len(model_val) != len(oracle_val):
-                return False
-            # Recursive multiset matching：每个 oracle element 从剩余 model elements 中找匹配
-            remaining = list(model_val)
-            for o_elem in oracle_val:
-                found = False
-                for i, m_elem in enumerate(remaining):
-                    if self._values_match(m_elem, o_elem):
-                        remaining.pop(i)
-                        found = True
-                        break
-                if not found:
-                    return False
-            return True
-
-        # Dict 递归比较
-        if isinstance(oracle_val, dict) and isinstance(model_val, dict):
-            if set(model_val.keys()) != set(oracle_val.keys()):
-                return False
-            return all(
-                self._values_match(model_val[k], oracle_val[k])
-                for k in oracle_val
-            )
-
-        # 字符串化 fallback
-        return str(model_val).strip().lower() == str(oracle_val).strip().lower()
-
-    @staticmethod
-    def _is_null_equivalent(val: Any) -> bool:
-        """判断值是否为 null 等价。"""
-        if val is None:
-            return True
-        if isinstance(val, str) and val.strip().lower() in ("", "null", "none"):
-            return True
-        return False
-
-    @staticmethod
-    def _bool_match(model_val: Any, oracle_val: Any) -> bool:
-        """布尔值匹配，处理字符串形式的布尔。"""
-        def to_bool(v: Any) -> Optional[bool]:
-            if isinstance(v, bool):
-                return v
-            if isinstance(v, str):
-                low = v.strip().lower()
-                if low in ("true", "1", "yes"):
-                    return True
-                if low in ("false", "0", "no"):
-                    return False
-            if isinstance(v, (int, float)):
-                return bool(v)
-            return None
-
-        mb = to_bool(model_val)
-        ob = to_bool(oracle_val)
-        if mb is None or ob is None:
-            return False
-        return mb == ob
+        return _shared_values_match(model_val, oracle_val)

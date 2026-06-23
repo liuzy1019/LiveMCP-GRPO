@@ -1,6 +1,9 @@
-"""SchemaShift GRPO 训练入口。
+"""SchemaShift GRPO Baseline 训练入口。
 
-替代直接调用 verl.trainer.main_ppo，注入 SchemaShiftTaskRunner。
+标准 vLLM rollout，不接入交互式 replay agent loop。
+用于 E3 Vanilla GRPO 对比实验。
+
+正式训练请使用 src/training/run_exp4.py（E4 交互式静态 replay）。
 
 Usage:
     python scripts/train_grpo.py [hydra overrides...]
@@ -49,6 +52,16 @@ from omegaconf import OmegaConf, open_dict
 from src.training.length_check import maybe_run_length_check
 from src.training.schemashift_task_runner import SchemaShiftTaskRunner
 from verl.trainer.main_ppo import run_ppo
+
+# 注册 agent loop（支持交互式 replay smoke test）
+try:
+    from src.agent_loop.schemashift_replay_loop import SchemaShiftReplayLoop  # noqa: F401
+except ImportError:
+    pass
+try:
+    from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
+except ImportError:
+    pass
 
 
 def _ensure_short_ray_temp_dir(config) -> str:

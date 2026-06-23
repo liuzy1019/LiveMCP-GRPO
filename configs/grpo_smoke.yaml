@@ -5,8 +5,8 @@ model:
   path: outputs/sft_cold_start_4b/final                           # SFT 产出权重
 
 data:
-  train_file: data/grpo_train.parquet
-  val_file: data/grpo_val.parquet
+  train_file: data/grpo_train_replay.parquet
+  val_file: data/grpo_val_replay.parquet
 
 reward:
   function_path: src/reward/schemashift_reward_fn.py

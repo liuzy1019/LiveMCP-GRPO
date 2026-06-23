@@ -553,10 +553,12 @@ class BFCLAgentLoop(AgentLoopBase):
         return self.tokenizer.decode(token_ids, skip_special_tokens=True)
 
     async def _encode_message_tokens(self, add_messages: list[dict]) -> list[int]:
-        """用 apply_chat_template 编码新消息，stripping system prompt 前缀。
+        """用 apply_chat_template 编码新消息。
 
-        对齐 verl ToolAgentLoop 做法：apply_chat_template 产生的 token 包含
-        system 格式化前缀，stripping 后只保留增量内容。
+        Qwen3 的 chat template 对纯 tool/user 消息不产生 system 前缀，
+        直接返回完整 token 序列即可。
+        产出的 token 序列形如：
+          <|im_start|>{role}\n{content}<|im_end|>\n<|im_start|>assistant\n
         """
         response_ids = await self.loop.run_in_executor(
             None,
@@ -564,7 +566,7 @@ class BFCLAgentLoop(AgentLoopBase):
                 add_messages, add_generation_prompt=True, tokenize=True
             ),
         )
-        return response_ids[self._system_prompt_len:]
+        return list(response_ids)
 
     @staticmethod
     def _extract_next_user_message(

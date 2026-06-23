@@ -124,8 +124,8 @@ N_GPUS="${N_GPUS:-8}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 export CUDA_VISIBLE_DEVICES
 MODEL_PATH="${MODEL_PATH:-outputs/sft_cold_start_4b/final}"
-TRAIN_FILE="${TRAIN_FILE:-data/grpo_train.parquet}"
-VAL_FILE="${VAL_FILE:-data/grpo_val.parquet}"
+TRAIN_FILE="${TRAIN_FILE:-data/grpo_train_replay.parquet}"
+VAL_FILE="${VAL_FILE:-data/grpo_val_replay.parquet}"
 REWARD_FN_PATH="${REWARD_FN_PATH:-src/reward/schemashift_reward_fn.py}"
 TOTAL_STEPS="${TOTAL_STEPS:-2}"
 LR="${LR:-1e-6}"
@@ -315,11 +315,11 @@ for path in sys.argv[1:]:
         raise SystemExit(
             f"{path} is missing required SchemaShift fields: {sorted(missing)}\n"
             "Fields must be either top-level columns or inside extra_info dict.\n"
-            "Regenerate data with:\n"
-            "  python scripts/prepare_grpo_data.py "
-            "--episode_seeds data/toucan/episode_seeds.jsonl "
-            "--output data/grpo_train.parquet "
-            "--val_output data/grpo_val.parquet"
+"Regenerate data with:\n"
+"  python scripts/prepare_grpo_data.py "
+"--episode_seeds data/toucan/episode_seeds.jsonl "
+"--output data/grpo_train_replay.parquet "
+"--val_output data/grpo_val_replay.parquet"
         )
     if "perturbation_level" in df.columns:
         levels = df["perturbation_level"].value_counts().to_dict()
@@ -346,7 +346,7 @@ CONDA_PYTHON="$(which python)"
     data.max_response_length="${RESPONSE_LENGTH}" \
     data.train_batch_size="${TRAIN_BATCH_SIZE}" \
     data.val_batch_size="${VAL_BATCH_SIZE}" \
-    data.shuffle=True \
+    data.shuffle=False \
     data.filter_overlong_prompts=True \
     data.truncation=left \
     data.reward_fn_key=data_source \
@@ -375,6 +375,11 @@ CONDA_PYTHON="$(which python)"
     actor_rollout_ref.rollout.max_num_seqs="${MAX_NUM_SEQS}" \
     actor_rollout_ref.rollout.enable_prefix_caching=False \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu="${LOG_PROB_MICRO_BATCH}" \
+    actor_rollout_ref.rollout.mode=async \
+    actor_rollout_ref.rollout.agent.default_agent_loop=schemashift_replay \
+    actor_rollout_ref.rollout.agent.agent_loop_config_path=configs/agent_loop.yaml \
+    actor_rollout_ref.rollout.agent.num_workers="${N_GPUS}" \
+    data.return_raw_chat=True \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu="${LOG_PROB_MICRO_BATCH}" \
     actor_rollout_ref.ref.fsdp_config.param_offload="${PARAM_OFFLOAD}" \
     algorithm.adv_estimator=schemashift_grpo \

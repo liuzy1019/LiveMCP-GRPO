@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # E4: SchemaShift-GRPO — 混合扰动, schemashift_grpo estimator
-# Config: configs/exp4_schemashift.yaml（可通过 EXP_CONFIG 覆盖）
+#
+# MODE=direct（默认）：直接 GRPO，使用原始 Qwen3-4B 权重
+#   → configs/exp4_schemashift.yaml
+# MODE=cold：SFT 冷启动 → GRPO，使用 SFT 产出权重
+#   → configs/exp4_schemashift_cold.yaml
 #
 # 自适应多卡：设置 N_GPUS 即可自动计算兼容的 batch size。
 # E4 数据每 task 9 条记录（3 none + 3 mild + 3 strong），
@@ -10,14 +14,80 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$PROJECT_DIR"
 
+# ── 命令行参数解析 ──
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            cat <<'EOF'
+SchemaShift-GRPO E4 训练入口
+
+用法:
+  bash scripts/train/grpo/run_schemashift.sh [选项] [Hydra overrides...]
+
+选项:
+  --help, -h              显示此帮助信息
+  --config PATH           指定 YAML 配置文件
+                          默认: configs/exp4_schemashift.yaml (MODE=direct)
+                                configs/exp4_schemashift_cold.yaml (MODE=cold)
+
+环境变量覆盖:
+  MODE=direct|cold        选择训练路线 (默认: direct)
+  EXP_NAME                实验名称
+  MODEL_PATH              模型路径
+  BETA                    Schemashift beta 参数
+  N_GPUS                  GPU 数量
+  TOTAL_STEPS             总训练步数
+  SAVE_FREQ               保存频率
+  TEST_FREQ               验证频率
+  MICRO_BATCH_PER_GPU     micro batch size per GPU
+  EXTRA_HYDRA_OVERRIDES   额外 Hydra 覆盖参数
+
+其余位置参数将作为 Hydra overrides 透传。
+EOF
+            exit 0
+            ;;
+        --config)
+            if [ $# -lt 2 ]; then
+                echo "❌ --config 需要指定配置文件路径" >&2
+                exit 1
+            fi
+            EXP_CONFIG="$2"
+            shift 2
+            ;;
+        *)
+            EXTRA_HYDRA_OVERRIDES="${EXTRA_HYDRA_OVERRIDES:-} ${1}"
+            shift
+            ;;
+    esac
+done
+
+# ── Ray 短临时目录（避免 plasma store AF_UNIX socket path 超 107 bytes）──
+export TMPDIR="${TMPDIR:-/tmp/ssgrpo_tmp}"
+export RAY_TMPDIR="${RAY_TMPDIR:-/tmp/ssgrpo_ray}"
+mkdir -p "${TMPDIR}" "${RAY_TMPDIR}"
+
+MODE="${MODE:-direct}"
+
+case "${MODE}" in
+    direct)
+        EXP_CONFIG="${EXP_CONFIG:-${PROJECT_DIR}/configs/exp4_schemashift.yaml}"
+        ;;
+    cold|cold_start)
+        EXP_CONFIG="${EXP_CONFIG:-${PROJECT_DIR}/configs/exp4_schemashift_cold.yaml}"
+        ;;
+    *)
+        echo "❌ 未知 MODE=${MODE}，可选: direct, cold" >&2
+        exit 1
+        ;;
+esac
+
 N_GPUS="${N_GPUS:-$(nvidia-smi -L 2>/dev/null | wc -l)}"
 if [ "${N_GPUS}" -lt 1 ] 2>/dev/null || [ -z "${N_GPUS}" ]; then
     echo "❌ 未检测到 GPU (N_GPUS=${N_GPUS})，无法启动训练" >&2
     exit 1
 fi
 
-EXP_CONFIG="${EXP_CONFIG:-${PROJECT_DIR}/configs/exp4_schemashift.yaml}"
-PYTHON_BIN="${PYTHON_BIN:-/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python}"
+PYTHON_BIN="${PYTHON_BIN:-python}"
 
 get() {
   "$PYTHON_BIN" - "$EXP_CONFIG" "$1" <<'PY'
@@ -63,6 +133,7 @@ g = 9
 print(mbs * g // math.gcd(mbs, g))
 ")
 VAL_BATCH_SIZE=$((N_GPUS * 1))
+LOG_PROB_MICRO_BATCH="${LOG_PROB_MICRO_BATCH:-4}"
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_DIR="${PROJECT_DIR}/logs/${EXP_NAME}_${TIMESTAMP}"
@@ -75,7 +146,7 @@ export PYTHONPATH="${PROJECT_DIR}:${PROJECT_DIR}/verl:${PYTHONPATH:-}"
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
 
-echo "E4: SchemaShift start | model=${MODEL_PATH} | gpus=${N_GPUS} | micro=${MICRO_BATCH_PER_GPU} | train_batch=${TRAIN_BATCH_SIZE} | mini_batch=${MINI_BATCH_SIZE} | beta=${BETA} | config=${EXP_CONFIG}" \
+echo "E4: SchemaShift start | mode=${MODE} | model=${MODEL_PATH} | gpus=${N_GPUS} | micro=${MICRO_BATCH_PER_GPU} | train_batch=${TRAIN_BATCH_SIZE} | mini_batch=${MINI_BATCH_SIZE} | beta=${BETA} | config=${EXP_CONFIG}" \
   | tee "${LOG_DIR}/train.log"
 
 "$PYTHON_BIN" src/training/run_exp4.py \
@@ -88,6 +159,7 @@ echo "E4: SchemaShift start | model=${MODEL_PATH} | gpus=${N_GPUS} | micro=${MIC
     data.prompt_key="prompt" \
     data.return_raw_chat=True \
     data.shuffle=False \
+    +data.apply_chat_template_kwargs.enable_thinking=False \
     \
     actor_rollout_ref.model.path="${MODEL_PATH}" \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
@@ -105,16 +177,19 @@ echo "E4: SchemaShift start | model=${MODEL_PATH} | gpus=${N_GPUS} | micro=${MIC
     actor_rollout_ref.rollout.agent.agent_loop_config_path="${AGENT_LOOP_CONFIG}" \
     actor_rollout_ref.rollout.agent.num_workers=${N_GPUS} \
     actor_rollout_ref.rollout.n="${GROUP_SIZE}" \
+    actor_rollout_ref.rollout.max_turns="${MAX_TURNS}" \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${TP_SIZE} \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH} \
     \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH} \
     \
     algorithm.adv_estimator="${ADV_EST}" \
     algorithm.norm_adv_by_std_in_grpo=True \
     +algorithm.beta="${BETA}" \
     \
     reward_model.enable=False \
+    custom_reward_function.path="${PROJECT_DIR}/src/reward/schemashift_reward_fn.py" \
+    custom_reward_function.name=compute_score \
     \
     trainer.total_epochs=1 \
     trainer.n_gpus_per_node=${N_GPUS} \

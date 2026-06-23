@@ -75,6 +75,8 @@ class _FakeTokenizer:
 
     def __init__(self, scale: int = 1):
         self._scale = scale
+        self.pad_token_id = 0
+        self.pad_token = "<pad>"
 
     def apply_chat_template(self, messages, add_generation_prompt=False):
         text = "".join(m.get("content", "") for m in messages)
