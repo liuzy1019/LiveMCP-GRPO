@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""E4 SchemaShift-GRPO 训练入口。
+"""SchemaShift-GRPO 训练入口。
 
 用法:
-    SCHEMASHIFT_BETA=0.25 python -m src.training.run_exp4 \
-        actor_rollout_ref.model.path=Qwen/Qwen2.5-1.5B-Instruct \
+    SCHEMASHIFT_BETA=0.25 python src/training/run_grpo.py \
+        actor_rollout_ref.model.path=models/Qwen3-4B \
         ...
 """
 
@@ -37,7 +37,7 @@ def _maybe_run_pre_check() -> None:
     train = args.get("train_files")
     val = args.get("val_files")
     model_path = args.get("model_path")
-    limit = args.get("max_prompt_length", 2048)
+    limit = args.get("max_prompt_length", 10240)
     if train and model_path:
         assert_e4_group_integrity(train, model_path, limit, "train")
     if val and model_path:
@@ -104,7 +104,11 @@ def main() -> None:
                 )
 
         task_runner_class = ray.remote(num_cpus=1)(SchemaShiftTaskRunner)
-        run_ppo(config, task_runner_class=task_runner_class)
+        try:
+            run_ppo(config, task_runner_class=task_runner_class)
+        finally:
+            if ray.is_initialized():
+                ray.shutdown()
 
     _entry()
 

@@ -1,6 +1,6 @@
 """验证 replay 和 reward 的匹配一致性。
 
-覆盖 review.MD 中列出的所有失败场景：
+覆盖历史发现的 replay/reward 匹配不一致场景：
 - list_numeric_string
 - list_dict_key_order
 - nested_list

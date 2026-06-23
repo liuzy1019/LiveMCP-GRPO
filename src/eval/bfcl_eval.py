@@ -55,6 +55,34 @@ def _infer_category(task_id: str) -> str:
     return "unknown"
 
 
+def _record_task_id(record: dict) -> str:
+    """Return the best stable task id available in current/legacy parquet rows."""
+    for key in ("task_id", "group_id", "episode_id"):
+        value = record.get(key)
+        if value:
+            return str(value)
+
+    extra_info = record.get("extra_info")
+    if isinstance(extra_info, str):
+        try:
+            extra_info = json.loads(extra_info)
+        except (json.JSONDecodeError, TypeError):
+            extra_info = {}
+    if isinstance(extra_info, dict):
+        for key in ("task_id", "group_id", "episode_id"):
+            value = extra_info.get(key)
+            if value:
+                return str(value)
+        uid = extra_info.get("uid")
+        if uid:
+            return str(uid).split("___", 1)[0]
+
+    uid = record.get("uid")
+    if uid:
+        return str(uid).split("___", 1)[0]
+    return ""
+
+
 def _evaluate_single_sample(
     model_outputs: list[dict],
     ground_truth: list[list[str]],
@@ -362,12 +390,12 @@ def evaluate_checkpoint(
     records = _load_parquet(data_path)
 
     # 评估侧去重：同一 (task_id, perturbation_level) 在 E4 train/val 中可能出现多次
-    # （上游 build_parquet 为每个 task 生成 3 条用于 GRPO group sampling）
+    # （上游 prepare_grpo_data 为每个 task × level 生成多条副本用于 GRPO group sampling）
     # eval 阶段只需评一次，避免分母虚高 / 重复采样污染统计。
     seen_keys = set()
     deduped = []
     for r in records:
-        key = (r.get("task_id", ""), r.get("perturbation_level", "none"))
+        key = (_record_task_id(r), r.get("perturbation_level", "none"))
         if key in seen_keys:
             continue
         seen_keys.add(key)
@@ -410,7 +438,7 @@ def evaluate_checkpoint(
     total_evaluated = 0
     for idx, record in enumerate(records):
         level = record.get("perturbation_level", "none")
-        task_id = record.get("task_id", "")
+        task_id = _record_task_id(record)
         category = _infer_category(task_id)
         is_seen = task_id in train_task_ids if train_task_ids else True
 

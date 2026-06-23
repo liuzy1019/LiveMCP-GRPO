@@ -170,9 +170,10 @@ class EpisodeSeedBuilder:
             if ep is not None:
                 episodes.append(ep)
 
+        success_rate = (len(episodes) / len(data) * 100) if data else 0.0
         logger.info(
             f"构建完成: {len(episodes)} / {len(data)} 条成功 "
-            f"({len(episodes)/len(data)*100:.1f}%)"
+            f"({success_rate:.1f}%)"
         )
         self._log_stats()
 

@@ -14,7 +14,7 @@ Oracle Propagation（mcp_tools_rl_project_plan.md §6.2）：
 重要变更（2026-06-18）：
   - 删除模板合成逻辑（合成的 tool_output 与 final_answer 之间无真实信息依赖，
     会产生噪声 reward 信号）
-  - 改为直接从 convert_toolace.py 输出的 conditioned_steps.jsonl 加载真实数据
+  - 改为直接从配置指定的 conditioned_steps.jsonl 加载真实数据
   - 真实数据中 tool_output 和 final_answer 有实际的实体引用关系
 """
 
@@ -70,7 +70,7 @@ class ConditionedBuilderConfig:
 class ConditionedDecisionBuilder:
     """Conditioned Decision 构建器。
 
-    从 convert_toolace.py 输出的真实数据中加载 conditioned decision samples。
+    从配置指定的真实数据中加载 conditioned decision samples。
 
     两类数据：
     1. conditioned_steps.jsonl — 真实的 tool_output → next_action 链路
@@ -171,6 +171,8 @@ class ConditionedDecisionBuilder:
                     continue
 
                 action_type = d.get("action_type", "")
+                # 归一化：数据中的 "conditioned_tool_call" → "tool_call"
+                normalized_action_type = "tool_call" if action_type == "conditioned_tool_call" else action_type
                 scenario_type = d.get("scenario_type", "")
 
                 # 验证 messages 中确实有 tool_output（conditioned 的前提）
@@ -186,7 +188,7 @@ class ConditionedDecisionBuilder:
                     tools=d["tools"],
                     messages=d["messages"],
                     ground_truth_action=d["ground_truth_action"],
-                    action_type=action_type,
+                    action_type=normalized_action_type,
                     step_index=d.get("step_index", 0),
                     total_steps=d.get("total_steps", 2),
                     provenance="real",

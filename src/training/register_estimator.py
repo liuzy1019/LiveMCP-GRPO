@@ -9,6 +9,8 @@ token_level_rewards/response_mask/index(uid)/config，不传 non_tensor_batch。
 import importlib
 import functools
 from typing import Optional
+
+import numpy as np
 from loguru import logger
 
 
@@ -35,8 +37,6 @@ def _normalize_schemashift_non_tensor_batch(non_tensor_batch, batch_size: int):
         return non_tensor_batch
     if "extra_info" not in non_tensor_batch:
         return non_tensor_batch
-
-    import numpy as np
 
     extra_infos = non_tensor_batch["extra_info"]
     if isinstance(extra_infos, np.ndarray) and extra_infos.ndim > 0:
@@ -121,7 +121,6 @@ def register_schemashift_estimator(config: Optional[dict] = None) -> bool:
                 if non_tensor_batch and "uid" in non_tensor_batch:
                     adv_kwargs["index"] = non_tensor_batch["uid"]
                 else:
-                    import numpy as np
                     adv_kwargs["index"] = np.arange(bsz)
                 # 注入 non_tensor_batch（包含 perturbation_level, group_id）
                 # 注：这些字段被 _get_gen_batch 保留在 batch.non_tensor_batch 中

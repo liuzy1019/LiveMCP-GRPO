@@ -12,11 +12,11 @@ echo "=========================================="
 
 # Python 版本检查
 PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
-echo "[1/5] Python 版本: $PYTHON_VERSION"
+echo "[1/4] Python 版本: $PYTHON_VERSION"
 
 # 创建虚拟环境
 if [ ! -d "venv" ]; then
-    echo "[2/5] 创建虚拟环境..."
+    echo "[2/4] 创建虚拟环境..."
     python3 -m venv venv
 fi
 source venv/bin/activate
@@ -25,7 +25,7 @@ source venv/bin/activate
 pip install --upgrade pip -q
 
 # 安装核心依赖
-echo "[3/5] 安装项目依赖..."
+echo "[3/4] 安装项目依赖..."
 pip install -e ".[dev]" -q
 
 # 安装本地 verl fork（包含 schemashift 所需的 ray_trainer.py 修改）
@@ -42,28 +42,16 @@ else
 fi
 
 # 创建目录结构
-echo "[4/5] 创建目录结构..."
-mkdir -p data/possible_answer
-mkdir -p data/verl
+echo "[4/4] 创建目录结构..."
 mkdir -p checkpoints
 mkdir -p logs
 mkdir -p experiments
-
-# 下载 BFCL 数据
-echo "[5/5] 下载 BFCL V3 数据..."
-if python3 scripts/download_data.py 2>/dev/null; then
-    echo "       数据下载完成"
-    echo "       生成训练 parquet: python scripts/build_parquet.py"
-else
-    echo "       数据下载失败或已存在，跳过"
-fi
 
 echo "=========================================="
 echo " 环境配置完成"
 echo ""
 echo " 下一步:"
-echo "   python scripts/build_parquet.py          # 生成训练数据"
+echo "   python scripts/prepare_grpo_data.py --episode_seeds data/toucan/episode_seeds.jsonl --output data/grpo_train_replay.parquet --val_output data/grpo_val_replay.parquet"
 echo "   bash scripts/run_grpo.sh                 # 直接 GRPO"
 echo "   MODE=cold bash scripts/run_grpo.sh       # SFT 冷启动 → GRPO"
-echo "   python scripts/eval/eval_zero_shot.py    # Zero-shot 评估"
 echo "=========================================="

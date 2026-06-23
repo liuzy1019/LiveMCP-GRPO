@@ -707,11 +707,11 @@ class ComponentReward:
         if not enum_map:
             return value
 
-        # 判断格式：如果第一个 value 是 dict，则为 nested 格式
-        first_val = next(iter(enum_map.values()), None) if enum_map else None
-        is_nested = isinstance(first_val, dict)
+        # 判断格式：使用 any() 检查所有 value（对齐 matching.py 的 has_nested 判断），
+        # 避免只检查第一个 value 在混合格式下误判
+        has_nested = any(isinstance(v, dict) for v in enum_map.values()) if enum_map else False
 
-        if is_nested:
+        if has_nested:
             tool_map = enum_map.get(tool_name, {})
             param_map = tool_map.get(param_name, {})
             if not param_map:
@@ -729,7 +729,14 @@ class ComponentReward:
         # 检查是否为 original value（在 perturbed schema 下非法）
         # param_map: {perturbed_val: original_val}
         # reverse: {original_val: perturbed_val}
-        reverse = {orig: pert for pert, orig in param_map.items()}
+        # P2-fix: 过滤不可哈希的 value（如 dict），对齐 _map_enum_flat
+        reverse = {}
+        for pert, orig in param_map.items():
+            try:
+                hash(orig)
+                reverse[orig] = pert
+            except TypeError:
+                pass
         if v_str in reverse:
             # 模型输出了 original value，perturbed schema 下非法
             return f"__INVALID_ENUM_{v_str}__"

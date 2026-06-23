@@ -12,6 +12,8 @@ import pytest
 
 from src.data.distractor_sampler import DistractorSampler, DistractorConfig, ToolEntry
 from src.data.conditioned_builder import ConditionedDecisionBuilder, ConditionedBuilderConfig, NoToolSample
+from src.data.episode_seed_builder import BuilderConfig, EpisodeSeedBuilder
+from scripts.prepare_grpo_data import _stable_seed
 
 
 # ============================================================
@@ -102,6 +104,23 @@ def _make_no_tool_step(
         "scenario_type": "no_tool",
         "step_index": 0,
     }
+
+
+def test_prepare_grpo_stable_seed_is_process_independent():
+    """prepare_grpo_data 不应依赖 Python 内置 hash() 的进程随机盐。"""
+    assert _stable_seed("episode-1:none") == _stable_seed("episode-1:none")
+    assert _stable_seed("episode-1:none") != _stable_seed("episode-1:mild")
+
+
+def test_episode_seed_builder_empty_input_does_not_divide_by_zero(tmp_path):
+    """空 Toucan 文件应返回空列表，而不是在成功率日志处除零。"""
+    empty = tmp_path / "empty.jsonl"
+    empty.write_text("", encoding="utf-8")
+
+    builder = EpisodeSeedBuilder(
+        BuilderConfig(toucan_data_path=str(empty), output_path=str(tmp_path / "out.jsonl"))
+    )
+    assert builder.build() == []
 
 
 @pytest.fixture
@@ -374,7 +393,10 @@ class TestConditionedDecisionBuilder:
 
         # 检查类型
         final_answers = [s for s in conditioned if s.action_type == "final_answer"]
-        tool_calls = [s for s in conditioned if s.action_type == "conditioned_tool_call"]
+        tool_calls = [
+            s for s in conditioned
+            if s.action_type == "tool_call" and s.scenario_type == "conditioned_tool_call"
+        ]
         assert len(final_answers) == 1
         assert len(tool_calls) == 1
 

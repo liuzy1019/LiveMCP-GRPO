@@ -73,6 +73,13 @@ class TestEnumMappingNested:
         mapped = map_enum_values("search_flights", args, NESTED_ENUM_MAP)
         assert mapped == {"class": "business", "date": "2024-01-01"}
 
+    def test_unhashable_original_value_does_not_crash(self):
+        """nested enum_map 中 original value 异常为 dict 时不应崩溃。"""
+        enum_map = {"fn": {"mode": {"alt": {"nested": "value"}}}}
+        args = {"mode": {"nested": "value"}}
+        mapped = map_enum_values("fn", args, enum_map)
+        assert mapped == args
+
 
 class TestEnumMappingFlat:
     """扁平格式 enum_map 测试（兼容旧数据）。"""

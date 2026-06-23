@@ -16,6 +16,7 @@ verl 可调用的环境。
   - episode 结束后调用 env.get_reward_info() 获取 reward 计算所需信息
 """
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -111,8 +112,10 @@ class MCPToolEnvironment:
         Returns:
             完整的初始 prompt 字符串（system + tools + user message）。
         """
-        match_config = self.config.match_config or MatchConfig(
-            strict_values=self.config.strict_replay_values
+        match_config = (
+            copy.deepcopy(self.config.match_config)
+            if self.config.match_config is not None
+            else MatchConfig(strict_values=self.config.strict_replay_values)
         )
         # 从 episode metadata 中提取 name_map / enum_map（如果有）
         if episode.metadata.get("name_map"):

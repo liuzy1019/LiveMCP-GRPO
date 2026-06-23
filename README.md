@@ -6,9 +6,9 @@
 
 当前方案：
 - **数据**: Toucan EpisodeSeed → `prepare_grpo_data.py` → parquet（含 `replay_observation`）
-- **SFT Cold-Start**: Qwen3-4B, 格式对齐, 9146 条样本
-- **GRPO**: verl + SchemaShiftReplayLoop (交互式静态 replay) + 五组件 Reward + 多步奖励 + StratAdv
-- **硬件**: 8×L20 44GB（colocated 模式）
+- **SFT Cold-Start**: Qwen3-4B，本地产物位于 `outputs/sft_cold_start_4b/final`
+- **GRPO**: verl + SchemaShiftReplayLoop（交互式静态 replay）+ 五组件 Reward + 多步奖励 + StratAdv
+- **目标硬件**: 8×L20 44GB（colocated 模式）
 
 ---
 
@@ -16,10 +16,10 @@
 
 | 阶段 | 状态 | 说明 |
 |------|------|------|
-| 数据准备 | ✅ 完成 | Toucan inspection + EpisodeSeed 构建 + SFT 样本导出 (9146条) + GRPO parquet |
-| SFT Cold-Start | ✅ 完成 | Qwen3-4B, 8×L20 44GB, DeepSpeed ZeRO-2 |
-| RL 训练 | ✅ 正式训练 | 300 step, group_size=1, 9 records/task, max_turns=5, StratAdv beta=0.25 |
-| Live MCP MVP | ✅ smoke 可运行 | calendar/shopping subprocess stdio server |
+| 数据准备 | ✅ 本地就绪 | 4962 条 EpisodeSeed、9146 条 SFT 样本、GRPO train/val parquet 已存在 |
+| SFT Cold-Start | ✅ 本地产物存在 | `training_report.json` 与 `final/` 权重存在；当前 shell 无可用 GPU，未重新复训 |
+| RL 训练 | ⏳ 入口/配置就绪 | direct/cold 配置与脚本已就绪；本地未发现正式 GRPO checkpoint |
+| Live MCP MVP | ✅ 可选分支 | calendar/shopping subprocess stdio server；默认不接入 GRPO |
 | 评测 | ⏳ 待构建 | Self MCP Robustness Set |
 
 ---
@@ -43,8 +43,8 @@ schemashift-grpo/
 │   ├── prepare_grpo_data.py        # EpisodeSeed → verl parquet
 │   └── train/grpo/run_schemashift.sh  # E4 正式训练脚本
 ├── configs/
-│   ├── exp4_schemashift.yaml       # E4 直接 GRPO 配置
-│   ├── exp4_schemashift_cold.yaml   # E4 SFT冷启动→GRPO 配置
+│   ├── grpo_direct.yaml           # 直接 GRPO 配置
+│   ├── grpo_cold.yaml             # SFT冷启动→GRPO 配置
 │   ├── grpo_smoke.yaml             # smoke test 配置
 │   ├── sft_cold_start_4b.yaml      # SFT 配置
 │   └── live_mcp/                   # Live MCP 配置
@@ -64,15 +64,21 @@ python -m pip install -e .
 python scripts/check_dependency_conflicts.py
 ```
 
-**硬件要求**：8×L20 (44GB) 用于 GRPO；SFT 可在 4×A10 (23GB) 上运行（batch=1 + ZeRO-2）。
+**硬件要求**：GRPO 默认按 8×L20 44GB 设计；SFT/GRPO 的 GPU 数、batch、micro batch 与 TP size 应通过配置、环境变量或 Hydra override 调整。
 
 ---
 
 ## 测试
 
 ```bash
-pytest tests/  # 100+ passed
+conda run -n arl python -m pytest tests/
+
+# 依赖或 GPU 不完整时至少运行：
+conda run -n arl python -m compileall src scripts tests
+git diff --check
 ```
+
+当前本地复核结果：`arl` 环境下全量测试 292 passed；当前 shell 的 CUDA 不可用，GRPO smoke/正式训练仍需目标 GPU 环境复验。
 
 ## SFT Cold-Start
 
@@ -101,11 +107,14 @@ bash scripts/run_grpo.sh
 # SFT 冷启动 → GRPO
 MODE=cold bash scripts/run_grpo.sh
 
+# 显式指定配置
+bash scripts/run_grpo.sh --config configs/grpo_direct.yaml
+
 # 可通过环境变量覆盖参数
 N_GPUS=4 BETA=0.3 TOTAL_STEPS=300 bash scripts/run_grpo.sh
 ```
 
-当前正式训练配置（[exp4_schemashift.yaml](configs/exp4_schemashift.yaml)）：
+当前正式训练配置（[grpo_direct.yaml](configs/grpo_direct.yaml)）；本地尚无正式 GRPO checkpoint 可证明跑批完成：
 
 | 参数 | 值 |
 |------|-----|
@@ -152,8 +161,7 @@ python scripts/run_live_mcp_smoke.py \
 
 | 文档 | 内容 |
 |------|------|
-| [docs/project_status.md](docs/project_status.md) | 项目设计文档：算法方案、训练路线、参数配置、组件状态 |
-| [docs/live_mcp_branch.md](docs/live_mcp_branch.md) | Live MCP 并行分支（未接入主训练路线） |
+| [docs/project_plan.md](docs/project_plan.md) | 权威方案文档与工程约束 |
 | [configs/README.md](configs/README.md) | 配置文件清单与参数说明 |
 | [data/README.md](data/README.md) | 数据目录结构与复现 |
 

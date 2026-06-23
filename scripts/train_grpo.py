@@ -1,9 +1,10 @@
-"""SchemaShift GRPO Baseline 训练入口。
+"""SchemaShift GRPO Smoke / 统一训练入口。
 
-标准 vLLM rollout，不接入交互式 replay agent loop。
-用于 E3 Vanilla GRPO 对比实验。
+标准 vLLM rollout，支持通过 Hydra config 切换 agent loop 和 advantage estimator。
+SchemaShiftTaskRunner 会注册 schemashift_grpo estimator，但实际使用的 estimator
+由 config 中的 algorithm.adv_estimator 决定。
 
-正式训练请使用 src/training/run_exp4.py（E4 交互式静态 replay）。
+正式训练请使用 src/training/run_grpo.py（交互式静态 replay）。
 
 Usage:
     python scripts/train_grpo.py [hydra overrides...]

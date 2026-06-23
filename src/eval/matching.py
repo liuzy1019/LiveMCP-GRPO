@@ -519,11 +519,11 @@ def map_enum_values(
     if not enum_map:
         return args
 
-    # 判断格式：如果第一个 value 是 dict，则为精确格式
-    first_val = next(iter(enum_map.values()), None) if enum_map else None
-    is_nested = isinstance(first_val, dict)
+    # 判断格式：如果任一 top-level value 是 dict，则为精确格式（nested）
+    # 注意：不能只看第一个 value，防止混合格式导致 _map_enum_flat 收到不可哈希的 dict
+    has_nested = any(isinstance(v, dict) for v in enum_map.values()) if enum_map else False
 
-    if is_nested:
+    if has_nested:
         return _map_enum_nested(func_name, args, enum_map)
     else:
         return _map_enum_flat(args, enum_map)
@@ -544,7 +544,13 @@ def _map_enum_nested(func_name: str, args: dict, enum_map: dict) -> dict:
 
         v_str = str(v)
         # reverse: {original_val: perturbed_val}
-        reverse = {orig: pert for pert, orig in param_enums.items()}
+        reverse = {}
+        for pert, orig in param_enums.items():
+            try:
+                hash(orig)
+                reverse[orig] = pert
+            except TypeError:
+                pass
 
         if v_str in param_enums:
             # 合法 perturbed value → 映射回 original
@@ -559,7 +565,15 @@ def _map_enum_nested(func_name: str, args: dict, enum_map: dict) -> dict:
 
 def _map_enum_flat(args: dict, enum_map: dict) -> dict:
     """扁平格式（兼容旧数据）：全局映射 + 合法性检查。"""
-    reverse = {v: k for k, v in enum_map.items()}
+    # P1-fix: 过滤不可哈希的 value（如 dict），这些值无法作为反向索引的 key
+    reverse = {}
+    for k, v in enum_map.items():
+        try:
+            hash(v)
+            reverse[v] = k
+        except TypeError:
+            pass
+
     mapped = {}
     for k, v in args.items():
         v_str = str(v)

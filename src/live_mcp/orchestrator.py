@@ -103,6 +103,11 @@ class StateMachineOrchestrator:
     ) -> list[LiveTask]:
         tasks: list[LiveTask] = []
         servers = self.manager.server_names if server_name == "all" else [server_name]
+        if not servers:
+            raise ValueError("no enabled Live MCP servers available")
+        unknown = [name for name in servers if name not in self.manager.server_names]
+        if unknown:
+            raise ValueError(f"unknown or disabled Live MCP server(s): {unknown}")
         idx = 0
         while len(tasks) < count:
             current_server = servers[idx % len(servers)]

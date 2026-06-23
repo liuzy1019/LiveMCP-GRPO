@@ -2,14 +2,22 @@
 # E4: SchemaShift-GRPO — 混合扰动, schemashift_grpo estimator
 #
 # MODE=direct（默认）：直接 GRPO，使用原始 Qwen3-4B 权重
-#   → configs/exp4_schemashift.yaml
+#   → configs/grpo_direct.yaml
 # MODE=cold：SFT 冷启动 → GRPO，使用 SFT 产出权重
-#   → configs/exp4_schemashift_cold.yaml
+#   → configs/grpo_cold.yaml
 #
 # 自适应多卡：设置 N_GPUS 即可自动计算兼容的 batch size。
 # E4 数据每 task 9 条记录（3 none + 3 mild + 3 strong），
 # train_batch_size 必须为 9 的倍数，且与 GPU 数兼容。
 set -euo pipefail
+
+# ── 确保脚本退出时（正常/异常）清理 Ray 进程 ──
+_cleanup_ray() {
+    if ray status &>/dev/null 2>&1; then
+        ray stop --force 2>/dev/null || true
+    fi
+}
+trap _cleanup_ray EXIT
 
 PROJECT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$PROJECT_DIR"
@@ -27,8 +35,8 @@ SchemaShift-GRPO E4 训练入口
 选项:
   --help, -h              显示此帮助信息
   --config PATH           指定 YAML 配置文件
-                          默认: configs/exp4_schemashift.yaml (MODE=direct)
-                                configs/exp4_schemashift_cold.yaml (MODE=cold)
+                          默认: configs/grpo_direct.yaml (MODE=direct)
+                                configs/grpo_cold.yaml (MODE=cold)
 
 环境变量覆盖:
   MODE=direct|cold        选择训练路线 (默认: direct)
@@ -40,6 +48,7 @@ SchemaShift-GRPO E4 训练入口
   SAVE_FREQ               保存频率
   TEST_FREQ               验证频率
   MICRO_BATCH_PER_GPU     micro batch size per GPU
+  TRAINER_LOGGER          verl logger 列表，默认 ['console','wandb']
   EXTRA_HYDRA_OVERRIDES   额外 Hydra 覆盖参数
 
 其余位置参数将作为 Hydra overrides 透传。
@@ -70,10 +79,10 @@ MODE="${MODE:-direct}"
 
 case "${MODE}" in
     direct)
-        EXP_CONFIG="${EXP_CONFIG:-${PROJECT_DIR}/configs/exp4_schemashift.yaml}"
+        EXP_CONFIG="${EXP_CONFIG:-${PROJECT_DIR}/configs/grpo_direct.yaml}"
         ;;
     cold|cold_start)
-        EXP_CONFIG="${EXP_CONFIG:-${PROJECT_DIR}/configs/exp4_schemashift_cold.yaml}"
+        EXP_CONFIG="${EXP_CONFIG:-${PROJECT_DIR}/configs/grpo_cold.yaml}"
         ;;
     *)
         echo "❌ 未知 MODE=${MODE}，可选: direct, cold" >&2
@@ -81,9 +90,27 @@ case "${MODE}" in
         ;;
 esac
 
-N_GPUS="${N_GPUS:-$(nvidia-smi -L 2>/dev/null | wc -l)}"
-if [ "${N_GPUS}" -lt 1 ] 2>/dev/null || [ -z "${N_GPUS}" ]; then
-    echo "❌ 未检测到 GPU (N_GPUS=${N_GPUS})，无法启动训练" >&2
+_detect_n_gpus() {
+    local gpu_list
+    if ! command -v nvidia-smi >/dev/null 2>&1; then
+        echo "0"
+        return
+    fi
+    if ! gpu_list="$(nvidia-smi -L 2>/dev/null)"; then
+        echo "0"
+        return
+    fi
+    if [ -z "${gpu_list}" ]; then
+        echo "0"
+        return
+    fi
+    printf '%s\n' "${gpu_list}" | grep -c '^GPU '
+}
+
+N_GPUS="${N_GPUS:-$(_detect_n_gpus)}"
+if ! [[ "${N_GPUS}" =~ ^[0-9]+$ ]] || [ "${N_GPUS}" -lt 1 ]; then
+    echo "❌ 未检测到可用 GPU (N_GPUS=${N_GPUS})，无法启动训练" >&2
+    echo "   请确认 NVIDIA driver 正常，并在 arl 环境运行: nvidia-smi -L" >&2
     exit 1
 fi
 
@@ -121,7 +148,8 @@ TOTAL_STEPS="${TOTAL_STEPS:-$(get trainer.total_training_steps)}"
 SAVE_FREQ="${SAVE_FREQ:-$(get trainer.save_freq)}"
 TEST_FREQ="${TEST_FREQ:-$(get trainer.test_freq)}"
 PROJECT_NAME=$(get trainer.project_name)
-VAL_BEFORE_TRAIN="${VAL_BEFORE_TRAIN:-True}"
+VAL_BEFORE_TRAIN="${VAL_BEFORE_TRAIN:-$(get trainer.val_before_train)}"
+TRAINER_LOGGER="${TRAINER_LOGGER:-['console','wandb']}"
 
 # ── batch size 自适应 ──
 MICRO_BATCH_PER_GPU="${MICRO_BATCH_PER_GPU:-$(get actor.ppo_micro_batch_size_per_gpu)}"
@@ -149,7 +177,7 @@ export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
 echo "E4: SchemaShift start | mode=${MODE} | model=${MODEL_PATH} | gpus=${N_GPUS} | micro=${MICRO_BATCH_PER_GPU} | train_batch=${TRAIN_BATCH_SIZE} | mini_batch=${MINI_BATCH_SIZE} | beta=${BETA} | config=${EXP_CONFIG}" \
   | tee "${LOG_DIR}/train.log"
 
-"$PYTHON_BIN" src/training/run_exp4.py \
+"$PYTHON_BIN" src/training/run_grpo.py \
     data.train_files="${TRAIN_FILES}" \
     data.val_files="${VAL_FILES}" \
     data.train_batch_size="${TRAIN_BATCH_SIZE}" \
@@ -177,7 +205,7 @@ echo "E4: SchemaShift start | mode=${MODE} | model=${MODEL_PATH} | gpus=${N_GPUS
     actor_rollout_ref.rollout.agent.agent_loop_config_path="${AGENT_LOOP_CONFIG}" \
     actor_rollout_ref.rollout.agent.num_workers=${N_GPUS} \
     actor_rollout_ref.rollout.n="${GROUP_SIZE}" \
-    actor_rollout_ref.rollout.max_turns="${MAX_TURNS}" \
+    +actor_rollout_ref.rollout.max_turns="${MAX_TURNS}" \
     actor_rollout_ref.rollout.tensor_model_parallel_size=${TP_SIZE} \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=${LOG_PROB_MICRO_BATCH} \
     \
@@ -197,7 +225,7 @@ echo "E4: SchemaShift start | mode=${MODE} | model=${MODEL_PATH} | gpus=${N_GPUS
     trainer.default_local_dir="${PROJECT_DIR}/checkpoints/${EXP_NAME}" \
     trainer.save_freq="${SAVE_FREQ}" \
     trainer.test_freq="${TEST_FREQ}" \
-    trainer.logger="['console','wandb']" \
+    trainer.logger="${TRAINER_LOGGER}" \
     trainer.project_name="${PROJECT_NAME}" \
     trainer.experiment_name="${EXP_NAME}" \
     trainer.val_before_train=${VAL_BEFORE_TRAIN} \

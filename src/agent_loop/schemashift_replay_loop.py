@@ -281,7 +281,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
         n_model_tool_calls = 0
         n_correct_calls = 0
 
-        logger.info(
+        logger.debug(
             f"[replay {rid_short}] start | episode_type={episode_type} "
             f"| oracle_steps={len(oracle_actions)} | prompt_len={len(prompt_ids)}"
         )
@@ -312,7 +312,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
 
             # 长度兜底
             if len(all_response_ids) >= self.response_length:
-                logger.info(f"[replay {rid_short}] turn={turn_idx} response_length 耗尽")
+                logger.debug(f"[replay {rid_short}] turn={turn_idx} response_length 耗尽")
                 break
 
             # 2. 解析模型输出
@@ -320,7 +320,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
 
             if not tool_call_matches:
                 # 没有 tool_call → 终止（可能是 final_answer 或无标签输出）
-                logger.info(
+                logger.debug(
                     f"[replay {rid_short}] turn={turn_idx} 无 tool_call，终止 "
                     f"(is_terminal={_is_terminal_response(response_text)})"
                 )
@@ -330,7 +330,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
             # 交互式 replay 的核心目的是模型在看到 observation 后才继续决策
             if _is_terminal_response(response_text):
                 # 同一 turn 既有 tool_call 又有 terminal tag → 不释放 observation，终止
-                logger.warning(
+                logger.debug(
                     f"[replay {rid_short}] turn={turn_idx} 同一 turn 同时输出 "
                     f"tool_call 和 terminal tag，视为非法，终止 episode"
                 )
@@ -356,7 +356,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
                     f"errors={consecutive_errors}/{self.max_consecutive_errors}"
                 )
                 if consecutive_errors >= self.max_consecutive_errors:
-                    logger.info(f"[replay {rid_short}] turn={turn_idx} 连续错误超限，终止 episode")
+                    logger.debug(f"[replay {rid_short}] turn={turn_idx} 连续错误超限，终止 episode")
                     break
             elif oracle_step_idx < len(oracle_actions):
                 current_oracle = oracle_actions[oracle_step_idx]
@@ -369,13 +369,13 @@ class SchemaShiftReplayLoop(AgentLoopBase):
                         "Please provide your final answer directly."
                     )
                     consecutive_errors += 1
-                    logger.info(
+                    logger.debug(
                         f"[replay {rid_short}] turn={turn_idx} oracle 期望 {oracle_type}，"
                         f"模型给了 tool_call "
                         f"errors={consecutive_errors}/{self.max_consecutive_errors}"
                     )
                     if consecutive_errors >= self.max_consecutive_errors:
-                        logger.info(f"[replay {rid_short}] turn={turn_idx} 连续错误超限，终止 episode")
+                        logger.debug(f"[replay {rid_short}] turn={turn_idx} 连续错误超限，终止 episode")
                         break
                 elif _match_tool_call(all_parsed_calls, current_oracle, name_map, enum_map):
                     # 匹配成功 → 返回预存 observation
@@ -385,7 +385,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
                     n_correct_calls += 1
                     oracle_step_idx += 1
                     consecutive_errors = 0  # 重置错误计数
-                    logger.info(
+                    logger.debug(
                         f"[replay {rid_short}] turn={turn_idx} 匹配成功 "
                         f"tool={all_parsed_calls[0]['name']} step={oracle_step_idx}/{len(oracle_actions)}"
                     )
@@ -398,7 +398,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
                         f"with correct arguments. Please check and try again."
                     )
                     consecutive_errors += 1
-                    logger.info(
+                    logger.debug(
                         f"[replay {rid_short}] turn={turn_idx} 不匹配 "
                         f"model={model_name} expected={expected_name} "
                         f"errors={consecutive_errors}/{self.max_consecutive_errors}"
@@ -406,7 +406,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
                     # P2 修复：连续错误超限 → 终止 episode（而非推进 oracle）
                     # 避免跳过未完成的 oracle step 导致 coverage 语义混乱
                     if consecutive_errors >= self.max_consecutive_errors:
-                        logger.info(
+                        logger.debug(
                             f"[replay {rid_short}] turn={turn_idx} 连续错误超限，终止 episode"
                         )
                         break
@@ -414,12 +414,12 @@ class SchemaShiftReplayLoop(AgentLoopBase):
                 # oracle 步骤已耗尽
                 observation = "Error: No more actions expected. Please provide your final answer."
                 consecutive_errors += 1
-                logger.info(
+                logger.debug(
                     f"[replay {rid_short}] turn={turn_idx} oracle 步骤已耗尽 "
                     f"errors={consecutive_errors}/{self.max_consecutive_errors}"
                 )
                 if consecutive_errors >= self.max_consecutive_errors:
-                    logger.info(f"[replay {rid_short}] turn={turn_idx} 连续错误超限，终止 episode")
+                    logger.debug(f"[replay {rid_short}] turn={turn_idx} 连续错误超限，终止 episode")
                     break
 
             # 4. 将 observation 编码为 tool role message，拼接到 response
@@ -431,7 +431,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
 
             # 长度检查
             if len(all_response_ids) + len(tool_tokens) >= self.response_length:
-                logger.info(f"[replay {rid_short}] turn={turn_idx} 加入 obs 后超长，终止")
+                logger.debug(f"[replay {rid_short}] turn={turn_idx} 加入 obs 后超长，终止")
                 break
 
             # tool observation → mask=0（不参与 loss）
@@ -444,7 +444,7 @@ class SchemaShiftReplayLoop(AgentLoopBase):
 
         # 计算 reward（不在 agent loop 中计算，交给 verl 的 reward function）
         # reward_score = None 表示由外部 reward function 计算
-        logger.info(
+        logger.debug(
             f"[replay {rid_short}] done | turns={turn_idx + 1} "
             f"| tool_calls={n_model_tool_calls} correct={n_correct_calls} "
             f"| oracle_covered={oracle_step_idx}/{len(oracle_actions)} "

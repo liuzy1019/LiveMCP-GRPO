@@ -83,7 +83,7 @@ class ExporterConfig:
     max_tools_in_prompt: int = 20  # 最多展示多少个工具 schema
     # 过滤
     max_completion_length: int = 2048  # completion 最大字符数
-    max_prompt_length: int = 8192  # prompt 最大字符数（估算）
+    max_prompt_length: int = 10240  # prompt 最大字符数（估算）
     skip_no_tool_episodes: bool = False  # 是否跳过 no_tool 类型
     # 多步展开
     expand_all_steps: bool = True  # True: 展开所有步骤; False: 只取第一步

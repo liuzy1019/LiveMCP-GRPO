@@ -15,11 +15,13 @@ Usage:
 
 import argparse
 import copy
+import hashlib
 import json
 import sys
 from pathlib import Path
 
 import pandas as pd
+from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -30,6 +32,12 @@ from src.envs.schema_perturber import SchemaPerturber, LEVEL_NONE, LEVEL_MILD, L
 # E4 SchemaShift 扰动展开配置：每 seed 3 层 × 每层 3 副本 = 9 行
 E4_LEVELS = [LEVEL_NONE, LEVEL_MILD, LEVEL_STRONG]
 E4_COPIES_PER_LEVEL = 3
+
+
+def _stable_seed(text: str) -> int:
+    """Return a process-stable 31-bit seed for reproducible data generation."""
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") & 0x7FFFFFFF
 
 
 def episode_to_verl_row(
@@ -202,6 +210,9 @@ def format_tools_for_prompt(tools: list[dict]) -> str:
 
 
 def main():
+    logger.remove()
+    logger.add(sys.stderr, level="WARNING")
+
     parser = argparse.ArgumentParser(description="EpisodeSeed → verl parquet")
     # 输入输出
     parser.add_argument("--episode_seeds", type=str, required=True)
@@ -263,7 +274,7 @@ def main():
 
         for level in E4_LEVELS:
             # 每层独立 SchemaPerturber，避免 name_map/enum_map 跨层污染
-            base_seed = hash(group_id + level) & 0x7FFFFFFF
+            base_seed = _stable_seed(f"{group_id}:{level}")
 
             if level == LEVEL_NONE:
                 tools = copy.deepcopy(deduped_tools)
@@ -292,8 +303,14 @@ def main():
                 row = episode_to_verl_row(ep, tools, level, nm, em, copy_i)
                 rows.append(row)
 
-    print(f"E4 展开: {len(episodes)} seeds → {len(rows)} rows ({len(rows)//len(episodes)} rows/seed)")
     df = pd.DataFrame(rows)
+    n_groups = df["group_id"].nunique() if "group_id" in df.columns else 0
+    skipped = len(episodes) - n_groups
+    records_per_group = (len(rows) // n_groups) if n_groups else 0
+    print(
+        f"E4 展开: {len(episodes)} seeds → {n_groups} trainable groups "
+        f"({skipped} skipped) → {len(rows)} rows ({records_per_group} rows/group)"
+    )
 
     # P1-4: E4 group 完整性校验
     if args.expect_e4_groups and "group_id" in df.columns:

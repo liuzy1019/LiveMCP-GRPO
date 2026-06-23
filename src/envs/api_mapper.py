@@ -97,12 +97,16 @@ class FunctionNameMapper:
         """将嵌套格式的 enum_map 展平为 {perturbed: original}。"""
         if not self.enum_map:
             return {}
-        first_val = next(iter(self.enum_map.values()), None)
-        if isinstance(first_val, dict):
+        has_nested = any(isinstance(v, dict) for v in self.enum_map.values())
+        if has_nested:
             # 精确格式: {func: {param: {pert: orig}}}
             flat = {}
             for func_enums in self.enum_map.values():
+                if not isinstance(func_enums, dict):
+                    continue
                 for param_enums in func_enums.values():
+                    if not isinstance(param_enums, dict):
+                        continue
                     flat.update(param_enums)
             return flat
         else:
@@ -129,16 +133,32 @@ def build_perturbed_ground_truth(
 
     # 反转 enum_map（original → perturbed）
     if enum_map:
-        first_val = next(iter(enum_map.values()), None)
-        if isinstance(first_val, dict):
+        has_nested = any(isinstance(v, dict) for v in enum_map.values())
+        if has_nested:
             # 嵌套格式 → 展平后反转
             flat = {}
             for func_enums in enum_map.values():
+                if not isinstance(func_enums, dict):
+                    continue
                 for param_enums in func_enums.values():
+                    if not isinstance(param_enums, dict):
+                        continue
                     flat.update(param_enums)
-            reverse_enum_map = {v: k for k, v in flat.items()}
+            reverse_enum_map = {}
+            for k, v in flat.items():
+                try:
+                    hash(v)
+                    reverse_enum_map[v] = k
+                except TypeError:
+                    pass
         else:
-            reverse_enum_map = {v: k for k, v in enum_map.items()}
+            reverse_enum_map = {}
+            for k, v in enum_map.items():
+                try:
+                    hash(v)
+                    reverse_enum_map[v] = k
+                except TypeError:
+                    pass
     else:
         reverse_enum_map = {}
 

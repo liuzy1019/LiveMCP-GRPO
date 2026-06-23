@@ -35,17 +35,21 @@ class LiveMCPManager:
 
     def start_suite(self) -> None:
         root = project_root()
-        for cfg in self.suite_config.servers:
-            if not cfg.enabled:
-                continue
-            transport = self._build_transport(cfg, root)
-            transport.start()
-            self._transports[cfg.name] = transport
-        bootstrap = self.create_session(seed=self._default_seed())
         try:
-            self.discover_tools(bootstrap.session_id)
-        finally:
-            self.close_session(bootstrap.session_id)
+            for cfg in self.suite_config.servers:
+                if not cfg.enabled:
+                    continue
+                transport = self._build_transport(cfg, root)
+                transport.start()
+                self._transports[cfg.name] = transport
+            bootstrap = self.create_session(seed=self._default_seed())
+            try:
+                self.discover_tools(bootstrap.session_id)
+            finally:
+                self.close_session(bootstrap.session_id)
+        except Exception:
+            self.stop_suite()
+            raise
 
     def stop_suite(self) -> None:
         for transport in self._transports.values():

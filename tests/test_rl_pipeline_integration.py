@@ -384,6 +384,24 @@ class TestMCPToolEnvironment:
         # unparseable → executor 收到 action_type="unparseable" → 未知类型 → done
         assert done is True
 
+    def test_match_config_not_mutated_across_resets(self):
+        """共享 EnvConfig.match_config 不应被 episode metadata 原地污染。"""
+        ep_with_map = _make_simple_episode()
+        ep_with_map.metadata["name_map"] = {"fetch_weather": "get_weather"}
+        ep_without_map = _make_simple_episode()
+
+        shared_match_config = MatchConfig()
+        env = MCPToolEnvironment(
+            EnvConfig(strict_parse=False, match_config=shared_match_config)
+        )
+
+        env.reset(ep_with_map)
+        assert env.get_reward_info()["metadata"]["name_map"] == {"fetch_weather": "get_weather"}
+
+        env.reset(ep_without_map)
+        assert env.get_reward_info()["metadata"]["name_map"] == {}
+        assert shared_match_config.name_map == {}
+
 
 # ---- TrajectoryVerifier tests ----
 

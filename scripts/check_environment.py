@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""dancegrpo 环境兼容性检查脚本。
+"""SchemaShift-GRPO 环境兼容性检查脚本。
 在目标机器上运行: python check_environment.py
 """
 
+import os
 import sys
 import platform
-from subprocess import run, PIPE
+from pathlib import Path
+from subprocess import run
 
 try:
     from packaging.version import parse as parse_version
@@ -26,7 +28,7 @@ def version_at_least(output: str, minimum: str) -> bool:
         return False
 
 
-def check(header, cmds, checks):
+def check(header, checks):
     """检查一组依赖项。"""
     print(f"\n{'='*50}")
     print(f"  {header}")
@@ -34,9 +36,9 @@ def check(header, cmds, checks):
     all_ok = True
     for label, cmd, expected in checks:
         try:
-            result = run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+            result = run(cmd, capture_output=True, text=True, timeout=10)
             output = result.stdout.strip() or result.stderr.strip()
-            ok = expected(output)
+            ok = result.returncode == 0 and expected(output)
             status = "✅" if ok else "❌"
             if not ok:
                 all_ok = False
@@ -53,8 +55,8 @@ def main():
     print(f"Python: {sys.version.split()[0]}")
 
     # Python 版本
-    ok_py = sys.version_info >= (3, 10)
-    print(f"{'✅' if ok_py else '❌'} Python >= 3.10: {sys.version.split()[0]}")
+    ok_py = sys.version_info >= (3, 11)
+    print(f"{'✅' if ok_py else '❌'} Python >= 3.11: {sys.version.split()[0]}")
 
     # CUDA
     try:
@@ -73,30 +75,31 @@ def main():
             print(f"    显存: {total_mem:.0f} GB")
 
     # 核心 Python 包
-    ok = check("核心依赖检查", "", [
-        ("torch", f"python -c 'import torch; print(torch.__version__)'",
+    py = sys.executable
+    ok = check("核心依赖检查", [
+        ("torch", [py, "-c", "import torch; print(torch.__version__)"],
          lambda x: version_at_least(x, "2.0.0")),
-        ("transformers", f"python -c 'import transformers; print(transformers.__version__)'",
+        ("transformers", [py, "-c", "import transformers; print(transformers.__version__)"],
          lambda x: version_at_least(x, "4.0")),
-        ("numpy", f"python -c 'import numpy; print(numpy.__version__)'",
+        ("numpy", [py, "-c", "import numpy; print(numpy.__version__)"],
          lambda x: True),
-        ("PyYAML", f"python -c 'import yaml; print(yaml.__version__)'",
+        ("PyYAML", [py, "-c", "import yaml; print(yaml.__version__)"],
          lambda x: True),
-        ("pydantic", f"python -c 'import pydantic; print(pydantic.__version__)'",
+        ("pydantic", [py, "-c", "import pydantic; print(pydantic.__version__)"],
          lambda x: version_at_least(x, "2.0")),
-        ("loguru", f"python -c 'import loguru; print(loguru.__version__)'",
+        ("loguru", [py, "-c", "import loguru; print(loguru.__version__)"],
          lambda x: True),
-        ("huggingface_hub", f"python -c 'import huggingface_hub; print(huggingface_hub.__version__)'",
+        ("huggingface_hub", [py, "-c", "import huggingface_hub; print(huggingface_hub.__version__)"],
          lambda x: True),
     ])
 
     # RL 训练框架（可选）
-    ok &= check("RL 训练框架检查（可选）", "", [
-        ("vllm", f"python -c 'import vllm; print(vllm.__version__)'",
+    ok &= check("RL 训练框架检查（可选）", [
+        ("vllm", [py, "-c", "import vllm; print(vllm.__version__)"],
          lambda x: version_at_least(x, "0.6.0")),
-        ("verl", f"python -c 'import verl; print(\"OK\")'",
+        ("verl", [py, "-c", "import verl; print('OK')"],
          lambda x: "OK" in x),
-        ("bfcl executor", f"python -c 'from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_utils import execute_multi_turn_func_call; print(\"OK\")'",
+        ("bfcl executor", [py, "-c", "from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_utils import execute_multi_turn_func_call; print('OK')"],
          lambda x: "OK" in x),
     ])
 
@@ -107,12 +110,21 @@ def main():
     if cuda_ok and torch is not None:
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
+            project_root = Path(__file__).resolve().parent.parent
+            default_model = project_root / "models" / "Qwen3-4B"
+            model_path = os.environ.get(
+                "SCHEMASHIFT_ENV_TEST_MODEL",
+                str(default_model) if default_model.exists() else "",
+            )
+            if not model_path:
+                print("  ⚠️ 未找到本地 models/Qwen3-4B，跳过 GPU 推理测试")
+                raise RuntimeError("skip_gpu_inference_test")
             model = AutoModelForCausalLM.from_pretrained(
-                "Qwen/Qwen2.5-1.5B-Instruct",
+                model_path,
                 torch_dtype="auto",
                 device_map="cuda:0",
             )
-            tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-1.5B-Instruct")
+            tokenizer = AutoTokenizer.from_pretrained(model_path)
             inputs = tokenizer("Hello", return_tensors="pt").to("cuda:0")
             out = model.generate(**inputs, max_new_tokens=10)
             print(f"  ✅ 模型推理成功: {tokenizer.decode(out[0])[:50]}")
@@ -120,17 +132,23 @@ def main():
             import gc; gc.collect()
             torch.cuda.empty_cache()
         except Exception as e:
-            print(f"  ⚠️ 推理测试失败: {e}")
+            if str(e) != "skip_gpu_inference_test":
+                print(f"  ⚠️ 推理测试失败: {e}")
 
     # 总结
     print(f"\n{'='*50}")
-    if ok:
+    final_ok = ok and ok_py and cuda_ok
+    if final_ok:
         print("  ✅ 环境兼容性检查通过")
     else:
         print(f"  {'⚠️' if ok_py and cuda_ok else '❌'} 环境兼容性检查{'部分' if ok_py and cuda_ok else '不'}通过")
-        print("  缺少的包可以在验证后安装: pip install <package>")
+        if not cuda_ok:
+            print("  CUDA 不可用；请检查 NVIDIA driver/GPU 可见性。")
+        if not ok:
+            print("  缺少的包可以在验证后安装: pip install <package>")
     print(f"{'='*50}")
+    return final_ok
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main() else 1)

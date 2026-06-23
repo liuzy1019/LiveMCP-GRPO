@@ -16,7 +16,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop, _parse_bfcl_native_args
 from src.eval.bfcl_eval import _run_inference_single
 from src.reward.bfcl_reward import compute_bfcl_reward
-from src.eval.bfcl_eval import _evaluate_per_turn
+from src.eval.bfcl_eval import _evaluate_per_turn, _record_task_id
 
 
 def test_parser_supports_dotted_names_and_positional_arguments():
@@ -268,3 +268,12 @@ def test_eval_inference_maps_perturbed_calls_before_scoring():
     assert _run_inference_single(FakeLLM(), FakeTokenizer(), record, object(), max_turns=1) == [
         {"name": "search_flights", "arguments": {"class": "economy"}}
     ]
+
+
+def test_eval_record_task_id_uses_current_grpo_fields():
+    assert _record_task_id({"group_id": "episode-a"}) == "episode-a"
+    assert _record_task_id({"uid": "episode-b___none___call_only___r0"}) == "episode-b"
+    assert (
+        _record_task_id({"extra_info": json.dumps({"episode_id": "episode-c"})})
+        == "episode-c"
+    )

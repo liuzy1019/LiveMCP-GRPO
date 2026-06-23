@@ -2,6 +2,12 @@
 
 本目录下的数据文件不入库（详见根目录 `.gitignore`），clone 后请按以下步骤复现。
 
+当前本地快照已包含：
+
+- `data/toucan/episode_seeds.jsonl`：4962 条有效 EpisodeSeed（见 `data/toucan/builder_stats.json`）
+- `data/sft/sft_train.jsonl`：9146 条 SFT 样本（见 `data/sft/export_stats.json`）
+- `data/grpo_train_replay.parquet` 与 `data/grpo_val_replay.parquet`：GRPO replay 数据
+
 ## 目录结构
 
 ```

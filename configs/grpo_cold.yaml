@@ -1,8 +1,8 @@
-# SchemaShift-GRPO（E4-Cold）：SFT 冷启动 → GRPO，扰动数据 + 分层 advantage
+# SchemaShift-GRPO（Cold）：SFT 冷启动 → GRPO，扰动数据 + 分层 advantage
 #
-# 与 exp4_schemashift.yaml 唯一区别：model.path 指向 SFT cold-start 产出权重
+# 与 grpo_direct.yaml 唯一区别：model.path 指向 SFT cold-start 产出权重
 exp:
-  name: exp4_schemashift_cold_v1
+  name: schemashift_cold_v1
 
 model:
   path: outputs/sft_cold_start_4b/final

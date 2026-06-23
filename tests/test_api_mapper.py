@@ -54,6 +54,17 @@ class TestFunctionNameMapper:
         assert "find_flights" not in result
         assert "book_reservation" not in result
 
+    def test_mixed_enum_map_ignores_non_nested_entries(self):
+        """混合 enum_map 不应因只看第一个 value 而把 nested dict 当替换值。"""
+        mapper = FunctionNameMapper(
+            enum_map={
+                "legacy": "old",
+                "search_flights": {"class": {"standard": "economy"}},
+            }
+        )
+        result = mapper.map_func_call("search_flights(class='standard')")
+        assert result == "search_flights(class='economy')"
+
 class TestBuildPerturbedGroundTruth:
     """build_perturbed_ground_truth 测试。"""
 
@@ -81,3 +92,12 @@ class TestBuildPerturbedGroundTruth:
         result = build_perturbed_ground_truth(gt_list, name_map)
         # search_flights 是 original，应该被映射为 find_flights
         assert "find_flights" in result[0]
+
+    def test_unhashable_enum_original_does_not_crash(self):
+        """异常 enum_map 值为 dict 时，构建扰动 GT 不应崩溃。"""
+        result = build_perturbed_ground_truth(
+            ["search_flights(class='economy')"],
+            name_map={},
+            enum_map={"search_flights": {"class": {"standard": {"raw": "economy"}}}},
+        )
+        assert result == ["search_flights(class='economy')"]

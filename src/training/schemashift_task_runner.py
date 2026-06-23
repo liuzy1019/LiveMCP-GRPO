@@ -37,4 +37,4 @@ class SchemaShiftTaskRunner(TaskRunner):
             logger.warning("SchemaShiftTaskRunner: estimator 注册失败，将使用标准 GRPO")
 
         # 执行标准训练流程
-        super().run(config)
+        return super().run(config)

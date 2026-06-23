@@ -226,7 +226,19 @@ done
 
 # ---- 探测 GPU 显存 ----
 FIRST_GPU=$(echo "${CUDA_VISIBLE_DEVICES}" | cut -d',' -f1)
-GPU_MEM_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits -i "${FIRST_GPU}" | tr -d ' ')
+if ! command -v nvidia-smi >/dev/null 2>&1; then
+    echo "ERROR: 未找到 nvidia-smi，无法运行 GRPO smoke" >&2
+    exit 1
+fi
+if ! GPU_MEM_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits -i "${FIRST_GPU}" 2>/dev/null | tr -d ' '); then
+    echo "ERROR: nvidia-smi 无法读取 GPU ${FIRST_GPU}，无法运行 GRPO smoke" >&2
+    echo "       请确认 NVIDIA driver 正常，并在 arl 环境运行: nvidia-smi -L" >&2
+    exit 1
+fi
+if ! [[ "${GPU_MEM_MIB}" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: nvidia-smi 返回的显存不是数字: ${GPU_MEM_MIB}" >&2
+    exit 1
+fi
 GPU_MEM_GIB=$((GPU_MEM_MIB / 1024))
 
 echo "=== GPU Info ==="

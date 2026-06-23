@@ -6,24 +6,24 @@
 
 | 路线 | 配置文件 | 启动脚本 | Python 入口 |
 |------|----------|----------|-------------|
-| 直接 GRPO | `exp4_schemashift.yaml` | `bash scripts/run_grpo.sh` | `src/training/run_exp4.py` |
-| SFT 冷启动 → GRPO | `exp4_schemashift_cold.yaml` | `MODE=cold bash scripts/run_grpo.sh` | `src/training/run_exp4.py` |
+| 直接 GRPO | `grpo_direct.yaml` | `bash scripts/run_grpo.sh` | `src/training/run_grpo.py` |
+| SFT 冷启动 → GRPO | `grpo_cold.yaml` | `MODE=cold bash scripts/run_grpo.sh` | `src/training/run_grpo.py` |
 
 ## 文件清单
 
 | 文件 | 用途 | 状态 |
 |------|------|------|
-| `exp4_schemashift.yaml` | 直接 GRPO（交互式 replay + StratAdv） | ✅ |
-| `exp4_schemashift_cold.yaml` | SFT 冷启动 → GRPO | ✅ |
+| `grpo_direct.yaml` | 直接 GRPO（交互式 replay + StratAdv） | ✅ |
+| `grpo_cold.yaml` | SFT 冷启动 → GRPO | ✅ |
 | `sft_cold_start_4b.yaml` | Qwen3-4B SFT cold-start（格式对齐） | ✅ |
 | `grpo_smoke.yaml` | GRPO smoke test（2 步验证链路） | ✅ |
 | `agent_loop.yaml` | Agent loop 配置 | ✅ |
 | `ds_zero2.json` | DeepSpeed ZeRO-2（JSON 格式，DS 直接消费） | ✅ |
 | `live_mcp/` | Live MCP 配置（可选并行分支） | ✅ |
 
-## E4 正式训练核心参数
+## 正式训练核心参数
 
-配置文件：[exp4_schemashift.yaml](exp4_schemashift.yaml)
+配置文件：[grpo_direct.yaml](grpo_direct.yaml)
 
 | YAML 路径 | 当前值 | 说明 |
 |-----------|--------|------|
@@ -37,8 +37,16 @@
 
 可通过环境变量覆盖：`N_GPUS`、`BETA`、`TOTAL_STEPS`、`SAVE_FREQ`、`TEST_FREQ`
 
+正式入口也支持 `--config PATH` 与位置参数形式的 Hydra overrides，例如：
+
+```bash
+bash scripts/run_grpo.sh --config configs/grpo_direct.yaml trainer.total_training_steps=10
+MODE=cold bash scripts/run_grpo.sh
+```
+
 ## 注意
 
 - `ds_zero2.json` 保持 JSON 格式（DeepSpeed 不支持 YAML）
 - Live MCP 配置是可选并行分支，不影响默认 replay 训练路径
 - 所有路径使用项目根目录相对路径，禁止写死机器绝对路径
+- 本目录只描述配置事实；正式 GRPO 是否完成以 `checkpoints/`、训练日志和目标 GPU 环境复验结果为准
