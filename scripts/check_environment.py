@@ -99,8 +99,6 @@ def main():
          lambda x: version_at_least(x, "0.6.0")),
         ("verl", [py, "-c", "import verl; print('OK')"],
          lambda x: "OK" in x),
-        ("bfcl executor", [py, "-c", "from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_utils import execute_multi_turn_func_call; print('OK')"],
-         lambda x: "OK" in x),
     ])
 
     # GPU 推理测试

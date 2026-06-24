@@ -20,6 +20,7 @@ export RAY_DEDUP_LOGS="${RAY_DEDUP_LOGS:-1}"
 export SCHEMASHIFT_CONSOLE_LOG_MODE="${SCHEMASHIFT_CONSOLE_LOG_MODE:-compact}"
 export SCHEMASHIFT_VAL_NUM_EXAMINE="${SCHEMASHIFT_VAL_NUM_EXAMINE:-0}"
 export SCHEMASHIFT_VERBOSE_VALIDATION="${SCHEMASHIFT_VERBOSE_VALIDATION:-0}"
+export LOGURU_LEVEL="${LOGURU_LEVEL:-INFO}"  # 默认 INFO，避免 DEBUG 刷屏；需要 DEBUG 的用 LOGURU_LEVEL=DEBUG 启动
 # 注意：不要设置 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # vLLM 0.11 的 CuMemAllocator 与 expandable_segments 互斥（会 assert 失败）
 # verl 自己通过 torch.cuda.memory._set_allocator_settings() 在训练阶段动态开启
@@ -124,9 +125,9 @@ N_GPUS="${N_GPUS:-8}"
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 export CUDA_VISIBLE_DEVICES
 MODEL_PATH="${MODEL_PATH:-outputs/sft_cold_start_4b/final}"
-TRAIN_FILE="${TRAIN_FILE:-data/grpo_train_replay.parquet}"
-VAL_FILE="${VAL_FILE:-data/grpo_val_replay.parquet}"
-REWARD_FN_PATH="${REWARD_FN_PATH:-src/reward/schemashift_reward_fn.py}"
+TRAIN_FILE="${TRAIN_FILE:-data/oval_grpo_train.parquet}"
+VAL_FILE="${VAL_FILE:-data/oval_grpo_val.parquet}"
+REWARD_FN_PATH="${REWARD_FN_PATH:-src/reward/oval_reward_fn.py}"
 TOTAL_STEPS="${TOTAL_STEPS:-2}"
 LR="${LR:-1e-6}"
 LR_WARMUP_RATIO="${LR_WARMUP_RATIO:-0.1}"
@@ -328,10 +329,7 @@ for path in sys.argv[1:]:
             f"{path} is missing required SchemaShift fields: {sorted(missing)}\n"
             "Fields must be either top-level columns or inside extra_info dict.\n"
 "Regenerate data with:\n"
-"  python scripts/prepare_grpo_data.py "
-"--episode_seeds data/toucan/episode_seeds.jsonl "
-"--output data/grpo_train_replay.parquet "
-"--val_output data/grpo_val_replay.parquet"
+"  python scripts/generate_oval_data.py "
         )
     if "perturbation_level" in df.columns:
         levels = df["perturbation_level"].value_counts().to_dict()

@@ -4,7 +4,7 @@
 SchemaShiftTaskRunner 会注册 schemashift_grpo estimator，但实际使用的 estimator
 由 config 中的 algorithm.adv_estimator 决定。
 
-正式训练请使用 src/training/run_grpo.py（交互式静态 replay）。
+正式训练请使用 src/training/run_grpo.py（OVAL Live MCP rollout）。
 
 Usage:
     python scripts/train_grpo.py [hydra overrides...]
@@ -54,13 +54,9 @@ from src.training.length_check import maybe_run_length_check
 from src.training.schemashift_task_runner import SchemaShiftTaskRunner
 from verl.trainer.main_ppo import run_ppo
 
-# 注册 agent loop（支持交互式 replay smoke test）
+# 注册 agent loop
 try:
-    from src.agent_loop.schemashift_replay_loop import SchemaShiftReplayLoop  # noqa: F401
-except ImportError:
-    pass
-try:
-    from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
+    from src.agent_loop.schemashift_oval_loop import SchemaShiftOvalLoop  # noqa: F401
 except ImportError:
     pass
 

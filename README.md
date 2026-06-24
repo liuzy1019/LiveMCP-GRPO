@@ -16,7 +16,7 @@
 
 | 阶段 | 状态 | 说明 |
 |------|------|------|
-| 数据准备 | ✅ 本地就绪 | 4962 条 EpisodeSeed、9146 条 SFT 样本、GRPO train/val parquet 已存在 |
+| 数据准备 | ✅ 本地就绪 | 4962 条 EpisodeSeed、9146 条 SFT 样本、GRPO train/val parquet 已重建：train 33003 行 / val 1728 行，含 no_tool 与 distractor |
 | SFT Cold-Start | ✅ 本地产物存在 | `training_report.json` 与 `final/` 权重存在；当前 shell 无可用 GPU，未重新复训 |
 | RL 训练 | ⏳ 入口/配置就绪 | direct/cold 配置与脚本已就绪；本地未发现正式 GRPO checkpoint |
 | Live MCP MVP | ✅ 可选分支 | calendar/shopping subprocess stdio server；默认不接入 GRPO |
@@ -32,16 +32,17 @@ schemashift-grpo/
 │   ├── envs/                       # schema_perturber + api_mapper + replay_mcp_executor + mcp_tool_environment
 │   ├── data/                       # episode_seed_builder + conditioned_builder + distractor_sampler + sft_step_exporter
 │   ├── reward/                     # action_parser + component_reward + schemashift_reward_fn (多步奖励)
-│   ├── eval/                       # bfcl_eval + matching
+│   ├── eval/                       # enum matching
 │   ├── training/                   # schemashift_advantage + grpo_estimator + register_estimator + length_check
-│   ├── agent_loop/                 # schemashift_replay_loop (正式) + bfcl_agent_loop (legacy)
+│   ├── agent_loop/                 # schemashift_replay_loop (正式) + schemashift_oval_loop (live MCP)
 │   └── live_mcp/                   # live MCP MVP: subprocess stdio servers + offline rollout/reward
 ├── scripts/                        # 训练/数据/环境脚本
-│   ├── run_grpo.sh                 # 路由入口 → run_schemashift.sh
+│   ├── train_grpo.py                # GRPO 统一训练入口
 │   ├── run_grpo_smoke.sh           # smoke test shell
+│   ├── oval_grpo_smoke.sh          # OVAL smoke test shell
 │   ├── sft_cold_start.py           # SFT cold-start
 │   ├── prepare_grpo_data.py        # EpisodeSeed → verl parquet
-│   └── train/grpo/run_schemashift.sh  # E4 正式训练脚本
+│   └── generate_oval_data.py       # OVAL 训练数据生成
 ├── configs/
 │   ├── grpo_direct.yaml           # 直接 GRPO 配置
 │   ├── grpo_cold.yaml             # SFT冷启动→GRPO 配置
@@ -78,7 +79,7 @@ conda run -n arl python -m compileall src scripts tests
 git diff --check
 ```
 
-当前本地复核结果：`arl` 环境下全量测试 292 passed；当前 shell 的 CUDA 不可用，GRPO smoke/正式训练仍需目标 GPU 环境复验。
+当前本地复核结果：`arl` 环境下全量测试 297 passed；当前 shell 的 CUDA 不可用，GRPO smoke/正式训练仍需目标 GPU 环境复验。
 
 ## SFT Cold-Start
 
@@ -97,6 +98,13 @@ python scripts/prepare_grpo_data.py \
     --output data/grpo_train_replay.parquet \
     --val_output data/grpo_val_replay.parquet
 ```
+
+当前默认导出策略：
+
+- 每个 group 仍按 `none/mild/strong × 3 copies = 9` 行展开。
+- `no_tool` 默认按最终 group 约 15% 采样进入 GRPO。
+- 每条展开记录默认以 40% 概率注入 3-8 个 distractor tools。
+- 本地当前快照：train `33003` 行 / `3667` groups；val `1728` 行 / `192` groups。
 
 ## GRPO 训练
 

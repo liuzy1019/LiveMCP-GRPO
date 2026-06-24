@@ -15,7 +15,14 @@ SchemaShift Advantage 计算（参考实现 / 单元测试 oracle）。
 import torch
 from loguru import logger
 
-from src.envs.schema_perturber import PerturbationLevel, TRAINING_LEVELS
+# 扰动强度级别（从已删除的 src/envs/schema_perturber 提取，OVAL 路线用于分层 advantage 计算）
+PerturbationLevel = str
+LEVEL_NONE: PerturbationLevel = "none"
+LEVEL_MILD: PerturbationLevel = "mild"
+LEVEL_MODERATE: PerturbationLevel = "moderate"
+LEVEL_STRONG: PerturbationLevel = "strong"
+
+TRAINING_LEVELS = [LEVEL_NONE, LEVEL_MILD, LEVEL_STRONG]
 
 
 def compute_schemashift_advantages(

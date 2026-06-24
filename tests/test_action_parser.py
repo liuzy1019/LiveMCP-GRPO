@@ -77,7 +77,7 @@ class TestMultiLineJsonInvalidArguments:
 
     def test_string_arguments_multiline(self):
         """tagged 内多行 JSON，arguments 为字符串 → 不崩溃。"""
-        output = '<tool_call>\n{"name":"get_weather","arguments":"city=Beijing"}\n{"name":"get_time","arguments":{"zone":"CST"}}\n</tool_call>'
+        output = '\<tool_call\>\n{"name":"get_weather","arguments":"city=Beijing"}\n{"name":"get_time","arguments":{"zone":"CST"}}\n</tool_call>'
         result = parse_action(output)
         assert result.action_type == "tool_call"
         assert result.parseable is True
@@ -114,32 +114,5 @@ class TestNormalizeToolCallHelper:
         assert result == {"name": "foo", "arguments": {}, "_args_was_invalid": False}
 
 
-class TestEndToEndRewardNocrash:
-    """端到端验证：所有 fallback 路径 + reward 计算不崩溃。"""
-
-    def test_qwen_direct_string_args_reward(self):
-        """Qwen 直出 + 字符串 arguments → reward 计算不崩溃。"""
-        from src.reward.component_reward import ComponentReward, OracleAction
-
-        r = ComponentReward()
-        o = OracleAction(
-            action_type="tool_call",
-            tool_calls=[{"name": "get_weather", "arguments": {"city": "Beijing"}}],
-        )
-        output = '{"name":"get_weather","arguments":"city=Beijing"}'
-        result = r.compute(output, o)
-        assert result.total_reward >= 0
-        assert result.components["schema_valid"] == 0.0
-
-    def test_multiline_string_args_reward(self):
-        """多行 JSON + 字符串 arguments → reward 计算不崩溃。"""
-        from src.reward.component_reward import ComponentReward, OracleAction
-
-        r = ComponentReward()
-        o = OracleAction(
-            action_type="tool_call",
-            tool_calls=[{"name": "get_weather", "arguments": {"city": "Beijing"}}],
-        )
-        output = '<tool_call>\n{"name":"get_weather","arguments":"city=Beijing"}\n{"name":"get_time","arguments":{"zone":"CST"}}\n</tool_call>'
-        result = r.compute(output, o)
-        assert result.total_reward >= 0
+# End-to-end reward tests removed — component_reward module deleted as part of replay route cleanup.
+# Oval reward tests live in tests/test_oval_mcp_components.py

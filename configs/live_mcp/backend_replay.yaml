@@ -1,8 +1,0 @@
-# Live MCP 后端覆盖 — 强制使用 replay 模式
-# 用法：显式指定 replay，覆盖可能的 live 默认
-
-environment:
-  backend: replay
-
-replay:
-  episode_seeds_path: data/toucan/episode_seeds.jsonl

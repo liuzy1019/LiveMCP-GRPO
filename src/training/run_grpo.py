@@ -52,14 +52,8 @@ def main() -> None:
     _maybe_run_pre_check()
 
     # 注册 agent loop（必须在 verl 启动前 import）
-    from src.agent_loop.schemashift_replay_loop import SchemaShiftReplayLoop  # noqa: F401
-    print("  Agent loop SchemaShiftReplayLoop 已注册")
-
-    # 保留 BFCLAgentLoop 注册（兼容旧配置）
-    try:
-        from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
-    except ImportError:
-        pass
+    from src.agent_loop.schemashift_oval_loop import SchemaShiftOvalLoop  # noqa: F401
+    print("  Agent loop SchemaShiftOvalLoop 已注册")
 
     # 注册 schemashift_grpo estimator + patch verl 传递 non_tensor_batch
     # 主进程注册一次，便于 fail-fast；ray actor 内还需重新注册（见下面 SchemaShiftTaskRunner）
@@ -74,11 +68,7 @@ def main() -> None:
 
     class SchemaShiftTaskRunner(TaskRunner):
         def run(self, config):
-            from src.agent_loop.schemashift_replay_loop import SchemaShiftReplayLoop  # noqa: F401
-            try:
-                from src.agent_loop.bfcl_agent_loop import BFCLAgentLoop  # noqa: F401
-            except ImportError:
-                pass
+            from src.agent_loop.schemashift_oval_loop import SchemaShiftOvalLoop  # noqa: F401
             from src.training.register_estimator import register_schemashift_estimator
             register_schemashift_estimator()
             return super().run(config)

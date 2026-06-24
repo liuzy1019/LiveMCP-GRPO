@@ -1,0 +1,352 @@
+"""Task Reward: R_task per OVAL-MCP §7.1.
+
+Phase 1 uses trajectory-level R_task composed of:
+  R_positive = w_val * R_validity + w_cov * R_coverage + w_name * R_name + w_arg * R_arg
+  R_task = clip(R_positive / Z_pos + w_eff * R_efficiency, -0.2, 1.0)
+
+If required_tool_calls = []: binary R_task (no-tool tasks).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+from src.oval_mcp.verifier.events import EventLog
+
+
+# Recommended weights from OVAL-MCP §7.1
+DEFAULT_WEIGHTS = {
+    "w_val": 0.5,
+    "w_cov": 0.5,
+    "w_eff": 0.15,
+    "w_name": 0.2,
+    "w_arg": 0.1,
+    "w_struct": 0.6,
+    "w_exec": 0.4,
+    "alpha_eff": 0.3,
+    "beta_budget": 0.3,
+}
+
+
+@dataclass
+class TaskRewardResult:
+    """Decomposed task reward with all components."""
+
+    r_task: float = 0.0
+    r_validity: float = 0.0
+    r_structural: float = 0.0
+    r_execution: float = 0.0
+    r_coverage: float = 0.0
+    r_name: float = 0.0
+    r_arg: float = 0.0
+    r_efficiency: float = 0.0
+    r_positive: float = 0.0
+    z_pos: float = 1.0
+
+    # Diagnostics
+    n_model_calls: int = 0
+    n_required_calls: int = 0
+    completed_predicates: int = 0
+    total_predicates: int = 1
+    aligned_calls: int = 0
+    is_no_tool_task: bool = False
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "r_task": self.r_task,
+            "r_validity": self.r_validity,
+            "r_structural": self.r_structural,
+            "r_execution": self.r_execution,
+            "r_coverage": self.r_coverage,
+            "r_name": self.r_name,
+            "r_arg": self.r_arg,
+            "r_efficiency": self.r_efficiency,
+            "n_model_calls": float(self.n_model_calls),
+            "completed_predicates": float(self.completed_predicates),
+            "total_predicates": float(self.total_predicates),
+        }
+
+
+class TaskReward:
+    """Compute R_task from trajectory event log and task definition.
+
+    Phase 1: trajectory-level reward only.
+    """
+
+    def __init__(self, weights: dict[str, float] | None = None):
+        self.w = {**DEFAULT_WEIGHTS, **(weights or {})}
+
+    def compute(
+        self,
+        event_log: EventLog,
+        task: dict[str, Any],
+    ) -> TaskRewardResult:
+        """Compute R_task for a complete trajectory."""
+        result = TaskRewardResult()
+
+        required_tool_calls = task.get("required_tool_calls", [])
+        is_no_tool = len(required_tool_calls) == 0
+        result.is_no_tool_task = is_no_tool
+
+        if is_no_tool:
+            return self._compute_no_tool(event_log, task, result)
+
+        return self._compute_with_tools(event_log, task, required_tool_calls, result)
+
+    def _compute_no_tool(
+        self,
+        event_log: EventLog,
+        task: dict[str, Any],
+        result: TaskRewardResult,
+    ) -> TaskRewardResult:
+        """No-tool task: binary R_task.
+
+        R_task = 1.0 if no tool calls AND terminal predicate passes, else 0.0
+        """
+        n_calls = len(event_log.tool_call_events)
+        result.n_model_calls = n_calls
+
+        # Check if terminal action satisfies task predicate
+        terminal_ok = self._check_terminal_predicate(event_log, task)
+
+        if n_calls == 0 and terminal_ok:
+            result.r_task = 1.0
+        else:
+            result.r_task = 0.0
+
+        return result
+
+    def _compute_with_tools(
+        self,
+        event_log: EventLog,
+        task: dict[str, Any],
+        required_tool_calls: list[dict],
+        result: TaskRewardResult,
+    ) -> TaskRewardResult:
+        """Tool-required task: full R_task formula."""
+        tool_events = event_log.tool_call_events
+        n_calls = len(tool_events)
+        result.n_model_calls = n_calls
+
+        # 1. R_validity = w_struct * R_structural + w_exec * R_execution
+        r_structural = self._compute_structural_validity(tool_events, task)
+        r_execution = self._compute_execution_validity(tool_events)
+        result.r_structural = r_structural
+        result.r_execution = r_execution
+        result.r_validity = self.w["w_struct"] * r_structural + self.w["w_exec"] * r_execution
+
+        # 2. R_coverage: completed outcome predicates / total
+        total_preds = len(task.get("outcome_assertions", [])) or 1
+        completed = self._count_completed_predicates(event_log, task)
+        result.completed_predicates = completed
+        result.total_predicates = total_preds
+        result.r_coverage = completed / total_preds if total_preds > 0 else 0.0
+
+        # Check identity violation → R_coverage = 0
+        if self._has_identity_violation(event_log, task):
+            result.r_coverage = 0.0
+
+        # 3. R_name: unique tool name overlap
+        required_names = self._required_tool_names(required_tool_calls)
+        model_names = self._model_tool_names(tool_events)
+        if n_calls == 0:
+            result.r_name = 0.0
+        elif required_names:
+            result.r_name = len(model_names & required_names) / len(required_names)
+        else:
+            result.r_name = 0.0
+
+        # 4. R_arg: argument value match for aligned calls
+        aligned_calls = self._identify_aligned_calls(tool_events, task, required_tool_calls)
+        result.aligned_calls = len(aligned_calls)
+        result.r_arg = self._compute_arg_score(aligned_calls)
+
+        # 5. R_efficiency
+        n_required = self._count_required_calls(required_tool_calls)
+        result.n_required_calls = n_required
+        result.r_efficiency = self._compute_efficiency(n_calls, n_required)
+
+        # R_positive and R_task
+        result.r_positive = (
+            self.w["w_val"] * result.r_validity
+            + self.w["w_cov"] * result.r_coverage
+            + self.w["w_name"] * result.r_name
+            + self.w["w_arg"] * result.r_arg
+        )
+        result.z_pos = (
+            self.w["w_val"] + self.w["w_cov"] + self.w["w_name"] + self.w["w_arg"]
+        )
+        result.r_task = max(
+            -0.2,
+            min(1.0, result.r_positive / result.z_pos + self.w["w_eff"] * result.r_efficiency),
+        )
+
+        return result
+
+    def _compute_structural_validity(
+        self,
+        tool_events: list,
+        task: dict[str, Any],
+    ) -> float:
+        """R_structural: fraction of tool calls with schema-valid args."""
+        if not tool_events:
+            return 0.0
+        valid = sum(1 for e in tool_events if e.schema_valid)
+        return valid / len(tool_events)
+
+    def _compute_execution_validity(
+        self,
+        tool_events: list,
+    ) -> float:
+        """R_execution: fraction of tool calls that executed successfully."""
+        if not tool_events:
+            return 0.0
+        success = sum(1 for e in tool_events if e.execution_success)
+        return success / len(tool_events)
+
+    def _count_completed_predicates(
+        self,
+        event_log: EventLog,
+        task: dict[str, Any],
+    ) -> int:
+        """Count how many outcome predicates were satisfied.
+
+        Phase 1 simplified: count based on event operations matching expected predicates.
+        Full predicate evaluation will be domain-specific in Phase 2.
+        """
+        assertions = task.get("outcome_assertions", [])
+        if not assertions:
+            return 0
+
+        # Simplified: check if all required tool operations appear in event log
+        operations = {e.operation for e in event_log.events if e.operation}
+        required_ops = set()
+        for a in assertions:
+            if isinstance(a, dict):
+                op = a.get("operation")
+                if op:
+                    required_ops.add(op)
+
+        if not required_ops:
+            return 0
+
+        completed = sum(1 for op in required_ops if op in operations)
+        return completed
+
+    def _has_identity_violation(
+        self,
+        event_log: EventLog,
+        task: dict[str, Any],
+    ) -> bool:
+        """Check if any event has identity violation AND task requires preserve."""
+        identity_policy = task.get("identity_policy", "")
+        if identity_policy != "preserve":
+            return False
+        return any(e.identity_violation for e in event_log.events)
+
+    def _required_tool_names(
+        self,
+        required_tool_calls: list[dict],
+    ) -> set[str]:
+        """Extract unique required tool names."""
+        return {c.get("tool_name", "") for c in required_tool_calls if c.get("tool_name")}
+
+    def _model_tool_names(self, tool_events: list) -> set[str]:
+        """Extract unique tool names from model calls."""
+        return {e.tool_name for e in tool_events if e.tool_name}
+
+    def _identify_aligned_calls(
+        self,
+        tool_events: list,
+        task: dict[str, Any],
+        required_tool_calls: list[dict],
+    ) -> list:
+        """Identify model calls that are 'aligned' with required tools.
+
+        A call is aligned if:
+          1. tool_name matches a required tool
+          2. the call advanced at least one predicate (execution_success or state_changed)
+        """
+        required_names = self._required_tool_names(required_tool_calls)
+        aligned = []
+        for e in tool_events:
+            if e.tool_name in required_names and (e.execution_success or e.state_changed):
+                aligned.append((e, self._find_required_call(required_tool_calls, e.tool_name)))
+        return aligned
+
+    def _find_required_call(
+        self,
+        required_tool_calls: list[dict],
+        tool_name: str,
+    ) -> dict | None:
+        for c in required_tool_calls:
+            if c.get("tool_name") == tool_name:
+                return c
+        return None
+
+    def _compute_arg_score(
+        self,
+        aligned_calls: list,
+    ) -> float:
+        """R_arg: mean arg_match_score across aligned calls.
+
+        arg_match_score = |matched_arg_values| / |required_arg_values|
+        """
+        if not aligned_calls:
+            return 0.0
+        scores = []
+        for event, required_call in aligned_calls:
+            if required_call is None:
+                continue
+            required_args = required_call.get("arguments", {})
+            if not required_args:
+                scores.append(1.0)
+                continue
+            model_args = event.tool_arguments or {}
+            matched = 0
+            for key, expected_val in required_args.items():
+                actual_val = model_args.get(key)
+                if actual_val is not None and str(actual_val).lower() == str(expected_val).lower():
+                    matched += 1
+            scores.append(matched / len(required_args))
+        return sum(scores) / len(scores) if scores else 0.0
+
+    def _compute_efficiency(
+        self,
+        n_model_calls: int,
+        n_required_calls: int,
+    ) -> float:
+        """R_efficiency: adaptive excess-call penalty.
+
+        B = n_required_calls + ceil(beta_budget * n_required_calls)
+        R_efficiency = -alpha_eff * max(0, n_model_calls - B) / max(B, 1)
+        """
+        import math
+        B = n_required_calls + math.ceil(self.w["beta_budget"] * n_required_calls)
+        B = max(B, 1)
+        excess = max(0, n_model_calls - B)
+        return -self.w["alpha_eff"] * excess / B
+
+    def _count_required_calls(self, required_tool_calls: list[dict]) -> int:
+        """Count the number of required tool calls (with multiplicity)."""
+        return len(required_tool_calls)
+
+    def _check_terminal_predicate(
+        self,
+        event_log: EventLog,
+        task: dict[str, Any],
+    ) -> bool:
+        """Check if terminal action satisfies task predicate.
+
+        Phase 1 simplified: if the trajectory ends with a valid terminal action
+        (final_answer/report_error/ask_clarification) and there are no errors, passes.
+        """
+        if not event_log.events:
+            return False
+        last = event_log.events[-1]
+        valid_terminals = {"final_answer", "ask_clarification", "report_error"}
+        return last.action_type in valid_terminals
+
+
+__all__ = ["TaskReward", "TaskRewardResult", "DEFAULT_WEIGHTS"]

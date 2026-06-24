@@ -5,7 +5,7 @@
 策略：装了的依赖必须落在 [min, max) 兼容窗口；没装的依赖（verl/vllm 在
 非训练机上不一定有）跳过，不算失败。
 
-兼容窗口锚定 arl 环境实测通过的版本组合（见 AGENTS.md 和 mcp_tools_rl_project_plan.md）：
+兼容窗口锚定 arl 环境实测通过的版本组合（见 AGENTS.md 和 docs/project_plan.md）：
 torch 2.8 / vllm 0.11 / verl 0.6.1 / flash_attn 2.7.3 / transformers 4.57.6 /
 ray 2.x."""
 
@@ -42,7 +42,7 @@ def _require_in_range(mod_name: str, min_v: str, max_v: str):
     lo, hi = Version(min_v), Version(max_v)
     assert lo <= v < hi, (
         f"{mod_name}=={v} 不在兼容窗口 [{min_v}, {max_v}) 内。"
-        f"如确认要升级，请同步更新 AGENTS.md / mcp_tools_rl_project_plan.md 的版本表，再放宽本测试。"
+        f"如确认要升级，请同步更新 AGENTS.md / docs/project_plan.md 的版本表，再放宽本测试。"
     )
 
 
@@ -141,7 +141,7 @@ def test_project_entry_imports():
     """核心模块必须能 import，且不会触发副作用错误。"""
     importlib.import_module("src.training.schemashift_grpo_estimator")
     importlib.import_module("src.training.register_estimator")
-    importlib.import_module("src.reward.component_reward")
+    importlib.import_module("src.reward.oval_reward_fn")
     importlib.import_module("src.reward.action_parser")
 
 

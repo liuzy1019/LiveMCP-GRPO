@@ -47,6 +47,13 @@ class SchemaRegistry:
     def all_tools(self) -> list[dict[str, Any]]:
         return list(self._schemas.values())
 
+    def server_tools(self, server_name: str) -> list[dict[str, Any]]:
+        """返回指定 server 的所有注册工具 schema。"""
+        return [
+            schema for name, schema in self._schemas.items()
+            if self._server_by_tool.get(name) == server_name
+        ]
+
     def validate_arguments(
         self,
         tool_name: str,
