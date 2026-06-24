@@ -1,0 +1,72 @@
+# Banking MCP Server 配置
+# 提供银行账户的转账、余额查询、冻结等操作
+
+name: banking
+type: local_subprocess
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.banking.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  reset_mode: deterministic_seed
+  max_sessions: 64
+  default_seed: 42
+
+tools:
+  discovery:
+    - get_account_info
+  readonly:
+    - get_balance
+    - get_history
+    - verify_account
+    - get_account_info
+  mutating:
+    - transfer
+    - freeze_account
+
+sampler:
+  class_path: src.live_mcp.sampler.BankingSampler
+
+reward_profile: banking_basic
+
+dependency_graph:
+  edges:
+    - source_tool: get_account_info
+      target_tool: transfer
+      relation: explicit
+      source_output_path: account_id
+      target_argument_path: from_account
+    - source_tool: get_account_info
+      target_tool: get_balance
+      relation: explicit
+      source_output_path: account_id
+      target_argument_path: account_id
+    - source_tool: get_balance
+      target_tool: transfer
+      relation: implicit
+      description: check balance before deciding transfer amount
+    - source_tool: verify_account
+      target_tool: transfer
+      relation: implicit
+      description: verify recipient before transfer
+    - source_tool: transfer
+      target_tool: get_history
+      relation: implicit
+      description: transfer should appear in transaction history
+
+query_templates:
+  banking_transfer:
+    - "Transfer {amount} from {from_account} to {to_account}."
+  banking_balance_check:
+    - "What is the balance of {account_id}?"
+  banking_free_and_check:
+    - "Freeze {account_id} then check its status."

@@ -10,6 +10,7 @@ uid 格式: {task_id}___{level}___{scenario_type}（新格式）
 """
 
 from collections import defaultdict
+import os
 
 import numpy as np
 import torch
@@ -22,6 +23,51 @@ except ImportError as e:
         "verl 未安装或版本不兼容，schemashift_grpo estimator 无法注册。"
         f"原始错误: {e}"
     )
+
+
+# ── LATA helpers ────────────────────────────────────────────────────
+
+_LATA_WARNED = False
+
+
+def _resolve_lata_mode(config) -> str:
+    """从 config 或环境变量解析 LATA 模式"""
+    # 环境变量优先（调试方便）
+    if os.environ.get("OVAL_LATA", ""):
+        return os.environ["OVAL_LATA"]
+    # config 次之
+    if config:
+        return str(config.get("lata_mode", config.get("lata", "none")))
+    return "none"
+
+
+def _apply_lata(
+    advantages: torch.Tensor,
+    response_mask: torch.Tensor,
+    mode: str,
+    config,
+) -> torch.Tensor:
+    """Apply LATA allocation to trajectory-level advantages.
+
+    Fall back to standard allocation on import failure.
+    """
+    global _LATA_WARNED
+    try:
+        from src.oval_mcp.training.lata import LATAAllocator, LATAConfig
+        allocator = LATAAllocator(LATAConfig(mode=mode))
+        result = allocator.allocate_from_mask(advantages, response_mask)
+        if not _LATA_WARNED:
+            logger.info(
+                f"[LATA] mode={mode} | mean_len={result.mean_length:.1f} "
+                f"| scale_range=[{min(result.per_token_scale):.3f}, {max(result.per_token_scale):.3f}]"
+            )
+            _LATA_WARNED = True
+        return result.token_advantages
+    except Exception as e:
+        if not _LATA_WARNED:
+            logger.warning(f"[LATA] 分配失败，回退到 standard allocation: {e}")
+            _LATA_WARNED = True
+        return advantages.unsqueeze(-1) * response_mask.float()
 
 
 def _parse_uid(uid: str) -> tuple[str, str, str]:
@@ -294,6 +340,41 @@ def compute_schemashift_grpo_advantage(
             _diagnose_batch(index, non_tensor_batch, task_ids, levels, scenario_types, scores)
             compute_schemashift_grpo_advantage._diagnosed = True
 
-        advantages = advantages.unsqueeze(-1) * response_mask
+        # ── 饱和组检测与跳过（§9.2-9.3） ──
+        # std(J) < min_group_std → advantage = 0，不产生 policy gradient
+        # 饱和组 rollout 仍参与 lambda_safe 的 hat_C_batch（在 register_estimator 层已处理）
+        min_group_std = float(config.get("min_group_std", 1e-6) if config else 1e-6)
+        n_saturated_groups = 0
+        n_total_groups = len(task2indices)
+        saturated_group_ids: list[str] = []
+
+        if max_group_size >= 2:
+            for tid, indices in task2indices.items():
+                if len(indices) < 2:
+                    continue
+                group_j = scores[torch.tensor(indices, device=scores.device)]
+                g_mean = group_j.mean()
+                g_var = ((group_j - g_mean) ** 2).mean()
+                g_std = g_var.sqrt()
+                if g_std < min_group_std:
+                    advantages[torch.tensor(indices, device=scores.device)] = 0.0
+                    n_saturated_groups += 1
+                    saturated_group_ids.append(tid)
+
+        if n_saturated_groups > 0 and not hasattr(compute_schemashift_grpo_advantage, '_sat_warned'):
+            logger.warning(
+                f"[schemashift_grpo] SATURATION: {n_saturated_groups}/{n_total_groups} groups skipped "
+                f"(std(J) < {min_group_std:.0e}). "
+                f"saturated_ids (前5): {saturated_group_ids[:5]}"
+            )
+            compute_schemashift_grpo_advantage._sat_warned = True
+
+        # ── LATA: Length-Aware Token Allocation ──
+        # 当全部组饱和（advantage 已全零）时跳过 LATA 分配，避免无效计算
+        lata_mode = _resolve_lata_mode(config)
+        if lata_mode != "none" and n_saturated_groups < n_total_groups:
+            advantages = _apply_lata(advantages, response_mask, lata_mode, config)
+        else:
+            advantages = advantages.unsqueeze(-1) * response_mask
 
     return advantages, advantages.clone()

@@ -1,0 +1,79 @@
+# Filesystem MCP Server 配置
+# 文件系统：deepest state，支持路径导航和权限管理
+
+name: filesystem
+type: local_subprocess
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.filesystem.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  reset_mode: deterministic_seed
+  max_sessions: 64
+  default_seed: 42
+
+tools:
+  discovery:
+    - ls
+  readonly:
+    - ls
+    - pwd
+    - cat
+  mutating:
+    - cd
+    - mkdir
+    - touch
+    - mv
+    - cp
+    - rm
+    - chmod
+
+sampler:
+  class_path: src.live_mcp.sampler.FilesystemSampler
+
+reward_profile: filesystem_basic
+
+dependency_graph:
+  edges:
+    - source_tool: ls
+      target_tool: cd
+      relation: implicit
+      description: list directory before navigating
+    - source_tool: cd
+      target_tool: ls
+      relation: implicit
+      description: navigate then list contents
+    - source_tool: ls
+      target_tool: cat
+      relation: implicit
+      description: list files before reading content
+    - source_tool: cat
+      target_tool: mv
+      relation: implicit
+      description: examine content before moving
+    - source_tool: touch
+      target_tool: cat
+      relation: implicit
+      description: create file then read it
+    - source_tool: mkdir
+      target_tool: touch
+      relation: implicit
+      description: create directory then create file inside
+
+query_templates:
+  filesystem_nav_and_read:
+    - "Navigate to the projects directory and list its contents, then read README.md."
+  filesystem_create_and_move:
+    - "Create a new file {filename} in /home/user, write some content, then move it to the projects directory."
+  filesystem_copy_and_permissions:
+    - "Copy {source} to {target}, then change the target's permissions to {mode}."
+

@@ -1,0 +1,74 @@
+# Issue Tracker MCP Server 配置
+# 任务跟踪系统：工作流状态机，支持严格的 transition 约束
+
+name: issue_tracker
+type: local_subprocess
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.issue_tracker.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  reset_mode: deterministic_seed
+  max_sessions: 64
+  default_seed: 42
+
+tools:
+  discovery:
+    - list_issues
+  readonly:
+    - list_issues
+    - get_issue
+  mutating:
+    - create_issue
+    - assign_issue
+    - transition_issue
+    - comment_issue
+
+sampler:
+  class_path: src.live_mcp.sampler.IssueTrackerSampler
+
+reward_profile: issue_tracker_basic
+
+dependency_graph:
+  edges:
+    - source_tool: list_issues
+      target_tool: get_issue
+      relation: explicit
+      source_output_path: issue_id
+      target_argument_path: issue_id
+    - source_tool: get_issue
+      target_tool: assign_issue
+      relation: explicit
+      source_output_path: issue_id
+      target_argument_path: issue_id
+    - source_tool: assign_issue
+      target_tool: transition_issue
+      relation: explicit
+      source_output_path: issue_id
+      target_argument_path: issue_id
+    - source_tool: transition_issue
+      target_tool: comment_issue
+      relation: implicit
+      description: comment after state transition
+    - source_tool: create_issue
+      target_tool: assign_issue
+      relation: implicit
+      description: create then assign
+
+query_templates:
+  issue_tracker_assign_and_start:
+    - "Find the open {priority} priority issue about {title}, assign it to {assignee}, then move it to in_progress."
+  issue_tracker_resolve:
+    - "Find {assignee}'s in_progress issues, then move the {title} issue through review to resolved."
+  issue_tracker_bug_report:
+    - "Create a new high priority issue titled '{title}' and assign it to a developer."
+

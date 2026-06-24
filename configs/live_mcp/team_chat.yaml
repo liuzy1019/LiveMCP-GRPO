@@ -1,0 +1,75 @@
+# Team Chat MCP Server 配置
+# 即时通讯：append-only 状态，支持 channels/messages/threads
+
+name: team_chat
+type: local_subprocess
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.team_chat.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  reset_mode: deterministic_seed
+  max_sessions: 64
+  default_seed: 42
+
+tools:
+  discovery:
+    - list_channels
+  readonly:
+    - list_channels
+    - get_channel
+    - get_thread
+  mutating:
+    - send_message
+    - create_thread
+    - react_message
+
+sampler:
+  class_path: src.live_mcp.sampler.TeamChatSampler
+
+reward_profile: team_chat_basic
+
+dependency_graph:
+  edges:
+    - source_tool: list_channels
+      target_tool: get_channel
+      relation: explicit
+      source_output_path: channel_id
+      target_argument_path: channel_id
+    - source_tool: get_channel
+      target_tool: send_message
+      relation: explicit
+      source_output_path: channel_id
+      target_argument_path: channel_id
+    - source_tool: send_message
+      target_tool: create_thread
+      relation: explicit
+      source_output_path: message_id
+      target_argument_path: message_id
+    - source_tool: create_thread
+      target_tool: get_thread
+      relation: explicit
+      source_output_path: thread_id
+      target_argument_path: thread_id
+    - source_tool: get_channel
+      target_tool: react_message
+      relation: implicit
+      description: read message before reacting
+
+query_templates:
+  team_chat_send_and_thread:
+    - "Go to the {channel} channel, send a message about '{topic}', then create a thread from it."
+  team_chat_read_and_react:
+    - "Check the latest message in {channel} and react with '{reaction}'."
+  team_chat_thread_reply:
+    - "Find the thread with id '{thread_id}' in {channel} and reply to it."
+

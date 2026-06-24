@@ -808,6 +808,22 @@ Per conversation:
      query -> deterministic oracle / teacher processing -> tool execution -> response -> continuation
   5. apply robustness knobs:
      distractor tools, enum stripping, missing-function, irrelevance/no-tool
+  5a. apply execution-level perturbations（执行级扰动）:
+     perturb_probability = 0.15–0.30 per tool call
+     perturbation types:
+       - intermittent_api_error:  返回 "Internal Server Error" 或超时，oracle 自动 retry
+       - paginated_response:      返回 {"items": [...], "next_cursor": "xxx"}，迫使多轮调用
+       - incomplete_intermediate: 搜索结果只返回 snippets 而不显示完整详情，迫使后续 extract 调用
+       - partial_batch_failure:   批量操作中部分对象操作失败（如 update 10 条，3 条失败），
+                                  迫使模型检查结果并逐个处理失败项
+     当扰动发生后，oracle 必须执行恢复行为（retry / 分页 fetch / 补充 extract / 逐个处理），
+     确保最终 predicate 集合与未扰动版本一致。扰动不改变任务的成功条件，
+     只增加达到成功所需的平均 turn 数。
+     扰动类型按 domain 适配：
+       - filesystem/terminal: intermittent_api_error, partial_batch_failure
+       - search/shopping:    paginated_response, incomplete_intermediate
+       - calendar/crm:       intermittent_api_error, partial_batch_failure
+       - email/team_chat:    paginated_response, partial_batch_failure
   6. replay completed conversation against fresh reset
   7. keep only executable traces that pass validation
   8. instantiate DomainAdapter predicates:
@@ -1967,11 +1983,28 @@ required_states 是 progress predicates 的子集（§8），
 解释规则：
   - 若 partial_R2 < 0.05：F_gamma 的提升主要来自放大已有 progress 信号（改变 group 内方差结构），
     而非提供新信息。这不意味着 M4+F 无效，但意味着其效果可以通过调大 R_coverage 权重模拟。
+    **结论：M4+F 的提升归因于 progress emphasis（放大 progress 信号在 J 中的相对权重），
+    不是新的信号源。**
   - 若 partial_R2 >= 0.05：F_gamma 提供了 R_coverage 之外的独特信息，
     M4+F 的提升可归因于 shaping 的信用分配改善。
 
 即使完全共线（partial_R2 = 0），lambda_shape = 0.5 也改变了 progress signal 在 J 中的相对权重，
 可能通过改变 group 内方差结构来影响训练动力学。但此时的效果不等价于 "F_gamma 提供了新信息"。
+
+**P_process 的有效范围与解释**：
+
+trajectory-level P_process（Phase 2）在典型情况下对组内 J 方差的贡献 < 1%。
+原因：P_process 是基于进度谓词的 bounded score，在组内不同 trajectory 之间
+方差极小——大部分 trajectory 要么都完成了进度谓词（P_process ≈ 1.0），
+要么都没完成（P_process ≈ 0.0），仅在边界情况下产生差异。
+
+P_process 的实际作用：
+  - 反饱和：当组内所有 trajectory 的 R_task 相同时（saturation），
+    P_process 的微小差异可以提供非零方差，防止 gradient signal 消失。
+  - 不提供 step-level 信用分配改善：step-level 区分能力完全由 Phase 3 的
+    LATA + 局部质量信号承担。若需要在 Phase 2 获得 step-level 区分，
+    可设 gamma < 1。
+
 ```
 
 Phase 3 再验证 turn/token signal path：
@@ -1989,6 +2022,39 @@ ablations:
   process-only       # trajectory-level P_process, no token allocation
   process + LATA     # local q_u uses P_process-derived p_u
   F/P/C-local + LATA # optional full signed relevance path
+
+additional training diagnostics:
+  prefix_overlap_ratio —— 衡量组内轨迹多样性的诊断指标，不修改算法。
+
+  定义：
+    对组内 G 条轨迹，识别所有轨迹中行为相同的共享前缀 turn（同一 turn 产生完全相同的 a_t 和 o_t）。
+    令 L_shared 为共享前缀中包含的 eligible policy token 数，
+    L_total 为组内所有轨迹的 eligible policy token 总数。
+
+    prefix_overlap_ratio = L_shared / L_total
+
+  数学含义：
+    高 prefix_overlap_ratio 意味着组内多条轨迹共享大量相同前缀 token，
+    这些 token 的有效样本量接近 1（而非 G），梯度估计方差接近 σ²（而非 σ²/G）。
+    这不是 LATA 的缺陷——LATA 在这些 token 上的权重分配是正确的。
+    问题在于 rollout 采样阶段组内轨迹多样性不足——模型的探索行为不够分散。
+    这与 min_group_std 检查的整条轨迹无方差是不同的问题：
+    min_group_std 检测 J_i 无方差；prefix_overlap_ratio 检测 token 级多样性的缺失。
+
+  诊断用途：
+    - 若 prefix_overlap_ratio 长期 > 0.5：说明模型对早期 turn 的探索不足，
+      即使 group 没有被 min_group_std 跳过，前缀 token 的梯度估计方差依然较大。
+    - 降低方法（不在 LATA 内）：
+      a. 提高 rollout temperature
+      b. 增大 group size G
+      c. 同一 task 配多个不同初始状态的 variant
+      d. 在数据生成中注入任务级随机扰动（参见 §6 step 5a）
+    - 若 prefix_overlap_ratio < 0.2：当前采样多样性足够，训练正常。
+
+  实现注意：
+    - 仅对 eligible policy token 计数（排除 prompt token 和 observation token）
+    - 共享前缀的判断基于 (action_tokens, observation_tokens) 的 exact match
+    - 该指标仅用于训练日志中的监控曲线，不参与梯度计算
 ```
 
 ### 11.2 对照组
@@ -2042,6 +2108,7 @@ Over-call Ratio
 Group Reward Saturation Rate
 Mixed Safety Group Rate
 Held-out MCP Server Success Rate
+Prefix Overlap Ratio
 ```
 
 ### 11.4 核心验证

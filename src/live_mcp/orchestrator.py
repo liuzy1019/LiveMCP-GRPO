@@ -11,7 +11,18 @@ from src.live_mcp.executor import LiveMCPExecutor
 from src.live_mcp.manager import LiveMCPManager
 from src.live_mcp.oracle import OraclePlanner, OracleValidator
 from src.live_mcp.query_generator import QueryGenerator, StructuredTask
-from src.live_mcp.sampler import CalendarSampler, ShoppingSampler
+from src.live_mcp.sampler import (
+    CalendarSampler,
+    ShoppingSampler,
+    BankingSampler,
+    EmailSampler,
+    FilesystemSampler,
+    PaymentsSampler,
+    CRMSampler,
+    IssueTrackerSampler,
+    TeamChatSampler,
+    FoodDeliverySampler,
+)
 from src.live_mcp.teacher import DeterministicTeacherAdapter
 from src.live_mcp.types import LiveTask, to_plain
 
@@ -49,7 +60,18 @@ class StateMachineOrchestrator:
         self.teacher = DeterministicTeacherAdapter(self.query_generator)
         self.planner = OraclePlanner()
         self.validator = OracleValidator()
-        self.samplers = {"calendar": CalendarSampler(), "shopping": ShoppingSampler()}
+        self.samplers = {
+            "calendar": CalendarSampler(),
+            "shopping": ShoppingSampler(),
+            "banking": BankingSampler(),
+            "email": EmailSampler(),
+            "filesystem": FilesystemSampler(),
+            "payments": PaymentsSampler(),
+            "crm": CRMSampler(),
+            "issue_tracker": IssueTrackerSampler(),
+            "team_chat": TeamChatSampler(),
+            "food_delivery": FoodDeliverySampler(),
+        }
 
     def generate_one(self, server_name: str, seed: int, difficulty: str) -> LiveTask:
         rng = random.Random(seed)
@@ -111,6 +133,10 @@ class StateMachineOrchestrator:
         idx = 0
         while len(tasks) < count:
             current_server = servers[idx % len(servers)]
+            # 跳过没有注册 sampler 的 server（如新加的 banking 尚未接采样器）
+            if current_server not in self.samplers:
+                idx += 1
+                continue
             difficulty = self._pick_difficulty(seed + idx, difficulty_mix)
             task = self.generate_one(current_server, seed + idx, difficulty)
             if idx % 5 == 3:

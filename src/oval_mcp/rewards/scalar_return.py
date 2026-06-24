@@ -1,10 +1,27 @@
-"""Scalar return: J = R_task - lambda_safe * C_safety.
+"""Scalar return: J = R_task - lambda_safe * C_safety + optional terms.
 
 OVAL-MCP §9 Phase 1:
   J_i = R_task(tau_i) - lambda_safe * C_safety(tau_i)
   A_i = (J_i - mean(J_1...J_G)) / (std(J_1...J_G) + eps)
 
 Phase 1: I_process = 0, I_shape = 0.
+
+F_gamma 与 R_coverage 的关系（Phase 2 消融必须验证）：
+  - γ=1 时 F_gamma = Phi(m_T) = completed_required_states / total_required_states
+  - required_states ⊆ coverage_predicates，因此 F_gamma 与 R_coverage 共享底层信息
+  - M4+F vs M4 的提升来源：
+    * 若 partial_R2(F_gamma | R_coverage) < 0.05：F_gamma 的作用是放大 progress
+      信号在 J 中的相对权重（progress emphasis），而非提供新信号源。
+      效果可通过调大 R_coverage 权重近似复现。
+    * 若 partial_R2 >= 0.05：F_gamma 提供了 R_coverage 之外的独特信息，
+      提升可归因于 shaping 的信用分配改善。
+  - 默认解释：γ=1 时 F_gamma 提供 progress emphasis，不是独立信用分配。
+
+P_process 的作用边界（Phase 2 消融必须说明）：
+  - trajectory-level P_process（Phase 2）在典型情况下对组内 J 方差贡献 < 1%
+  - 只在 R_task 完全饱和时（组内所有 tau 的 R_task 相同）才会产生可量化的效果
+  - 作用：反饱和（防止 J 方差为零时 gradient signal 消失）
+  - 不提供 step-level 信用分配改善——信用分配改善等到 Phase 3 LATA
 """
 
 from __future__ import annotations

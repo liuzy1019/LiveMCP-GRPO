@@ -1,10 +1,18 @@
-# Live MCP MVP 套件配置
+# Live MCP 全量套件配置（10 domain，对齐 PROVE Table 2 精选子集）
 # 默认 backend=replay，不会误接正式训练链路
 
-suite_name: live_mcp_mvp
+suite_name: live_mcp_full
 servers:
-  - configs/live_mcp/calendar.yaml  # 日历 server
-  - configs/live_mcp/shopping.yaml  # 购物 server
+  - configs/live_mcp/calendar.yaml       # Productivity: calendar
+  - configs/live_mcp/shopping.yaml       # Commerce: shopping
+  - configs/live_mcp/banking.yaml        # Finance: banking
+  - configs/live_mcp/email.yaml          # Productivity: email (append-only)
+  - configs/live_mcp/filesystem.yaml     # Productivity: filesystem (deep state)
+  - configs/live_mcp/payments.yaml       # Finance: payments (transactional)
+  - configs/live_mcp/crm.yaml            # CRM: crm (relational)
+  - configs/live_mcp/issue_tracker.yaml  # CRM: issue_tracker (workflow)
+  - configs/live_mcp/team_chat.yaml      # Social: team_chat (append-only)
+  - configs/live_mcp/food_delivery.yaml  # Lifestyle: food_delivery (lifecycle)
 
 environment:
   backend: replay  # replay | live（默认 replay，避免误触 live 训练）
@@ -15,7 +23,7 @@ replay:
 live:
   suite: configs/live_mcp/suite_mvp.yaml
   transport: subprocess_stdio  # stdio 子进程通信
-  task_file: data/live_mcp/tasks/live_mcp_mvp.jsonl
+  task_file: data/live_mcp/tasks/live_mcp_full.jsonl
   trace_dir: data/live_mcp/traces
 
 rollout:
@@ -25,7 +33,7 @@ rollout:
   stop_on_execution_error: false  # 执行错误不中断 episode
 
 reward:
-  profile: mvp_default
+  profile: full_default
   weights:
     validity: 0.25  # 格式合法性
     coverage: 0.25  # 工具覆盖率

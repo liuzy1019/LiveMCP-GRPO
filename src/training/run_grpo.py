@@ -60,6 +60,16 @@ def main() -> None:
     from src.training.register_estimator import register_schemashift_estimator
     register_schemashift_estimator()
 
+    # ── 初始化 LambdaState（lambda_safe file-backed 共享状态） ──
+    from src.oval_mcp.training.lambda_state import LambdaState, DEFAULT_STATE_PATH
+    # 每次训练从干净状态开始（除非设置 OVAL_KEEP_LAMBDA=1）
+    keep_lambda = os.environ.get("OVAL_KEEP_LAMBDA", "0") != "1"
+    if keep_lambda and os.path.exists(DEFAULT_STATE_PATH):
+        LambdaState.reset(DEFAULT_STATE_PATH)
+    lambda_state = LambdaState.load_or_default()
+    lambda_state.save()
+    print(f"  lambda_safe 初始化: {lambda_state.lambda_safe} (path={DEFAULT_STATE_PATH})")
+
     # ray TaskRunner 跑在独立 actor 进程，主进程注册的 dict / monkey-patch 不会带过去。
     # 通过 task_runner_class hook 在 actor 进程里再注册一次。
     import hydra

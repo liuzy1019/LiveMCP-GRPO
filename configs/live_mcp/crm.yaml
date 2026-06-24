@@ -1,0 +1,78 @@
+# CRM MCP Server 配置
+# 客户关系管理：关系型状态，support leads/contacts/deals
+
+name: crm
+type: local_subprocess
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.crm.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  reset_mode: deterministic_seed
+  max_sessions: 64
+  default_seed: 42
+
+tools:
+  discovery:
+    - list_leads
+  readonly:
+    - list_leads
+    - list_deals
+    - get_deal
+  mutating:
+    - create_lead
+    - convert_lead
+    - create_contact
+    - create_deal
+    - update_deal
+
+sampler:
+  class_path: src.live_mcp.sampler.CRMSampler
+
+reward_profile: crm_basic
+
+dependency_graph:
+  edges:
+    - source_tool: list_leads
+      target_tool: create_deal
+      relation: explicit
+      source_output_path: lead_id
+      target_argument_path: lead_id
+    - source_tool: create_lead
+      target_tool: convert_lead
+      relation: explicit
+      source_output_path: lead_id
+      target_argument_path: lead_id
+    - source_tool: convert_lead
+      target_tool: create_deal
+      relation: explicit
+      source_output_path: contact_id
+      target_argument_path: contact_id
+    - source_tool: create_deal
+      target_tool: update_deal
+      relation: explicit
+      source_output_path: deal_id
+      target_argument_path: deal_id
+    - source_tool: list_deals
+      target_tool: get_deal
+      relation: explicit
+      source_output_path: deal_id
+      target_argument_path: deal_id
+
+query_templates:
+  crm_lead_to_deal:
+    - "Find the lead from {company}, convert it to a contact, then create a deal for {amount}."
+  crm_update_pipeline:
+    - "Find the {stage} deals, then advance the {deal_name} deal to the next stage."
+  crm_create_lead:
+    - "Create a new lead for {name} at {company} from {source}."
+

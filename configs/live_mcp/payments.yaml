@@ -1,0 +1,70 @@
+# Payments MCP Server 配置
+# 支付系统：事务状态，支持 invoice/payment/refund 全流程
+
+name: payments
+type: local_subprocess
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.payments.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  reset_mode: deterministic_seed
+  max_sessions: 64
+  default_seed: 42
+
+tools:
+  discovery:
+    - list_invoices
+  readonly:
+    - get_invoice
+    - list_invoices
+  mutating:
+    - create_invoice
+    - pay_invoice
+    - refund_invoice
+    - create_webhook
+
+sampler:
+  class_path: src.live_mcp.sampler.PaymentsSampler
+
+reward_profile: payments_basic
+
+dependency_graph:
+  edges:
+    - source_tool: create_invoice
+      target_tool: pay_invoice
+      relation: explicit
+      source_output_path: invoice_id
+      target_argument_path: invoice_id
+    - source_tool: pay_invoice
+      target_tool: get_invoice
+      relation: implicit
+      description: verify payment status after paying
+    - source_tool: get_invoice
+      target_tool: refund_invoice
+      relation: explicit
+      source_output_path: invoice_id
+      target_argument_path: invoice_id
+    - source_tool: list_invoices
+      target_tool: get_invoice
+      relation: explicit
+      source_output_path: invoice_id
+      target_argument_path: invoice_id
+
+query_templates:
+  payments_create_and_pay:
+    - "Create an invoice for {customer} for {amount} {currency}, then pay it."
+  payments_refund:
+    - "Find the paid invoice for {customer}, then issue a refund for {amount}."
+  payments_invoice_check:
+    - "List all unpaid invoices and check the details of the most recent one."
+

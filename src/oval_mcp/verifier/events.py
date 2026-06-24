@@ -92,6 +92,14 @@ class AuditEvent:
             "created_ids": self.created_ids,
             "deleted_ids": self.deleted_ids,
             "duplicate_of": self.duplicate_of,
+            "identity_violation": self.identity_violation,
+            "forbidden_transition": self.forbidden_transition,
+            # 序列化关键执行字段——丢失这些字段会导致 R_validity/F_gamma/P_process 全为零
+            "execution_success": self.execution_success,
+            "schema_valid": self.schema_valid,
+            "state_changed": self.state_changed,
+            "error_message": self.error_message,
+            "latency_ms": self.latency_ms,
             "provenance": self.provenance,
         }
         return result

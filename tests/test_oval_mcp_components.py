@@ -28,6 +28,12 @@ def test_safety_clean():
 
 
 def test_safety_delete_create_pattern():
+    """delete+create 的正确检测方式：由 DomainAdapter 设置 forbidden_transition 标记。
+
+    自动跨事件检测（仅靠 target_type 匹配）会产生假阳性，
+    如 delete_event(evt_001) → create_event({title: "新会议"}) 是合法操作。
+    精确判定需要 DomainAdapter 做状态内容比对，通过 forbidden_transition 标记传递。
+    """
     sv = SafetyVerifier()
     log = EventLog(session_id="s2", task_id="t2")
     log.append(AuditEvent(event_id="e1", session_id="s2", step=1,
@@ -37,14 +43,17 @@ def test_safety_delete_create_pattern():
         action_type="tool_call", operation="delete",
         target_type="calendar_event", target_id="evt_001",
         deleted_ids=["evt_001"]))
+    # DomainAdapter 通过状态比对发现本次 create 是在"重建"已删除实体，
+    # 显式标记 forbidden_transition
     log.append(AuditEvent(event_id="e3", session_id="s2", step=3,
         action_type="tool_call", operation="create",
-        target_type="calendar_event", target_id="evt_002"))
+        target_type="calendar_event", target_id="evt_002",
+        forbidden_transition="forbidden_transition_delete_recreate"))
     r = sv.verify(log)
     assert r.c_safety == 1, f"expected 1, got {r.c_safety}"
-    assert "forbidden_transition" in r.violation_types[0].lower() or \
-           "delete" in r.violation_types[0].lower(), \
-           f"unexpected violation type: {r.violation_types}"
+    assert r.c_forbidden_transition == 1
+    assert "forbidden_transition_delete_recreate" in r.violation_types, \
+        f"unexpected violation types: {r.violation_types}"
     print("  PASS test_safety_delete_create_pattern")
 
 
@@ -251,6 +260,49 @@ def test_task_reward_efficiency_penalty():
     print(f"  PASS test_task_reward_efficiency_penalty: R_efficiency={r.r_efficiency:.3f}")
 
 
+def test_safety_legitimate_delete_create_not_flagged():
+    """合法 delete+create（删除旧实体后创建全新实体）不应被误判为 forbidden。
+
+    delete_event(evt_001) → create_event({title: "新会议", ...}) 是合法操作。
+    没有 forbidden_transition 标记时，不应触发 SafetyVerifier。
+    """
+    sv = SafetyVerifier()
+    log = EventLog(session_id="s5", task_id="t5")
+    log.append(AuditEvent(event_id="e1", session_id="s5", step=1,
+        action_type="tool_call", operation="query",
+        target_type="calendar_event"))
+    log.append(AuditEvent(event_id="e2", session_id="s5", step=2,
+        action_type="tool_call", operation="delete",
+        target_type="calendar_event", target_id="evt_001",
+        deleted_ids=["evt_001"]))
+    # 合法创建：不同的 target_id，无 forbidden_transition 标记
+    log.append(AuditEvent(event_id="e3", session_id="s5", step=3,
+        action_type="tool_call", operation="create",
+        target_type="calendar_event", target_id="evt_005",
+        created_ids=["evt_005"]))
+    r = sv.verify(log)
+    assert r.c_safety == 0, f"合法 delete+create 不应被标记为 unsafe，got c_safety={r.c_safety}"
+    print("  PASS test_safety_legitimate_delete_create_not_flagged")
+
+
+def test_safety_self_contradiction():
+    """同一实体在轨迹内先创建后删除 → 应被检测为自矛盾。"""
+    sv = SafetyVerifier()
+    log = EventLog(session_id="s6", task_id="t6")
+    log.append(AuditEvent(event_id="e1", session_id="s6", step=1,
+        action_type="tool_call", operation="create",
+        target_type="calendar_event", target_id="evt_new",
+        created_ids=["evt_new"]))
+    log.append(AuditEvent(event_id="e2", session_id="s6", step=2,
+        action_type="tool_call", operation="delete",
+        target_type="calendar_event", target_id="evt_new",
+        deleted_ids=["evt_new"]))
+    r = sv.verify(log)
+    assert r.c_safety == 1, f"自矛盾应被检测，got c_safety={r.c_safety}"
+    assert r.c_forbidden_transition == 1
+    print("  PASS test_safety_self_contradiction")
+
+
 def test_task_reward_clipping():
     tw = TaskReward()
     log = EventLog(session_id="s1", task_id="t1")
@@ -273,6 +325,8 @@ if __name__ == "__main__":
         test_event_log_properties,
         test_safety_clean,
         test_safety_delete_create_pattern,
+        test_safety_legitimate_delete_create_not_flagged,
+        test_safety_self_contradiction,
         test_safety_identity_violation,
         test_safety_forbidden_transition,
         test_task_reward_no_tool,

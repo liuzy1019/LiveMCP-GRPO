@@ -1,0 +1,77 @@
+# Email MCP Server 配置
+# 邮件系统：append-only 状态，支持 inbox/threads/labels
+
+name: email
+type: local_subprocess
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.email.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  reset_mode: deterministic_seed
+  max_sessions: 64
+  default_seed: 42
+
+tools:
+  discovery:
+    - list_inbox
+  readonly:
+    - list_inbox
+    - search_emails
+    - get_email
+    - get_thread
+  mutating:
+    - send_email
+    - create_draft
+    - add_label
+    - move_to_thread
+
+sampler:
+  class_path: src.live_mcp.sampler.EmailSampler
+
+reward_profile: email_basic
+
+dependency_graph:
+  edges:
+    - source_tool: list_inbox
+      target_tool: get_email
+      relation: explicit
+      source_output_path: email_id
+      target_argument_path: email_id
+    - source_tool: search_emails
+      target_tool: get_email
+      relation: explicit
+      source_output_path: email_id
+      target_argument_path: email_id
+    - source_tool: get_email
+      target_tool: add_label
+      relation: explicit
+      source_output_path: email_id
+      target_argument_path: email_id
+    - source_tool: get_email
+      target_tool: move_to_thread
+      relation: explicit
+      source_output_path: email_id
+      target_argument_path: email_id
+    - source_tool: send_email
+      target_tool: get_thread
+      relation: implicit
+      description: sent email should appear in thread
+
+query_templates:
+  email_label_and_reply:
+    - "Find emails from {sender} about {subject}, add label '{label}', then reply to the thread."
+  email_search_and_thread:
+    - "Search for emails matching '{keyword}', then move the relevant one to thread '{thread_id}'."
+  email_draft_and_send:
+    - "Create a draft email to {to} with subject '{subject}', then send it."
+

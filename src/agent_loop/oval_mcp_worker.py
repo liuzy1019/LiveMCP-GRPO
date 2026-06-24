@@ -45,7 +45,7 @@ class OvalMCPWorkerContext:
         domains: list[str] | None = None,
     ):
         self.suite_config = load_suite_config(suite_path)
-        self.domains = domains or ["calendar", "shopping"]
+        self.domains = domains or ["calendar", "shopping", "banking"]
         self.manager = LiveMCPManager(self.suite_config)
         self.executor: LiveMCPExecutor | None = None
         self._audit_wrappers: dict[str, AuditWrapper] = {}
@@ -101,32 +101,39 @@ class OvalMCPWorkerContext:
     ) -> tuple[AuditEvent, ToolExecutionResult]:
         """执行一次 tool_call 并产生审计事件。
 
-        Args:
-            session_id: 当前 session
-            domain: MCP server 名称 (calendar/shopping)
-            tool_call: 模型的 tool_call
-            model_output: 模型原始输出文本（用于审计记录）
-
-        Returns:
-            (AuditEvent, ToolExecutionResult)
+        Captures pre_state before execution and post_state after,
+        to enable accurate state-diff and cross-event pattern detection.
         """
         audit = self._audit_wrappers.get(domain)
         if audit is None:
             raise ValueError(f"no audit wrapper for domain: {domain}")
 
-        # 包装为 ToolCall 列表
-        tool_calls = [tool_call]
+        # Capture pre-state BEFORE execution (required for state diff)
+        pre_state = None
+        try:
+            pre_state = self.manager.get_state(session_id)
+        except Exception:
+            pass
 
-        # 通过 LiveMCPExecutor 执行
+        # Execute via LiveMCPExecutor
         exec_result = self.executor.execute(session_id, tool_call)
 
-        # 通过 audit wrapper 记录事件
-        event = audit.audit_step(
+        # Capture post-state AFTER execution
+        post_state = None
+        try:
+            post_state = self.manager.get_state(session_id)
+        except Exception:
+            pass
+
+        # Record event with proper pre/post state
+        event = audit.audit_step_with_state(
             session_id=session_id,
             action_type="tool_call",
-            tool_calls=tool_calls,
+            tool_calls=[tool_call],
             execution_results=[exec_result],
             model_output=model_output,
+            pre_state=pre_state,
+            post_state=post_state,
         )
 
         return event, exec_result
@@ -174,19 +181,14 @@ class OvalMCPWorkerContext:
 
 
 def _event_to_dict(event: AuditEvent) -> dict[str, Any]:
-    """将 AuditEvent 转为可序列化 dict。"""
+    """将 AuditEvent 转为可序列化 dict（fallback，主路径走 event.to_dict()）。"""
     return {
-        "step_index": event.step_index,
+        "step": event.step,
         "operation": event.operation,
         "target_type": event.target_type,
         "target_id": event.target_id,
         "tool_name": event.tool_name,
         "execution_success": event.execution_success,
-        "execution_error": event.execution_error,
-        "state_diff": event.state_diff,
-        "pre_state_hash": event.pre_state_hash,
-        "post_state_hash": event.post_state_hash,
-        "model_output": event.model_output,
+        "error_message": event.error_message,
         "session_id": event.session_id,
-        "timestamp": event.timestamp,
     }
