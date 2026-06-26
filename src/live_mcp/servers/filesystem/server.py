@@ -189,9 +189,11 @@ class FilesystemServer(StatefulToolServer):
 
     def mv(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); src = self._resolve(session_id, arguments["source"]); dst = self._resolve(session_id, arguments["target"])
+        # Check protected path BEFORE popping source to avoid data loss
+        if self._protected_prefix in src:
+            raise KeyError("cannot move protected paths")
         node = state["fs"].pop(src, None)
         if not node: raise KeyError(f"source not found: {src}")
-        if self._protected_prefix in src: raise KeyError("cannot move protected paths")
         state["fs"][dst] = node; return _result(True, {"source": src, "target": dst}, None, "", True)
 
     def cp(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

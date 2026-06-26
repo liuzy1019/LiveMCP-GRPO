@@ -15,7 +15,7 @@
   "sqrt_l":  a_{i,t} = A_i / sqrt(L_i)          （推荐默认）
   "norm":    a_{i,t} = A_i * sqrt(L_ref / L_i)  （batch 归一化，L_ref = mean(L)）
 
-Phase 1 推荐 "none"（保持 baseline 可比），Phase 3 切换到 "sqrt_l"。
+推荐 "sqrt_l" 作为默认模式。
 """
 
 from __future__ import annotations

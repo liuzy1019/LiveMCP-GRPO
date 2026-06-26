@@ -59,7 +59,7 @@ class LiveMCPExecutor:
                 False,
                 False,
             )
-        server_name = self.schema_registry.server_for_tool(tool_call.name)
+        server_name = self.schema_registry.server_for_tool(tool_call.name, tool_call.arguments)
         if server_name is None:
             return self._result(
                 tool_call,

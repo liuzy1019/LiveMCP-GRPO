@@ -138,7 +138,7 @@ class FoodDeliveryServer(StatefulToolServer):
 
     def contact_support(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); order = self._order(state, arguments["order_id"]); issue = arguments["issue_type"]
-        tid = f"ticket_{state['next_order_num']:04d}"; state["next_order_num"] += 1
+        tid = f"ticket_{state['next_ticket_num']:04d}"; state["next_ticket_num"] += 1
         ticket = {"ticket_id": tid, "order_id": order["order_id"], "issue_type": issue, "description": arguments["description"], "status": "open", "created_at": "2026-06-24T21:40:00"}
         state.setdefault("support_tickets", []).append(ticket)
         return _result(True, {"ticket": ticket}, None, "", True)

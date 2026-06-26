@@ -15,13 +15,9 @@ servers:
   - configs/live_mcp/food_delivery.yaml  # Lifestyle: food_delivery (lifecycle)
 
 environment:
-  backend: replay  # replay | live（默认 replay，避免误触 live 训练）
-
-replay:
-  episode_seeds_path: data/toucan/episode_seeds.jsonl
+  backend: live  # live（默认 live，MCP subprocess 执行）
 
 live:
-  suite: configs/live_mcp/suite_mvp.yaml
   transport: subprocess_stdio  # stdio 子进程通信
   task_file: data/live_mcp/tasks/live_mcp_full.jsonl
   trace_dir: data/live_mcp/traces

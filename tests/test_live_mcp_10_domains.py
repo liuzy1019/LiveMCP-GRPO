@@ -69,12 +69,10 @@ ALL_DOMAINS = [
 
 def test_all_servers_healthy(live_manager):
     """All 10 servers respond to healthcheck."""
+    result = live_manager.healthcheck()
     for domain in ALL_DOMAINS:
-        session = live_manager.create_session(seed=42)
-        result = live_manager.call_tool(domain, session.session_id, "_healthcheck", {})
-        assert result["observation"]["ok"] is True, f"{domain} healthcheck failed"
-        live_manager.close_session(session.session_id)
-        print(f"  {domain}: HEALTHCHECK OK")
+        assert result.get(domain) is True, f"{domain} healthcheck failed"
+    print(f"  all {len(ALL_DOMAINS)} domains: HEALTHCHECK OK")
 
 
 # ─────────────────────────────────────

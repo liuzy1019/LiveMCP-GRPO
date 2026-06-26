@@ -1,7 +1,7 @@
 [project]
-name = "schemashift-grpo"
+name = "livemcp-grpo"
 version = "0.1.0"
-description = "SchemaShift-GRPO: MCP-Tools-Aware Tool-Use RL via Schema Perturbation + Verifiable Reward"
+description = "State-Machine Data Synthesis + Constrained GRPO for Multi-Step MCP Tool Use"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "torch==2.8.0",
@@ -72,3 +72,6 @@ select = ["E", "F", "I", "N", "W"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+    "requires_llm: requires LLM model inference (slow, skipped by default)",
+]

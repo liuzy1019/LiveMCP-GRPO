@@ -1,59 +1,140 @@
 # data/
 
-本目录下的数据文件不入库（详见根目录 `.gitignore`），clone 后请按以下步骤复现。
+本目录存放训练数据产出和实验记录。原始 parquet 数据不入库（见 `.gitignore`），实验配置与统计结果跟踪入库。
 
-当前本地快照已包含：
-
-- `data/toucan/episode_seeds.jsonl`：4962 条有效 EpisodeSeed（见 `data/toucan/builder_stats.json`）
-- `data/sft/sft_train.jsonl`：9146 条 SFT 样本（见 `data/sft/export_stats.json`）
-- `data/grpo_train_replay.parquet` 与 `data/grpo_val_replay.parquet`：GRPO replay 数据。当前本地快照为 train 33003 行 / 3667 groups，val 1728 行 / 192 groups。
+---
 
 ## 目录结构
 
 ```
 data/
-├── toucan/                     # Toucan 主数据源（EpisodeSeed JSONL）
-├── grpo_train_replay.parquet   # verl GRPO 训练数据（由 prepare_grpo_data.py 生成）
-├── grpo_val_replay.parquet     # verl GRPO 验证数据（由 prepare_grpo_data.py 生成）
-└── live_mcp/                   # Live MCP 生成任务与 trace（由 live smoke 脚本生成）
+├── experiments/                    # 实验记录（配置+结果摘要，跟踪入库）
+│   ├── .gitkeep
+│   └── {YYYY-MM-DD}_{tag}/         # 单次实验目录
+│       ├── config.json             # 完整运行参数
+│       └── result.json             # 产出统计
+├── oval_grpo_train.parquet         # GRPO 训练数据（gitignored）
+├── oval_grpo_val.parquet           # GRPO 验证数据（gitignored）
+└── README.md
 ```
 
-## 数据复现
+---
+
+## 数据生成管线
+
+```
+PROVE Teacher（两步管线，默认模式）
+  ┌──────────────────────────────────────────────────┐
+  │ Phase 1: LLM 规划 (task_planner.py)               │
+  │   输入: domain schemas + grounded state            │
+  │   输出: user_query + [tool_a, tool_b, ...]         │
+  │   LLM 仅输出工具名序列，~200 tokens，8B 可靠       │
+  └──────────────────────────────────────────────────┘
+                        ↓
+  ┌──────────────────────────────────────────────────┐
+  │ Phase 2: 执行记录 (task_planner.py)               │
+  │   真实 MCP session 执行 → 记录 oracle trace        │
+  │   infer_args: 从 state/schema/history 推断参数     │
+  │   derive_success_criteria: 从 state delta 派生     │
+  └──────────────────────────────────────────────────┘
+                        ↓
+  ┌──────────────────────────────────────────────────┐
+  │ 鲁棒性注入 (orchestrator.py)                       │
+  │   distractor tools:  40%                          │
+  │   missing function:  20%                          │
+  │   irrelevance query:  5%                          │
+  └──────────────────────────────────────────────────┘
+                        ↓
+  ┌──────────────────────────────────────────────────┐
+  │ 导出 parquet (generate_oval_data.py)               │
+  │   verl 格式: prompt + reward_model + extra_info    │
+  │   group_id 按 (domain × batch) 分组               │
+  └──────────────────────────────────────────────────┘
+```
+
+### 难度分布
+
+| 类型 | 比例 | 说明 |
+|------|------|------|
+| **complete** | 60% | user query 包含全部所需信息 |
+| **missing** | 20% | user query 省略一个关键参数 |
+| **minimal** | 20% | user query 极其简略，需模型自行推断 |
+
+---
+
+## 数据生成命令
 
 ```bash
-# 1. 获取 Toucan EpisodeSeed 数据
-python scripts/download_toucan.py
-python scripts/inspect_toucan.py
+# PROVE 模式（默认，推荐）
+# vLLM 模式：
+python scripts/generate_oval_data.py \
+  --count 500 --val-count 100 \
+  --domain all \
+  --model Qwen3-8B \
+  --api-base http://localhost:8001/v1 \
+  --seed 42 \
+  --output data/oval_grpo_train.parquet \
+  --val-output data/oval_grpo_val.parquet
 
-# 2. SFT 样本导出（依赖 episode seeds）
-# 由 src/data/sft_step_exporter.py 从 episode_seed 导出
+# Local transformers 模式：
+python scripts/generate_oval_data.py \
+  --count 500 --val-count 100 \
+  --domain all \
+  --model models/Qwen/Qwen3-8B \
+  --seed 42 \
+  ...
 
-# 3. GRPO parquet 导出
-python scripts/prepare_grpo_data.py \
-  --episode_seeds data/toucan/episode_seeds.jsonl \
-  --output data/grpo_train_replay.parquet \
-  --val_output data/grpo_val_replay.parquet
+# E2E 模式（legacy）
+python scripts/generate_oval_data.py \
+  --teacher e2e --count 500 ...
 
-# 4. Live MCP 任务与 smoke trace
-python scripts/generate_live_mcp_tasks.py \
-  --suite configs/live_mcp/suite_mvp.yaml \
-  --output data/live_mcp/tasks/live_mcp_mvp.jsonl \
-  --num-tasks 20 \
-  --seed 42
+# 记录实验配置与结果（自动写入 data/experiments/）
+python scripts/generate_oval_data.py \
+  --experiment-tag prove_v1 \
+  ...
 ```
 
-当前默认 GRPO 导出策略：
+---
 
-- 每个 group 展开为 `none/mild/strong × 3 copies = 9` 行。
-- `no_tool` 默认按最终 group 约 15% 采样进入 GRPO。
-- 每条展开记录默认以 40% 概率注入 3-8 个 distractor tools。
-- `error_output` 暂不进入 GRPO，避免未验证错误恢复 oracle 引入噪声。
+## 实验记录规范
 
-## 设计原则
+每次正式数据生成运行，在 `data/experiments/{YYYY-MM-DD}_{tag}/` 下记录：
 
-- **训练主源 Toucan**：所有 GRPO 数据从 Toucan EpisodeSeed 构建
-- **Oracle-Preserving**：Schema 扰动后 ground truth 通过 name_map/enum_map 可还原
-- **行为分布补齐**：GRPO 数据包含 `call_then_final`、`call_then_call` 和采样后的 `no_tool`
-- **Distractor 增强**：部分行额外注入相似/跨域 distractor tools，并写入 `extra_info`
-- **SFT 仅对齐格式**：SFT 样本从 episode_seed 可见上下文导出，不暴露 oracle_trace
-- **GRPO parquet 含 replay_observation**：离线 replay 执行器无需真实 MCP server
+- **`config.json`** — 完整 CLI 参数 + 环境信息（模型版本、GPU、commit hash）
+- **`result.json`** — 产出统计（总行数、各 domain 分布、scenario_type 分布、难度分布）
+
+示例 `config.json`：
+
+```json
+{
+  "run_id": "2026-06-26_prove_v1",
+  "command": "python scripts/generate_oval_data.py --count 500 --val-count 100 --domain all --model models/Qwen3-8B --seed 42 --experiment-tag prove_v1",
+  "model": "Qwen3-8B",
+  "domain": "all",
+  "count": 500,
+  "val_count": 100,
+  "seed": 42,
+  "teacher_mode": "prove",
+  "distractor_rate": 0.40,
+  "missing_function_rate": 0.20,
+  "irrelevance_ratio": 0.05,
+  "difficulty_mix": {"complete": 0.6, "missing": 0.2, "minimal": 0.2},
+  "git_commit": "abc1234",
+  "gpu_model": "A10",
+  "timestamp": "2026-06-26T14:38:21+08:00"
+}
+```
+
+示例 `result.json`：
+
+```json
+{
+  "train_rows": 478,
+  "val_rows": 96,
+  "yield": 0.956,
+  "duration_seconds": 1234.5,
+  "domain_distribution": {"calendar": 50, "banking": 48, "email": 50},
+  "scenario_distribution": {"normal": 239, "distractor": 191, "missing_function": 48},
+  "difficulty_distribution": {"complete": 287, "missing": 96, "minimal": 95}
+}
+```

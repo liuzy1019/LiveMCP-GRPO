@@ -1,4 +1,9 @@
-"""Tool schema registry and bounded top-level argument validation."""
+"""Tool schema registry with server-prefixed names.
+
+All schemas stored under '{server}::{tool}' to avoid name collisions across domains.
+Schema validation and server resolution try all matching schemas when a tool name
+is ambiguous (e.g. 'add_label' exists in both email and issue_tracker).
+"""
 
 from __future__ import annotations
 
@@ -16,9 +21,10 @@ class SchemaValidationResult:
 
 
 class SchemaRegistry:
+    _PREFIX_SEP = "::"
+
     def __init__(self) -> None:
         self._schemas: dict[str, dict[str, Any]] = {}
-        self._server_by_tool: dict[str, str] = {}
         self._name_map: dict[str, str] = {}
 
     def register_tools(
@@ -32,14 +38,40 @@ class SchemaRegistry:
             name = schema.get("name")
             if not isinstance(name, str) or not name:
                 continue
-            self._schemas[name] = schema
-            self._server_by_tool[name] = server_name
+            key = f"{server_name}{self._PREFIX_SEP}{name}"
+            self._schemas[key] = schema
+
+    def _matching_keys(self, tool_name: str) -> list[str]:
+        """Return all schema keys matching tool_name."""
+        if self._PREFIX_SEP in tool_name and tool_name in self._schemas:
+            return [tool_name]
+        canonical = self._name_map.get(tool_name, tool_name)
+        if self._PREFIX_SEP in canonical and canonical in self._schemas:
+            return [canonical]
+        suffix = f"{self._PREFIX_SEP}{tool_name}"
+        return [k for k in self._schemas if k.endswith(suffix)]
+
+    def _server_from_key(self, key: str) -> str:
+        return key.split(self._PREFIX_SEP, 1)[0]
 
     def get_schema(self, tool_name: str) -> dict[str, Any] | None:
-        return self._schemas.get(self.canonical_name(tool_name))
+        keys = self._matching_keys(tool_name)
+        return self._schemas.get(keys[0]) if keys else None
 
-    def server_for_tool(self, tool_name: str) -> str | None:
-        return self._server_by_tool.get(self.canonical_name(tool_name))
+    def server_for_tool(self, tool_name: str, arguments: dict[str, Any] | None = None) -> str | None:
+        """Return server name for a tool. Disambiguates by argument validation if needed."""
+        keys = self._matching_keys(tool_name)
+        if not keys:
+            return None
+        if len(keys) == 1:
+            return self._server_from_key(keys[0])
+        # Multiple matches — try to disambiguate by validating arguments
+        if arguments:
+            for key in keys:
+                schema = self._schemas[key]
+                if _validate_args(schema, arguments):
+                    return self._server_from_key(key)
+        return self._server_from_key(keys[0])
 
     def canonical_name(self, visible_name: str) -> str:
         return self._name_map.get(visible_name, visible_name)
@@ -48,19 +80,36 @@ class SchemaRegistry:
         return list(self._schemas.values())
 
     def server_tools(self, server_name: str) -> list[dict[str, Any]]:
-        """返回指定 server 的所有注册工具 schema。"""
-        return [
-            schema for name, schema in self._schemas.items()
-            if self._server_by_tool.get(name) == server_name
-        ]
+        prefix = f"{server_name}{self._PREFIX_SEP}"
+        return [s for k, s in self._schemas.items() if k.startswith(prefix)]
 
     def validate_arguments(
         self,
         tool_name: str,
         arguments: dict[str, Any],
     ) -> SchemaValidationResult:
-        schema = self.get_schema(tool_name)
-        if schema is None or not isinstance(arguments, dict):
+        keys = self._matching_keys(tool_name)
+        if not keys:
+            return SchemaValidationResult(valid=False, type_errors=["arguments must be object"]) if not isinstance(arguments, dict) else SchemaValidationResult(valid=False)
+        # Try all matching schemas; return the first valid result
+        best: SchemaValidationResult | None = None
+        for key in keys:
+            schema = self._schemas[key]
+            # Fast check: if required args are missing, skip
+            required = (schema.get("input_schema") or schema.get("parameters") or {}).get("required", [])
+            if required and not all(k in arguments for k in required):
+                if best is None:
+                    best = SchemaValidationResult(valid=False, missing_required=[k for k in required if k not in arguments])
+                continue
+            result = self._validate_one(schema, arguments)
+            if result.valid:
+                return result
+            if best is None:
+                best = result
+        return best or SchemaValidationResult(valid=False)
+
+    def _validate_one(self, schema: dict[str, Any], arguments: dict[str, Any]) -> SchemaValidationResult:
+        if not isinstance(arguments, dict):
             return SchemaValidationResult(valid=False, type_errors=["arguments must be object"])
         input_schema = schema.get("input_schema") or schema.get("parameters") or {}
         properties = input_schema.get("properties", {})
@@ -86,6 +135,13 @@ class SchemaRegistry:
             type_errors=type_errors,
             enum_errors=enum_errors,
         )
+
+
+def _validate_args(schema: dict[str, Any], arguments: dict[str, Any]) -> bool:
+    """Quick check: do arguments satisfy the required fields of this schema?"""
+    input_schema = schema.get("input_schema") or schema.get("parameters") or {}
+    required = input_schema.get("required", [])
+    return all(k in arguments for k in required)
 
 
 def _type_matches(value: Any, expected_type: str | list[str]) -> bool:

@@ -1,6 +1,6 @@
 """Task Reward: R_task per OVAL-MCP §7.1.
 
-Phase 1 uses trajectory-level R_task composed of:
+Trajectory-level R_task composed of:
   R_positive = w_val * R_validity + w_cov * R_coverage + w_name * R_name + w_arg * R_arg
   R_task = clip(R_positive / Z_pos + w_eff * R_efficiency, -0.2, 1.0)
 
@@ -69,10 +69,7 @@ class TaskRewardResult:
 
 
 class TaskReward:
-    """Compute R_task from trajectory event log and task definition.
-
-    Phase 1: trajectory-level reward only.
-    """
+    """Compute R_task from trajectory event log and task definition."""
 
     def __init__(self, weights: dict[str, float] | None = None):
         self.w = {**DEFAULT_WEIGHTS, **(weights or {})}
@@ -81,6 +78,7 @@ class TaskReward:
         self,
         event_log: EventLog,
         task: dict[str, Any],
+        domain_adapter: Any = None,
     ) -> TaskRewardResult:
         """Compute R_task for a complete trajectory."""
         result = TaskRewardResult()
@@ -92,7 +90,7 @@ class TaskReward:
         if is_no_tool:
             return self._compute_no_tool(event_log, task, result)
 
-        return self._compute_with_tools(event_log, task, required_tool_calls, result)
+        return self._compute_with_tools(event_log, task, required_tool_calls, result, domain_adapter)
 
     def _compute_no_tool(
         self,
@@ -123,6 +121,7 @@ class TaskReward:
         task: dict[str, Any],
         required_tool_calls: list[dict],
         result: TaskRewardResult,
+        domain_adapter: Any = None,
     ) -> TaskRewardResult:
         """Tool-required task: full R_task formula."""
         tool_events = event_log.tool_call_events
@@ -138,7 +137,7 @@ class TaskReward:
 
         # 2. R_coverage: completed outcome predicates / total
         total_preds = len(task.get("outcome_assertions", [])) or 1
-        completed = self._count_completed_predicates(event_log, task)
+        completed = self._count_completed_predicates(event_log, task, domain_adapter)
         result.completed_predicates = completed
         result.total_predicates = total_preds
         result.r_coverage = completed / total_preds if total_preds > 0 else 0.0
@@ -209,17 +208,27 @@ class TaskReward:
         self,
         event_log: EventLog,
         task: dict[str, Any],
+        domain_adapter: Any = None,
     ) -> int:
-        """Count how many outcome predicates were satisfied.
+        """Count how many unique progress predicates were satisfied across the trajectory.
 
-        Phase 1 simplified: count based on event operations matching expected predicates.
-        Full predicate evaluation will be domain-specific in Phase 2.
+        Uses DomainAdapter.evaluate_event() when available; falls back to
+        operation-based counting otherwise.
         """
+        if domain_adapter is not None:
+            completed: set[str] = set()
+            for event in event_log.events:
+                try:
+                    satisfied = domain_adapter.evaluate_event(event, task)
+                    completed.update(satisfied)
+                except Exception:
+                    pass
+            return len(completed)
+
+        # Fallback: operation-based counting
         assertions = task.get("outcome_assertions", [])
         if not assertions:
             return 0
-
-        # Simplified: check if all required tool operations appear in event log
         operations = {e.operation for e in event_log.events if e.operation}
         required_ops = set()
         for a in assertions:
@@ -227,12 +236,9 @@ class TaskReward:
                 op = a.get("operation")
                 if op:
                     required_ops.add(op)
-
         if not required_ops:
             return 0
-
-        completed = sum(1 for op in required_ops if op in operations)
-        return completed
+        return sum(1 for op in required_ops if op in operations)
 
     def _has_identity_violation(
         self,
@@ -337,10 +343,11 @@ class TaskReward:
         event_log: EventLog,
         task: dict[str, Any],
     ) -> bool:
-        """Check if terminal action satisfies task predicate.
+        """Check if trajectory ends with a valid terminal action type.
 
-        Phase 1 simplified: if the trajectory ends with a valid terminal action
-        (final_answer/report_error/ask_clarification) and there are no errors, passes.
+        Structural check — actual predicate satisfaction (verified_postcondition,
+        produced_required_response) is handled by DomainAdapter.evaluate_event()
+        during R_coverage / F_gamma / P_process computation.
         """
         if not event_log.events:
             return False

@@ -45,7 +45,10 @@ class OvalMCPWorkerContext:
         domains: list[str] | None = None,
     ):
         self.suite_config = load_suite_config(suite_path)
-        self.domains = domains or ["calendar", "shopping", "banking"]
+        self.domains = domains or [
+            "calendar", "shopping", "banking", "email", "filesystem",
+            "payments", "crm", "issue_tracker", "team_chat", "food_delivery",
+        ]
         self.manager = LiveMCPManager(self.suite_config)
         self.executor: LiveMCPExecutor | None = None
         self._audit_wrappers: dict[str, AuditWrapper] = {}

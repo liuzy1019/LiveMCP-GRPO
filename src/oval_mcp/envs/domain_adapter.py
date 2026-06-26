@@ -3,7 +3,7 @@
 OVAL-MCP §5.2: Only DomainAdapter outputs enter reward/cost.
 Algorithm does not depend on calendar/shopping-specific fields.
 
-Phase 1 adapters: CalendarAdapter, ShoppingAdapter.
+Domain adapters for all 10 MCP environments.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ from typing import Any
 class DomainAdapter(ABC):
     """Abstract base for domain adapters.
 
-    Each MCP server domain must implement this to map
-    tool_calls + observations + state_diffs → normalized AuditEvents
-    and to provide predicates for reward/cost computation.
+    Each MCP server domain must implement normalize_event, protected_resources,
+    budget, and identity_policy. Predicate methods have sensible defaults
+    shared across all domains.
     """
 
     domain_name: str
@@ -43,20 +43,59 @@ class DomainAdapter(ABC):
         """
         ...
 
-    @abstractmethod
+    # ── Predicates shared across all domains ──
+
     def outcome_predicates(self, task: dict[str, Any]) -> list[str]:
-        """Return outcome predicate names for this task."""
-        ...
+        return [
+            "required_resource_resolved",
+            "required_transition_completed",
+            "required_output_fields_match",
+            "task_required_fields_preserved",
+            "final_response_satisfies_task",
+        ]
 
-    @abstractmethod
     def safety_predicates(self, task: dict[str, Any]) -> list[str]:
-        """Return safety predicate names for this task."""
-        ...
+        return [
+            "not_forbidden_transition",
+            "not_wrong_resource_mutation",
+            "not_identity_or_provenance_violation",
+            "not_duplicate_or_inconsistent_side_effect",
+        ]
 
-    @abstractmethod
     def progress_predicates(self, task: dict[str, Any]) -> list[str]:
-        """Return progress predicate names for this task."""
-        ...
+        return [
+            "resolved_required_entity",
+            "completed_required_transition",
+            "verified_postcondition",
+        ]
+
+    def required_tool_names(self, task: dict[str, Any]) -> set[str]:
+        calls = task.get("required_tool_calls", [])
+        return {c["tool_name"] for c in calls} if calls else set()
+
+    @property
+    def entity_container_key(self) -> str:
+        """Key in domain state that holds the primary entity container for recreate detection.
+
+        Override per domain: "events" for calendar, "accounts" for banking, etc.
+        """
+        return "events"  # default for calendar
+
+    @staticmethod
+    def _unwrap_domain_state(state: dict[str, Any] | None, domain_name: str) -> dict[str, Any] | None:
+        """Unwrap the domain-specific state from the manager's composite state.
+
+        manager.get_state() returns {"calendar": {"events": {...}}, ...}
+        This extracts the inner domain dict, or falls back to the raw state.
+        """
+        if state is None:
+            return None
+        domain_state = state.get(domain_name, None)
+        if isinstance(domain_state, dict):
+            return domain_state
+        return state
+
+    # ── Domain-specific abstract methods ──
 
     @abstractmethod
     def protected_resources(self, task: dict[str, Any]) -> list[str]:
@@ -73,10 +112,50 @@ class DomainAdapter(ABC):
         """Return the identity policy: preserve | create_new | append_only | lookup_only."""
         ...
 
-    @abstractmethod
-    def required_tool_names(self, task: dict[str, Any]) -> set[str]:
-        """Return the set of required tool names for this task."""
-        ...
+    # ── Predicate evaluation ──
+
+    def evaluate_event(
+        self,
+        event: Any,
+        task: dict[str, Any],
+    ) -> frozenset[str]:
+        """Return the set of progress predicate names satisfied by this event.
+
+        This is the single source of truth for predicate completion used by
+        R_coverage, F_gamma, and P_process.  Domain adapters SHOULD override
+        this when domain-specific semantics differ from the generic mapping.
+
+        Generic mapping (works for most domains):
+          query + success → {resolved_required_entity}
+          create/update/delete + success → {completed_required_transition, resolved_required_entity}
+          final_answer → {verified_postcondition, produced_required_response}
+          ask_clarification/report_error → {produced_required_response}
+        """
+        predicates: set[str] = set()
+
+        if not getattr(event, "execution_success", False):
+            return frozenset()
+
+        op = getattr(event, "operation", "")
+        action = getattr(event, "action_type", "")
+
+        # Query / read operations
+        if op == "query":
+            predicates.add("resolved_required_entity")
+
+        # State-changing operations
+        if op in ("create", "update", "delete"):
+            predicates.add("completed_required_transition")
+            predicates.add("resolved_required_entity")  # implies entity was resolved
+
+        # Terminal actions
+        if action == "final_answer":
+            predicates.add("verified_postcondition")
+            predicates.add("produced_required_response")
+        elif action in ("ask_clarification", "report_error"):
+            predicates.add("produced_required_response")
+
+        return frozenset(predicates)
 
 
 class CalendarAdapter(DomainAdapter):
@@ -138,8 +217,8 @@ class CalendarAdapter(DomainAdapter):
                 if isinstance(event, dict):
                     result["target_id"] = event.get("event_id", "")
             # Detect created IDs from state diff
-            be = self._unwrap_domain_state(before_state)
-            ae = self._unwrap_domain_state(after_state)
+            be = self._unwrap_domain_state(before_state, "calendar")
+            ae = self._unwrap_domain_state(after_state, "calendar")
             if be is not None and ae is not None:
                 before_events = set(be.get("events", {}).keys())
                 after_events = set(ae.get("events", {}).keys())
@@ -159,8 +238,8 @@ class CalendarAdapter(DomainAdapter):
         elif tool_name == "delete_event":
             result["target_id"] = tool_arguments.get("event_id", "")
             # Detect deleted IDs from state diff
-            be = self._unwrap_domain_state(before_state)
-            ae = self._unwrap_domain_state(after_state)
+            be = self._unwrap_domain_state(before_state, "calendar")
+            ae = self._unwrap_domain_state(after_state, "calendar")
             if be is not None and ae is not None:
                 before_events = set(be.get("events", {}).keys())
                 after_events = set(ae.get("events", {}).keys())
@@ -176,29 +255,8 @@ class CalendarAdapter(DomainAdapter):
 
         return result
 
-    def outcome_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "required_resource_resolved",
-            "required_transition_completed",
-            "required_output_fields_match",
-            "task_required_fields_preserved",
-            "final_response_satisfies_task",
-        ]
 
-    def safety_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "not_forbidden_transition",
-            "not_wrong_resource_mutation",
-            "not_identity_or_provenance_violation",
-            "not_duplicate_or_inconsistent_side_effect",
-        ]
 
-    def progress_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "resolved_required_entity",
-            "completed_required_transition",
-            "verified_postcondition",
-        ]
 
     def protected_resources(self, task: dict[str, Any]) -> list[str]:
         # Calendar: protected resources are target event IDs that must not be deleted
@@ -210,23 +268,7 @@ class CalendarAdapter(DomainAdapter):
     def identity_policy(self, task: dict[str, Any]) -> str:
         return task.get("identity_policy", "preserve")
 
-    @staticmethod
-    def _unwrap_domain_state(state: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Unwrap the domain-specific state from the manager's composite state.
 
-        manager.get_state() returns {"calendar": {"events": {...}}, ...}
-        This extracts the inner domain dict, or falls back to the raw state.
-        """
-        if state is None:
-            return None
-        domain_state = state.get("calendar", None)
-        if isinstance(domain_state, dict):
-            return domain_state
-        return state
-
-    def required_tool_names(self, task: dict[str, Any]) -> set[str]:
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class ShoppingAdapter(DomainAdapter):
@@ -243,6 +285,7 @@ class ShoppingAdapter(DomainAdapter):
     """
 
     domain_name = "shopping"
+    entity_container_key = "orders"
 
     TOOL_MAP = {
         "search_products": ("query", "product"),
@@ -295,9 +338,12 @@ class ShoppingAdapter(DomainAdapter):
                 if isinstance(order, dict):
                     result["target_id"] = order.get("order_id", "")
             if before_state and after_state:
-                before_orders = set(before_state.get("orders", {}).keys())
-                after_orders = set(after_state.get("orders", {}).keys())
-                result["created_ids"] = list(after_orders - before_orders)
+                be = self._unwrap_domain_state(before_state, "shopping")
+                ae = self._unwrap_domain_state(after_state, "shopping")
+                if be is not None and ae is not None:
+                    before_orders = set(be.get("orders", {}).keys())
+                    after_orders = set(ae.get("orders", {}).keys())
+                    result["created_ids"] = list(after_orders - before_orders)
 
         elif tool_name == "get_order":
             result["target_id"] = tool_arguments.get("order_id", "")
@@ -307,29 +353,8 @@ class ShoppingAdapter(DomainAdapter):
 
         return result
 
-    def outcome_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "required_resource_resolved",
-            "required_transition_completed",
-            "required_output_fields_match",
-            "task_required_fields_preserved",
-            "final_response_satisfies_task",
-        ]
 
-    def safety_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "not_forbidden_transition",
-            "not_wrong_resource_mutation",
-            "not_identity_or_provenance_violation",
-            "not_duplicate_or_inconsistent_side_effect",
-        ]
 
-    def progress_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "resolved_required_entity",
-            "completed_required_transition",
-            "verified_postcondition",
-        ]
 
     def protected_resources(self, task: dict[str, Any]) -> list[str]:
         return task.get("protected_product_ids", [])
@@ -340,9 +365,6 @@ class ShoppingAdapter(DomainAdapter):
     def identity_policy(self, task: dict[str, Any]) -> str:
         return task.get("identity_policy", "create_new")
 
-    def required_tool_names(self, task: dict[str, Any]) -> set[str]:
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class BankingAdapter(DomainAdapter):
@@ -366,6 +388,7 @@ class BankingAdapter(DomainAdapter):
     """
 
     domain_name = "banking"
+    entity_container_key = "accounts"
 
     TOOL_MAP = {
         "get_balance": ("query", "bank_account"),
@@ -404,8 +427,8 @@ class BankingAdapter(DomainAdapter):
         if tool_name == "transfer":
             result["target_id"] = tool_arguments.get("from_account", "")
             # Detect account balance changes
-            be = self._unwrap_domain_state(before_state)
-            ae = self._unwrap_domain_state(after_state)
+            be = DomainAdapter._unwrap_domain_state(before_state, "banking")
+            ae = DomainAdapter._unwrap_domain_state(after_state, "banking")
             if be is not None and ae is not None:
                 from_aid = tool_arguments.get("from_account", "")
                 to_aid = tool_arguments.get("to_account", "")
@@ -421,8 +444,8 @@ class BankingAdapter(DomainAdapter):
 
         elif tool_name == "freeze_account":
             result["target_id"] = tool_arguments.get("account_id", "")
-            be = self._unwrap_domain_state(before_state)
-            ae = self._unwrap_domain_state(after_state)
+            be = DomainAdapter._unwrap_domain_state(before_state, "banking")
+            ae = DomainAdapter._unwrap_domain_state(after_state, "banking")
             if be is not None and ae is not None:
                 aid = tool_arguments.get("account_id", "")
                 before_frozen = be.get("accounts", {}).get(aid, {}).get("frozen", False)
@@ -453,29 +476,8 @@ class BankingAdapter(DomainAdapter):
 
         return result
 
-    def outcome_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "required_resource_resolved",
-            "required_transition_completed",
-            "required_output_fields_match",
-            "task_required_fields_preserved",
-            "final_response_satisfies_task",
-        ]
 
-    def safety_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "not_forbidden_transition",
-            "not_wrong_resource_mutation",
-            "not_identity_or_provenance_violation",
-            "not_duplicate_or_inconsistent_side_effect",
-        ]
 
-    def progress_predicates(self, task: dict[str, Any]) -> list[str]:
-        return [
-            "resolved_required_entity",
-            "completed_required_transition",
-            "verified_postcondition",
-        ]
 
     def protected_resources(self, task: dict[str, Any]) -> list[str]:
         return task.get("protected_account_ids", [])
@@ -486,18 +488,7 @@ class BankingAdapter(DomainAdapter):
     def identity_policy(self, task: dict[str, Any]) -> str:
         return task.get("identity_policy", "preserve")
 
-    @staticmethod
-    def _unwrap_domain_state(state: dict[str, Any] | None) -> dict[str, Any] | None:
-        if state is None:
-            return None
-        domain_state = state.get("banking", None)
-        if isinstance(domain_state, dict):
-            return domain_state
-        return state
 
-    def required_tool_names(self, task: dict[str, Any]) -> set[str]:
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class EmailAdapter(DomainAdapter):
@@ -509,6 +500,7 @@ class EmailAdapter(DomainAdapter):
     """
 
     domain_name = "email"
+    entity_container_key = "emails"
 
     TOOL_MAP = {
         "list_inbox": ("query", "email"),
@@ -551,15 +543,9 @@ class EmailAdapter(DomainAdapter):
         # Append-only: no deletes allowed
         return result
 
-    def outcome_predicates(self, task): return ["required_resource_resolved", "required_transition_completed", "required_output_fields_match", "task_required_fields_preserved", "final_response_satisfies_task"]
-    def safety_predicates(self, task): return ["not_forbidden_transition", "not_wrong_resource_mutation", "not_identity_or_provenance_violation", "not_duplicate_or_inconsistent_side_effect"]
-    def progress_predicates(self, task): return ["resolved_required_entity", "completed_required_transition", "verified_postcondition"]
     def protected_resources(self, task): return task.get("protected_thread_ids", [])
     def budget(self, task): return task.get("budget", 5)
     def identity_policy(self, task): return task.get("identity_policy", "append_only")
-    def required_tool_names(self, task):
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class FilesystemAdapter(DomainAdapter):
@@ -571,6 +557,7 @@ class FilesystemAdapter(DomainAdapter):
     """
 
     domain_name = "filesystem"
+    entity_container_key = "fs"
 
     TOOL_MAP = {
         "ls": ("query", "directory"),
@@ -623,15 +610,9 @@ class FilesystemAdapter(DomainAdapter):
             result["created_ids"] = [tool_arguments.get("target", "")]
         return result
 
-    def outcome_predicates(self, task): return ["required_resource_resolved", "required_transition_completed", "required_output_fields_match", "task_required_fields_preserved", "final_response_satisfies_task"]
-    def safety_predicates(self, task): return ["not_forbidden_transition", "not_wrong_resource_mutation", "not_identity_or_provenance_violation", "not_duplicate_or_inconsistent_side_effect"]
-    def progress_predicates(self, task): return ["resolved_required_entity", "completed_required_transition", "verified_postcondition"]
     def protected_resources(self, task): return task.get("protected_paths", [])
     def budget(self, task): return task.get("budget", 8)
     def identity_policy(self, task): return task.get("identity_policy", "preserve")
-    def required_tool_names(self, task):
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class PaymentsAdapter(DomainAdapter):
@@ -643,6 +624,7 @@ class PaymentsAdapter(DomainAdapter):
     """
 
     domain_name = "payments"
+    entity_container_key = "invoices"
 
     TOOL_MAP = {
         "create_invoice": ("create", "invoice"),
@@ -695,15 +677,9 @@ class PaymentsAdapter(DomainAdapter):
             result["target_id"] = tool_arguments.get("url", "")
         return result
 
-    def outcome_predicates(self, task): return ["required_resource_resolved", "required_transition_completed", "required_output_fields_match", "task_required_fields_preserved", "final_response_satisfies_task"]
-    def safety_predicates(self, task): return ["not_forbidden_transition", "not_wrong_resource_mutation", "not_identity_or_provenance_violation", "not_duplicate_or_inconsistent_side_effect"]
-    def progress_predicates(self, task): return ["resolved_required_entity", "completed_required_transition", "verified_postcondition"]
     def protected_resources(self, task): return task.get("protected_invoice_ids", [])
     def budget(self, task): return task.get("budget", 5)
     def identity_policy(self, task): return task.get("identity_policy", "verify")
-    def required_tool_names(self, task):
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class CRMAdapter(DomainAdapter):
@@ -715,6 +691,7 @@ class CRMAdapter(DomainAdapter):
     """
 
     domain_name = "crm"
+    entity_container_key = "leads"
 
     TOOL_MAP = {
         "create_lead": ("create", "lead"),
@@ -765,27 +742,16 @@ class CRMAdapter(DomainAdapter):
         elif tool_name == "update_deal":
             result["target_id"] = tool_arguments.get("deal_id", "")
             if "stage" in tool_arguments:
-                result["changed_fields"] = ["stage"]
+                result["changed_fields"].append("stage")
             if "amount" in tool_arguments:
-                if "changed_fields" in result and result["changed_fields"]:
-                    result["changed_fields"].append("amount")
-                elif result["changed_fields"] is None:
-                    result["changed_fields"] = ["amount"]
-                else:
-                    result["changed_fields"] = ["amount"]
+                result["changed_fields"].append("amount")
         elif tool_name == "get_deal":
             result["target_id"] = tool_arguments.get("deal_id", "")
         return result
 
-    def outcome_predicates(self, task): return ["required_resource_resolved", "required_transition_completed", "required_output_fields_match", "task_required_fields_preserved", "final_response_satisfies_task"]
-    def safety_predicates(self, task): return ["not_forbidden_transition", "not_wrong_resource_mutation", "not_identity_or_provenance_violation", "not_duplicate_or_inconsistent_side_effect"]
-    def progress_predicates(self, task): return ["resolved_required_entity", "completed_required_transition", "verified_postcondition"]
     def protected_resources(self, task): return task.get("protected_lead_ids", [])
     def budget(self, task): return task.get("budget", 6)
     def identity_policy(self, task): return task.get("identity_policy", "preserve")
-    def required_tool_names(self, task):
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class IssueTrackerAdapter(DomainAdapter):
@@ -797,6 +763,7 @@ class IssueTrackerAdapter(DomainAdapter):
     """
 
     domain_name = "issue_tracker"
+    entity_container_key = "issues"
 
     TOOL_MAP = {
         "create_issue": ("create", "issue"),
@@ -842,15 +809,9 @@ class IssueTrackerAdapter(DomainAdapter):
             result["target_id"] = tool_arguments.get("issue_id", "")
         return result
 
-    def outcome_predicates(self, task): return ["required_resource_resolved", "required_transition_completed", "required_output_fields_match", "task_required_fields_preserved", "final_response_satisfies_task"]
-    def safety_predicates(self, task): return ["not_forbidden_transition", "not_wrong_resource_mutation", "not_identity_or_provenance_violation", "not_duplicate_or_inconsistent_side_effect"]
-    def progress_predicates(self, task): return ["resolved_required_entity", "completed_required_transition", "verified_postcondition"]
     def protected_resources(self, task): return task.get("protected_issue_ids", [])
     def budget(self, task): return task.get("budget", 6)
     def identity_policy(self, task): return task.get("identity_policy", "preserve")
-    def required_tool_names(self, task):
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class TeamChatAdapter(DomainAdapter):
@@ -911,15 +872,9 @@ class TeamChatAdapter(DomainAdapter):
             result["target_id"] = tool_arguments.get("thread_id", "")
         return result
 
-    def outcome_predicates(self, task): return ["required_resource_resolved", "required_transition_completed", "required_output_fields_match", "task_required_fields_preserved", "final_response_satisfies_task"]
-    def safety_predicates(self, task): return ["not_forbidden_transition", "not_wrong_resource_mutation", "not_identity_or_provenance_violation", "not_duplicate_or_inconsistent_side_effect"]
-    def progress_predicates(self, task): return ["resolved_required_entity", "completed_required_transition", "verified_postcondition"]
     def protected_resources(self, task): return task.get("protected_channel_ids", [])
     def budget(self, task): return task.get("budget", 4)
     def identity_policy(self, task): return task.get("identity_policy", "append_only")
-    def required_tool_names(self, task):
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 class FoodDeliveryAdapter(DomainAdapter):
@@ -931,6 +886,7 @@ class FoodDeliveryAdapter(DomainAdapter):
     """
 
     domain_name = "food_delivery"
+    entity_container_key = "orders"
 
     TOOL_MAP = {
         "list_restaurants": ("query", "restaurant"),
@@ -982,15 +938,9 @@ class FoodDeliveryAdapter(DomainAdapter):
             result["target_id"] = tool_arguments.get("order_id", "")
         return result
 
-    def outcome_predicates(self, task): return ["required_resource_resolved", "required_transition_completed", "required_output_fields_match", "task_required_fields_preserved", "final_response_satisfies_task"]
-    def safety_predicates(self, task): return ["not_forbidden_transition", "not_wrong_resource_mutation", "not_identity_or_provenance_violation", "not_duplicate_or_inconsistent_side_effect"]
-    def progress_predicates(self, task): return ["resolved_required_entity", "completed_required_transition", "verified_postcondition"]
     def protected_resources(self, task): return task.get("protected_order_ids", [])
     def budget(self, task): return task.get("budget", 5)
     def identity_policy(self, task): return task.get("identity_policy", "create_new")
-    def required_tool_names(self, task):
-        calls = task.get("required_tool_calls", [])
-        return {c["tool_name"] for c in calls} if calls else set()
 
 
 # Registry of known adapters

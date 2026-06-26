@@ -16,7 +16,6 @@ from src.live_mcp.agent_loop import AgentLoopConfig, MCPToolsAgentLoop, OracleGe
 from src.live_mcp.config import SuiteConfig, load_suite_config
 from src.live_mcp.executor import LiveMCPExecutor
 from src.live_mcp.manager import LiveMCPManager
-from src.live_mcp.orchestrator import StateMachineOrchestrator
 from src.live_mcp.trace import TraceRecorder
 from src.live_mcp.types import LiveTask, RolloutTrace, live_task_from_dict, to_plain
 from src.reward.action_parser import ActionParser
@@ -104,41 +103,45 @@ class LiveMCPBranch:
         self.executor = None
         self._started = False
 
-    def generate_tasks(
+    def generate_tasks_llm(
         self,
         *,
         server_name: str,
         count: int,
         seed: int,
         difficulty_mix: dict[str, float] | None = None,
+        model_path: str = "models/Qwen3-4B",
+        api_base: str | None = None,
+        irrelevance_ratio: float = 0.05,
+        distractor_rate: float = 0.40,
+        missing_function_rate: float = 0.20,
     ) -> list[LiveTask]:
+        """Generate tasks with PROVE-style two-phase teacher."""
         self._require_started()
         assert self.executor is not None
-        orchestrator = StateMachineOrchestrator(self.suite_config, self.manager, self.executor)
+
+        from src.live_mcp.llm_client import LLMClient
+        from src.live_mcp.orchestrator import TaskOrchestrator
+
+        if api_base:
+            client = LLMClient(
+                mode="openai", model_path=model_path, api_base=api_base,
+            )
+        else:
+            client = LLMClient(mode="local", model_path=model_path)
+
+        orchestrator = TaskOrchestrator(
+            self.suite_config, self.manager, self.executor, client,
+        )
         return orchestrator.generate_many(
             server_name=server_name,
             count=count,
             seed=seed,
-            difficulty_mix=difficulty_mix or {"easy": 1.0},
+            difficulty_mix=difficulty_mix or {"complete": 0.6, "missing": 0.2, "minimal": 0.2},
+            distractor_rate=distractor_rate,
+            missing_function_rate=missing_function_rate,
+            irrelevance_ratio=irrelevance_ratio,
         )
-
-    def generate_tasks_to_file(
-        self,
-        *,
-        output_path: str | Path,
-        server_name: str,
-        count: int,
-        seed: int,
-        difficulty_mix: dict[str, float] | None = None,
-    ) -> TaskGenerationSummary:
-        tasks = self.generate_tasks(
-            server_name=server_name,
-            count=count,
-            seed=seed,
-            difficulty_mix=difficulty_mix,
-        )
-        save_live_tasks(tasks, output_path)
-        return summarize_generated_tasks(tasks, count, output_path)
 
     def run_oracle_smoke(
         self,

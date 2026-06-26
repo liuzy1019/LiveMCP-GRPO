@@ -112,19 +112,16 @@ def _diagnose_batch(index, non_tensor_batch, task_ids, levels, scenario_types, s
             + ", ".join(f"{g}:{c}" for g, c in list(incomplete.items())[:3])
         )
     else:
-        # 检查 3:3:3 分布
-        level_distribution_ok = True
+        # 数据驱动的分层多样性诊断（不硬编码标签集）
         for gid in set(task_ids):
             g_levels = [levels[i] for i, tid in enumerate(task_ids) if tid == gid]
-            lc = Counter(g_levels)
-            if lc != {"none": 3, "mild": 3, "strong": 3}:
-                level_distribution_ok = False
-                break
-        if not level_distribution_ok:
-            logger.warning(
-                "[schemashift_grpo] group 内 perturbation_level 分布非 3:3:3，"
-                "StratAdv 分层可能异常"
-            )
+            unique_levels = set(g_levels)
+            if len(unique_levels) < 2:
+                logger.warning(
+                    f"[schemashift_grpo] group {gid} 所有样本 "
+                    f"perturbation_level 相同 ({unique_levels})，"
+                    f"分层 advantage 退化为 GRPO baseline"
+                )
 
 
 @register_adv_est("schemashift_grpo")

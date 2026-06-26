@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""SchemaShift-GRPO 训练入口。
+"""OVAL-MCP GRPO 训练入口。
 
 用法:
-    SCHEMASHIFT_BETA=0.25 python src/training/run_grpo.py \
-        actor_rollout_ref.model.path=models/Qwen3-4B \
+    OVAL_BETA=0.25 python src/training/run_grpo.py \\
+        actor_rollout_ref.model.path=models/Qwen3-4B \\
         ...
 """
 
 import os
 import sys
 from pathlib import Path
+
+from loguru import logger
 
 # 确保项目在路径中
 PROJECT_DIR = str(Path(__file__).resolve().parent.parent.parent)
@@ -20,18 +22,18 @@ sys.path.insert(0, os.path.join(PROJECT_DIR, "verl"))
 
 def _maybe_run_pre_check() -> None:
     """E4 启动前：先跑通用长度预检（默认开启），再跑 SchemaShift 专属的
-    3:3:3 group 完整性（SCHEMASHIFT_PRECHECK=1 才跑，离线校验代价高）。"""
+    3:3:3 group 完整性（OVAL_PRECHECK=1 才跑，离线校验代价高）。"""
     from src.training.length_check import (
         assert_e4_group_integrity,
         maybe_run_length_check,
         parse_data_args_from_argv,
     )
 
-    # 长度预检默认开启，由 length_check 自己处理 SCHEMASHIFT_SKIP_LENGTH_CHECK
+    # 长度预检默认开启，由 length_check 自己处理 OVAL_SKIP_LENGTH_CHECK
     maybe_run_length_check(sys.argv[1:])
 
-    # group 完整性是 E4 独有，沿用原 SCHEMASHIFT_PRECHECK 开关
-    if os.environ.get("SCHEMASHIFT_PRECHECK", "0") != "1":
+    # group 完整性是 E4 独有，沿用原 OVAL_PRECHECK 开关
+    if os.environ.get("OVAL_PRECHECK", "0") != "1":
         return
     args = parse_data_args_from_argv(sys.argv[1:])
     train = args.get("train_files")
@@ -45,15 +47,15 @@ def _maybe_run_pre_check() -> None:
 
 
 def main() -> None:
-    beta = float(os.environ.get("SCHEMASHIFT_BETA", "0.25"))
-    print(f"  E4 SchemaShift-GRPO 训练入口 | beta={beta}")
+    beta = float(os.environ.get("OVAL_BETA", "0.25"))
+    logger.info(f"OVAL-MCP GRPO 训练入口 | beta={beta}")
 
-    # 训练前可选：模拟 verl 的 prompt 过滤，验证 group 完整性（SCHEMASHIFT_PRECHECK=1 触发）
+    # 训练前可选：模拟 verl 的 prompt 过滤，验证 group 完整性（OVAL_PRECHECK=1 触发）
     _maybe_run_pre_check()
 
     # 注册 agent loop（必须在 verl 启动前 import）
     from src.agent_loop.schemashift_oval_loop import SchemaShiftOvalLoop  # noqa: F401
-    print("  Agent loop SchemaShiftOvalLoop 已注册")
+    logger.info("Agent loop SchemaShiftOvalLoop 已注册")
 
     # 注册 schemashift_grpo estimator + patch verl 传递 non_tensor_batch
     # 主进程注册一次，便于 fail-fast；ray actor 内还需重新注册（见下面 SchemaShiftTaskRunner）
@@ -68,7 +70,7 @@ def main() -> None:
         LambdaState.reset(DEFAULT_STATE_PATH)
     lambda_state = LambdaState.load_or_default()
     lambda_state.save()
-    print(f"  lambda_safe 初始化: {lambda_state.lambda_safe} (path={DEFAULT_STATE_PATH})")
+    logger.info(f"lambda_safe 初始化: {lambda_state.lambda_safe} (path={DEFAULT_STATE_PATH})")
 
     # ray TaskRunner 跑在独立 actor 进程，主进程注册的 dict / monkey-patch 不会带过去。
     # 通过 task_runner_class hook 在 actor 进程里再注册一次。
@@ -87,7 +89,7 @@ def main() -> None:
     def _entry(config):
         # 防止系统默认 temp dir 路径过长导致 AF_UNIX socket path 超限
         import tempfile
-        ray_tmp_dir = os.environ.get("SCHEMASHIFT_RAY_TMPDIR", "/tmp/ssgrpo_ray")
+        ray_tmp_dir = os.environ.get("OVAL_RAY_TMPDIR", "/tmp/oval_ray")
         os.makedirs(ray_tmp_dir, exist_ok=True)
         os.environ.setdefault("TMPDIR", "/tmp/ssgrpo_tmp")
         os.environ.setdefault("RAY_TMPDIR", ray_tmp_dir)

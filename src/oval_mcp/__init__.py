@@ -1,7 +1,4 @@
-"""OVAL-MCP: Event-Verified Constrained GRPO for Long-Horizon MCP Tool Use.
-
-Phase 1: live execution + event-sourced safety + constrained GRPO
-"""
+"""OVAL-MCP: Event-Verified Constrained GRPO for Long-Horizon MCP Tool Use."""
 
 from src.oval_mcp.verifier.events import AuditEvent, EventLog, TrajectoryEventLog
 from src.oval_mcp.verifier.safety import SafetyVerifier

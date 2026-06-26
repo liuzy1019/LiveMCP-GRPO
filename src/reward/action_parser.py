@@ -6,8 +6,7 @@
   - ask_clarification: <ask_clarification>...</ask_clarification>
   - report_error: <report_error>...</report_error>
 
-P0 阶段 ask_clarification / report_error 暂无正例 oracle，
-但模型输出这些时应被判为 action-type mismatch，不是 format error。
+模型输出 ask_clarification / report_error 时被判为 action-type mismatch，不是 format error。
 """
 
 import json

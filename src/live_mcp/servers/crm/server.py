@@ -125,7 +125,7 @@ class CRMServer(StatefulToolServer):
         return _result(True, {"deal": deal, "contact": contact, "lead": lead}, None, "", False)
 
     def create_task(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); tid = f"task_{state['next_lead_num']:04d}"; state["next_lead_num"] += 1
+        state = self._state(session_id); tid = f"task_{state['next_task_num']:04d}"; state["next_task_num"] += 1
         task = {"task_id": tid, "title": arguments["title"], "deal_id": arguments.get("deal_id"), "contact_id": arguments.get("contact_id"), "due_date": arguments.get("due_date", ""), "priority": arguments.get("priority", "medium"), "status": "open"}
         state.setdefault("tasks", {})[tid] = task
         return _result(True, {"task": task}, None, "", True)
@@ -147,7 +147,7 @@ class CRMServer(StatefulToolServer):
         state = self._state(session_id); etype, eid = arguments["entity_type"], arguments["entity_id"]
         entities = {"lead": state["leads"], "contact": state["contacts"], "deal": state["deals"]}
         if etype not in entities or eid not in entities[etype]: raise KeyError(f"{etype} not found: {eid}")
-        nid = f"note_{state['next_lead_num']:04d}"; state["next_lead_num"] += 1
+        nid = f"note_{state['next_note_num']:04d}"; state["next_note_num"] += 1
         note = {"note_id": nid, "entity_type": etype, "entity_id": eid, "content": arguments["content"], "created_at": "2026-06-24"}
         state.setdefault("notes", {})[nid] = note
         return _result(True, {"note": note}, None, "", True)

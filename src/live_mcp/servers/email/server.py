@@ -58,6 +58,8 @@ class EmailServer(StatefulToolServer):
     def send_email(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid = self._nxt_eml(state)
         tid = arguments.get("thread_id") or f"thd_{state['next_thread_num']:03d}"
+        if not arguments.get("thread_id"):
+            state["next_thread_num"] += 1
         if tid not in state["threads"]: state["threads"][tid] = []
         email = {"email_id": eid, "to": arguments["to"], "cc": arguments.get("cc", ""), "bcc": arguments.get("bcc", ""), "sender": "current_user@example.com", "subject": arguments["subject"], "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": "2026-06-24", "read": True, "attachments": arguments.get("attachments", [])}
         state["emails"][eid] = email; state["inbox_order"].append(eid); state["threads"][tid].append(eid)
@@ -77,7 +79,7 @@ class EmailServer(StatefulToolServer):
         if note: body = note + "\n\n" + body
         email = {"email_id": eid, "to": arguments["to"], "cc": "", "sender": "current_user@example.com", "subject": f"Fwd: {orig['subject']}", "body": body, "labels": [], "thread_id": f"thd_{state['next_thread_num']:03d}", "status": "sent", "date": "2026-06-24", "read": True}
         state["emails"][eid] = email; state["inbox_order"].append(eid)
-        state.setdefault(email["thread_id"], []).append(eid); state["next_thread_num"] += 1
+        state["threads"].setdefault(email["thread_id"], []).append(eid); state["next_thread_num"] += 1
         return _result(True, {"email": email}, None, "", True)
 
     def reply_email(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -86,7 +88,7 @@ class EmailServer(StatefulToolServer):
         eid = self._nxt_eml(state); tid = orig.get("thread_id", f"thd_{state['next_thread_num']:03d}")
         email = {"email_id": eid, "to": orig["sender"], "cc": "", "sender": "current_user@example.com", "subject": f"Re: {orig['subject']}", "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": "2026-06-24", "read": True}
         state["emails"][eid] = email; state["inbox_order"].append(eid)
-        state.setdefault(tid, []).append(eid)
+        state["threads"].setdefault(tid, []).append(eid)
         return _result(True, {"email": email}, None, "", True)
 
     def add_label(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -109,7 +111,7 @@ class EmailServer(StatefulToolServer):
         old_tid = state["emails"][eid].get("thread_id")
         if old_tid and old_tid in state["threads"] and eid in state["threads"][old_tid]: state["threads"][old_tid].remove(eid)
         state["emails"][eid]["thread_id"] = tid
-        state.setdefault(tid, []).append(eid)
+        state["threads"].setdefault(tid, []).append(eid)
         return _result(True, {"email_id": eid, "thread_id": tid}, None, "", True)
 
     def get_thread(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

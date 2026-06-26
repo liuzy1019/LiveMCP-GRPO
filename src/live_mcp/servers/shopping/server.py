@@ -99,8 +99,10 @@ class ShoppingServer(StatefulToolServer):
         for item in state["cart"]:
             if item["product_id"] == pid: removed = item; state["products"][pid]["stock"] += item["quantity"]
             else: kept.append(item)
+        if removed is None:
+            raise KeyError(f"product not in cart: {pid}")
         state["cart"] = kept
-        return _result(True, {"removed": removed, "cart": list(state["cart"])}, None, "", bool(removed))
+        return _result(True, {"removed": removed, "cart": list(state["cart"])}, None, "", True)
 
     def get_cart(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)

@@ -1,33 +1,22 @@
-"""OVAL reward function — verl custom_reward_function 接口。
+"""OVAL reward function — verl custom_reward_function interface.
 
-通过 verl config 的 custom_reward_function.path 指定本文件，
-custom_reward_function.name 指定 "compute_score"。
+Entry point: compute_score(data_source, solution_str, ground_truth, extra_info=None)
 
-接口签名：
-    compute_score(data_source, solution_str, ground_truth, extra_info=None, **kwargs) -> dict
-
-核心流程：
-  1. 从 extra_info 中读取 audit_events（由 SchemaShiftOvalLoop 产生）
-  2. 重构 AuditEvent 对象，包装为 EventLog
-  3. 通过 SafetyVerifier 计算 C_safety
-  4. 通过 TaskReward 计算 R_task
-  5. 通过 ProgressTracker 计算 F_gamma（仅当 I_shape != 0）
-  6. 通过 ProcessScorer 计算 P_process（仅当 I_process != 0）
-  7. 从 LambdaState 读取当前 lambda_safe
-  8. 计算 J = R_task + I_shape*lambda_shape*F + I_process*lambda_process*P - lambda_safe*C
-  9. 返回 score dict（含 score、r_task、c_safety、f_gamma、p_process、j 等）
-
-Phase 1 默认配置：
-  - I_process = 0
-  - I_shape = 0
-  - J = R_task - lambda_safe * C_safety
-
-Phase 2 可通过环境变量启用 shaping/process 进行消融。
+Pipeline:
+  1. Parse audit_events from extra_info (produced by SchemaShiftOvalLoop)
+  2. Build EventLog, get DomainAdapter
+  3. TaskReward → R_task
+  4. SafetyVerifier → C_safety
+  5. ProgressTracker → F_gamma (via DomainAdapter.evaluate_event)
+  6. ProcessScorer → P_process (via DomainAdapter.evaluate_event)
+  7. LambdaState → lambda_safe
+  8. J = R_task + lambda_shape * F + lambda_process * P - lambda_safe * C
 """
 
 import os
 from typing import Any
 
+from src.oval_mcp.envs.domain_adapter import get_adapter
 from src.oval_mcp.verifier.safety import SafetyVerifier
 from src.oval_mcp.verifier.events import EventLog, AuditEvent
 from src.oval_mcp.rewards.task_reward import TaskReward
@@ -47,14 +36,13 @@ _task_reward = TaskReward()
 _progress_tracker = ProgressTracker()
 _process_scorer = ProcessScorer(p_max=0.3)
 
-# ── 消融开关（环境变量控制） ──
-_I_SHAPE = int(os.environ.get("OVAL_I_SHAPE", "0"))
-_I_PROCESS = int(os.environ.get("OVAL_I_PROCESS", "0"))
+# ── 消融开关（环境变量控制，默认全开） ──
+_I_SHAPE = int(os.environ.get("OVAL_I_SHAPE", "1"))
+_I_PROCESS = int(os.environ.get("OVAL_I_PROCESS", "1"))
 _LAMBDA_SHAPE = float(os.environ.get("OVAL_LAMBDA_SHAPE", "0.5"))
 _LAMBDA_PROCESS = float(os.environ.get("OVAL_LAMBDA_PROCESS", "0.3"))
 _GAMMA = float(os.environ.get("OVAL_GAMMA", "1.0"))
 
-# Phase 1 默认 lambda_safe（当 LambdaState 不可用时）
 _LAMBDA_SAFE_DEFAULT = 1.0
 
 
@@ -150,10 +138,10 @@ def _build_task_dict(extra_info: dict) -> dict:
     }
 
 
-def _compute_f_gamma(event_log: EventLog, task_dict: dict) -> dict:
+def _compute_f_gamma(event_log: EventLog, task_dict: dict, domain_adapter=None) -> dict:
     """计算 F_gamma 及其分解值。"""
     try:
-        fg_result = _progress_tracker.compute(event_log, task_dict, gamma=_GAMMA)
+        fg_result = _progress_tracker.compute(event_log, task_dict, gamma=_GAMMA, domain_adapter=domain_adapter)
         return {
             "f_gamma": fg_result.f_gamma,
             "phi_initial": fg_result.phi_initial,
@@ -166,10 +154,10 @@ def _compute_f_gamma(event_log: EventLog, task_dict: dict) -> dict:
                 "completed_required": 0.0, "total_required": 0.0}
 
 
-def _compute_p_process(event_log: EventLog, task_dict: dict) -> dict:
+def _compute_p_process(event_log: EventLog, task_dict: dict, domain_adapter=None) -> dict:
     """计算 P_process 及其分解值。"""
     try:
-        pp_result = _process_scorer.compute(event_log, task_dict)
+        pp_result = _process_scorer.compute(event_log, task_dict, domain_adapter=domain_adapter)
         return {
             "p_process": pp_result.p_process,
             "p_total_bonus": pp_result.total_bonus,
@@ -202,8 +190,11 @@ def compute_score(
     if not audit_events:
         return {
             "score": 0.0,
-            "r_task": 0.0, "c_safety": 0.0, "j": 0.0,
-            "f_gamma": 0.0, "p_process": 0.0,
+            "r_task": 0.0, "r_validity": 0.0, "r_coverage": 0.0, "r_efficiency": 0.0,
+            "c_safety": 0.0, "c_violations": "",
+            "f_gamma": 0.0, "phi_final": 0.0,
+            "p_process": 0.0,
+            "j": 0.0, "lambda_safe": 1.0,
             "n_events": 0.0,
             "n_model_tool_calls": float(extra_info.get("n_model_tool_calls", 0)),
             "n_exec_success": float(extra_info.get("n_exec_success", 0)),
@@ -218,9 +209,16 @@ def compute_score(
     # ── 构建 task_dict ──
     task_dict = _build_task_dict(extra_info)
 
+    # ── Domain adapter ──
+    domain = extra_info.get("domain", "calendar")
+    try:
+        domain_adapter = get_adapter(domain)
+    except Exception:
+        domain_adapter = None
+
     # ── R_task ──
     try:
-        r_result = _task_reward.compute(event_log, task_dict)
+        r_result = _task_reward.compute(event_log, task_dict, domain_adapter=domain_adapter)
         r_task = r_result.r_task
         r_validity = r_result.r_validity
         r_coverage = r_result.r_coverage
@@ -239,12 +237,12 @@ def compute_score(
     # ── F_gamma (conditional on I_shape) ──
     fg_info = {"f_gamma": 0.0, "phi_final": 0.0}
     if _I_SHAPE:
-        fg_info = _compute_f_gamma(event_log, task_dict)
+        fg_info = _compute_f_gamma(event_log, task_dict, domain_adapter=domain_adapter)
 
     # ── P_process (conditional on I_process) ──
     pp_info = {"p_process": 0.0}
     if _I_PROCESS:
-        pp_info = _compute_p_process(event_log, task_dict)
+        pp_info = _compute_p_process(event_log, task_dict, domain_adapter=domain_adapter)
 
     # ── lambda_safe ──
     lambda_safe = float(extra_info.get("lambda_safe", _LAMBDA_SAFE_DEFAULT))
@@ -281,6 +279,7 @@ def compute_score(
         "n_events": float(n_events),
         "n_model_tool_calls": n_model_calls,
         "n_exec_success": n_exec_ok,
+        "error": "",
     }
 
     # merge shape/process diag into result

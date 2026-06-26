@@ -56,7 +56,7 @@ def _update_lambda_safe_safe(non_tensor_batch, batch_size: int) -> bool:
         if not LAMBDA_UPDATE_DIAGNOSED:
             logger.debug(
                 "[lambda_safe] c_safety 不在 non_tensor_batch 中，"
-                "lambda_safe 保持固定值（Phase 1 默认行为）"
+                "lambda_safe 保持固定值（LambdaState 不可用）"
             )
             LAMBDA_UPDATE_DIAGNOSED = True
         return False

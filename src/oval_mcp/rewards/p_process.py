@@ -85,8 +85,8 @@ FALLBACK_WARNED = False  # module-level flag for one-time warning
 class ProcessScorer:
     """Compute per-step process scores and trajectory P_process.
 
-    Uses coarse operation-based heuristics in Phase 1/2.
-    Phase 3: DomainAdapter provides per-step predicate truth values.
+    Uses DomainAdapter.evaluate_event() for predicate satisfaction;
+    falls back to generic heuristics when no adapter is available.
     """
 
     def __init__(
@@ -103,6 +103,7 @@ class ProcessScorer:
         self,
         event_log: EventLog,
         task: Optional[dict[str, Any]] = None,
+        domain_adapter: Any = None,
     ) -> ProcessScoreResult:
         """Compute P_process for a complete trajectory."""
         result = ProcessScoreResult()
@@ -113,7 +114,7 @@ class ProcessScorer:
 
         p_sum = 0.0
         for idx, event in enumerate(tools, start=1):
-            score = self._score_step(event, event_log, idx)
+            score = self._score_step(event, idx, task, domain_adapter)
             result.per_step.append(score)
             p_sum += score.p_clamped
             if score.forbidden_penalty_sum < 0:
@@ -125,36 +126,52 @@ class ProcessScorer:
         result.p_process = max(-self.p_max, min(self.p_max, p_sum))
         return result
 
+    # Mapping from predicate names to bonus keys
+    _PREDICATE_BONUS_MAP: dict[str, str] = {
+        "resolved_required_entity": "B_resolve_required_entity",
+        "satisfied_dependency_edge": "B_satisfy_dependency_edge",
+        "completed_required_transition": "B_complete_required_transition",
+        "verified_postcondition": "B_verify_postcondition",
+        "produced_required_response": "B_recover_from_tool_error",
+    }
+
     def _score_step(
         self,
         event,
-        event_log: EventLog,
         step_index: int,
+        task: Optional[dict[str, Any]] = None,
+        domain_adapter: Any = None,
     ) -> StepProcessScore:
         """Compute p_t for a single tool_call event.
 
-        Coarse heuristics (Phase 1/2):
-          - executed_success + state_changed → progress bonuses
-          - execution failed → error penalties
-          - schema_valid → struct bonus; schema_invalid → struct penalty
-          - forbidden_transition marker → forbidden penalty
+        Uses DomainAdapter.evaluate_event() for predicate satisfaction;
+        falls back to generic operation-based heuristics.
         """
         score = StepProcessScore(step=step_index)
 
         triggered_bonus: list[str] = []
         triggered_penalty: list[str] = []
 
-        # ── bonus detection ──
-        if event.execution_success and event.state_changed:
-            triggered_bonus.append("B_complete_required_transition")
-            if event.operation in ("create", "update", "delete"):
+        # ── bonus detection via DomainAdapter ──
+        satisfied: frozenset[str] = frozenset()
+        if domain_adapter is not None and task is not None:
+            try:
+                satisfied = domain_adapter.evaluate_event(event, task)
+            except Exception:
+                pass
+
+        if satisfied:
+            for pred, bonus_key in self._PREDICATE_BONUS_MAP.items():
+                if pred in satisfied and bonus_key in self._bonus:
+                    triggered_bonus.append(bonus_key)
+        else:
+            # Fallback: generic heuristics
+            if event.execution_success and event.state_changed:
+                triggered_bonus.append("B_complete_required_transition")
+            if event.execution_success and event.operation == "query":
                 triggered_bonus.append("B_resolve_required_entity")
 
-        if event.execution_success:
-            if event.operation == "query":
-                triggered_bonus.append("B_resolve_required_entity")
-
-        # ── penalty detection ──
+        # ── penalty detection (schema / execution — orthogonal to predicates) ──
         if not event.schema_valid:
             triggered_penalty.append("PEN_invalid_tool_schema")
 

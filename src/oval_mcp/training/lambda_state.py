@@ -21,10 +21,9 @@ from __future__ import annotations
 import json
 import os
 import threading
-from pathlib import Path
 
 
-DEFAULT_STATE_PATH = "/tmp/ssgrpo_lambda_state.json"
+DEFAULT_STATE_PATH = "/tmp/ovalmcp_lambda_state.json"
 
 
 class LambdaState:

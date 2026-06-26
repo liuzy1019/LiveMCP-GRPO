@@ -176,7 +176,8 @@ class SchemaShiftOvalLoop(AgentLoopBase):
             "OVAL_SUITE_PATH",
             "configs/live_mcp/suite_mvp.yaml",
         )
-        self.domains = os.environ.get("OVAL_DOMAINS", "calendar,shopping").split(",")
+        domains_str = os.environ.get("OVAL_DOMAINS", "calendar,shopping,banking,email,filesystem,payments,crm,issue_tracker,team_chat,food_delivery")
+        self.domains = [d.strip() for d in domains_str.split(",") if d.strip()]
 
         self._ctx: OvalMCPWorkerContext | None = None
 
@@ -305,7 +306,7 @@ class SchemaShiftOvalLoop(AgentLoopBase):
                     logger.warning(f"[oval {rid_short}] audit terminal 失败: {e}")
                 break
 
-            # P0-3: 同一 turn 同时输出 tool_call 和 terminal tag → 非法
+            # 同一 turn 同时输出 tool_call 和 terminal tag → 非法
             if _is_terminal_response(response_text):
                 logger.debug(
                     f"[oval {rid_short}] turn={turn_idx} 同一 turn 同时输出 "

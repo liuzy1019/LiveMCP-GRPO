@@ -108,7 +108,7 @@ class IssueTrackerServer(StatefulToolServer):
         return _result(True, {"issue_id": issue["issue_id"], "watchers": issue["watchers"]}, None, "", True)
 
     def create_sprint(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); sid = f"spr_{state['next_issue_num']:04d}"; state["next_issue_num"] += 1
+        state = self._state(session_id); sid = f"spr_{state['next_sprint_num']:04d}"; state["next_sprint_num"] += 1
         sprint = {"sprint_id": sid, "name": arguments["name"], "start_date": arguments["start_date"], "end_date": arguments["end_date"], "goal": arguments.get("goal", ""), "status": "active", "issues": []}
         state.setdefault("sprints", {})[sid] = sprint
         return _result(True, {"sprint": sprint}, None, "", True)
@@ -122,7 +122,9 @@ class IssueTrackerServer(StatefulToolServer):
         state = self._state(session_id); iid, sid = arguments["issue_id"], arguments["sprint_id"]
         issue = self._iss(state, iid)
         if sid not in state.get("sprints", {}): raise KeyError(f"sprint not found: {sid}")
-        issue["sprint_id"] = sid; state["sprints"][sid].setdefault("issues", []).append(iid)
+        issue["sprint_id"] = sid
+        if iid not in state["sprints"][sid].setdefault("issues", []):
+            state["sprints"][sid]["issues"].append(iid)
         return _result(True, {"issue_id": iid, "sprint_id": sid}, None, "", True)
 
     def remove_from_sprint(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -135,7 +137,7 @@ class IssueTrackerServer(StatefulToolServer):
     def create_subtask(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); iid = arguments["issue_id"];
         self._iss(state, iid)  # validate exists
-        sid = f"sub_{state['next_issue_num']:04d}"; state["next_issue_num"] += 1
+        sid = f"sub_{state['next_subtask_num']:04d}"; state["next_subtask_num"] += 1
         subtask = {"subtask_id": sid, "issue_id": iid, "title": arguments["title"], "assignee": arguments.get("assignee"), "status": "open"}
         state.setdefault("subtasks", {})[sid] = subtask
         return _result(True, {"subtask": subtask}, None, "", True)
@@ -147,8 +149,8 @@ class IssueTrackerServer(StatefulToolServer):
 
     def time_track(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); iid = arguments["issue_id"]; self._iss(state, iid); hours = float(arguments["hours"])
-        entry = {"entry_id": f"time_{state['next_issue_num']:04d}", "issue_id": iid, "hours": hours, "description": arguments.get("description", ""), "date": "2026-06-24", "user": "current_user"}
-        state.setdefault("time_entries", []).append(entry); state["next_issue_num"] += 1
+        entry = {"entry_id": f"time_{state['next_time_entry_num']:04d}", "issue_id": iid, "hours": hours, "description": arguments.get("description", ""), "date": "2026-06-24", "user": "current_user"}
+        state.setdefault("time_entries", []).append(entry); state["next_time_entry_num"] += 1
         return _result(True, {"time_entry": entry}, None, "", True)
 
     def get_time_report(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

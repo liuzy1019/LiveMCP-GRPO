@@ -130,11 +130,16 @@ def _crm_state(seed: int) -> dict[str, Any]:
         "deal_0001": {"deal_id": "deal_0001", "name": "Cloud Migration", "amount": 50000.00, "stage": "prospecting", "contact_id": None, "lead_id": "lead_0001", "created_at": "2026-06-10"},
         "deal_0002": {"deal_id": "deal_0002", "name": "Data Pipeline", "amount": 75000.00, "stage": "proposal", "contact_id": "contact_0001", "lead_id": "lead_0003", "created_at": "2026-06-15"},
     }
-    return {"leads": leads, "contacts": contacts, "deals": deals, "tasks": {}, "notes": {}, "next_lead_num": len(leads) + 1, "next_contact_num": len(contacts) + 1, "next_deal_num": len(deals) + 1}
+    return {"leads": leads, "contacts": contacts, "deals": deals, "tasks": {}, "notes": {}, "next_lead_num": len(leads) + 1, "next_contact_num": len(contacts) + 1, "next_deal_num": len(deals) + 1, "next_task_num": 1, "next_note_num": 1}
 
 
 def _issue_tracker_state(seed: int) -> dict[str, Any]:
-    rng = random.Random(seed); members = {"alice", "bob", "charlie", "dana"}
+    members = {
+        "alice": {"name": "Alice", "role": "developer"},
+        "bob": {"name": "Bob", "role": "senior developer"},
+        "charlie": {"name": "Charlie", "role": "tech lead"},
+        "dana": {"name": "Dana", "role": "designer"},
+    }
     issues = {
         "iss_0001": {"issue_id": "iss_0001", "title": "Login timeout on mobile", "description": "Users report 30s timeout on iOS app login.", "priority": "high", "labels": ["bug", "mobile"], "state": "open", "assignee": None, "watchers": [], "sprint_id": None, "milestone": None, "comments": [], "created_at": "2026-06-20"},
         "iss_0002": {"issue_id": "iss_0002", "title": "Add dark mode support", "description": "Feature request for dark mode in settings.", "priority": "medium", "labels": ["feature"], "state": "in_progress", "assignee": "bob", "watchers": ["alice"], "sprint_id": "spr_0001", "milestone": "v2.5", "comments": [{"author": "user", "body": "Started working on this.", "timestamp": "2026-06-22"}], "created_at": "2026-06-21"},
@@ -142,7 +147,7 @@ def _issue_tracker_state(seed: int) -> dict[str, Any]:
         "iss_0004": {"issue_id": "iss_0004", "title": "Update dependencies", "description": "Security audit flagged outdated packages.", "priority": "medium", "labels": ["maintenance"], "state": "resolved", "assignee": "charlie", "watchers": [], "sprint_id": "spr_0001", "milestone": "v2.5", "comments": [], "created_at": "2026-06-18"},
     }
     sprints = {"spr_0001": {"sprint_id": "spr_0001", "name": "Sprint 24", "start_date": "2026-06-15", "end_date": "2026-06-29", "goal": "Bug fixes and dark mode", "status": "active", "issues": ["iss_0002", "iss_0003", "iss_0004"]}}
-    return {"issues": issues, "members": members, "sprints": sprints, "subtasks": {}, "time_entries": [], "next_issue_num": len(issues) + 1}
+    return {"issues": issues, "members": members, "sprints": sprints, "subtasks": {}, "time_entries": [], "next_issue_num": len(issues) + 1, "next_sprint_num": len(sprints) + 1, "next_subtask_num": 1, "next_time_entry_num": 1}
 
 
 def _team_chat_state(seed: int) -> dict[str, Any]:
@@ -170,5 +175,8 @@ def _food_delivery_state(seed: int) -> dict[str, Any]:
         "rest_003": {"restaurant_id": "rest_003", "name": "Burger Barn", "cuisine": "American", "rating": 4.2, "delivery_fee": 1.99, "open": True, "hours": "10:00-23:00",
             "menu": [{"name": "Classic Burger", "price": 9.99, "dietary_tags": [], "popularity": 90}, {"name": "Cheese Burger", "price": 11.99, "dietary_tags": [], "popularity": 85}, {"name": "French Fries", "price": 3.99, "dietary_tags": ["vegetarian", "gluten-free"], "popularity": 70}, {"name": "Milkshake", "price": 5.99, "dietary_tags": ["vegetarian"], "popularity": 55}]},
     }
-    orders = {"ord_0001": {"order_id": "ord_0001", "restaurant_id": "rest_001", "restaurant_name": "Pizza Palace", "items": [{"name": "Margherita Pizza", "quantity": 2}, {"name": "Garlic Bread", "quantity": 1}], "delivery_address": "123 Main St", "special_instructions": "", "subtotal": 30.97, "delivery_fee": 2.99, "tip": 3.00, "total": 36.96, "status": "delivered", "rating": None, "created_at": "2026-06-20T18:00:00"}}
-    return {"restaurants": restaurants, "orders": orders, "support_tickets": [], "next_order_num": len(orders) + 1}
+    orders = {
+        "ord_0001": {"order_id": "ord_0001", "restaurant_id": "rest_001", "restaurant_name": "Pizza Palace", "items": [{"name": "Margherita Pizza", "quantity": 2}, {"name": "Garlic Bread", "quantity": 1}], "delivery_address": "123 Main St", "special_instructions": "", "subtotal": 30.97, "delivery_fee": 2.99, "tip": 3.00, "total": 36.96, "status": "delivered", "rating": None, "created_at": "2026-06-20T18:00:00"},
+        "ord_0002": {"order_id": "ord_0002", "restaurant_id": "rest_002", "restaurant_name": "Sushi Express", "items": [{"name": "California Roll", "quantity": 1}], "delivery_address": "456 Oak Ave", "special_instructions": "", "subtotal": 10.99, "delivery_fee": 3.99, "tip": 0, "total": 14.98, "status": "preparing", "rating": None, "created_at": "2026-06-21T12:30:00"},
+    }
+    return {"restaurants": restaurants, "orders": orders, "support_tickets": [], "next_order_num": len(orders) + 1, "next_ticket_num": 1}

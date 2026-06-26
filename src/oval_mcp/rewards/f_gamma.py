@@ -14,7 +14,7 @@ trajectory shaping:
 gamma=1 时的 telescoping 性质:
   F_gamma(tau) = Phi(m_T) - Phi(m_0) = completed/total at final state
   trajectory-level F_gamma 只区分不同终点的轨迹，不提供 step-level 区分。
-  step-level 区分由 Phase 3 LATA + F_u 承担。
+  step-level 区分由 LATA + F_u 承担。
 
 absorbing failure state 的 Phi:
   Phi(absorbing_failure) = Phi(m_{T-1})  # 继承失败前的 progress
@@ -24,7 +24,7 @@ absorbing failure state 的 Phi:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from src.oval_mcp.verifier.events import EventLog
 
@@ -70,14 +70,9 @@ class FGammaResult:
 class ProgressTracker:
     """Track required predicate completion across a trajectory.
 
-    Reads required_states from the total count of progress predicates,
-    then inspects event_log per-turn to determine which predicates
-    have been satisfied at each step.
-
-    Phase 1/2 simplified: detect predicate completion by operation
-    type coverage (create/update/delete/query/terminal) and
-    execution_success flags.  Full predicate semantics require
-    DomainAdapter integration (Phase 3).
+    Uses DomainAdapter.evaluate_event() to determine which predicates
+    each event satisfies — a single source of truth shared with
+    R_coverage and P_process.
     """
 
     def __init__(self, required_predicates: Optional[list[str]] = None):
@@ -88,17 +83,16 @@ class ProgressTracker:
         event_log: EventLog,
         task: dict,
         gamma: float = 1.0,
+        domain_adapter: Any = None,
     ) -> FGammaResult:
         """Compute F_gamma from trajectory event log and task definition.
 
-        Simplified Phase 1/2: uses a coarse operation-based heuristic
-        to estimate predicate completion at each step.
-
-        Phase 3: replace with DomainAdapter.predicate_evaluator.
+        When domain_adapter is provided, uses adapter.evaluate_event()
+        for precise predicate evaluation.  Falls back to a generic
+        operation-based mapping otherwise.
         """
         result = FGammaResult()
 
-        # determine which predicates are required for this task
         task_predicates = self._get_task_progress_predicates(task)
         total = len(task_predicates)
         result.total_required_states = total
@@ -109,23 +103,12 @@ class ProgressTracker:
         completed: set[str] = set()
         per_turn_f: list[float] = []
 
-        tools = event_log.tool_call_events
-        for step_idx, event in enumerate(tools, start=1):
+        for event in list(event_log.tool_call_events) + list(event_log.terminal_events):
             prev_phi = len(completed) / total
 
-            # coarse heuristic: each successful operation maps to a predicate
-            self._advance_predicates(completed, event, task_predicates, total)
+            new_predicates = self._eval_event(event, task, domain_adapter)
+            completed.update(new_predicates)
 
-            curr_phi = len(completed) / total
-
-            # F_u = gamma * Phi(m_u) - Phi(m_{u-1})
-            f_u = gamma * curr_phi - prev_phi
-            per_turn_f.append(f_u)
-
-        # terminal events may also satisfy predicates
-        for event in event_log.terminal_events:
-            prev_phi = len(completed) / total
-            self._advance_predicates(completed, event, task_predicates, total)
             curr_phi = len(completed) / total
             f_u = gamma * curr_phi - prev_phi
             per_turn_f.append(f_u)
@@ -134,7 +117,6 @@ class ProgressTracker:
         result.completed_required_states = len(completed)
         result.phi_final = len(completed) / total
 
-        # F_gamma = sum of per-turn F_u (telescoped with discount)
         if gamma == 1.0:
             result.f_gamma = result.phi_final - result.phi_initial
         else:
@@ -146,41 +128,50 @@ class ProgressTracker:
         return result
 
     def _get_task_progress_predicates(self, task: dict) -> list[str]:
-        """Extract task-specific progress predicate set.
-
-        Falls back to all PROGRESS_PREDICATE_NAMES if task doesn't specify.
-        """
         custom = task.get("progress_predicates")
         if custom and isinstance(custom, list):
             return [p for p in custom if p in self._required]
-        # default: all registered predicates
         return list(self._required)
 
-    def _advance_predicates(
-        self,
-        completed: set[str],
-        event,
-        task_predicates: list[str],
-        total: int,
-    ) -> None:
-        """Coarse heuristic: map event operation → predicate completion.
+    def _eval_event(self, event, task: dict, domain_adapter: Any = None) -> frozenset[str]:
+        """Return predicates satisfied by *event*.
 
-        Phase 3 TODO: replace with DomainAdapter.predicate_evaluator(event, state).
+        Prefers DomainAdapter.evaluate_event(); falls back to a minimal
+        generic mapping when no adapter is available.
         """
-        if not event.execution_success:
-            return
+        if domain_adapter is not None:
+            try:
+                return domain_adapter.evaluate_event(event, task)
+            except Exception:
+                pass  # fall through to generic
 
-        op = event.operation
-        if op in ("query", "list_events", "search_products", "get_event", "get_order"):
-            completed.add("resolved_required_entity")
-        if op in ("create", "update", "delete", "add_to_cart", "remove_from_cart", "checkout"):
-            completed.add("completed_required_transition")
-            completed.add("resolved_required_entity")
-        if op == "terminal" and event.action_type == "final_answer":
-            completed.add("verified_postcondition")
-            completed.add("produced_required_response")
-        if event.state_changed:
-            completed.add("satisfied_dependency_edge")
+        return _generic_evaluate_event(event)
+
+
+def _generic_evaluate_event(event) -> frozenset[str]:
+    """Minimal fallback when no DomainAdapter is available.
+
+    Mirrors the default implementation in DomainAdapter.evaluate_event().
+    """
+    predicates: set[str] = set()
+    if not getattr(event, "execution_success", False):
+        return frozenset()
+
+    op = getattr(event, "operation", "")
+    action = getattr(event, "action_type", "")
+
+    if op == "query":
+        predicates.add("resolved_required_entity")
+    if op in ("create", "update", "delete"):
+        predicates.add("completed_required_transition")
+        predicates.add("resolved_required_entity")
+    if action == "final_answer":
+        predicates.add("verified_postcondition")
+        predicates.add("produced_required_response")
+    elif action in ("ask_clarification", "report_error"):
+        predicates.add("produced_required_response")
+
+    return frozenset(predicates)
 
 
 __all__ = [
