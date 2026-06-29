@@ -531,7 +531,23 @@ class TaskOrchestrator:
     def _apply_missing_function(self, task: LiveTask) -> None:
         if not task.required_tools:
             return
-        hidden = task.required_tools[-1]
+        # Pick the LAST tool actually invoked in the oracle chain (the terminal
+        # action), not required_tools[-1] which is alphabetically sorted and
+        # would often select a lookup tool instead of the executor. Hiding the
+        # terminal/executor matches the intended "abstain" semantics: the model
+        # has all the lookup tools to inspect state but cannot complete the
+        # action, so the correct behavior is report_error with a clear reason.
+        oracle_calls = getattr(task.oracle_program, "calls", None) or []
+        if oracle_calls:
+            hidden = oracle_calls[-1].tool_name
+        else:
+            # Fallback: oracle empty (shouldn't happen for non-irrelevant tasks),
+            # use last required tool which preserves prior behavior.
+            hidden = task.required_tools[-1]
+        if hidden not in task.required_tools:
+            # Defensive: if oracle's last tool somehow not in required_tools
+            # (e.g. filtered earlier), fall back to required_tools[-1].
+            hidden = task.required_tools[-1]
         missing = {"type": "missing_function", "server": task.target_servers[0], "tool": hidden}
         task.metadata["original_required_tools"] = list(task.required_tools)
         task.metadata["original_success_criteria"] = list(task.success_criteria)

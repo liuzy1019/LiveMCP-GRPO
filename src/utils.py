@@ -82,6 +82,25 @@ def extract_json(text: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
+    # Multiple JSON blocks separated by blank lines.
+    # Qwen3 occasionally outputs two or more JSON objects back-to-back
+    # (e.g. {"action":"cd",...}\n\n{"action":"stat",...}).  The greedy
+    # regex below would collapse them into one blob, producing a parse
+    # error.  Split on blank-line boundaries and try each block.
+    #
+    # We prefer the FIRST valid JSON block because decide_action only
+    # expects one action per turn.
+    blocks = re.split(r"\n\s*\n", text)
+    if len(blocks) > 1:
+        for block in blocks:
+            block = block.strip()
+            if not block.startswith("{"):
+                continue
+            try:
+                return json.loads(block)
+            except json.JSONDecodeError:
+                pass
+
     # Try to find JSON object boundaries (greedy) and progressively
     # peel off trailing junk so we tolerate common LLM mistakes such as a
     # spurious closing brace at the end (e.g.,

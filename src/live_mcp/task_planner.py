@@ -317,7 +317,11 @@ Output ONLY the JSON, nothing else:
         # First-turn guidance: prevent LLM from answering without tools.
         # Exception: 'missing' difficulty tasks omit a parameter on purpose,
         # so ask_clarification is the correct first action.
-        # Also allow lookups (list/search/get) as legitimate first steps.
+        # For complete/minimal difficulty, also block ask_clarification —
+        # the query already contains enough information (or can be resolved
+        # via list/search/get lookups). LLMs over-aligned for safety (esp.
+        # on financial / sensitive domains like banking, payments) tend to
+        # ask clarifications unnecessarily, producing zero oracle calls.
         if not execution_history:
             if difficulty == "missing":
                 first_turn_hint = (
@@ -325,16 +329,16 @@ Output ONLY the JSON, nothing else:
                     "You may need to ask_clarification before calling a tool.\n"
                 )
                 default_action = "ask_clarification"
+                blocked_first = ("final_answer", "report_error")
             else:
                 first_turn_hint = (
-                    "\nIMPORTANT: This is your FIRST turn. You should use tools to complete the task.\n"
-                    "Do NOT use final_answer or report_error before calling any tools.\n"
-                    "If the task lacks entity IDs, use list/search/get tools to look them up.\n"
-                    "If essential information is missing and cannot be found via tools, use ask_clarification.\n"
+                    "\nIMPORTANT: This is your FIRST turn. You MUST use a tool to complete the task.\n"
+                    "Do NOT use final_answer, report_error, or ask_clarification before calling any tools.\n"
+                    "The query already contains the entity IDs you need (or you can look them up with list/search/get tools).\n"
+                    "If you are unsure which tool to call, default to a read-only lookup (list_*, get_*, search_*).\n"
                 )
-                default_action = "ask_clarification"
-            # Block final_answer/report_error on first turn, but allow tool_call and ask_clarification
-            blocked_first = ("final_answer", "report_error")
+                default_action = "tool_call"
+                blocked_first = ("final_answer", "report_error", "ask_clarification")
         else:
             first_turn_hint = ""
             default_action = "final_answer"
@@ -727,7 +731,7 @@ def derive_success_criteria(
 
     # Domain-specific semantic criteria
     tool_names = [c.tool_name for c in oracle_calls]
-    criteria.extend(_domain_criteria(tool_names, final_state, domain))
+    criteria.extend(_domain_criteria(tool_names, initial_state, final_state, domain))
 
     # Fallback: at minimum verify the domain state exists
     if not criteria:
@@ -738,14 +742,37 @@ def derive_success_criteria(
 
 def _domain_criteria(
     tool_names: list[str],
+    initial_state: dict[str, Any],
     final_state: dict[str, Any],
     domain: str,
 ) -> list[dict[str, Any]]:
-    """Domain-specific success criteria from tool semantics."""
+    """Domain-specific success criteria from tool semantics.
+
+    Only emits state_equals for entities whose value differs from
+    initial_state — never for untouched entities (which would otherwise
+    flood the criteria list and systematically deflate r_coverage when
+    the verifier cannot reconstruct the full final state from the
+    last observation).
+    """
     criteria: list[dict[str, Any]] = []
+
+    def _changed(container_key: str, entity_id: str, field: str) -> bool:
+        init_container = initial_state.get(container_key) or {}
+        final_container = final_state.get(container_key) or {}
+        if not isinstance(init_container, dict) or not isinstance(final_container, dict):
+            return True  # be permissive when shape is unexpected
+        init_entity = init_container.get(entity_id)
+        final_entity = final_container.get(entity_id)
+        if init_entity is None and final_entity is not None:
+            return True  # newly created
+        if not isinstance(init_entity, dict) or not isinstance(final_entity, dict):
+            return final_entity != init_entity
+        return init_entity.get(field) != final_entity.get(field)
 
     if "transfer" in tool_names:
         for acc_id, acc in final_state.get("accounts", {}).items():
+            if not _changed("accounts", acc_id, "balance"):
+                continue
             criteria.append({
                 "type": "state_equals", "server": domain,
                 "path": f"accounts.{acc_id}.balance",
@@ -755,6 +782,8 @@ def _domain_criteria(
         criteria.append({"type": "cart_not_empty", "server": domain})
     if "create_order" in tool_names:
         for oid, order in final_state.get("orders", {}).items():
+            if not _changed("orders", oid, "status"):
+                continue
             criteria.append({
                 "type": "state_equals", "server": domain,
                 "path": f"orders.{oid}.status",
@@ -762,13 +791,18 @@ def _domain_criteria(
             })
     if any(t in tool_names for t in ("create_invoice", "pay_invoice")):
         for inv_id, inv in final_state.get("invoices", {}).items():
-            if "status" in inv:
-                criteria.append({
-                    "type": "state_equals", "server": domain,
-                    "path": f"invoices.{inv_id}.status", "value": inv["status"],
-                })
+            if "status" not in inv:
+                continue
+            if not _changed("invoices", inv_id, "status"):
+                continue
+            criteria.append({
+                "type": "state_equals", "server": domain,
+                "path": f"invoices.{inv_id}.status", "value": inv["status"],
+            })
     if any(t in tool_names for t in ("update_lead", "convert_lead", "create_deal")):
         for lead_id, lead in final_state.get("leads", {}).items():
+            if not _changed("leads", lead_id, "status"):
+                continue
             criteria.append({
                 "type": "state_equals", "server": domain,
                 "path": f"leads.{lead_id}.status",
@@ -776,6 +810,8 @@ def _domain_criteria(
             })
     if any(t in tool_names for t in ("create_issue", "update_issue", "transition_issue")):
         for iss_id, issue in final_state.get("issues", {}).items():
+            if not _changed("issues", iss_id, "state"):
+                continue
             criteria.append({
                 "type": "state_equals", "server": domain,
                 "path": f"issues.{iss_id}.state",
@@ -787,14 +823,22 @@ def _domain_criteria(
             "value": len(final_state.get("emails", {})),
         })
     if any(t in tool_names for t in ("write_file", "create_file", "mkdir")):
+        init_fs = (initial_state.get("fs") or {}) if isinstance(initial_state.get("fs"), dict) else {}
         for path in final_state.get("fs", {}):
+            if path in init_fs:
+                continue  # only assert newly created paths
             criteria.append({"type": "file_exists", "server": domain, "path": path})
     if "send_message" in tool_names:
         for ch_id, ch in final_state.get("channels", {}).items():
+            init_ch = (initial_state.get("channels") or {}).get(ch_id) or {}
+            init_count = len(init_ch.get("messages", [])) if isinstance(init_ch, dict) else 0
+            final_count = len(ch.get("messages", []))
+            if final_count == init_count:
+                continue
             criteria.append({
                 "type": "state_equals", "server": domain,
                 "path": f"channels.{ch_id}.messages_count",
-                "value": len(ch.get("messages", [])),
+                "value": final_count,
             })
     return criteria
 

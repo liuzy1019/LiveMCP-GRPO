@@ -135,6 +135,15 @@ class TaskReward:
         result.r_execution = r_execution
         result.r_validity = self.w["w_struct"] * r_structural + self.w["w_exec"] * r_execution
 
+        # Terminal-action whitelist enforcement.
+        # Tasks may declare allowed_terminal_actions (e.g. ["ask_clarification"]
+        # for clarification scenarios, ["report_error"] for missing_function,
+        # ["final_answer"] for normal). Violating the whitelist halves
+        # r_validity — strong enough to matter for training, soft enough not
+        # to wipe out partial-credit on coverage / name / arg components.
+        if not self._check_terminal_predicate(event_log, task):
+            result.r_validity *= 0.5
+
         # 2. R_coverage: completed outcome predicates / total
         # P0-2: Combine outcome_assertions (operation-level) with
         # success_criteria (state-level). Both must be satisfied for full
@@ -418,10 +427,54 @@ class TaskReward:
             matched = 0
             for key, expected_val in required_args.items():
                 actual_val = model_args.get(key)
-                if actual_val is not None and str(actual_val).lower() == str(expected_val).lower():
+                if actual_val is None:
+                    continue
+                if self._args_equal(actual_val, expected_val):
                     matched += 1
             scores.append(matched / len(required_args))
         return sum(scores) / len(scores) if scores else 0.0
+
+    @staticmethod
+    def _args_equal(actual: Any, expected: Any) -> bool:
+        """Type-aware argument equality.
+
+        - Numbers compared as floats (500 == 500.0 == "500").
+        - Booleans compared as bools (True == "true" == "True").
+        - dict/list compared via canonical JSON (key-order independent for dicts).
+        - Strings compared case-insensitive after strip.
+        - Falls back to str().lower() comparison.
+        """
+        # Numeric comparison: try float on both sides
+        try:
+            af = float(actual)
+            ef = float(expected)
+            return abs(af - ef) < 1e-9
+        except (TypeError, ValueError):
+            pass
+
+        # Bool comparison
+        if isinstance(actual, bool) or isinstance(expected, bool):
+            def _to_bool(x: Any) -> bool | None:
+                if isinstance(x, bool):
+                    return x
+                if isinstance(x, str) and x.strip().lower() in ("true", "false"):
+                    return x.strip().lower() == "true"
+                return None
+            ab, eb = _to_bool(actual), _to_bool(expected)
+            if ab is not None and eb is not None:
+                return ab == eb
+
+        # Structured comparison: dict / list
+        if isinstance(actual, (dict, list)) or isinstance(expected, (dict, list)):
+            try:
+                import json as _json
+                return _json.dumps(actual, sort_keys=True, ensure_ascii=False) == \
+                       _json.dumps(expected, sort_keys=True, ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+
+        # String fallback: case-insensitive + strip
+        return str(actual).strip().lower() == str(expected).strip().lower()
 
     def _compute_efficiency(
         self,
