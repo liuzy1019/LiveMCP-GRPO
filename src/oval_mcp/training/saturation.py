@@ -192,9 +192,11 @@ class SaturationDiagnostics:
         lambda_increased: bool,
         summary: SaturationSummary,
     ) -> bool:
-        """Check if lambda_safe should be frozen due to stall.
+        """[Legacy] 检查 lambda_safe 是否应冻结。
 
-        Returns True if stall protection triggered.
+        注意：此方法仅用于测试/离线分析。
+        训练生产代码应使用 LambdaState.update()（含原子文件锁和持久化）。
+        两套实现独立维护 stall streak，同时使用会导致状态发散。
         """
         all_unsafe_mask = summary.all_unsafe_rate > self.tau_unsafe_stall
 

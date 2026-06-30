@@ -1,8 +1,16 @@
-"""Offline multi-turn Live MCP agent loop."""
+"""Offline multi-turn Live MCP agent loop.
+
+.. deprecated::
+    This module is kept for backward compatibility with ``src.live_mcp.api``
+    (offline replay / validation path).  The primary GRPO rollout path uses
+    ``src.agent_loop.livemcp_oval_loop.LiveMCPOvalLoop`` instead.
+    Do not add new features here; migrate consumers to the Oval loop.
+"""
 
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -59,6 +67,12 @@ class MCPToolsAgentLoop:
         config: AgentLoopConfig,
         reward_composer: RewardComposer | None = None,
     ):
+        warnings.warn(
+            "MCPToolsAgentLoop is deprecated. "
+            "Use src.agent_loop.livemcp_oval_loop.LiveMCPOvalLoop for GRPO rollout.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.manager = manager
         self.executor = executor
         self.parser = parser

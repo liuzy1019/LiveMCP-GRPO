@@ -76,6 +76,9 @@ class LiveTask:
     task_type: str = ""
     hidden_tools: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    conversation_queries: list[str] = field(default_factory=list)  # PROVE CONTINUATION: all user queries across rounds
+    oracle_calls_per_round: list[list] = field(default_factory=list)  # per-round oracle calls for prompt construction
+    execution_history_per_round: list[list] = field(default_factory=list)  # per-round execution results
 
 
 @dataclass

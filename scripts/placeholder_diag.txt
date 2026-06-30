@@ -1,0 +1,12 @@
+row 9 domain=email scen=distractor rounds=3
+  asst: [The assistant has processed this request.]
+  ocs: [{"tool_name": "get_email", "arguments": {"email_id": "eml_0001"}, "action": "tool_call"}, {"tool_name": "reply_email", "arguments": {"email_id": "eml_0001", "body": "Here is the updated report as req
+row 16 domain=payments scen=distractor rounds=3
+  asst: [The assistant has processed this request.]
+  ocs: [{"tool_name": "create_invoice", "arguments": {"customer": "inv_0004", "amount": 2000, "due_date": "next monday"}, "action": "tool_call"}, {"tool_name": "get_invoice", "arguments": {"invoice_id": "inv
+row 19 domain=crm scen=missing_function rounds=3
+  asst: [The assistant has processed this request.]
+  ocs: []
+row 25 domain=team_chat scen=task_planner rounds=3
+  asst: [The assistant has processed this request.]
+  ocs: [{"tool_name": "get_channel", "arguments": {"channel_id": "ch_engineering", "limit": 10}, "action": "tool_call"}, {"tool_name": "send_message", "arguments": {"channel_id": "ch_engineering", "content":

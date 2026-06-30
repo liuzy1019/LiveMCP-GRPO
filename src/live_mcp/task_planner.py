@@ -38,80 +38,91 @@ from src.utils import extract_json as _extract_json
 
 DOMAIN_DESCRIPTIONS: dict[str, str] = {
     "calendar": (
-        "Calendar management system. Users can list events, search by date/keyword, "
-        "create/update/delete events, manage recurring events, add/remove attendees, "
-        "check free/busy slots, set reminders, change timezone, and export calendars. "
-        "Events have start_time, end_time, title, description, attendees, location, "
-        "and recurrence rules."
+        "Calendar assistant. Users ask about their schedule, need to find free slots "
+        "across multiple people, book/change/cancel meetings, check who's attending, "
+        "handle recurring events, or fix scheduling conflicts. Requests are often "
+        "time-sensitive: 'is Thursday free?', 'move my 3pm to Friday', 'is anyone "
+        "free at lunch next week?'"
     ),
     "shopping": (
-        "E-commerce shopping system. Users can search products by category and price, "
-        "view product details, compare products, get recommendations, manage cart "
-        "(add/update/remove items), apply coupons, checkout, view orders, track "
-        "shipments, return items, write reviews, and manage wishlists."
+        "Online store. Users browse products by category/price, compare items, manage "
+        "their cart and wishlist, apply coupons, check orders, track packages, return "
+        "items, leave reviews. Common requests: 'find me a good keyboard under $100', "
+        "'what's in my cart?', 'has my order shipped?', 'return the blue one'. "
+        "Prices, stock, and order statuses are live."
     ),
     "banking": (
-        "Banking system. Users can list accounts, view balances, get transaction "
-        "history, transfer funds between accounts, wire transfer externally, "
-        "deposit, withdraw, pay bills, schedule/cancel transfers, freeze/unfreeze "
-        "accounts, verify account ownership, check exchange rates, and apply for loans."
+        "Personal banking. Users check balances, review transactions, transfer money "
+        "between their own accounts, pay bills, send wire transfers, freeze cards. "
+        "Typical requests: 'how much do I have in savings?', 'did my paycheck come in?', "
+        "'move $200 to checking', 'pay my rent bill', 'is my card frozen?' "
+        "Account IDs and balances come from live state. Some accounts may be frozen."
     ),
     "email": (
-        "Email system. Users can list inbox, search emails, read individual emails, "
-        "send emails, create drafts, forward/reply, add/remove labels, manage threads, "
-        "archive, mark read/unread, create filters, and view attachments. "
-        "Emails are append-only (no delete)."
+        "Email inbox. Users read/search emails, send replies, forward threads, "
+        "manage labels, archive old messages. Common requests: 'show me unread from "
+        "my boss', 'reply to that thread about the budget', 'label all the Q3 reports "
+        "as important', 'find the email with the contract attachment'. "
+        "Emails have IDs, subjects, senders, labels, read/unread status."
     ),
     "filesystem": (
-        "Unix-like filesystem. Users can navigate (ls, cd, pwd), read files (cat, head, "
-        "tail, wc), manage files (mkdir, touch, mv, cp, rm), set permissions (chmod, "
-        "chown), check disk usage (du, df), create symlinks, archive (tar, zip), "
-        "diff files, sort, compute checksums, and more. Protected paths exist "
-        "(e.g., /protected/). Root ownership cannot be transferred."
+        "Remote file server. Users navigate directories, read/edit/move files, check "
+        "disk space, set permissions, find files by name or content. Requests like: "
+        "'what's in /home/user/projects?', 'find all .log files >10MB', 'move the "
+        "config to /etc/app/', 'who owns this file?', 'make it readable by everyone'. "
+        "Protected paths exist — some operations may fail."
     ),
     "payments": (
-        "Payment processing system. Users can create invoices, view invoices, pay "
-        "invoices, issue refunds, cancel payments, dispute invoices, create webhooks, "
-        "and manage webhook subscriptions. Invoices have status: pending, paid, "
-        "refunded, cancelled, disputed."
+        "Business payments. Users manage invoices (create, view, pay, refund, cancel, "
+        "dispute), set up webhooks for payment events. Requests: 'send invoice #42 to "
+        "the client', 'has the wire for inv_005 cleared?', 'refund that overcharge', "
+        "'dispute inv_099 — wrong amount'. Invoices flow through statuses: pending → "
+        "paid → refunded/cancelled/disputed."
     ),
     "crm": (
-        "CRM system. Users can create/update/convert/delete leads, manage contacts, "
-        "create/update deals, track tasks, add notes to leads/contacts/deals. "
-        "Leads flow through status: new → contacted → qualified → converted/lost. "
-        "Deals have stages: prospecting → proposal → negotiation → closed_won/closed_lost."
+        "Sales CRM. Users track leads through pipeline stages, manage contacts and "
+        "deals, log tasks/notes. Requests: 'which leads are stuck in qualified?', "
+        "'convert lead_023 to a deal', 'who did I call last week?', 'move the "
+        "Acme deal to negotiation'. Leads: new→contacted→qualified→converted/lost."
     ),
     "issue_tracker": (
-        "Issue tracking system. Users can create/get/list/update issues, assign to "
-        "team members, transition workflow states (open→in_progress→in_review→resolved→closed), "
-        "comment, add/remove labels and watchers, manage sprints, subtasks, time tracking, "
-        "and milestones. State transitions are strictly enforced."
+        "Project issue tracker. Users create/assign/triage bugs and tasks, update "
+        "status, add labels/watchers/comments, manage sprints. Requests: 'who's on "
+        "bug #432?', 'move all login bugs to in_progress', 'what's in sprint 14?', "
+        "'label this as critical + frontend', 'close the ones I fixed yesterday'."
     ),
     "team_chat": (
-        "Team chat system. Users can list/join/create/archive channels, send messages "
-        "to channels, send direct messages, create message threads, add reactions, "
-        "search messages, and view user status. Messages are append-only."
+        "Team messaging. Users join channels, send messages, reply in threads, "
+        "react with emoji, search history. Requests: 'what did Sarah say in "
+        "#engineering?', 'post the update to #releases', 'search for the Q2 roadmap "
+        "discussion', 'join the new project channel'. Messages are append-only."
     ),
     "food_delivery": (
-        "Food delivery system. Users can list/search restaurants, view menus, filter "
-        "by dietary restrictions, view popular items, create/cancel orders, track "
-        "delivery status, rate orders, add tips, reorder past orders, and contact support. "
-        "Order lifecycle: confirmed→preparing→in_transit→delivered (can only cancel before preparing)."
+        "Food delivery app. Users browse restaurants/menus, filter by dietary needs, "
+        "place/cancel/track orders, rate meals, tip drivers. Requests: 'order sushi "
+        "from that place on 14th st', 'where's my pad thai?', 'cancel the pizza before "
+        "they start making it', 'reorder what I had last Friday'. Orders flow: "
+        "confirmed→preparing→in_transit→delivered."
     ),
 }
 
 DIFFICULTY_DESCRIPTIONS: dict[str, str] = {
     "complete": (
-        "User query contains ALL information needed — tool, arguments, and "
-        "explicit goal clearly stated. Model should execute without asking."
+        "The user knows exactly what they want and says it clearly — includes "
+        "specific IDs and the desired outcome. No follow-up needed. "
+        "Example tone: 'move $500 from acc_01 to checking', "
+        "'cancel evt_042', 'cat /home/user/report.txt'."
     ),
     "missing": (
-        "User query OMITS ONE critical parameter (e.g., date, recipient, "
-        "amount). Model must ask_clarification before proceeding."
+        "The user forgets ONE critical detail — like scheduling a meeting but "
+        "not saying when, requesting a transfer without the destination, or "
+        "asking to label an email without saying which one. It reads like a "
+        "real person forgetting, not a puzzle."
     ),
     "minimal": (
-        "User query is very BRIEF — just an intent, no specifics. "
-        "Model must infer details from context or ask clarification."
+        "The user sends a terse message — just intent, no specifics. Like a "
+        "quick text: 'check my schedule', 'find the invoice', 'pay rent'. "
+        "No entity IDs, no parameters — just what they want done."
     ),
 }
 
@@ -120,16 +131,23 @@ DIFFICULTY_DESCRIPTIONS: dict[str, str] = {
 # ═══════════════════════════════════════════════════════════════════════
 
 _PERSONA_TEMPLATES: list[str] = [
-    "a busy team lead with back-to-back meetings",
-    "a freelancer managing multiple clients",
-    "a graduate student organizing a research project",
-    "a small business owner handling daily operations",
-    "a project manager coordinating a remote team",
-    "an executive assistant preparing for a board meeting",
-    "a software engineer debugging a production issue",
-    "a marketing manager running a campaign",
-    "a data analyst preparing a weekly report",
-    "a customer support agent resolving tickets",
+    # ── Professional roles ──
+    "a busy team lead with back-to-back meetings (direct, short requests)",
+    "a freelancer juggling multiple client projects (casual but specific)",
+    "a graduate student deep in research (asks for lookups and re-formatting)",
+    "a small business owner handling everything themselves (practical, to-the-point)",
+    "a project manager coordinating across timezones (schedule-aware, mentions dates)",
+    "an executive assistant clearing a backlog (batch-style: 'handle all the X')",
+    "a software engineer debugging in prod (technical, knows exact file paths and IDs)",
+    "a marketing manager launching a campaign (deadline-driven, 'need this done by EOD')",
+    "a data analyst pulling reports (asks for aggregation: 'how many X since Y?')",
+    "a customer support agent triaging tickets (urgency cues: 'this one is on fire')",
+    # ── Casual / everyday users ──
+    "someone in a hurry on their phone (typos, fragments, no punctuation)",
+    "a non-technical user who doesn't know exact names of things (descriptive: 'that blue thing')",
+    "a frustrated customer whose order is wrong (emotion: 'this is the third time')",
+    "an older relative learning the system (polite, over-explains, 'can you help me with...')",
+    "a user who sends one-line texts like a chat (minimal words, no greeting)",
 ]
 
 _REFERENCE_DATES: list[str] = [
@@ -176,6 +194,15 @@ class ContinuationPolicy:
         if turn >= target:
             return False
         return True
+
+    @staticmethod
+    def conversation_rounds(rng: random.Random) -> int:
+        """PROVE §3.2 Step 3.5: sample number of user-assistant rounds per conversation.
+
+        Bounded by min_turns=2, max_turns=3. Each round is one user query
+        followed by one or more tool calls.
+        """
+        return rng.randint(2, 3)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -226,52 +253,80 @@ class TaskPlanner:
         difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(
             difficulty, DIFFICULTY_DESCRIPTIONS["complete"]
         )
-        tools_text = _format_tools(tool_schemas, strip_enums=self._strip_enums)
         state_text = _format_state_compact(grounded_state, max_entities=20)
 
-        # Persona & date context
-        persona_block = ""
-        if persona:
-            persona_block = f"\n## Persona\nYou are generating a query from the perspective of: {persona}.\n"
+        # Date context
         date_block = ""
         if reference_date:
             date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
 
-        # Chain constraint
-        chain_block = ""
-        if chain_seed and len(chain_seed) >= 2:
-            chain_block = (
-                f"\n## Constraint\nYour query must require these tools IN ORDER:\n"
-                f"{' → '.join(chain_seed)}\n"
-                f"The task should naturally flow through this tool chain.\n"
+        system = (
+            "You are role-playing as a real person messaging their AI assistant. "
+            "Write ONE short message — the way a real human would actually type it. "
+            "Real people state what they WANT, not HOW to do it. "
+            "They don't list steps, don't mention tool names, don't describe workflows. "
+            "They just say their goal in 1-2 sentences max.\n\n"
+            "BAD (AI-like): 'I need to search for events, then create a new one, then add attendees.'\n"
+            "GOOD (human-like): 'set up a meeting with Sarah next Tuesday at 2pm'\n\n"
+            "BAD: 'First verify the account, then check the balance, then transfer funds.'\n"
+            "GOOD: 'move $200 from savings to checking'"
+        )
+        if difficulty == "minimal":
+            grounding_line = (
+                "Do NOT include entity IDs — just express your intent naturally."
+            )
+        elif difficulty == "complete":
+            grounding_line = (
+                "Reference the exact entity IDs from Current State — weave them in naturally."
+            )
+        else:
+            grounding_line = (
+                "You forgot one key detail. Use IDs from Current State where you remember them, "
+                "but leave out the missing piece naturally — don't signal that you're omitting it."
             )
 
-        system = (
-            "You are generating training data for AI tool-use agents. "
-            "Your job is to write a realistic user query that references SPECIFIC entity IDs."
+        # Priority rule: when persona style conflicts with difficulty constraints,
+        # difficulty wins for structure (what info to include/omit), persona wins
+        # for voice (how it's phrased).
+        priority_note = (
+            "\nIMPORTANT: If your persona style conflicts with the difficulty level, "
+            "follow the difficulty for WHAT to include, but keep the persona's VOICE and TONE."
         )
-        user = f"""## Domain
-{self.domain_desc}
 
-## Available Tools
-{tools_text}
-{persona_block}{date_block}{dep_hints}{chain_block}
-## Current State (Real Entities — use these exact IDs and values)
+        # Chain hint: describe the multi-step flow in natural language
+        # so the generated query implies a sequence of operations
+        chain_hint = ""
+        if chain_seed and len(chain_seed) >= 2:
+            tool_desc_map = {t["name"]: t.get("description", "") for t in tool_schemas}
+            step_descs = []
+            for tn in chain_seed:
+                desc = tool_desc_map.get(tn, "")
+                # Use first sentence of description as the natural hint
+                first_sent = desc.split(".")[0].strip() if desc else tn
+                step_descs.append(first_sent)
+            flow_text = " → ".join(step_descs)
+            chain_hint = (
+                f"\n## Underlying Task Flow\n"
+                f"The user's task requires this sequence: {flow_text}\n"
+                f"Express this as a SINGLE natural goal — do NOT list steps or mention tool names.\n"
+            )
+        user = f"""## Persona
+{persona if persona else 'A normal user messaging their AI assistant.'}
+{date_block}
+## What this assistant can help with
+{self.domain_desc}
+{chain_hint}
+## Current State (real IDs and values)
 {state_text}
 
-## Task
-Write ONE natural language user query ({difficulty} difficulty). {difficulty_desc}
+## Your task
+Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
 
-CRITICAL: Your query MUST include the EXACT entity IDs from the Current State
-(e.g., "update event evt_003", "cancel order ord_042", "transfer $500 from acc_01 to acc_02").
-Without entity IDs, the agent cannot act. Extract the IDs from the state above.
+{grounding_line}{priority_note}
+Remember: state your GOAL, not the steps. One message, 1-2 sentences max.
 
-The query should sound like a real person asking for help.
-
-## Output Format
-{{"user_query": "<the query>"}}
-
-Output ONLY the JSON, nothing else:
+Return only:
+{{"user_query": "<the message>"}}
 """
         for attempt in range(3):
             try:
@@ -281,6 +336,8 @@ Output ONLY the JSON, nothing else:
                     temperature=0.7 + 0.1 * attempt,
                 )
                 data = _extract_json(raw)
+                if not isinstance(data, dict):
+                    continue
                 query = data.get("user_query", "")
                 if query:
                     return query
@@ -290,6 +347,94 @@ Output ONLY the JSON, nothing else:
                     f"{self.domain}: {type(e).__name__}: {e}"
                 )
         raise RuntimeError(f"Failed to generate query for {self.domain}")
+
+    # ── Step 1b: generate follow-up user message (PROVE CONTINUATION) ──
+
+    def generate_followup(
+        self,
+        tool_schemas: list[dict[str, Any]],
+        grounded_state: dict[str, Any],
+        previous_query: str,
+        execution_history: list[dict[str, Any]],
+        difficulty: str,
+        rng: random.Random,
+        persona: str = "",
+        reference_date: str = "",
+    ) -> str:
+        """Generate a follow-up user message grounded in previous results.
+
+        PROVE §3.2 Step 3.5: the user continues the conversation based on
+        what the assistant just did. The follow-up should reference previous
+        outputs naturally (e.g., "that looks right, now also...") without
+        mentioning tool names.
+        """
+        state_text = _format_state_compact(grounded_state, max_entities=20)
+        # Summarize last few tool results for the follow-up generator
+        recent = execution_history[-5:]
+        history_lines = []
+        for step in recent:
+            tool = step.get("tool_name", "?")
+            obs = step.get("observation", {})
+            if isinstance(obs, dict):
+                summary = _json.dumps(obs, ensure_ascii=False, default=str)[:300]
+            else:
+                summary = str(obs)[:300]
+            history_lines.append(f"  called {tool} → {summary}")
+        history_text = "\n".join(history_lines) if history_lines else "(no history)"
+
+        date_block = ""
+        if reference_date:
+            date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
+
+        system = (
+            "You are role-playing as a real person who just received a response "
+            "from their AI assistant. Write ONE short follow-up message — the way "
+            "a real human would actually type it.\n\n"
+            "Real people react to what they just heard and ask for the NEXT thing. "
+            "They might say 'great, now also...' or 'actually, can you change...' "
+            "or 'oh wait, I also need...'. They don't re-explain the original task.\n\n"
+            "DO NOT mention tool names or steps. Just state what you want next.\n"
+            "Keep it to 1-2 sentences. Be natural and casual."
+        )
+
+        user = f"""## Persona
+{persona if persona else 'A normal user messaging their AI assistant.'}
+{date_block}
+## Original request
+"{previous_query}"
+
+## Recent results (what the assistant just did)
+{history_text}
+
+## Current State (real IDs and values)
+{state_text}
+
+## Your task
+Write ONE short follow-up message. Difficulty: {difficulty}.
+React to what just happened and ask for the next thing naturally.
+
+Return only:
+{{"user_query": "<the follow-up message>"}}
+"""
+        for attempt in range(3):
+            try:
+                raw = self.client.generate_chat(
+                    [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+                    temperature=0.7 + 0.1 * attempt,
+                )
+                data = _extract_json(raw)
+                if not isinstance(data, dict):
+                    continue
+                query = data.get("user_query", "")
+                if query:
+                    return query
+            except Exception as e:
+                logger.debug(
+                    f"generate_followup attempt {attempt + 1}/3 failed for "
+                    f"{self.domain}: {type(e).__name__}: {e}"
+                )
+        raise RuntimeError(f"Failed to generate followup for {self.domain}")
 
     # ── Step 2-N: decide next action (LLM-in-the-loop) ──
 
@@ -301,6 +446,8 @@ Output ONLY the JSON, nothing else:
         attempt: int = 0,
         dep_hints: str = "",
         difficulty: str = "complete",
+        chain_seed: list[str] | None = None,
+        chain_progress: int = 0,
     ) -> ActionPlan:
         """LLM decides the next action given full context.
 
@@ -310,43 +457,81 @@ Output ONLY the JSON, nothing else:
         For 'missing' difficulty tasks, ask_clarification is expected on the
         first turn (the query deliberately omits a parameter), so the
         first-turn enforcement is relaxed.
+
+        chain_seed + chain_progress: guides the LLM toward multi-step tasks,
+        showing which tools have been called and which remain.
         """
         tools_text = _format_tools(tool_schemas, strip_enums=self._strip_enums)
         history_text = _format_history(execution_history)
+        tool_names_set = {t["name"] for t in tool_schemas}  # for action auto-correction
 
         # First-turn guidance: prevent LLM from answering without tools.
         # Exception: 'missing' difficulty tasks omit a parameter on purpose,
         # so ask_clarification is the correct first action.
-        # For complete/minimal difficulty, also block ask_clarification —
-        # the query already contains enough information (or can be resolved
-        # via list/search/get lookups). LLMs over-aligned for safety (esp.
-        # on financial / sensitive domains like banking, payments) tend to
-        # ask clarifications unnecessarily, producing zero oracle calls.
+        # For complete/minimal difficulty, the prompt guides the model to
+        # use tools first, but ask_clarification is allowed if genuinely needed.
         if not execution_history:
             if difficulty == "missing":
                 first_turn_hint = (
-                    "\nIMPORTANT: This task has a MISSING parameter. "
-                    "You may need to ask_clarification before calling a tool.\n"
+                    "\nNote: This task has a MISSING parameter. "
+                    "ask_clarification may be needed before calling a tool.\n"
                 )
                 default_action = "ask_clarification"
                 blocked_first = ("final_answer", "report_error")
             else:
                 first_turn_hint = (
-                    "\nIMPORTANT: This is your FIRST turn. You MUST use a tool to complete the task.\n"
-                    "Do NOT use final_answer, report_error, or ask_clarification before calling any tools.\n"
-                    "The query already contains the entity IDs you need (or you can look them up with list/search/get tools).\n"
-                    "If you are unsure which tool to call, default to a read-only lookup (list_*, get_*, search_*).\n"
+                    "\nThis is your FIRST turn. Call a tool to make progress on the task. "
+                    "Resolve ambiguities via tool calls before asking the user.\n"
                 )
                 default_action = "tool_call"
-                blocked_first = ("final_answer", "report_error", "ask_clarification")
+                blocked_first = ("final_answer", "report_error")
         else:
             first_turn_hint = ""
             default_action = "final_answer"
             blocked_first = ()
 
+        # Chain progress guide: show the LLM which tools have been called
+        # and which remain, preventing premature final_answer.
+        chain_guide = ""
+        if chain_seed and len(chain_seed) >= 2:
+            tool_desc_map = {t["name"]: t.get("description", "").split(".")[0].strip() or t["name"] for t in tool_schemas}
+            lines = ["## Task Progress"]
+            for i, tn in enumerate(chain_seed):
+                if i < chain_progress:
+                    marker = "✓ done"
+                elif i == chain_progress:
+                    marker = "← NEXT"
+                else:
+                    marker = ""
+                desc = tool_desc_map.get(tn, tn)
+                lines.append(f"  {i+1}. {tn} ({desc}) {marker}")
+            lines.append("Only call final_answer after ALL steps are complete.")
+            chain_guide = "\n".join(lines) + "\n"
+
         system = (
-            "You are controlling tools to complete a user task. "
-            "For each turn, decide ONE action. Output EXACTLY one JSON object."
+            "You are an AI assistant helping a user complete a task via tool calls. "
+            "Think about what the user needs, then take the best next step.\n"
+            "\n"
+            "Output ONE JSON object per turn:\n"
+            '- {"action": "tool_call", "tool_name": "<tool>", "arguments": {"<param>": <value>}}\n'
+            '    → to interact with a tool (read, write, search, execute).\n'
+            '- {"action": "final_answer", "text": "<answer>"}\n'
+            '    → when the task is done. Give the user their result.\n'
+            '- {"action": "report_error", "reason": "<why>"}\n'
+            '    → when the task cannot be completed with available tools/state.\n'
+            '- {"action": "ask_clarification", "question": "<what you need>"}\n'
+            '    → only when genuinely ambiguous and no tool can resolve it.\n'
+            "\n"
+            "⚠ FORMAT RULES (follow exactly):\n"
+            "- When calling a tool, \"action\" MUST be \"tool_call\". Put the tool name in \"tool_name\".\n"
+            "- NEVER put the tool name directly in \"action\" (e.g., WRONG: {\"action\": \"search_events\", ...}).\n"
+            "\n"
+            "Examples:\n"
+            '✓ CORRECT tool call: {"action": "tool_call", "tool_name": "search_events", "arguments": {"keyword": "team meeting"}}\n'
+            '✓ CORRECT final answer: {"action": "final_answer", "text": "You have 3 meetings this week."}\n'
+            '✓ CORRECT ask user:     {"action": "ask_clarification", "question": "Which account would you like to check?"}\n'
+            '✗ WRONG tool call:      {"action": "search_events", "arguments": {"keyword": "team meeting"}}\n'
+            '✗ WRONG tool call:      {"action": "search_events", "tool_name": "search_events", "arguments": {...}}'
         )
         user = f"""## Domain
 {self.domain_desc}
@@ -355,29 +540,15 @@ Output ONLY the JSON, nothing else:
 {tools_text}
 
 {dep_hints}
-
+{chain_guide}
 ## User Task
 {user_query}
 
-## Execution History (what has happened so far)
+## Execution History
 {history_text}
-
-## Your Turn
-Decide the NEXT action. Output ONE JSON object:
-
-- To call a tool:
-  {{"action": "tool_call", "tool_name": "<tool>", "arguments": {{"<param>": <value>}}}}
-
-- To give the final answer:
-  {{"action": "final_answer", "text": "<answer>"}}
-
-- To report an error (task impossible with current tools):
-  {{"action": "report_error", "reason": "<why>"}}
-
-- To ask the user for missing information:
-  {{"action": "ask_clarification", "question": "<what you need>"}}
 {first_turn_hint}
-Output ONLY the JSON, nothing else:
+## Your Turn
+Output one JSON object:
 """
         for _retry in range(3):
             try:
@@ -387,6 +558,8 @@ Output ONLY the JSON, nothing else:
                     temperature=0.7 + 0.1 * attempt,
                 )
                 data = _extract_json(raw)
+                if not isinstance(data, dict):
+                    continue
                 action = data.get("action", default_action)
 
                 # On first turn, reject blocked action types (only final_answer/report_error)
@@ -406,8 +579,27 @@ Output ONLY the JSON, nothing else:
                             f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
                         )
                         continue
-                else:
+                elif action in _VALID_TERMINALS:
                     tool_name = ""
+                elif action in tool_names_set:
+                    # Model used a tool name as the action type (e.g.,
+                    # {"action": "cd", "arguments": {...}} instead of
+                    # {"action": "tool_call", "tool_name": "cd", ...}).
+                    # Auto-correct: treat as tool_call with this tool_name.
+                    logger.debug(
+                        f"decide_action auto-corrected action '{action}' → tool_call "
+                        f"for {self.domain} (tool name used as action type). "
+                        f"LLM raw: {raw[:120]}..."
+                    )
+                    tool_name = action
+                    action = "tool_call"
+                else:
+                    # Unknown action type — retry
+                    logger.debug(
+                        f"decide_action unknown action '{action}' for {self.domain}, "
+                        f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
+                    )
+                    continue
 
                 return ActionPlan(
                     action=action,
@@ -928,6 +1120,9 @@ def replay_validate(
 # ═══════════════════════════════════════════════════════════════════════
 
 # Parameter names indicative of sensitive data (PROVE: passwords, tokens, etc.)
+# Recognised terminal action types (must match the prompt format).
+_VALID_TERMINALS: tuple[str, ...] = ("final_answer", "report_error", "ask_clarification")
+
 _SENSITIVE_PARAM_PATTERNS: tuple[str, ...] = (
     "password", "passwd", "token", "api_key", "apikey", "secret",
     "access_key", "private_key", "credential", "auth_token",
@@ -1077,9 +1272,15 @@ def _format_state_compact(state: dict[str, Any], max_entities: int = 20) -> str:
                 lines.append(f"... ({sum(len(v) if isinstance(v, dict) else 0 for v in state.values())} total entities, showing first {max_entities})")
                 return "\n".join(lines)
             if isinstance(entity_data, dict):
-                # Extract key identity fields
+                # Extract key identity fields (expanded for all domains)
                 id_fields: list[str] = []
-                for fk in ("name", "title", "subject", "status", "type", "balance", "amount"):
+                for fk in (
+                    "name", "title", "subject", "status", "type",
+                    "balance", "amount", "price", "quantity",
+                    "date", "start_time", "end_time", "due_date",
+                    "priority", "stage", "label", "category",
+                    "sender", "recipient",
+                ):
                     if fk in entity_data:
                         val = entity_data[fk]
                         if isinstance(val, str) and len(val) > 60:

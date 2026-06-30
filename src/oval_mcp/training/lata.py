@@ -153,6 +153,8 @@ class LATAAllocator:
                 dtype=advantages.dtype, device=device,
             )
             token_adv = (advantages * scale).unsqueeze(-1) * mask
+        else:
+            raise ValueError(f"unknown LATA mode: {self.config.mode}")
 
         return LATAResult(
             token_advantages=token_adv,

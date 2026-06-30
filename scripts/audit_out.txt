@@ -1,0 +1,47 @@
+=== ground_truth vs extra_info oracle_calls 一致性 ===
+row 1: gt_oc=9 ei_oc=9
+row 3: gt_oc=10 ei_oc=10
+row 100: gt_oc=0 ei_oc=0
+
+=== assistant content uniqueness ===
+unique assistant contents: 1
+  - '[The assistant processes this request using available tools.]'
+
+=== row 1 full prompt (multi-turn) ===
+  [user     ] add a reminder for evt_002 an hour before it starts
+  [assistant] [The assistant processes this request using available tools.]
+  [user     ] Okay, got it. Now can you add an email reminder for the Budget Check an hour before it starts too?
+  [assistant] [The assistant processes this request using available tools.]
+  [user     ] Okay, got it—reminder added for evt_003. What about the original one for evt_002? Let's get that sorted too.
+
+=== duplicate queries ===
+  [7x at [115, 117, 119, 124, 128, 129, 131]] unique oracle seq=7: "link deal_0001 to contact_0001"
+  [2x at [3, 5]] unique oracle seq=2: "reschedule evt_002 to Friday at noon"
+  [2x at [48, 55]] unique oracle seq=2: "freeze acc_frozen_demo and move $1000 from acc_savings to acc_checking"
+
+=== 0-call rows scenario distribution ===
+total 0-call rows: 77
+  scen=missing_function   domain=filesystem     : 7
+  scen=task_planner       domain=banking        : 5
+  scen=missing_function   domain=email          : 5
+  scen=task_planner       domain=email          : 5
+  scen=missing_function   domain=food_delivery  : 5
+  scen=missing_function   domain=calendar       : 4
+  scen=missing_function   domain=payments       : 4
+  scen=missing_function   domain=issue_tracker  : 4
+  scen=task_planner       domain=issue_tracker  : 4
+  scen=task_planner       domain=team_chat      : 4
+  scen=missing_function   domain=team_chat      : 4
+  scen=missing_function   domain=shopping       : 3
+  scen=missing_function   domain=banking        : 3
+  scen=missing_function   domain=crm            : 3
+  scen=irrelevant         domain=team_chat      : 3
+
+=== overshoot chain (>5 calls) examples ===
+  row 1 dom=calendar len=9 uniq=3 names=['set_reminder', 'list_events', 'list_events', 'search_events', 'search_events', 'set_reminder', 'set_reminder', 'set_reminder', 'set_reminder']
+  row 3 dom=calendar len=10 uniq=6 names=['get_event', 'list_events', 'update_event', 'search_events', 'get_free_busy', 'check_conflicts', 'search_events', 'check_conflicts', 'update_event', 'update_event']
+  row 4 dom=calendar len=6 uniq=3 names=['get_event', 'update_event', 'update_event', 'update_event', 'update_event', 'check_conflicts']
+total >5: 45/199
+
+=== perturbation_level raw values ===
+{'hard': 42, 'complete': 26, 'medium': 64, 'minimal': 32, 'missing': 35}

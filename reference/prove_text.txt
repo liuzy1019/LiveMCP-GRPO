@@ -1,0 +1,856 @@
+Synthesize and Reward — Reinforcement Learning for Multi-Step
+Tool Use in Live Environments
+IbrahimAbdelaziz*,AsimMunawar,KinjalBasu,MaxwellCrouse,
+ChulakaGunasekara,SuneetKatrekar,PavanKapanipathi
+IBMResearch
+Abstract dependencies—is a prerequisite for deploying au-
+tonomous agents in production [Yao et al., 2023,
+TrainingLLMstoorchestratemulti-steptoolcallsis Schick et al., 2023]. The problem is harder than
+heldbackbythreecoupledobstacles: realisticstate- single-turn function calling: the model must prop-
+ful execution environments are costly to build, syn- agate intermediate results, handle missing informa-
+thetic training queries are often detached from the tion gracefully, and abstain when no tool is applica-
+server’s actual state (so the generated tool calls fail ble. Twocomplementarylinesofworkhaveemerged
+toexecute),andrecall-basedRLrewardsincentivize inresponse.
+verbose tool-calling patterns. We present PROVE
+Datasynthesisandsupervisedfine-tuning. xLAM
+(ProgrammaticRewardsOnVerifiedEnvironments),
+[Zhang et al., 2024] releases a large corpus of veri-
+a framework with three contributions: (1) a li-
+fiedsingle-turnfunction-callingtraces,andAPIGen-
+brary of 20 stateful MCP (Model Context Protocol)
+MT [Prabhakar et al., 2025] extends this to multi-
+servers exposing 343 tools, enabling live-execution
+turn trajectories. More recent pipelines target real-
+RLtrainingwithsession-scopedstateisolation;(2)a
+ism and scale for multi-turn tool use: Magnet [Yin
+state-machine data synthesis pipeline that generates
+et al., 2025] composes traces from tool-dependency
+multi-turn tool-call trajectories grounded in live-
+graphs, ToolACE-MT[Zengetal.,2026]introduces
+sampled server state, so generated queries refer-
+non-autoregressivemulti-turngeneration, andTOU-
+ence entities that actually exist; and (3) a multi-
+CAN[Xuetal.,2025]scalessynthesisto1.5Mtraces
+component programmatic reward with an adaptive
+against real MCP servers. These pipelines typically
+efficiency penalty that counters the verbosity incen-
+feedaseparateSFTstageandarenotcoupledtoex-
+tive of recall-based rewards. We train four models
+ecutionfeedbackduringtraining.
+(Qwen3-4B, Qwen3-8B, Qwen2.5-7B, Granite-4.1-
+Reinforcement learning for tool use. A parallel
+8B) with GRPO on the resulting ∼13K training ex-
+line uses RL to shape tool-use behavior from re-
+amples. On BFCL Multi-Turn, τ2-bench, and T-
+ward signals without large SFT corpora. ToolRL
+Eval, PROVE yields improvements of up to +10.2,
+[Chen et al., 2025], ReTool [Feng et al., 2025],
++6.8, and +6.5 points respectively, demonstrating
+StepTool [Yu et al., 2024], Tool-R1 [Zhang et al.,
+thatthisframeworkyieldsconsistentgainsonmulti-
+2025b], Nemotron-Research-Tool-N1 [Zhang et al.,
+steptoolorchestrationacrosstwomodelfamilies.
+2025a],MUA-RL[Zhaoetal.,2025],andToolZero
+[Zeng et al.,2025] explore per-call andstep-grained
+1 Introduction rewards, multi-turn user simulation, and RL-from-
+scratch. Closest to our setting, Cheng et al. [2026]
+decomposes the reward into per-call validity and
+Training LLMs to orchestrate multi-step tool
+sequence-level consistency on a single cached-API
+calls—selecting the correct API, filling parame-
+domain, while the concurrent AgenticQwen [Qwen
+ters from context, and respecting inter-call data
+Team,2026]scalesto∼100Kbranchingtrajectories
+*Correspondence:ibrahim.abdelaziz1@ibm.com withLLM-as-judgerewards(Qwen3-235B).
+1
+6202
+nuJ
+3
+]LC.sc[
+2v29830.6062:viXra
+Despite this progress, three gaps remain unad- two architecture families, trained with identical hy-
+dressed jointly: (i) most pipelines execute against perparameters.
+cached or simulated APIs, missing the state- WeevaluateonBFCLMulti-Turn[Patiletal.,2024],
+dependent failure modes that arise in live, state- τ2-bench [Barres et al., 2025], and T-Eval [Chen
+ful services; (ii) synthetic queries are often de- etal.,2023]. PROVEimprovesallfourmodelsonall
+tached from the server’s actual state, producing three benchmarks, using ∼13K training examples,
+traces whose parameters do not correspond to any roughly 8× less than concurrent RL pipelines such
+real entity; and (iii) sequence-level rewards based as AgenticQwen [Qwen Team, 2026], and no judge
+purely on recall incentivize verbosity—RL-trained model. Figure1illustrateshowthesystemworks.
+models emit excess tool calls to maximize GT cov-
+erage,aregressionthatisrarelypenalizedexplicitly.
+2 Related Work
+We close these gaps with PROVE (Programmatic
+Rewards On Verified Environments),1 a framework
+Data Synthesis and Supervised Fine-Tuning for
+that tightly couples data synthesis to the RL loop
+ToolUse. Agrowingbodyofworkscalessynthetic
+throughasharedlive-executionbackend:
+data to train tool-using LLMs via supervised fine-
+1. Live MCP environments. A library of 20 tuning. xLAM [Zhang et al., 2024] releases a large
+stateful Model Context Protocol servers expos- corpusofverifiedsingle-turnfunction-callingtraces,
+ing 343 tools, with session-scoped state isola- and APIGen-MT [Prabhakar et al., 2025] extends
+tion, usedforbothdatasynthesisandRLtrain- this to multi-turn trajectories with stronger verifica-
+ing. UnlikecachedAPIs,thesecapturerealistic tion. Magnet [Yin et al., 2025] synthesizes multi-
+state-dependentexecutiondynamics. turn traces by translating a tool-dependency graph
+into natural conversations and distilling them into
+2. Grounded state-machine data synthesis. A smaller models. ToolACE-MT [Zeng et al., 2026]
+pipelinethatprobeseachliveserverforrealen- proposes non-autoregressive generation for agentic
+tities,groundsquerygenerationinthatsampled multi-turn interactions, and TOUCAN [Xu et al.,
+state, drives a state-machine teacher through 2025] scales synthesis to 1.5M traces from real-
+multi-turnconversationsagainsttheserver, and world MCP servers. Closer to our setting, Crouse
+replay-validates every trace. This produces et al. [2026] address the challenge of simulating
+∼13Ktrainingexamples(multi-turnMCPcon- complex multi-turn interactions when the execution
+versations, missing-function clarification, and backendisstateless. Thesepipelinesimprovetrajec-
+abstention) without manual annotation or an tory quality but typically feed a separate SFT stage
+LLM-as-judge. anddonottrainagainstliveexecutionfeedback. Our
+pipeline differs in three ways: (i) it is driven by a
+3. Programmatic multi-component reward. A
+statemachinethatgroundsqueriesinliveserverstate
+five-part reward decomposing tool-use quality
+atgenerationtime, (ii)itreplay-validateseverycon-
+into validity, dependency-ordered coverage, an
+versation against a freshly reset environment, and
+adaptive efficiency penalty with a complexity-
+(iii) it produces ∼13K examples that feed directly
+scaled call budget, a tool-name signal, and
+intoRLrolloutsratherthananintermediateSFTcor-
+an argument-value matching bonus—fully pro-
+pus.
+grammaticwithnoexternaljudgemodel(§3.3).
+Anablation(§4.5)showsthattheadaptivebud-
+Reinforcement Learning for Tool Use. Rein-
+get and the tool-name signal are the two most
+forcement learning has become a popular way to
+load-bearingcomponents.
+elicit tool-use behavior without large SFT corpora.
+Table1summarizesresultsacrossfourmodelsfrom ToolRL [Chen et al., 2025] showed that reward sig-
+nals alone can teach tool-use capabilities, and Re-
+1Code, the 20 MCP server library (343 tools), synthesized
+Tool[Fengetal.,2025]combinedreasoningandtool
+training data, and trained model checkpoints will be released
+soon. use through strategic RL. StepTool [Yu et al., 2024]
+2
+Table 1: Improvement over base model (∆) after training with PROVE. All models trained for 350 GRPO
+steps.
+Model BFCLMT ∆ TAU2 ∆ T-Eval ∆
+Qwen3-4B 29.0 +10.2 28.6 +3.6 78.2 +1.5
+Qwen3-8B 26.9 +0.9 29.3 +3.5 80.7 +1.9
+Qwen2.5-7B 16.8 +3.7 21.8 +6.8 73.4 +6.5
+Granite-4.1-8B 33.5 +0.1 31.3 +6.4 77.9 +4.4
+Data Synthesis Multi-Component Reward
+(State Machine) Rval+ Rcov+ Reff+ Rname+ Rarg banking calendar travel
+shopping email …
+R_total
+GRPO Trainer tool calls 20 Live MCP Servers
+Training Data
+(VERL + vLLM) (stateful, session-scoped)
+responses
+Figure1: Systemoverview. AnLLMteachergeneratesmulti-turntrajectoriesagainstliveMCPserversus-
+ingauto-discovereddependencygraphs. TheGRPOtrainerrollsoutagainstthesameserversandcomputes
+thefive-componentreward. Session-scopedstateisolationensuresreproducibility.
+introduces step-grained rewards for multi-step tool 3 Method
+chains, while Nemotron-Research-Tool-N1 [Zhang
+etal.,2025a]exploresreinforcedreasoningfortool- We describe the three methodological components:
+using models. Tool-R1 [Zhang et al., 2025b] targets the live MCP environment framework (§3.1), the
+sample efficiency with compositional multi-step re- data synthesis pipeline (§3.2), and the multi-
+wards,andMUA-RL[Zhaoetal.,2025]trainsmulti- componentreward(§3.3).
+turn policies against an LLM user simulator inside
+the RL loop. Tool Zero [Zeng et al., 2025] trains
+3.1 LiveMCPEnvironmentFramework
+tool-using agents via pure RL from scratch with-
+out SFT warm-up. Cheng et al. [2026] propose de- The Model Context Protocol [MCP; Anthropic,
+composingtool-userewardintoper-callvalidityand 2024] defines a standardized interface for LLMs
+sequence-level consistency components on a single to discover and invoke tools exposed by external
+cached-API domain; our validity term follows this servers. We build a library of 20 MCP environment
+graduated formulation but replaces AST compari- servers, each running as an independent subprocess
+son with live MCP schema validation and execu- communicating over stdio. Each server exposes a
+tion. Concurrent work by Qwen Team [2026] trains domain-specificsetoftools(10–40perenvironment)
+tool-use agents via GRPO with behavior-tree data with OpenAI-compatible function schemas. The
+flywheels(∼100Kexamples)andLLM-as-judgere- same set of environments is used for both data syn-
+wards (Qwen3-235B). Relative to this line, PROVE thesisandRLtraining.
+differs along two axes: we train against live stateful
+environments rather than cached or simulated APIs,
+Architecture. An MCPManager orchestrates
+and our reward is fully programmatic—no external
+server lifecycle: starting, stopping, and resetting
+judge model—with an adaptive efficiency penalty
+environments. During RL training, a MCPTool
+that directly targets the verbosity incentive of pure-
+wrapper integrates with the VERL framework
+recallcoveragerewardsunaddressedinpriorwork.
+[Sheng et al., 2024], routing each model-generated
+toolcalltotheappropriateMCPserverandreturning
+the execution response. Per-rollout state isolation is
+maintained via session-scoped state management:
+3
+each rollout episode receives a unique session ID, produce queries referencing fabricated entities—
+ensuring that tool calls from one rollout cannot account #12345, device tv_bedroom, user
+contaminateanother’sstate. rachel@example.com—that crash on exe-
+cution because those entities do not exist in the
+server’s state. We avoid this with a per-environment
+Domain Coverage. The library covers 20 envi-
+sampler that probes the live MCP server before
+ronmentsspanningfinance,productivity,commerce,
+query generation: it calls read-only discovery tools
+travel, social, IoT, developer tools, and knowledge
+(e.g., get_unique_values, search, list)
+management. Table 2 lists the environments with
+to enumerate real entities, filters them to those
+their user-visible tool counts and characteristic state
+with sufficient supporting data (e.g., cities with
+behavior. Every environment is stateful—account
+at least 20 businesses, accounts with non-zero
+balances change after transfers, calendar events per-
+balance), and caches a compact “sampling context”
+sist,filesystemtreesaccumulateedits—providingre-
+per environment (refreshed every k conversations).
+alistic execution dynamics that static caches cannot
+This context—real IDs, names, categories, and
+capture.
+value ranges—is injected into the query-generation
+prompt along with an anti-hallucination instruction
+AdvantagesoverStaticCaches. Comparedtothe that constrains the LLM to use only entities present
+cached-API approach of Cheng et al. [2026], live inthecontext. Theresultisquerieswhosearguments
+MCP execution offers: (1) Scalability: adding a exist in the server’s actual state, making the chosen
+new domain requires only implementing an MCP chain of tools executable end-to-end. For chain-
+server, not pre-computing a response cache; (2) Re- seeded queries, the sampler additionally returns
+alism: live execution captures state-dependent fail- chain-aligned context: a subset of entities most
+ures(e.g.,insufficientbalance,expiredcoupons)that relevanttothespecifictoolchainbeinggenerated.
+static caches miss; (3) Determinism: session-scoped
+state with deterministic reset ensures reproducible Step 3: State-Machine Orchestrator. Conversa-
+initialconditions.
+tion generation is driven by an explicit finite state
+machine that tracks five groups of states—query,
+3.2 DataSynthesisPipeline turn, tool-execution, response, and continuation—
+with transitions triggered by the outcome of each
+We generate training data through a state-machine LLM call or tool execution. A single turn proceeds
+orchestrator that drives a teacher LLM through as:
+multi-turn tool-use conversations against live MCP
+servers. Figure2illustratesthepipelineataglance.
+1. QUERYGENERATION. Auserqueryissampled
+from the dependency-graph chains, grounded
+on the sampling context from Step 2, condi-
+Step 1: Auto-Discovered Dependency Graph. tioned on a persona and reference date, and
+For each environment, the pipeline probes all
+(cid:0)n(cid:1)
+stratified by information level (60% complete,
+2
+toolpairsandasksanLLMtoclassifyeachrelation- 20%missing-required,20%minimal).
+ship as explicit (output of tool A is a required input
+of tool B), implicit (A must execute first to estab- 2. LLM PROCESSING. The teacher LLM
+lish state), or none. The resulting directed graph is (Gemma-4-31B-it) is prompted with the query
+hashed against the tool schema and cached, so the and tool schemas. A validator checks for well-
+O(n2) cost is paid once per environment. From this formed tool calls; invalid responses trigger a
+graphweextractlength-2tolength-5toolchainsthat fallbackregeneration.
+seedrealisticmulti-stepqueries.
+3. TOOLEXECUTION. Toolcallsaredispatchedto
+the live MCP server. The outcome is classified
+Step 2: Live-State Sampling (Grounded Query as SUCCESS, PARTIAL-SUCCESS, or FAILURE,
+Generation). A naive query generator would anddrivesthenexttransition.
+4
+Table 2: The 20 MCP environments used for RL rollouts. All servers are stateful with session-scoped
+isolation;Toolscountstheuser-visibletoolsurfaceexposedtotheagent(helper/debugtoolsarehidden).
+Category Environment Tools State/characteristicbehavior
+banking 17 Accounts,transfers,balances;sensitive-paramprovenance
+Finance trading 13 Portfolios,orders,marketdata;statefulorderbook
+payments 10 Invoices,refunds,webhooks;transactionalstate
+calendar 17 Events,invitees,recurringrules;time-dependentqueries
+Productivity email 17 Inbox,drafts,threads,labels;append-onlystate
+filesystem 40 Files,dirs,permissions;deepeststate(cd/ls/mv/cpchains)
+shopping 23 Catalog,cart,checkout;statefulcart
+Commerce marketplace 13 Listings,bids,sellerops;multi-entitystate
+retail_chain 11 Inventoryacrossstores;location-scopedstate
+travel_booking 20 Flights,hotels,itineraries;bookingstate
+Travel
+maps 16 Geocoding,routing,POIs;mostlystatelesslookups
+social_media 15 Posts,follows,feeds;append+feedstate
+Social/Comm.
+team_chat 11 Channels,messages,threads;append-onlystate
+IoT/Devices iot_devices 25 Smart-homedevices;sensorstate+actuators
+vehicle 20 Ignition,climate,navigation;mode-gatedactions
+crm 16 Leads,contacts,deals;relationalstate
+Knowledge/CRM
+issue_tracker 20 Issues,sprints,assignees;workflowtransitions
+budget 12 Expenses,categories;accumulativestate
+food_delivery 17 Menus,orders,tracking;orderlifecyclestate
+Lifestyle
+video_meeting 10 Meetings,participants,recordings;sessionstate
+4. RECOVERY. On failure, the state machine se- havior;(d)Missing-function: asubsetoftoolsishid-
+lectsamongretry-with-corrected-params,retry- den after chain selection, producing abstention or
+with-alternative-tool,orgracefulgive-upwitha clarificationexamples.
+fallbackexplanation.
+Step 5: Replay Validation and Deduplication.
+5. CONTINUATION. A decision module samples
+Each completed conversation is replayed against a
+whether to end the conversation, generate a
+freshly reset MCP environment. We count only
+follow-up, or ask a clarification, using a turn-
+schema-level and execution errors (not empty-result
+decay schedule bounded by min_turns= 2
+responses) and discard conversations with error rate
+andmax_turns= 3.
+above 30%. A provenance check ensures that sen-
+sitive parameters (passwords, tokens) appear only
+when traceable to prior user turns or tool outputs.
+Step 4: Robustness Knobs. Several probabilis-
+SurvivingconversationsarededuplicatedbyJaccard
+tic perturbations are applied during generation to
+similarityontool-callsequences(threshold0.70).
+broaden the training distribution: (a) Distractor in-
+jection (40%): 3–8 unrelated tools from other en-
+vironments are added to the candidate set, forc- Training Data. The final training set comprises
+ing tool discrimination; (b) Enum stripping (30%): 13,517 examples drawn from three sources: 10,895
+enumerated value lists are removed from parameter multi-turn MCP conversations across 20 environ-
+schemas,trainingthemodeltoinferconstraintsfrom ments; 1,500 clarification trajectories generated by
+descriptions; (c) Irrelevance queries (5%): queries the missing-function variant of Step 3; and 1,122
+thatnoavailabletoolcansatisfy,trainingrefusalbe- externally-sourced abstention examples (G = ∅)—
+5
+Step 1 —Auto-Discovered Dependency Graph
+Tool Schemas LLM Pairwise explicit | implicit | none Dependency Graph
+(per MCP env) Classifier (directed edges) + Chains (len 2–5)
+Recovery
+(retry / alt-tool / give-up)
+seed chain
+Step 2 —State Machine (per conversation) fail
+Query LLM Tool Response +
+Generation Processing Execution Continuation
+call next turn Robustness knobs
+• Distractors
+• Strip enums
+Live-State Sampler (state Li f v u e l, M re C s P e t S p e e rv r e c r onv.) • • I r M re is le s- v f a u n n c c e
+completed conv.
+Step 3 —Validate & Filter
+Replay Validate Sensitive-Param
+Deduplicate RL Training Data
+(error rate < 30%) Provenance Check
+Figure 2: State-machine-driven data synthesis. Per environment, we (1) auto-discover a tool dependency
+graph, (2) run a state machine that alternates query generation, tool execution, and continuation decisions
+againstaliveMCPserver,and(3)replay-validateeachconversationbeforeconversiontoRLtrainingdata.
+806 from When2Call [Ross et al., 2025] (no-tool- functionnameexistsinthecandidateschema;(2)all
+call scenarios) and 316 from xLAM-Irrelevance required parameters are present with compatible
+[MadeAgents, 2024] (irrelevant queries). All mod- JSON types; (3) live execution against the MCP
+elsaretrainedinasinglestagefor350GRPOsteps. server succeeds without error. The validity reward
+averages these per-call scores across all N model
+calls. This graduated formulation follows Cheng
+3.3 Multi-ComponentReward
+et al. [2026], though we replace their AST-based
+Ourrewarddecomposesintofivecomponents: valid- check with live MCP schema validation and execu-
+ity(iseachcallstructurallycorrectandexecutable?), tion. It provides partial credit—a call with the cor-
+coverage(areallrequiredstepscompletedindepen- rectnamebutwrongparametersreceives∼0.33;cor-
+dency order?), efficiency (was it done concisely?), rect structure but failed execution receives ∼0.66—
+tool-name guidance (did the model select the right givingthemodelfine-grainedlearningsignalevenon
+tools?),andargument-valuematching(dothecho- partially-correctattempts.
+senargumentvaluesagreewithgroundtruth,notjust
+the argument keys?). The first two address natural
+Coverage (R ). Measures whether the
+coverage
+desiderataforanytool-callingsystem. Theefficiency
+model’s output covers all ground-truth workflow
+penalty—specificallyitscomplexity-scaled,adaptive
+stepsinthecorrectdependencyorder:
+budget—and the tool-name bonus are our two most
+load-bearing reward-side contributions: an ablation 1 (cid:88)
+R = m(g)·o(g) (1)
+(§4.5) shows each is responsible for a ∼9-point coverage |G|
+g∈G
+aggregate drop across the three benchmarks when
+removed. Argument-value matching is a smaller- where m(g) = ⊮[g matched] and o(g) =
+weight signal that disproportionately helps multi- (cid:81) ⊮[µ(j) < µ(g)] enforces dependency or-
+turndialog(τ2). (j,g)∈E
+der; G is the set of ground-truth steps, E the depen-
+dency edges, and µ(·) maps steps to their matched
+Validity (R ). Each tool call is scored on position in the model’s output sequence. A model
+validity
+three graduated levels, equally weighted: (1) the call matches a GT step only if it includes all of
+6
+the GT call’s argument keys—preventing superfi- theground-truthset:
+cialmatcheswherethemodelcallstherightfunction
+|{c ∈ Cˆ : c.name ∈ GT_names}|
+withentirelywrongparameters. R = (3)
+name |Cˆ|
+Adaptive Efficiency (R efficiency ). Our key contri- whereCˆ isthesetofmodeltoolcallsandGT_names
+bution. Coverage reward (pure recall) incentivizes is the set of tool names appearing in the ground
+verbosity: more tool calls increase the probability truth. This is independent of ordering or argument
+of matching GT steps, with no penalty for excess. matching—itpurelyrewardstoolselectionquality.
+We introduce an additive penalty with a complexity-
+adaptivebudget:
+Argument-Value Matching (R ). Coverage
+arg
+matchesamodelcalltoaGTstepusingthefunction
+max(0, n −B)
+calls
+R = −α· (2) name and the set of argument keys—it does not
+efficiency
+B
+compare the actual argument values, so a model
+B = n +⌈n ·β⌉
+gt gt that fills the correct slots with the wrong values still
+receives full coverage credit. To close this gap we
+where n is the number of model tool calls, n is
+calls gt
+addavalue-matchingbonus: foreachpairofGTand
+the total number of ground-truth tool calls (summed
+modelcallsalreadyalignedbynameandkeyset,we
+acrossallsteps,includingparallelcallswithinasin-
+scorethefractionofargumentvaluesthatmatchGT,
+glestep),αcontrolspenaltystrength,andβ controls
+andaverageacrossalignedpairs:
+the slack budget. Counting calls rather than steps
+is what makes the penalty consistent: a step with 1 (cid:88) |{k : c.args[k] = g.args[k]}|
+R =
+three parallel ground-truth calls budgets three calls, arg |M| |g.args|
+notone,soamodelthatemitsthecorrectthreeisnot (c,g)∈M
+(4)
+penalizedasifithadthreeexcesscalls.
+whereM isthesetof(modelcall, GTcall)pairsal-
+The adaptive budget B is critical: a flat penalty
+ready aligned by Coverage. This signal is small in
+(B = n ) over-penalizes complex tasks where ex-
+gt magnitude but consistently lifts BFCL Multi-Turn,
+ploration or information-gathering calls are legiti-
+τ2-bench, and T-Eval at w = 0.1; we did not ob-
+mate. Withβ = 0.5,a4-calltaskhasbudgetB = 6, arg
+serve similar gains at much higher or much lower
+allowing 2 extra calls before any penalty applies.
+weights, suggesting 0.1 is a sweet spot that nudges
+Keyproperties:
+valuechoicewithoutovershadowingthemainreward
+• Complexity-adaptive: Harder tasks (more GT terms.
+steps)receiveproportionallymoreslack.
+Abstention Reward. For abstention examples
+• Asymmetric: Only penalizes excess calls (not
+(G = ∅): R = 1.0 if zero tool calls (correct ab-
+missing calls, which are already captured by
+stention),R = 0.0otherwise.
+R ).
+coverage
+CombinedReward.
+• GRPO-compatible: Under group-relative ad-
+vantage normalization, the penalty naturally R = w R +w R
+total val validity cov coverage
+scaleswithbatchdifficulty.
++w R +w R
+eff efficiency name name
++w R (5)
+arg arg
+Tool Name Bonus (R ). We observed in pilot
+name
+training runs that tool-name selection is a primary with w = 0.5, w = 0.5, w = 0.15, w =
+val cov eff name
+early-trainingbottleneck: validity(R )saturates 0.2, w = 0.1, α = 0.5, and β = 0.5 through-
+validity arg
+well before the model reliably picks the right tools, out all experiments. The auxiliary weights (w ,
+eff
+leaving the coverage signal too sparse to drive con- w , w ) are kept smaller than the main compo-
+name arg
+sistentlearning. Weaddanexplicitrewardthatcred- nents (w , w ) to avoid suppressing exploration
+val cov
+itsthemodelforcallingtoolswhosenamesappearin earlyintraining.
+7
+4 Experiments • BFCL Multi-Turn [Zhong et al., 2025]: Eval-
+uates multi-step function calling with subcat-
+4.1 Setup egories for base multi-turn, missing function,
+missing parameter, and long context scenarios.
+Base Models. We evaluate on four instruction- We report Overall MT accuracy and all subcat-
+tuned models spanning two architecture fam- egories.
+ilies: Qwen3-4B-Instruct2, Qwen3-8B3 [Qwen
+Team, 2025b], Qwen2.5-7B-Instruct4 [Qwen Team, • τ2-bench [Barres et al., 2025]: Evaluates con-
+2025a], and Granite-4.1-8B-Instruct5 [IBM Re-
+versational agents in a dual-control environ-
+search,2025]. Thiscovers4B–8Bparametersacross
+ment where both agent and user can modify
+Qwen and Granite architectures, testing whether a
+shared state across airline, retail, and telecom
+singlerewardconfigurationgeneralizesacrossmodel
+domains. AnLLMusersimulatordrivesmulti-
+families.
+turn conversations where the agent must call
+toolstoresolverequests. Wereportper-domain
+andaveragetaskcompletionrates.
+Training. WetrainwithGroupRelativePolicyOp-
+timization [GRPO; Shao et al., 2024] via the VERL
+• T-Eval [Chen et al., 2023]: Evaluates tool-use
+framework [Sheng et al., 2024] on 8×H100 GPUs.
+capabilities across six dimensions: instruction
+Key hyperparameters: batch size 16, rollout group
+following,planning,reasoning,retrieval,under-
+size 16, tensor parallelism 2. Maximum prompt
+standing,andreview. Wereportscoresaveraged
+length is 12,384 tokens; maximum response length
+overJSONandstringpromptformats.
+is 16,384 tokens. Multi-turn rollouts are capped at
+5 user turns and 10 assistant turns. RL rollouts use
+For τ2-bench, which requires an LLM user
+20liveMCPenvironments(see§3.1). Traininguses
+simulator to drive multi-turn interactions, we
+13,517 samples (10,895 multi-turn MCP conversa-
+use Qwen3-VL-235B-A22B-Instruct6 as the
+tions + 1,500 clarification + 806 When2Call + 316
+simulatoracrossallrunstokeepevaluationsdirectly
+xLAM-Irrelevance) for 350 GRPO steps in a single
+comparable.
+stage. KL coefficient is 0.01 for all models. Learn-
+ingrateistheonlyper-familyknob: Qwen3-4Buses
+1 × 10−6, Qwen3-8B uses 5 × 10−8, Qwen2.5-7B
+4.2 MainResults
+uses 3 × 10−7, and Granite-4.1-8B uses 3 × 10−7.
+The Qwen2.5 and Granite families are more sensi- Table 3 presents our main results comparing base
+tive to learning rate than Qwen3-4B—at 1 × 10−6 modelsagainstourmethodonBFCLMulti-Turnand
+both regress sharply on multi-turn benchmarks (see τ2-bench.
+§4discussion); weselectedeachmodel’sLRfroma
+smallsweepover{1×10−6, 3×10−7, 5×10−8}. All
+models use identical reward configuration (w = BFCL Multi-Turn. All four models improve on
+val
+0.5, w = 0.5, w = 0.15, w = 0.2, w = BFCL MT Overall: Qwen3-4B (+10.2), Qwen2.5-
+cov eff name arg
+0.1,α = 0.5,β = 0.5). 7B (+3.7), Qwen3-8B (+0.9), and Granite-4.1-8B
+(+0.1, essentially flat). The MT Base subcategory
+shows the strongest gain on Qwen3-4B (+12.0), in-
+Benchmarks. Weevaluateonthreebenchmarks: dicating substantially improved multi-step orches-
+tration; Granite-4.1-8B’s near-zero overall change
+2https://huggingface.co/Qwen/
+masksa+6.5gainonMulti-TurnMiss-Functionoff-
+Qwen3-4B-Instruct-2507
+setbysmallerregressionsonBase(−1.5)andLong-
+3https://huggingface.co/Qwen/Qwen3-8B
+4https://huggingface.co/Qwen/Qwen2.
+Context(−2.5).
+5-7B-Instruct
+5https://huggingface.co/ibm-granite/ 6https://huggingface.co/Qwen/
+granite-4.1-8b-instruct Qwen3-VL-235B-A22B-Instruct
+8
+Table3: Mainresultsacrossmodelfamilies. Allmodelstrainedfor350GRPOstepswith PROVE.
+BFCLMulti-Turn τ2-bench
+Model Method
+Base MissParam MissFunc LongCtx Overall Airline Retail Telecom Avg
+Qwen3-4B Base 23.5 14.5 14.0 23.0 18.8 26.8 35.1 13.2 25.0
+PROVE 35.5 18.5 29.0 33.0 29.0 28.0 42.1 15.8 28.6
+∆ +12.0 +4.0 +15.0 +10.0 +10.2 +1.2 +7.0 +2.6 +3.6
+Qwen3-8B Base 30.5 19.5 31.5 22.5 26.0 24.0 28.9 24.6 25.8
+PROVE 34.0 21.5 32.0 20.0 26.9 30.0 34.2 23.7 29.3
+∆ +3.5 +2.0 +0.5 -2.5 +0.9 +6.0 +5.3 -0.9 +3.5
+Qwen2.5-7B Base 17.0 10.0 14.5 11.0 13.1 16.0 12.3 16.7 15.0
+PROVE 22.5 13.5 18.0 13.0 16.8 26.0 16.7 22.8 21.8
+∆ +5.5 +3.5 +3.5 +2.0 +3.7 +10.0 +4.4 +6.1 +6.8
+Granite-4.1-8B Base 44.5 26.0 23.5 39.5 33.4 8.0 49.1 17.5 24.9
+PROVE 43.0 24.0 30.0 37.0 33.5 22.0 47.4 24.6 31.3
+∆ -1.5 -2.0 +6.5 -2.5 +0.1 +14.0 -1.8 +7.0 +6.4
+τ2-bench. All four models improve: Qwen2.5-
+7B(+6.8),Granite-4.1-8B(+6.4),Qwen3-4B(+3.6),
+1.1
+andQwen3-8B(+3.5). Granite-4.1-8B’sgainiscon-
+1.0
+centrated on the airline domain (+14.0, from 8.0 to
+0.9
+22.0) and telecom (+7.0); Qwen2.5-7B’s gain is the
+0.8
+mostuniformacrossthethreedomains,withallthree
+0.7
+improvingby+4ptsormore. Theearlierdivergence
+0.6
+patternweobservedforQwen3-8Batthelauncher’s
+0.5
+default learning rate (1 × 10−6) disappears at the
+0 50 100 150 200 250 300 350
+lower5×10−8 usedhere—themodelstabilizesand Training Step
+postsaTAU2gaincomparabletoQwen3-4B.
+4.3 T-EvalResults
+Table4reportsT-Evalscoresacrossallfourmodels.
+Analysis. AllfourmodelsimproveonT-Evalover-
+all: Qwen2.5-7B (+6.5), Granite-4.1-8B (+4.4),
+Qwen3-8B(+1.9),andQwen3-4B(+1.5). Qwen2.5-
+7B shows the strongest gains across five of six di-
+mensions; Granite-4.1-8B posts the single largest
+improvement on review (+15.6). The retrieve and
+plan dimensions benefit most consistently across
+models,asthesedirectlyexercisethemulti-steptool-
+dependencyskillsourrewardtargets.
+4.4 TrainingDynamics
+Figure3 showsthetraining rewardprogressionover
+350 steps. Three of four models exhibit rapid initial
+improvement (steps 0–50) followed by gradual re-
+finement,confirmingthattherewardprovidesstrong
+)naem/erocs/citirc(
+draweR
+Training Reward Progression
+Qwen3-4B
+Qwen3-8B
+Qwen2.5-7B
+Granite-4.1-8B
+Figure 3: Training reward (critic/score/mean) over
+350 GRPO steps. All models converge smoothly
+withoutinstability.
+learningsignalfromthestart;Qwen3-8Biscompar-
+ativelyflatthroughout.
+Figure4decomposestherewardintoitsfivecom-
+ponents at steps 0, 150, and 350 across all mod-
+els. Across Qwen3-4B, Qwen2.5-7B, and Granite-
+4.1-8B, the four trainable components move in the
+expected directions: R shows the largest gains,
+cov
+R saturatesearly(mostimprovementbystep150),
+val
+R shrinkstowardzeroasmodelslearnconciseness,
+eff
+and R improves steadily. Qwen3-8B is the ex-
+name
+ception: everycomponentisessentiallyflatthrough-
+out training, consistent with the conservative learn-
+ingraterequiredtostabilizethisbasemodelandwith
+itssmallereval-timegains.
+9
+Table4: T-Evalresults(0–100). ScoresaveragedoverJSONandstringpromptformats. Allmodelstrained
+for350stepswith PROVE.
+Model Method Instruct Plan Reason Retrieve Understand Review Overall
+Qwen3-4B Base 95.5 66.4 62.8 87.5 77.3 70.8 76.7
+Qwen3-4B PROVE 98.5 68.7 63.7 90.6 78.7 68.8 78.2
+∆ +3.0 +2.3 +1.0 +3.1 +1.4 -2.1 +1.5
+Qwen3-8B Base 98.8 64.7 64.2 88.0 77.8 79.2 78.8
+Qwen3-8B PROVE 94.8 65.2 63.0 92.7 81.8 86.5 80.7
+∆ -4.1 +0.4 -1.2 +4.7 +4.0 +7.3 +1.9
+Qwen2.5-7B Base 73.4 54.1 57.7 79.2 62.2 75.0 66.9
+Qwen2.5-7B PROVE 81.8 60.4 63.1 88.0 69.7 77.1 73.4
+∆ +8.4 +6.3 +5.5 +8.9 +7.6 +2.1 +6.5
+Granite-4.1-8B Base 93.5 68.2 63.4 87.0 74.0 55.2 73.5
+Granite-4.1-8B PROVE 94.7 69.7 63.7 91.7 76.9 70.8 77.9
+∆ +1.1 +1.5 +0.4 +4.7 +2.9 +15.6 +4.4
+1.0
+0.8
+0.6
+0.4
+0.2
+0.0
+0.2
+0.4
+Rval Rcov Reff Rname Rargv
+erocS
+Qwen3-4B Qwen3-8B Qwen2.5-7B Granite-4.1-8B
+Step 0
+Step 150
+Step 350
+Rval Rcov Reff Rname Rargv Rval Rcov Reff Rname Rargv Rval Rcov Reff Rname Rargv
+Figure4: Rewardcomponentprogressionatsteps0, 150, and350acrossallfourmodels. Coverage(R )
+cov
+showsthelargestandmostconsistentimprovement;validity(R )saturatesearly.
+val
+4.5 Reward-ComponentAblation β=0row: flatteningtheadaptivebudgetinR
+efficiency
+loses MT −6.6 and τ2 −3.1, isolating the per-
+To verify that each reward term contributes, we re- taskground-truth-calltargetasthemostload-bearing
+train Qwen3-4B with the paper recipe (350 GRPO pieceoftheefficiencyformulation.
+steps) under six variants: each of the five reward
+componentszeroedinturn,plusaflat-budgetvariant
+4.6 ComparisontoSupervisedFine-Tuning
+that disables the adaptive efficiency target (β = 0).
+Table5reportsBFCLMulti-Turn,τ2-benchaverage,
+To isolate the contribution of the reward signal, we
+andT-EvalOverallagainstthefullreward. train an SFT baseline on the same training data (3
+Every component carries weight on at least one epochs,ms-swift)foreachmodelandevaluatealong-
+benchmark. Removing R
+name
+produces the largest side the base model and PROVE. Table 6 reports
+broad-spectrum drop (BFCL MT −6.0, T-Eval BFCLMulti-Turn,τ2-bench,andT-EvalOverall.
+−2.4); removing R
+arg
+collapses τ2 (−4.2 pts) while PROVE dominates SFT on 11 of 12 cells (4 mod-
+paradoxically lifting MT (the model relearns to els × 3 benchmarks), only ceding BFCL MT on
+fire calls aggressively without the argument-quality Qwen2.5-7B. The most striking pattern is on τ2-
+penalty). Dropping R or R each costs bench: SFT regresses below the base model on
+validity coverage
+MT −2 to −5 pts together with T-Eval drops, con- 3/4 models (Qwen3-4B −5.4, Qwen3-8B −14.3,
+firmingbothtermsshapegeneralisationbeyondtheir Granite-4.1-8B −5.3 pts), suggesting that imitat-
+specific signals. The strongest single result is the ing the synthetic trajectories without execution-
+10
+Table 5: Reward-component ablation on Qwen3-4B Table 6: Comparing PROVE (RL with our reward)
+with the paper recipe (350 GRPO steps). Each row against SFT on the same training data and the base
+drops one term from the combined reward; the last model. SFT is trained for 3 epochs with ms-swift;
+row keeps all terms but flattens the adaptive effi- PROVE runs 350 GRPO steps. PROVE dominates
+ciency budget (β = 0). ∆ vs. the full reward is SFTonallthreebenchmarksfor3/4models,andties
+shown in parentheses. TAU2 is reported on a 0–100 orwinsonthefourth. Bestresultperrowinbold. τ2
+scale. Code-side names map as R ≡ R , ona0–100scale.
+validity atomic
+R ≡R ,R ≡R .
+coverage orch efficiency eff
+Model Method BFCLMT τ2 T-Eval
+Variant BFCLMT TAU2 T-Eval
+Qwen3-4B Base 18.8 25.0 76.7
+Fullreward(PROVE) 29.0 28.6 78.2 SFT 26.2 19.6 74.7
+PROVE 29.0 28.6 78.2
+−R
+validity
+23.8-5.2 30.7+2.1 74.8-3.4
+−R
+coverage
+26.6-2.4 29.0+0.4 76.7-1.5 Qwen3-8B Base 26.0 25.8 78.8
+−R
+efficiency
+25.0-4.0 28.5-0.1 76.5-1.6 SFT 22.4 11.5 76.3
+−R
+name
+23.0-6.0 27.8-0.8 75.8-2.4 PROVE 26.9 29.3 80.7
+−R arg 30.6+1.6 24.5-4.2 77.6-0.6 Qwen2.5-7B Base 13.1 15.0 66.9
+R efficiency flat(β=0) 22.4-6.6 25.5-3.1 78.6+0.4 SFT 22.5 15.2 72.2
+PROVE 16.8 21.8 73.4
+Granite-4.1-8B Base 33.4 24.9 73.5
+groundedrewarddamagesthemulti-turnagenticbe-
+SFT 29.0 19.6 75.2
+haviour the base model already had. PROVE never
+PROVE 33.5 31.3 77.9
+regresses on τ2 relative to base, and improves it by
++3.5 to +6.8 across all four models. The same ef-
+Table 7: Teacher ablation. We re-run the data-
+fectisvisiblebutmilderonT-Eval,whereSFTtrails
+synthesis pipeline (orchestrator + clarification) with
+PROVE by 1.2–4.4 pts. This indicates that the data
+Qwen3-32B as the teacher in place of Gemma-4-
+alone is insufficient: the reward signal is what con-
+31B-it,thentrainQwen3-4BandQwen3-8Bwiththe
+verts the trajectories into reliable multi-step orches-
+paper recipe (350 GRPO steps). Results are within
+tration.
+noise across both teachers on all three benchmarks,
+and both improve over the base model. Best result
+perrowinbold;τ2 ona0–100scale.
+4.7 TeacherAblation
+The orchestrator and clarification pipelines (§3.2) Model Setting BFCLMT τ2 T-Eval
+use a teacher LLM to drive query generation and Qwen3-4B Base 18.8 25.0 76.7
+assistant turns. To check whether our results de- Gemma-31B 29.0 28.6 78.2
+Qwen3-32B 22.6 29.0 76.8
+pend on a particular teacher, we regenerate the full
+training mixture using Qwen3-32B as the teacher Qwen3-8B Base 26.0 25.8 78.8
+in place of Gemma-4-31B-it, keeping every other Gemma-31B 26.9 29.3 80.7
+knob fixed (same prompts, same
+(cid:0)n(cid:1)
+dependency-
+Qwen3-32B 27.1 29.7 79.8
+2
+graph cache, same filtering). We then train Qwen3-
+4B and Qwen3-8B with the paper recipe (350 steps,
+the method’s gains stem from the reward formula-
+R =0.1,family-specificLR).
+arg tion and the live-execution training loop rather than
+Results in Table 7 are within noise on all three
+aparticularteacher’swritingstyle.
+benchmarks: τ2-bench scores are essentially iden-
+tical across teachers (∆<1 pt for both models) and
+T-Eval differs by at most 1.4 pts. BFCL Multi-Turn 5 Conclusion
+shows a Qwen3-4B regression with the Qwen3-32B
+teacher (−6.4 pts) but no such effect on Qwen3-8B We presented PROVE (Programmatic Rewards On
+(+0.2). This robustness to teacher choice suggests Verified Environments), which couples live state-
+11
+ful MCP environments, state-grounded multi-turn Maxwell Crouse, Ibrahim Abdelaziz, Kshitij Fad-
+datasynthesis,andaprogrammaticmulti-component nis,SivaSankalpPatel,KinjalBasu,ChulakaGu-
+RL reward into a single training loop—no LLM- nasekara, Sadhana Kumaravel, Asim Munawar,
+as-judge, no manual annotation. Two reward-side and Pavan Kapanipathi. Simulating complex
+components carry the most weight: an adaptive ef- multi-turntoolcallinginteractionsinstatelessex-
+ficiency penalty R with a complexity-scaled ecutionenvironments,2026.
+efficiency
+call budget, which counters the verbosity incentive
+Jiazhan Feng, Ruochen Li, Junheng Hao, and
+ofpure-recallcoveragerewards,andatool-namesig-
+Xin Eric Wang. ReTool: Reinforcement learning
+nal R ; an ablation (§4.5) shows each is respon-
+name
+forstrategictooluseinLLMs,2025.
+sible for a ∼9-point aggregate drop across the three
+benchmarks when removed. Validity, coverage, and IBM Research. Granite 4.1 language mod-
+anargument-valuematchingsignal(thelatterdispro- els, 2025. https://huggingface.
+portionatelyhelpingmulti-turndialog)roundoutthe co/ibm-granite/granite-4.
+five-component reward. With a single reward con- 1-8b-instruct.
+figuration and only learning rate tuned per family,
+four models from two architecture families improve MadeAgents. xLAM-Irrelevance-7.5k.
+on BFCL Multi-Turn, τ2-bench, and T-Eval, sup- https://huggingface.co/datasets/
+portingourcentralclaim: acompact,fullyprogram-
+MadeAgents/xlam-irrelevance-7.5k,
+matic reward coupled with grounded data synthe- 2024. HuggingFacedataset.
+siscandriveconsistentmulti-steptool-orchestration
+Shishir G. Patil, Huanzhi Mao, Charlie Cheng-Jie
+gainswithoutlarge-scaledatapipelinesorexpensive
+Ji, Fanjia Yan, Vishnu Suresh, Ion Stoica, and
+judgemodels.
+Joseph E. Gonzalez. The berkeley function call-
+ingleaderboard(BFCL):Fromtoolusetoagentic
+evaluationoflargelanguagemodels. InAdvances
+References
+inNeuralInformationProcessingSystems,2024.
+Anthropic. Model context protocol. 2024.
+AksharaPrabhakar,ZuxinLiu,WeiranYao,Jianguo
+https://modelcontextprotocol.io/.
+Zhang, Tian Lan, Rithesh Murthy, Zhiwei Liu,
+Thai Hoang, Shelby Heinecke, Huan Wang, Sil-
+VictorBarres,HonghuaDong,SohamRay,XujieSi,
+vio Savarese, and Caiming Xiong. APIGen-MT:
+and Karthik Narasimhan. τ2-bench: Evaluating
+Agentic PIpeline GENeration for multi-turn tool-
+conversational agents in a dual-control environ-
+useagents,2025.
+ment,2025.
+QwenTeam. Qwen2.5technicalreport,2025a.
+ChengChenetal. ToolRL:Rewardisalltoollearn-
+ingneeds,2025. QwenTeam. Qwen3technicalreport,2025b.
+Qwen Team. AgenticQwen: Building tool-use
+Zehui Chen, Weihua Du, Wenwei Zhang, Kuikun
+agentswithdualdataflywheelsandbehaviortrees,
+Liu, Jiangning Liu, Miao Zheng, Jingming Zhuo,
+2026.
+SongyangZhang,DahuaLin,KaiChen,andFeng
+Zhao. T-Eval: Evaluatingthetoolutilizationcapa-
+Hayley Ross, Ameya Sunil Mahabaleshwarkar, and
+bilityoflargelanguagemodelsstepbystep,2023.
+Yoshi Suhara. When2Call: When (not) to call
+tools. InProceedingsofNAACL,2025.
+Jiayang Cheng, Xin Liu, Zhihan Zhang, Haoyang
+Wen, Zixuan Zhang, Qingyu Yin, Shiyang Li, Timo Schick, Jane Dwivedi-Yu, Roberto Dessì,
+Priyanka Nigam, Bing Yin, Chao Zhang, and Roberta Raileanu, Maria Lomeli, Eric Hambro,
+YangqiuSong. TrainingLLMsformulti-steptool LukeZettlemoyer,NicolaCancedda,andThomas
+orchestration with constrained data synthesis and Scialom. Toolformer: Languagemodelscanteach
+graduatedrewards,2026. themselvestousetools,2023.
+12
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Murthy,EricHu,ZeyuanChen,RanXu,JuanCar-
+Xu, Junxiao Song, Xiao Bi, Haowei Zhang, losNiebles,ShelbyHeinecke,HuanWang,Silvio
+Mingchuan Zhang, Y. K. Li, Y. Wu, and Daya Savarese,andCaimingXiong.xLAM:Afamilyof
+Guo. DeepSeekMath: Pushing the limits of largeactionmodelstoempowerAIagentsystems,
+mathematicalreasoninginopenlanguagemodels, 2024.
+2024.
+Shaokun Zhang, Yi Dong, Jieyu Zhang, Jan Kautz,
+Guangming Sheng et al. VERL: An extensible Bryan Catanzaro, Andrew Tao, Qingyun Wu,
+framework for post-training of LLMs via RL, ZhidingYu,andGuilinLiu. Nemotron-Research-
+2024. https://github.com/volcengine/verl. Tool-N1: Exploring tool-using language models
+withreinforcedreasoning,2025a.
+Zhangchen Xu, Adriana Meza Soria, Shawn Tan,
+Anurag Roy, Ashish Sunil Agrawal, Radha Yabo Zhang, Yirong Zeng, Qingfu Li, Zhenyi Hu,
+Poovendran, and Rameswar Panda. TOUCAN: KaiHan, andWangmengZuo. Tool-R1: Sample-
+Synthesizing 1.5m tool-agentic data from real- efficient reinforcement learning for agentic tool
+worldMCPenvironments,2025. use,2025b.
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Weikang Zhao, Xili Wang, et al. MUA-RL: Multi-
+Shafran,KarthikNarasimhan,andYuanCao. Re- turnuser-interactingagentreinforcementlearning
+Act: Synergizingreasoningandactinginlanguage foragentictooluse,2025.
+models,2023.
+Lucen Zhong, Zhengxiao Du, Akari Asai, and Jie
+Fan Yin, Zifeng Wang, I-Hung Hsu, Jun Yan, Tang. ComplexFuncBench: Exploring multi-
+Ke Jiang, Yanfei Chen, Jindong Gu, Long T. Le, step and constrained function calling under long-
+Kai-Wei Chang, Chen-Yu Lee, Hamid Palangi, contextscenario,2025.
+and Tomas Pfister. Magnet: Multi-turn tool-use
+data synthesis and distillation via graph transla-
+tion,2025.
+Yuanqing Yu, Zhefan Wang, Weizhi Ma, Zhicheng
+Guo, Jingtao Zhan, Shuai Wang, Chuhan Wu,
+ZhiqiangGuo,andMinZhang.StepTool: Enhanc-
+ingmulti-steptoolusageinLLMsviastep-grained
+reinforcementlearning,2024.
+Xingshan Zeng, Weiwen Liu, Lingzhi Wang,
+Liangyou Li, Fei Mi, Yasheng Wang, Lifeng
+Shang, Xin Jiang, and Qun Liu. ToolACE-MT:
+Non-autoregressive generation for agentic multi-
+turn interaction. In International Conference on
+LearningRepresentations(ICLR),2026.
+Yirong Zeng, Xiao Ding, Yutai Hou, Yuxian Wang,
+Li Du, Juyi Dai, et al. Tool Zero: Training tool-
+augmented LLMs via pure RL from scratch. In
+FindingsofEMNLP,2025.
+Jianguo Zhang, Tian Lan, Ming Zhu, Zuxin Liu,
+Thai Hoang, Shirley Kokane, Weiran Yao, Jun-
+taoTan,AksharaPrabhakar,HaolinChen,Zhiwei
+Liu, Yihao Feng, Tulika Awalgaonkar, Rithesh
+13

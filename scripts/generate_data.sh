@@ -22,8 +22,8 @@ cd "${PROJECT_ROOT}"
 
 # ── Parse args ─────────────────────────────────────────────────────
 MODEL=""
-COUNT=500
-VAL_COUNT=100
+COUNT=5000
+VAL_COUNT=500
 DOMAIN="all"
 SUITE="configs/live_mcp/suite_mvp.yaml"
 SEED=42

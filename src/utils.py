@@ -1,12 +1,12 @@
 """
-共享工具函数：extra_info / metadata 的 JSON-string normalization。
+共享工具函数：extra_info / metadata 的 JSON-string normalization、数据迭代。
 
 verl/pyarrow 序列化后，extra_info 及其嵌套字段可能变为 JSON 字符串。
 本模块提供统一的 normalize 函数，供 reward、replay loop、register_estimator 复用。
 """
 
 import json
-from typing import Any
+from typing import Any, Iterable
 
 
 def normalize_extra_info(value: Any) -> dict:
@@ -127,4 +127,29 @@ def extract_json(text: str) -> dict[str, Any]:
             except json.JSONDecodeError:
                 continue
 
-    raise ValueError(f"Could not extract valid JSON from: {text[:200]}...")
+    # All parsing strategies failed — return empty dict so callers
+    # don't crash on .get() with AttributeError: 'NoneType'
+    return {}
+
+def iter_prompt_messages(records: list[dict]) -> Iterable[list[dict]]:
+    """从 parquet records 中迭代 prompt 消息。
+
+    parquet 里 prompt 列实际是 list<struct{role, content}>。
+    保留对 JSON 字符串形式的兜底（旧数据兼容）。
+    """
+    import json as _json
+    for r in records:
+        p = r.get("prompt")
+        if p is None:
+            yield [{"role": "user", "content": ""}]
+            continue
+        if isinstance(p, list):
+            yield list(p)
+            continue
+        if isinstance(p, str):
+            try:
+                yield _json.loads(p)
+            except (ValueError, TypeError):
+                yield [{"role": "user", "content": p}]
+            continue
+        yield [{"role": "user", "content": str(p)}]

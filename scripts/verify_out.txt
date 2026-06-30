@@ -1,0 +1,19 @@
+=== columns ===
+['prompt', 'data_source', 'reward_model', 'extra_info', 'uid', 'group_id', 'perturbation_level', 'scenario_type']
+
+=== extra_info keys (row 1) ===
+['budget', 'conversation_rounds', 'domain', 'generation_method', 'group_id', 'has_distractors', 'has_missing_function', 'hidden_tools', 'oracle_calls', 'perturbation_level', 'required_tools', 'scenario_type', 'session_seed', 'success_criteria', 'target_servers', 'task_id', 'uid', 'visible_tool_names']
+
+=== row 1 prompt roles ===
+roles: ['system', 'user', 'assistant', 'user', 'assistant', 'user']
+any tool role? False
+
+=== row 1 oracle_calls preview ===
+  tool_call | set_reminder | {'event_id': 'evt_002', 'minutes_before': 60, 'method': 'email'}
+  tool_call | list_events | {}
+  tool_call | list_events | {}
+  tool_call | search_events | {'query': 'Design Review'}
+  tool_call | search_events | {'query': 'Budget Check'}
+
+=== assistant content row 1 ===
+'[The assistant processes this request using available tools.]'

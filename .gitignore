@@ -1,0 +1,56 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/*
+!logs/.gitkeep
+
+# Data output (keep directory structure, ignore generated data)
+data/*.parquet
+data/*.json
+data/*.log
+data/*.csv
+data/experiments/*/
+!data/experiments/.gitkeep
+
+# Training artifacts
+checkpoints/
+wandb/
+*.pt
+*.bin
+*.safetensors
+
+# Environment / secrets
+.env
+.env.*
+*.key
+*.pem
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Misc
+tmp_*

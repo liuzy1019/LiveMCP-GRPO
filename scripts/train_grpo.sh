@@ -1,25 +1,39 @@
 #!/bin/bash
-# GRPO training entry point — flexible multi-GPU via gpu_config.sh.
+# GRPO 训练入口 —— PyTorch Lightning 风格配置 + 实验管理。
 #
-# Usage:
-#   bash scripts/train_grpo.sh                           # all detected GPUs
-#   bash scripts/train_grpo.sh --gpus 0,1,2,3            # specific GPUs
-#   bash scripts/train_grpo.sh --total-steps 100         # override steps
-#   CUDA_VISIBLE_DEVICES=4,5,6,7 bash scripts/train_grpo.sh  # env override
-#   GPU_COUNT=4 bash scripts/train_grpo.sh               # limit GPU count
+# 支持模式：
+#   - 单卡:    bash scripts/train_grpo.sh --model models/Qwen3-4B
+#   - 多卡 FSDP: bash scripts/train_grpo.sh --gpus 0,1,2,3
+#   - WandB:   bash scripts/train_grpo.sh --wandb
+#   - 环境变量覆盖所有 TrainerConfig 字段（OVAL_* 前缀）
 #
-# Env var overrides:
-#   OVAL_TRAIN_FILE, OVAL_VAL_FILE     -- data paths
-#   OVAL_TOTAL_STEPS                   -- training steps
-#   OVAL_ROLLOUT_N                     -- rollouts per group
-#   OVAL_RESPONSE_LENGTH               -- max response tokens
-#   OVAL_GPU_MEM_UTIL                  -- override GPU memory utilization
+# Options:
+#   --model PATH              模型路径（default: models/Qwen3-4B）
+#   --gpus IDS                指定 GPU（如 0,1,2,3）
+#   --devices N               限制 GPU 数量
+#   --total-steps N           训练步数
+#   --wandb                   启用 WandB 日志
+#   --wandb-project PROJECT   WandB 项目名
+#   --wandb-entity ENTITY     WandB entity
+#   --wandb-tags TAGS         WandB 标签（逗号分隔）
+#   --strategy {fsdp,deepspeed,ddp}  分布式策略（default: fsdp）
+#   --lr LR                   学习率
+#   --batch-size N            训练 batch size
+#   --rollout-n N             Rollout 每组数量
+#   --debug                   调试模式（更多日志）
+#
+# 实验命名：自动生成 {日期}_{strategy}_{GPU数}gpu_b{batch}_lr{学习率}，如：
+#   20260629_fsdp_4gpu_b32_lr1e-6/
+#
+# Env var 覆盖（优先级最高）：
+#   OVAL_MODEL_PATH, OVAL_TRAIN_FILE, OVAL_VAL_FILE
+#   OVAL_TOTAL_STEPS, OVAL_ROLLOUT_N, OVAL_RESPONSE_LENGTH
+#   OVAL_GPU_MEM_UTIL, OVAL_USE_WANDB, OVAL_WANDB_PROJECT
+#   OVAL_SEED, OVAL_LR 等
 
 set -euo pipefail
 
-# ---- vLLM orphan cleanup trap ----
-# verl/vLLM rollout can leave zombie EngineCore processes.
-# This trap runs on any exit (normal, error, or signal) to clean them up.
+# ── vLLM orphan cleanup trap ────────────────────────────────────────
 _cleanup_vllm_orphans() {
     local exit_code=$?
     VLLM_ORPHANS=$(ps -eo pid,comm --no-headers 2>/dev/null | awk '/VLLM::EngineCore/{print $1}' || true)
@@ -37,7 +51,7 @@ trap _cleanup_vllm_orphans EXIT INT TERM
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
-# ---- environment ----
+# ── Environment ─────────────────────────────────────────────────────
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export NVCC_APPEND_FLAGS=-allow-unsupported-compiler
@@ -51,28 +65,50 @@ unset PYTORCH_CUDA_ALLOC_CONF 2>/dev/null || true
 export TMPDIR="${TMPDIR:-/tmp/ssgrpo_tmp}"
 export RAY_TMPDIR="${RAY_TMPDIR:-/tmp/ssgrpo_ray}"
 export LIVEMCP_RAY_TMPDIR="${LIVEMCP_RAY_TMPDIR:-${RAY_TMPDIR}}"
-mkdir -p "${TMPDIR}" "${RAY_TMPDIR}" outputs
+mkdir -p "${TMPDIR}" "${RAY_TMPDIR}"
 
-# ---- cleanup stale Ray ----
+# ── Parse CLI args ──────────────────────────────────────────────────
+GPU_ARG=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --gpus)       GPU_ARG="$2"; shift 2 ;;
+        --gpus=*)     GPU_ARG="${1#*=}"; shift ;;
+        --devices)    export OVAL_DEVICES="$2"; shift 2 ;;
+        --devices=*)  export OVAL_DEVICES="${1#*=}"; shift ;;
+        --model)      export OVAL_MODEL_PATH="$2"; shift 2 ;;
+        --model=*)    export OVAL_MODEL_PATH="${1#*=}"; shift ;;
+        --total-steps)   export OVAL_TOTAL_STEPS="$2"; shift 2 ;;
+        --total-steps=*) export OVAL_TOTAL_STEPS="${1#*=}"; shift ;;
+        --wandb)      export OVAL_USE_WANDB=1; shift ;;
+        --no-wandb)   export OVAL_USE_WANDB=0; shift ;;
+        --wandb-project) export OVAL_WANDB_PROJECT="$2"; shift 2 ;;
+        --wandb-project=*) export OVAL_WANDB_PROJECT="${1#*=}"; shift ;;
+        --wandb-entity) export OVAL_WANDB_ENTITY="$2"; shift 2 ;;
+        --wandb-entity=*) export OVAL_WANDB_ENTITY="${1#*=}"; shift ;;
+        --wandb-tags) export OVAL_WANDB_TAGS="$2"; shift 2 ;;
+        --wandb-tags=*) export OVAL_WANDB_TAGS="${1#*=}"; shift ;;
+        --strategy)   export OVAL_STRATEGY="$2"; shift 2 ;;
+        --strategy=*) export OVAL_STRATEGY="${1#*=}"; shift ;;
+        --lr)         export OVAL_LR="$2"; shift 2 ;;
+        --lr=*)       export OVAL_LR="${1#*=}"; shift ;;
+        --batch-size) export OVAL_TRAIN_BATCH_SIZE="$2"; shift 2 ;;
+        --batch-size=*) export OVAL_TRAIN_BATCH_SIZE="${1#*=}"; shift ;;
+        --rollout-n)  export OVAL_ROLLOUT_N="$2"; shift 2 ;;
+        --rollout-n=*) export OVAL_ROLLOUT_N="${1#*=}"; shift ;;
+        --debug)      export OVAL_DEBUG=1; shift ;;
+        *)            echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+# ── Cleanup stale Ray ───────────────────────────────────────────────
 if ray status &>/dev/null 2>&1; then
     echo "[cleanup] Stopping stale Ray cluster..."
     ray stop --force 2>/dev/null || true
     sleep 2
 fi
 
-# ---- GPU detection (flexible, via gpu_config.sh) ----
-# Accept --gpus <ids> argument, pass remaining args through
-GPU_ARG=""
-REMAINING_ARGS=()
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --gpus) GPU_ARG="$2"; shift 2 ;;
-        --gpus=*) GPU_ARG="${1#*=}"; shift ;;
-        *) REMAINING_ARGS+=("$1"); shift ;;
-    esac
-done
-set -- "${REMAINING_ARGS[@]}"
-
+# ── GPU detection ───────────────────────────────────────────────────
 if [ -n "${GPU_ARG}" ]; then
     . scripts/gpu_config.sh "${GPU_ARG}"
 else
@@ -82,174 +118,169 @@ fi
 # Allow env override of mem_util
 GPU_MEM_UTIL="${OVAL_GPU_MEM_UTIL:-${GPU_MEM_UTIL}}"
 
-# ---- per-tier defaults (overrideable via env) ----
+# ── Per-tier defaults (overrideable via env) ────────────────────────
 if [ "${GPU_TIER}" = "L20" ]; then
-    PROMPT_LENGTH="${OVAL_PROMPT_LENGTH:-12384}"
-    RESPONSE_LENGTH="${OVAL_RESPONSE_LENGTH:-16384}"
-    MAX_NUM_SEQS="${OVAL_MAX_NUM_SEQS:-64}"
-    MICRO_BATCH="${OVAL_MICRO_BATCH:-2}"
-    TRAIN_BATCH_SIZE="${OVAL_TRAIN_BATCH_SIZE:-32}"
-    MINI_BATCH_SIZE="${OVAL_MINI_BATCH_SIZE:-8}"
-    ROLLOUT_N="${OVAL_ROLLOUT_N:-8}"
-elif [ "${GPU_TIER}" = "A10" ]; then
-    PROMPT_LENGTH="${OVAL_PROMPT_LENGTH:-10240}"
-    RESPONSE_LENGTH="${OVAL_RESPONSE_LENGTH:-4096}"
-    MAX_NUM_SEQS="${OVAL_MAX_NUM_SEQS:-8}"
-    MICRO_BATCH="${OVAL_MICRO_BATCH:-1}"
-    TRAIN_BATCH_SIZE="${OVAL_TRAIN_BATCH_SIZE:-8}"
-    MINI_BATCH_SIZE="${OVAL_MINI_BATCH_SIZE:-8}"
-    ROLLOUT_N="${OVAL_ROLLOUT_N:-8}"
+    : "${OVAL_PROMPT_LENGTH:=12384}"
+    : "${OVAL_RESPONSE_LENGTH:=16384}"
+    : "${OVAL_MAX_NUM_SEQS:=64}"
+    : "${OVAL_MICRO_BATCH:=2}"
+    : "${OVAL_TRAIN_BATCH_SIZE:=32}"
+    : "${OVAL_MINI_BATCH_SIZE:=8}"
+    : "${OVAL_ROLLOUT_N:=16}"
 elif [ "${GPU_TIER}" = "A100" ] || [ "${GPU_TIER}" = "Hopper" ]; then
-    PROMPT_LENGTH="${OVAL_PROMPT_LENGTH:-16384}"
-    RESPONSE_LENGTH="${OVAL_RESPONSE_LENGTH:-16384}"
-    MAX_NUM_SEQS="${OVAL_MAX_NUM_SEQS:-128}"
-    MICRO_BATCH="${OVAL_MICRO_BATCH:-4}"
-    TRAIN_BATCH_SIZE="${OVAL_TRAIN_BATCH_SIZE:-64}"
-    MINI_BATCH_SIZE="${OVAL_MINI_BATCH_SIZE:-16}"
-    ROLLOUT_N="${OVAL_ROLLOUT_N:-16}"
+    : "${OVAL_PROMPT_LENGTH:=16384}"
+    : "${OVAL_RESPONSE_LENGTH:=16384}"
+    : "${OVAL_MAX_NUM_SEQS:=128}"
+    : "${OVAL_MICRO_BATCH:=4}"
+    : "${OVAL_TRAIN_BATCH_SIZE:=64}"
+    : "${OVAL_MINI_BATCH_SIZE:=16}"
+    : "${OVAL_ROLLOUT_N:=16}"
+elif [ "${GPU_TIER}" = "A10" ]; then
+    : "${OVAL_PROMPT_LENGTH:=10240}"
+    : "${OVAL_RESPONSE_LENGTH:=4096}"
+    : "${OVAL_MAX_NUM_SEQS:=8}"
+    : "${OVAL_MICRO_BATCH:=1}"
+    : "${OVAL_TRAIN_BATCH_SIZE:=8}"
+    : "${OVAL_MINI_BATCH_SIZE:=8}"
+    : "${OVAL_ROLLOUT_N:=8}"
 else
-    PROMPT_LENGTH="${OVAL_PROMPT_LENGTH:-10240}"
-    RESPONSE_LENGTH="${OVAL_RESPONSE_LENGTH:-2048}"
-    MAX_NUM_SEQS="${OVAL_MAX_NUM_SEQS:-8}"
-    MICRO_BATCH="${OVAL_MICRO_BATCH:-1}"
-    TRAIN_BATCH_SIZE="${OVAL_TRAIN_BATCH_SIZE:-8}"
-    MINI_BATCH_SIZE="${OVAL_MINI_BATCH_SIZE:-8}"
-    ROLLOUT_N="${OVAL_ROLLOUT_N:-4}"
+    : "${OVAL_PROMPT_LENGTH:=10240}"
+    : "${OVAL_RESPONSE_LENGTH:=2048}"
+    : "${OVAL_MAX_NUM_SEQS:=8}"
+    : "${OVAL_MICRO_BATCH:=1}"
+    : "${OVAL_TRAIN_BATCH_SIZE:=8}"
+    : "${OVAL_MINI_BATCH_SIZE:=8}"
+    : "${OVAL_ROLLOUT_N:=4}"
 fi
 
-# ---- algorithm parameters (hardware-independent) ----
-MODEL_PATH="${OVAL_MODEL_PATH:-models/Qwen3-4B}"
-REWARD_FN_PATH="src/reward/oval_reward_fn.py"
-AGENT_LOOP="livemcp_oval"
+# ── Export tier-derived defaults ────────────────────────────────────
+# 这些 : "${VAR:=default}" 已经在上面按 tier 设置好了，这里兜底
+: "${OVAL_PROMPT_LENGTH:=10240}"
+: "${OVAL_RESPONSE_LENGTH:=2048}"
+: "${OVAL_MAX_NUM_SEQS:=8}"
+: "${OVAL_MICRO_BATCH:=1}"
+: "${OVAL_TRAIN_BATCH_SIZE:=8}"
+: "${OVAL_MINI_BATCH_SIZE:=8}"
+: "${OVAL_ROLLOUT_N:=8}"
 
-# env var overrides (OVAL_* prefix)
-TRAIN_FILE="${OVAL_TRAIN_FILE:-data/train.parquet}"
-VAL_FILE="${OVAL_VAL_FILE:-data/val.parquet}"
-TOTAL_STEPS="${OVAL_TOTAL_STEPS:-100}"
+export OVAL_PROMPT_LENGTH OVAL_RESPONSE_LENGTH OVAL_MAX_NUM_SEQS
+export OVAL_MICRO_BATCH OVAL_TRAIN_BATCH_SIZE OVAL_MINI_BATCH_SIZE OVAL_ROLLOUT_N
+export OVAL_GPU_MEM_UTIL="${GPU_MEM_UTIL}"
 
-LR="${OVAL_LR:-1e-6}"
-LR_WARMUP_RATIO="${OVAL_LR_WARMUP_RATIO:-0.1}"
-KL_COEF="${OVAL_KL_COEF:-0.01}"
-PPO_EPOCHS="${OVAL_PPO_EPOCHS:-1}"
-GRAD_CLIP="${OVAL_GRAD_CLIP:-1.0}"
-TEMPERATURE="${OVAL_TEMPERATURE:-0.7}"
-TOP_P="${OVAL_TOP_P:-0.95}"
-ROLLOUT_TP="${OVAL_ROLLOUT_TP:-1}"
-LOG_PROB_MICRO_BATCH="${OVAL_LOG_PROB_MICRO_BATCH:-1}"
-VAL_BATCH_SIZE="${OVAL_VAL_BATCH_SIZE:-${TRAIN_BATCH_SIZE}}"
+# ── Setup Python (config + experiment) ──────────────────────────────
+# 将结果写入临时 JSON 文件，避免 shell 字符串转义 / marker 匹配问题
+CONDA_PYTHON="${CONDA_PYTHON:-python3}"
+CONFIG_JSON_FILE=$(mktemp /tmp/livemcp_config.XXXXXX.json)
 
-# FSDP offload: defaults from gpu_config.sh, env overrides
-ACTOR_PARAM_OFFLOAD="${OVAL_ACTOR_PARAM_OFFLOAD:-${PARAM_OFFLOAD}}"
-REF_PARAM_OFFLOAD="${OVAL_REF_PARAM_OFFLOAD:-${PARAM_OFFLOAD}}"
+# 把 shell 布尔值转成 Python 可识别的 True/False
+_py_bool() {
+    case "${1:-false}" in true|1|True|TRUE) echo "True" ;; *) echo "False" ;; esac
+}
 
-# Phase 1 default: R_task + C_safety only (no F_gamma / P_process)
-export OVAL_I_SHAPE=0
-export OVAL_I_PROCESS=0
+"${CONDA_PYTHON}" -c "
+import json, os, sys
+sys.path.insert(0, '${PROJECT_ROOT}')
 
-echo "============================================"
-echo "OVAL-MCP GRPO Training"
-echo "============================================"
-echo "MODEL:     ${MODEL_PATH}"
-echo "GPU:       ${GPU_COUNT}x ${GPU_TIER} (${GPU_MODEL})"
-echo "GPU_IDS:   ${GPU_IDS}"
-echo "TRAIN:     ${TRAIN_FILE}"
-echo "VAL:       ${VAL_FILE}"
-echo "REWARD:    ${REWARD_FN_PATH}"
-echo "AGENT:     ${AGENT_LOOP}"
-echo "STEPS:     ${TOTAL_STEPS}"
-echo "ROLLOUT_N: ${ROLLOUT_N}"
-echo "BATCH:     ${TRAIN_BATCH_SIZE} (mini=${MINI_BATCH_SIZE}, micro=${MICRO_BATCH})"
-echo "RESPONSE:  ${RESPONSE_LENGTH}"
-echo "PROMPT:    ${PROMPT_LENGTH}"
-echo "MEM_UTIL:  ${GPU_MEM_UTIL}"
-echo "FSDP:      actor_offload=${ACTOR_PARAM_OFFLOAD} ref_offload=${REF_PARAM_OFFLOAD}"
-echo "============================================"
+from src.training.trainer_config import (
+    TrainerConfig, ExperimentManager, resolve_gpu_info, print_config_summary,
+)
 
-# ---- register estimator ----
-export PYTHONPATH=".:${PYTHONPATH:-}"
+config = TrainerConfig.from_env(
+    devices=${GPU_COUNT},
+    strategy='${OVAL_STRATEGY:-fsdp}',
+    gpu_mem_util=${GPU_MEM_UTIL:-0.6},
+    enforce_eager=$(_py_bool "${ENFORCE_EAGER:-false}"),
+    free_cache_engine=$(_py_bool "${FREE_CACHE_ENGINE:-true}"),
+    fsdp_param_offload=$(_py_bool "${PARAM_OFFLOAD:-false}"),
+    rollout_tp=${OVAL_ROLLOUT_TP:-1},
+    log_prob_micro_batch=${OVAL_LOG_PROB_MICRO_BATCH:-1},
+)
 
-# ---- validate data ----
+num_gpu, gpu_ids, gpu_model = resolve_gpu_info(config.devices)
+
+exp = ExperimentManager(config)
+run_dir = exp.setup()
+
+wandb_dir = run_dir / 'wandb'
+wandb_dir.mkdir(parents=True, exist_ok=True)
+
+overrides = config.to_hydra_overrides()
+overrides.append(f'trainer.default_local_dir={run_dir}/checkpoints')
+overrides.append(f'trainer.logger={config.to_logger_list()}')
+
+print_config_summary(config, num_gpu, gpu_model)
+
+result = {
+    'overrides': overrides,
+    'run_dir': str(run_dir),
+    'wandb_dir': str(wandb_dir),
+    'gpu_ids': gpu_ids,
+    'num_gpu': num_gpu,
+    'use_wandb': config.use_wandb,
+    'wandb_project': config.wandb_project,
+    'run_name': config.run_name,
+}
+with open('${CONFIG_JSON_FILE}', 'w') as f:
+    json.dump(result, f, indent=2)
+"
+
+# 读取 JSON 结果
+RUN_DIR=$("${CONDA_PYTHON}" -c "import json; print(json.load(open('${CONFIG_JSON_FILE}'))['run_dir'])")
+OVERRIDES_STR=$("${CONDA_PYTHON}" -c "import json; print(' '.join(json.load(open('${CONFIG_JSON_FILE}'))['overrides']))")
+USE_WANDB=$("${CONDA_PYTHON}" -c "import json; print(json.load(open('${CONFIG_JSON_FILE}'))['use_wandb'])")
+WANDB_DIR=$("${CONDA_PYTHON}" -c "import json; print(json.load(open('${CONFIG_JSON_FILE}'))['wandb_dir'])")
+rm -f "${CONFIG_JSON_FILE}"
+
+# ── Validate data ───────────────────────────────────────────────────
 echo ""
 echo "=== Validating data ==="
-python3 -c "
+"${CONDA_PYTHON}" -c "
 import sys, pandas as pd
-for path in ['${TRAIN_FILE}', '${VAL_FILE}']:
+from pathlib import Path
+
+train_file = '${OVAL_TRAIN_FILE:-data/train.parquet}'
+val_file = '${OVAL_VAL_FILE:-data/val.parquet}'
+
+for path in [train_file, val_file]:
+    if not Path(path).exists():
+        print(f'  WARNING: {path} does not exist!')
+        continue
     df = pd.read_parquet(path)
     domains = set()
+    from src.utils import normalize_extra_info
     for _, row in df.iterrows():
-        domains.add(row['extra_info']['domain'])
+        ei = normalize_extra_info(row['extra_info'])
+        domains.add(ei.get('domain', 'unknown'))
     print(f'  {path}: {len(df)} rows, domains={sorted(domains)}')
     if len(df) > 0:
-        ei = df.iloc[0]['extra_info']
+        ei = normalize_extra_info(df.iloc[0]['extra_info'])
         print(f'    sample: domain={ei.get(\"domain\")}, scenario={ei.get(\"scenario_type\")}')
 "
 echo ""
 
-# ---- launch training ----
-CONDA_PYTHON="${CONDA_PYTHON:-python3}"
+# ── Setup WandB env ─────────────────────────────────────────────────
+if [ "${USE_WANDB}" = "True" ]; then
+    export WANDB_DIR="${WANDB_DIR}"
+    export WANDB_PROJECT="${OVAL_WANDB_PROJECT:-oval-mcp-grpo}"
+    [ -n "${OVAL_WANDB_ENTITY:-}" ] && export WANDB_ENTITY="${OVAL_WANDB_ENTITY}"
+    echo "[wandb] Enabled: project=${WANDB_PROJECT}, dir=${WANDB_DIR}"
+else
+    echo "[wandb] Disabled (use --wandb to enable)"
+fi
+
+# ── Launch Training ─────────────────────────────────────────────────
+echo ""
+echo "=== Launching GRPO Training ==="
+echo "  Experiment: ${RUN_DIR}"
+echo "  Log:        ${RUN_DIR}/logs/train.log"
+echo ""
+
 exec "${CONDA_PYTHON}" "scripts/train_grpo.py" \
-    data.train_files="${TRAIN_FILE}" \
-    data.val_files="${VAL_FILE}" \
-    data.max_prompt_length="${PROMPT_LENGTH}" \
-    data.max_response_length="${RESPONSE_LENGTH}" \
-    data.train_batch_size="${TRAIN_BATCH_SIZE}" \
-    data.val_batch_size="${VAL_BATCH_SIZE}" \
-    data.shuffle=True \
-    data.filter_overlong_prompts=True \
-    data.truncation=left \
-    data.reward_fn_key=data_source \
-    data.return_raw_chat=True \
-    actor_rollout_ref.model.path="${MODEL_PATH}" \
-    actor_rollout_ref.actor.strategy=fsdp \
-    actor_rollout_ref.actor.ppo_mini_batch_size="${MINI_BATCH_SIZE}" \
-    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu="${MICRO_BATCH}" \
-    actor_rollout_ref.actor.ppo_epochs="${PPO_EPOCHS}" \
-    actor_rollout_ref.actor.grad_clip="${GRAD_CLIP}" \
-    actor_rollout_ref.actor.optim.lr="${LR}" \
-    actor_rollout_ref.actor.optim.lr_warmup_steps_ratio="${LR_WARMUP_RATIO}" \
-    actor_rollout_ref.actor.fsdp_config.param_offload="${ACTOR_PARAM_OFFLOAD}" \
-    actor_rollout_ref.actor.fsdp_config.model_dtype=bfloat16 \
-    actor_rollout_ref.ref.fsdp_config.model_dtype=bfloat16 \
-    actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.tensor_model_parallel_size="${ROLLOUT_TP}" \
-    actor_rollout_ref.rollout.gpu_memory_utilization="${GPU_MEM_UTIL}" \
-    actor_rollout_ref.rollout.free_cache_engine="${FREE_CACHE_ENGINE}" \
-    actor_rollout_ref.rollout.enforce_eager="${ENFORCE_EAGER}" \
-    actor_rollout_ref.rollout.n="${ROLLOUT_N}" \
-    actor_rollout_ref.rollout.temperature="${TEMPERATURE}" \
-    actor_rollout_ref.rollout.top_p="${TOP_P}" \
-    actor_rollout_ref.rollout.prompt_length="${PROMPT_LENGTH}" \
-    actor_rollout_ref.rollout.response_length="${RESPONSE_LENGTH}" \
-    actor_rollout_ref.rollout.max_num_batched_tokens="$((PROMPT_LENGTH + RESPONSE_LENGTH))" \
-    actor_rollout_ref.rollout.max_num_seqs="${MAX_NUM_SEQS}" \
-    actor_rollout_ref.rollout.enable_prefix_caching=False \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu="${LOG_PROB_MICRO_BATCH}" \
-    actor_rollout_ref.rollout.mode=async \
-    actor_rollout_ref.rollout.agent.default_agent_loop="${AGENT_LOOP}" \
-    actor_rollout_ref.rollout.agent.agent_loop_config_path=configs/agent_loop.yaml \
-    actor_rollout_ref.rollout.agent.num_workers="${GPU_COUNT}" \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu="${LOG_PROB_MICRO_BATCH}" \
-    actor_rollout_ref.ref.fsdp_config.param_offload="${REF_PARAM_OFFLOAD}" \
-    algorithm.adv_estimator=livemcp_grpo \
-    algorithm.use_kl_in_reward=True \
-    algorithm.kl_penalty=kl \
-    algorithm.kl_ctrl.type=fixed \
-    algorithm.kl_ctrl.kl_coef="${KL_COEF}" \
-    custom_reward_function.path="${REWARD_FN_PATH}" \
-    custom_reward_function.name=compute_score \
-    trainer.project_name=mcp_grpo \
-    trainer.experiment_name=train \
-    trainer.logger='["console"]' \
-    trainer.total_epochs=1 \
-    trainer.total_training_steps="${TOTAL_STEPS}" \
-    trainer.nnodes=1 \
-    trainer.n_gpus_per_node="${GPU_COUNT}" \
-    trainer.save_freq=50 \
-    trainer.val_before_train=False \
-    trainer.test_freq=-1 \
-    reward_model.enable=False \
-    2>&1 | tee "outputs/train_grpo.log"
+    ${OVERRIDES_STR} \
+    2>&1 | tee "${RUN_DIR}/logs/train.log"
 
 echo ""
 echo "=== Training Complete ==="
-echo "Check outputs/train_grpo.log for results"
+echo "  Results: ${RUN_DIR}"
+echo "  Log:     ${RUN_DIR}/logs/train.log"
+echo "  Checkpoints: ${RUN_DIR}/checkpoints/"

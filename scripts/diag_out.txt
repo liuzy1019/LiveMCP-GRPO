@@ -1,0 +1,51 @@
+=== task_planner 0-call rows 详情 ===
+  row 15 domain=calendar hidden=[] required=[] missing_func=False
+    query: reschedule the Team Sync meeting to Friday
+  row 23 domain=shopping hidden=[] required=[] missing_func=False
+    query: how many K3 Keyboards have been sold since last month
+  row 42 domain=banking hidden=[] required=[] missing_func=False
+    query: Can you help me transfer some money from my savings account to checking? I think $500 would be good.
+  row 45 domain=banking hidden=[] required=[] missing_func=False
+    query: transfer the client payment to my business account
+  row 53 domain=banking hidden=[] required=[] missing_func=False
+    query: this is the third time the order is wrong — can you look into it?
+  row 54 domain=banking hidden=[] required=[] missing_func=False
+    query: Can you help me transfer some money from my savings account to my checking one?
+  row 56 domain=banking hidden=[] required=[] missing_func=False
+    query: transfer the $2000 from the business account
+  row 59 domain=email hidden=[] required=[] missing_func=False
+    query: i need to schedule a sync with alice from the sprint planning email, but forgot to mention the time
+  row 60 domain=email hidden=[] required=[] missing_func=False
+    query: label all the Q3 reports as important
+  row 61 domain=email hidden=[] required=[] missing_func=False
+    query: label the Q2 review email as important before EOD
+  row 66 domain=email hidden=[] required=[] missing_func=False
+    query: this is the third time my order was wrong—can you track the one i reported yesterday?
+  row 70 domain=email hidden=[] required=[] missing_func=False
+    query: reply to the Q2 review thread with the updates i mentioned
+  row 80 domain=filesystem hidden=[] required=[] missing_func=False
+    query: I need to move that config file out of the projects folder, but I don't remember where it's supposed to go
+  row 90 domain=filesystem hidden=[] required=[] missing_func=False
+    query: how many .ini files are in the projects folder
+  row 95 domain=payments hidden=[] required=[] missing_func=False
+    query: Can you help me with the invoice for 1500 dollars that’s still pending?
+  row 98 domain=payments hidden=[] required=[] missing_func=False
+    query: send invoice inv_0001 to the client
+  row 142 domain=issue_tracker hidden=[] required=[] missing_func=False
+    query: assign the login timeout and PDF export issues to Charlie for the next sprint
+  row 147 domain=issue_tracker hidden=[] required=[] missing_func=False
+    query: this one is on fire — triage iss_0001 right away
+  row 149 domain=issue_tracker hidden=[] required=[] missing_func=False
+    query: assign that login timeout issue to Charlie
+  row 151 domain=issue_tracker hidden=[] required=[] missing_func=False
+    query: Can you help me assign that login timeout issue to someone? I think it's the one with high priority.
+  row 155 domain=team_chat hidden=[] required=[] missing_func=False
+    query: post the update to #releases about the deployment delay
+  row 157 domain=team_chat hidden=[] required=[] missing_func=False
+    query: how many messages have been posted in #engineering since october
+  row 163 domain=team_chat hidden=[] required=[] missing_func=False
+    query: post the update to #releases
+  row 170 domain=team_chat hidden=[] required=[] missing_func=False
+    query: post the update about the new feature to the engineering channel — need it up before the team meeting
+  row 173 domain=food_delivery hidden=[] required=[] missing_func=False
+    query: this is the third time Pizza Palace messed up my order — I need to cancel it but I don’t know what I even ordered this t

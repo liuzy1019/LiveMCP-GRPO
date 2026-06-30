@@ -24,8 +24,8 @@ DEFAULT_WEIGHTS = {
     "w_arg": 0.1,
     "w_struct": 0.6,
     "w_exec": 0.4,
-    "alpha_eff": 0.3,
-    "beta_budget": 0.3,
+    "alpha_eff": 0.5,
+    "beta_budget": 0.5,
 }
 
 
@@ -165,15 +165,16 @@ class TaskReward:
         if self._has_identity_violation(event_log, task):
             result.r_coverage = 0.0
 
-        # 3. R_name: unique tool name overlap
+        # 3. R_name: precision — fraction of model calls whose name is in GT
+        #    PROVE §4.2: R_name = |{c ∈ Ĉ : c.name ∈ GT_names}| / |Ĉ|
         required_names = self._required_tool_names(required_tool_calls)
         model_names = self._model_tool_names(tool_events)
         if n_calls == 0:
             result.r_name = 0.0
-        elif required_names:
-            result.r_name = len(model_names & required_names) / len(required_names)
         else:
-            result.r_name = 0.0
+            # 分母是模型调用总数（precision），惩罚调用不在 GT 中的工具
+            correct_calls = sum(1 for e in tool_events if e.tool_name in required_names)
+            result.r_name = correct_calls / n_calls
 
         # 4. R_arg: argument value match for aligned calls
         aligned_calls = self._identify_aligned_calls(tool_events, task, required_tool_calls)

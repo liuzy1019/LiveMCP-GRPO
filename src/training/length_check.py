@@ -14,7 +14,6 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from loguru import logger
 
@@ -48,25 +47,9 @@ def _percentile(sorted_xs: list[int], pct: float) -> int:
     return sorted_xs[idx]
 
 
-def _iter_prompt_messages(records: list[dict]) -> Iterable[list[dict]]:
-    """parquet 里 prompt 列实际是 list<struct{role, content}>。
-    保留对 JSON 字符串形式的兜底（旧数据兼容）。"""
-    import json as _json
-    for r in records:
-        p = r.get("prompt")
-        if p is None:
-            yield [{"role": "user", "content": ""}]
-            continue
-        if isinstance(p, list):
-            yield list(p)
-            continue
-        if isinstance(p, str):
-            try:
-                yield _json.loads(p)
-            except (ValueError, TypeError):
-                yield [{"role": "user", "content": p}]
-            continue
-        yield [{"role": "user", "content": str(p)}]
+# 向后兼容：iter_prompt_messages 已移至 utils.py，此处保留 re-export
+from src.utils import iter_prompt_messages
+_iter_prompt_messages = iter_prompt_messages
 
 
 def check_split_length(
@@ -209,6 +192,7 @@ def assert_e4_group_integrity(
     expected = expected_levels or {}
     grouped: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     n_filtered = 0
+    n_missing_group = 0
     for r, messages in zip(records, _iter_prompt_messages(records)):
         try:
             n = len(tokenizer.apply_chat_template(messages, add_generation_prompt=True))
@@ -217,7 +201,17 @@ def assert_e4_group_integrity(
         if n > max_prompt_length:
             n_filtered += 1
             continue
-        grouped[r.get("group_id", "")][r.get("perturbation_level", "none")] += 1
+        gid = r.get("group_id", "")
+        if not gid:
+            n_missing_group += 1
+            gid = f"_no_group_{n_missing_group}"  # 每个缺失 group_id 的行独立成组
+        grouped[gid][r.get("perturbation_level", "none")] += 1
+
+    if n_missing_group > 0:
+        logger.warning(
+            f"[{split}] {n_missing_group}/{len(records)} 行缺少 group_id，"
+            f"已拍平为独立 group（每组 1 条），StratAdv 将回退到 GRPO baseline"
+        )
 
     if expected:
         # 精确标签分布检查（E4 3:3:3 等）

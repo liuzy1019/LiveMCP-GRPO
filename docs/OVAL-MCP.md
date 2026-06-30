@@ -2057,6 +2057,42 @@ additional training diagnostics:
     - 该指标仅用于训练日志中的监控曲线，不参与梯度计算
 ```
 
+### 11.1.1 外部评测
+
+对标 PROVE 论文，使用以下开源 benchmark 做 external validation（与训练时的 OVAL-MCP reward 体系独立，仅作为泛化性证据）：
+
+```text
+BFCL Multi-Turn [Patil et al., 2024; Zhong et al., 2025]:
+  - 评估多步 function calling 能力
+  - 四个子类别：Base Multi-Turn / Missing Function / Missing Parameter / Long Context
+  - 报告 Overall MT 及各子类别 accuracy
+  - 项目已有 bfcl-eval>=2025.10 依赖（pyproject.toml）
+
+T-Eval [Chen et al., 2023]:
+  - 六个维度评估 tool-use：instruction following / planning / reasoning /
+    retrieval / understanding / review
+  - 分 JSON 和 string 两种 prompt 格式
+  - 报告各维度及 Overall 分数
+
+可选扩展（后续评估）：
+  - MCPMark [Wu et al., 2025]：127 个多步 MCP 任务，与训练环境同构，可对接
+    DomainAdapter 产出 OVAL-MCP 完整指标（C_safety / F_gamma / P_process）
+  - τ²-bench [Barres et al., 2025]：对话式 agent 评估，需 LLM user simulator
+```
+
+评测运行方式：
+```text
+1. 训练完成后，各 ablation model checkpoint 在 BFCL Multi-Turn 和 T-Eval 上跑评测
+2. BFCL Multi-Turn：使用 bfcl-eval 原生评测流程，不做修改
+3. T-Eval：使用官方评测脚本，不做修改
+4. 报告格式：各 model × 各 ablation × 各 benchmark 子指标矩阵
+```
+
+注意：BFCL Multi-Turn 和 T-Eval 是 outcome-only 评测（只看最终 tool call 正确性），
+不包含 OVAL-MCP 的 trajectory event log。因此只能在 benchmark 上验证
+"训练不会让模型在标准基准上退化"，无法验证 C_safety / F_gamma / P_process 的
+消融效果。如需验证 safety 信号对外部任务的影响，使用 MCPMark（对接 DomainAdapter）。
+
 ### 11.2 对照组
 
 这里 `C_final_state` 指只看最终可观察状态的 safety proxy；`C_event_log` 指由 audited event log 计算的 `C_safety`。M2/M3 使用固定 `lambda` 做对照；M4 及之后使用动态 `lambda_safe`。
@@ -2107,7 +2143,13 @@ Missing Dependency Rate
 Over-call Ratio
 Group Reward Saturation Rate
 Mixed Safety Group Rate
-Held-out MCP Server Success Rate
+
+External Benchmark Scores（独立于训练 reward，仅作泛化验证）:
+  BFCL Multi-Turn Overall
+  BFCL MT - Base / Miss-Func / Miss-Param / Long-Ctx
+  T-Eval Overall
+  T-Eval - Instruct / Plan / Reason / Retrieve / Understand / Review
+
 Prefix Overlap Ratio
 ```
 
@@ -2179,7 +2221,7 @@ Domain mixing 约束：
 1. 训练 split 不得由单一 MCP server 主导；
 2. 每个 state archetype 至少有 success、recovery、abstention、distractor 样本；
 3. reward distribution 必须按 MCP server、state_archetype、scenario_type 分组记录；
-4. ablation 必须报告 seen-server 与 held-out-server 指标。
+4. ablation 必须报告 BFCL Multi-Turn 和 T-Eval 上的外部评测结果。
 ```
 
 ## 12. 工程实现
@@ -2208,7 +2250,7 @@ Domain mixing 约束：
 11. task-required field preservation 与 protected field loss 分开记录；
 12. replay validation 使用 fresh isolated session，invalid reset rollout 不进入训练统计分母；
 13. ablation 覆盖 outcome-only、event-safety、constrained、shaping、process、length-aware allocation；
-14. eval 报告 seen-server 与 held-out-server 结果；
+14. eval 报告 BFCL Multi-Turn 和 T-Eval 结果，可选扩展 MCPMark；
 15. 不用训练 surrogate J 代替真实任务指标。
 ```
 
@@ -2219,3 +2261,8 @@ Domain mixing 约束：
 3. `Constrained Group Relative Policy Optimization`, arXiv:2602.05863.
 4. `Potential-Based Shaping and Q-Value Initialization are Equivalent`, arXiv:1106.5267.
 5. `qiqihezh/agentic-grpo-longhorizon`, GitHub repository, used as reward-design reference for PRM-Lite-style process signal, LATA-style advantage allocation, and ablation discipline.
+6. Shishir G. Patil et al. "BFCL: The Berkeley Function Calling Leaderboard." In Advances in Neural Information Processing Systems, 2024.
+7. Zhiqiang Zhong et al. "BFCL Multi-Turn: Multi-Step Function Calling Evaluation." 2025.
+8. Zehui Chen et al. "T-Eval: Evaluating Tool-Use Capabilities of Large Language Models." arXiv:2312.14033, 2023.
+9. Zachary Barres et al. "τ²-bench: A Benchmark for Tool-Using Conversational Agents with Dual-Control Environments." 2025.
+10. Fanshi Zhang, Yaoqi Ye, Jiawei Wang et al. "MCPMark: A Benchmark for Stress-Testing Realistic and Faithful MCP Agents." 2025.

@@ -24,6 +24,8 @@ except ImportError as e:
         f"原始错误: {e}"
     )
 
+from src.training.advantage_core import compute_per_group_stratified_advantages
+
 
 # ── LATA helpers ────────────────────────────────────────────────────
 
@@ -33,18 +35,26 @@ _LATA_WARNED = False
 def _resolve_lata_mode(config) -> str:
     """从 config 或环境变量解析 LATA 模式。
 
-    优先级: LIVEMCP_LATA > OVAL_LATA > config > default "none".
+    优先级: config > get_config() > env vars > default "none".
     禁用 sentinel: "0", "false", "off", "none" 均视为禁用.
     """
     _DISABLED = frozenset({"0", "false", "off", "none", ""})
-    # 环境变量优先（支持 LIVEMCP_ 和 OVAL_ 前缀，与 reward_fn 一致）
+    # 1) hydra config（如果已通过 register_estimator 注入）
+    if config:
+        val = str(config.get("lata_mode", config.get("lata", "none"))).lower()
+        return "none" if val in _DISABLED else val
+    # 2) 统一配置（优先使用 LIVEMCP_LATA / OVAL_LATA 但统一到 get_config）
+    try:
+        from src.training.livemcp_hyperparams import get_config
+        lata = get_config().lata_mode
+        return "none" if lata.lower() in _DISABLED else lata.lower()
+    except ImportError:
+        pass
+    # 3) 直接环境变量兜底
     for key in ("LIVEMCP_LATA", "OVAL_LATA"):
         val = os.environ.get(key, "")
         if val:
             return "none" if val.lower() in _DISABLED else val.lower()
-    # config 次之
-    if config:
-        return str(config.get("lata_mode", config.get("lata", "none"))).lower()
     return "none"
 
 
@@ -63,12 +73,39 @@ def _apply_lata(
         from src.oval_mcp.training.lata import LATAAllocator, LATAConfig
         allocator = LATAAllocator(LATAConfig(mode=mode))
         result = allocator.allocate_from_mask(advantages, response_mask)
+        mean_len = result.mean_length
+        scale_range = (min(result.per_token_scale), max(result.per_token_scale))
         if not _LATA_WARNED:
             logger.info(
-                f"[LATA] mode={mode} | mean_len={result.mean_length:.1f} "
-                f"| scale_range=[{min(result.per_token_scale):.3f}, {max(result.per_token_scale):.3f}]"
+                f"[LATA] mode={mode} | mean_len={mean_len:.1f} "
+                f"| scale_range=[{scale_range[0]:.3f}, {scale_range[1]:.3f}]"
             )
             _LATA_WARNED = True
+
+        # P1-13: 跟踪 mean_response_length 趋势。LATA 的 sqrt(L) 归一化
+        # 可能使模型偏好更短的回复。如果 mean_len 持续下降且 R_task 也下降，
+        # 说明 LATA 过强，应回退到 "none" 或降低归一化强度。
+        if not hasattr(_apply_lata, '_len_history'):
+            _apply_lata._len_history: list[float] = []
+        _apply_lata._len_history.append(mean_len)
+        if len(_apply_lata._len_history) >= 50:
+            recent = _apply_lata._len_history[-50:]
+            if recent:
+                # Simple trend: slope of last 50 points via linear regression
+                n = len(recent)
+                x_mean = (n - 1) / 2
+                y_mean = sum(recent) / n
+                numerator = sum((i - x_mean) * (y - y_mean) for i, y in enumerate(recent))
+                denominator = sum((i - x_mean) ** 2 for i in range(n))
+                slope = numerator / denominator if denominator > 0 else 0
+                if slope < -0.01:
+                    logger.warning(
+                        f"[LATA LENGTH TREND] mean_response_length 正在下降 "
+                        f"(slope={slope:.3f}/step over last 50 batches, "
+                        f"current mean={mean_len:.1f})。"
+                        f"如果 R_task 也同步下降，建议将 LATA 模式改为 'none'。"
+                    )
+            _apply_lata._len_history = _apply_lata._len_history[-100:]  # keep last 100
         return result.token_advantages
     except Exception as e:
         if not _LATA_WARNED:
@@ -287,65 +324,16 @@ def compute_livemcp_grpo_advantage(
                 group_scores = scores[idx_tensor]
                 group_levels = [levels[i] for i in indices]
                 group_scenarios = [scenario_types[i] for i in indices]
-                n_group = len(group_scores)
 
-                # 按 (perturbation_level, scenario_type) 2 维分层
-                stratum2local = defaultdict(list)
-                scenario2local = defaultdict(list)
-                for local_i, (level, scenario) in enumerate(zip(group_levels, group_scenarios)):
-                    stratum2local[(level, scenario)].append(local_i)
-                    scenario2local[scenario].append(local_i)
-
-                # Step 1: 层内归一化（带 fallback）
-                strat_advs = torch.zeros(n_group, device=scores.device)
-                for stratum_key, loc_indices in stratum2local.items():
-                    loc_tensor = torch.tensor(loc_indices, device=scores.device)
-                    stratum_scores = group_scores[loc_tensor]
-                    n_stratum = len(loc_indices)
-
-                    if n_stratum >= min_stratum_size:
-                        # 正常 z-score
-                        if norm_adv_by_std_in_grpo:
-                            s_mean = stratum_scores.mean()
-                            s_std = stratum_scores.std(unbiased=False).clamp(min=epsilon)
-                            strat_advs[loc_tensor] = (stratum_scores - s_mean) / s_std
-                        else:
-                            strat_advs[loc_tensor] = stratum_scores - stratum_scores.mean()
-                    elif n_stratum == 2:
-                        # 只减均值，不除 std
-                        strat_advs[loc_tensor] = stratum_scores - stratum_scores.mean()
-                    elif n_stratum == 1:
-                        # 回退到 scenario-level
-                        scenario = stratum_key[1]
-                        sc_indices = scenario2local[scenario]
-                        if len(sc_indices) >= 2:
-                            sc_tensor = torch.tensor(sc_indices, device=scores.device)
-                            sc_scores = group_scores[sc_tensor]
-                            sc_mean = sc_scores.mean()
-                            if len(sc_indices) >= min_stratum_size and norm_adv_by_std_in_grpo:
-                                sc_std = sc_scores.std(unbiased=False).clamp(min=epsilon)
-                                strat_advs[loc_tensor] = (stratum_scores - sc_mean) / sc_std
-                            else:
-                                strat_advs[loc_tensor] = stratum_scores - sc_mean
-                        else:
-                            # 回退到 group-level global
-                            g_mean = group_scores.mean()
-                            if n_group >= min_stratum_size and norm_adv_by_std_in_grpo:
-                                g_std = group_scores.std(unbiased=False).clamp(min=epsilon)
-                                strat_advs[loc_tensor] = (stratum_scores - g_mean) / g_std
-                            else:
-                                strat_advs[loc_tensor] = stratum_scores - g_mean
-
-                # Step 2: 全局 z-score 用作残差
-                group_mean = group_scores.mean()
-                if norm_adv_by_std_in_grpo and n_group >= 2:
-                    group_std = group_scores.std(unbiased=False).clamp(min=epsilon)
-                    global_z = (group_scores - group_mean) / group_std
-                else:
-                    global_z = group_scores - group_mean
-
-                # Step 3: A = strat_z + beta * global_z
-                advantages[idx_tensor] = strat_advs + beta * global_z
+                advantages[idx_tensor] = compute_per_group_stratified_advantages(
+                    group_scores=group_scores,
+                    group_levels=group_levels,
+                    group_scenarios=group_scenarios,
+                    beta=beta,
+                    epsilon=epsilon,
+                    min_stratum_size=min_stratum_size,
+                    norm_by_std=norm_adv_by_std_in_grpo,
+                )
 
         # 首次执行时打诊断日志
         if not hasattr(compute_livemcp_grpo_advantage, '_diagnosed'):
@@ -355,7 +343,7 @@ def compute_livemcp_grpo_advantage(
         # ── 饱和组检测与跳过（§9.2-9.3） ──
         # std(J) < min_group_std → advantage = 0，不产生 policy gradient
         # 饱和组 rollout 仍参与 lambda_safe 的 hat_C_batch（在 register_estimator 层已处理）
-        min_group_std = float(config.get("min_group_std", 1e-6) if config else 1e-6)
+        min_group_std = float(config.get("min_group_std", 0.01) if config else 0.01)
         n_saturated_groups = 0
         n_total_groups = len(task2indices)
         saturated_group_ids: list[str] = []

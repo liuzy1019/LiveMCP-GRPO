@@ -12,6 +12,7 @@ No replay filtering needed — oracle trace was built by actual execution.
 from __future__ import annotations
 
 import copy
+import json
 import random
 from typing import Any
 
@@ -54,6 +55,239 @@ class TaskOrchestrator:
         self._domain_graphs: dict[str, dict] = {}     # cached dependency graphs per domain
         self._domain_chains: dict[str, list] = {}     # cached length-2 to length-5 chains
 
+    def _run_turn_loop(
+        self,
+        teacher,
+        current_query: str,
+        server_tools: list[dict],
+        server_name: str,
+        session_id: str,
+        difficulty: str,
+        dep_hints: str,
+        local_rng: random.Random,
+        chain_seed: list[str] | None,
+        round_idx: int,
+    ) -> tuple[list, list[dict], set[str]]:
+        """Run one conversation round of teacher-driven tool execution.
+
+        Returns (oracle_calls, execution_history, required_tools).
+        """
+        from src.live_mcp.task_planner import ContinuationPolicy, apply_perturbation
+        from src.live_mcp.types import ToolCall
+
+        oracle_calls: list = []
+        execution_history: list[dict[str, Any]] = []
+        required_tools: set[str] = set()
+
+        # BUG-C fix: dedup oracle tool calls within a round.
+        # Same (tool_name, args_repr) must not appear twice — the LLM occasionally
+        # "forgets" prior progress and re-issues the same call, which inflates the
+        # oracle chain past PROVE's len-5 limit and leaks repeated tools into the
+        # ground truth.
+        seen_oracle_keys: set[tuple[str, str]] = set()
+        # BUG-3 fix: read-class tools deduped by name only.
+        seen_read_tools: set[str] = set()
+
+        def _oracle_key(name: str, args: dict) -> tuple[str, str]:
+            try:
+                args_repr = json.dumps(args, sort_keys=True, default=str, ensure_ascii=False)
+            except Exception:
+                args_repr = repr(sorted(args.items()) if isinstance(args, dict) else args)
+            return (name, args_repr)
+
+        def _add_oracle(call: OracleCall) -> bool:
+            """Append call to oracle_calls if not duplicate / not over budget.
+            Returns True if appended.
+            """
+            # Hard cap on real (non-clarification) calls per task.
+            real_count = sum(1 for oc in oracle_calls if oc.action != "clarification")
+            if call.action != "clarification" and real_count >= 5:
+                return False
+            # LIST-class tools (one-shot collections): dedup by name only.
+            # get_/search_/find_ are entity reads — different entities are
+            # legitimate, so they fall through to (name,args) dedup below.
+            tname = call.tool_name or ""
+            if call.action != "clarification" and tname.startswith("list_"):
+                if tname in seen_read_tools:
+                    return False
+                seen_read_tools.add(tname)
+            # All other (write-class) tools dedup by (name, args).
+            key = _oracle_key(call.tool_name, call.arguments or {})
+            if key in seen_oracle_keys:
+                return False
+            seen_oracle_keys.add(key)
+            oracle_calls.append(call)
+            return True
+
+        if round_idx == 0:
+            round_chain_len = len(chain_seed) if chain_seed else 3
+        else:
+            round_chain_len = local_rng.randint(1, 3)
+        target_turns = ContinuationPolicy.target_turns(round_chain_len, local_rng)
+        max_turns = min(target_turns + 2, 8)
+
+        # BUG-2 fix (PROVE alignment): hard chain-length cap at 5 across all
+        # rounds.  PROVE limits oracle chain to len-5; without a hard cap the
+        # turn loop keeps appending until the LLM emits final_answer, producing
+        # 6-9 length chains for greedy LLMs.
+        MAX_ORACLE_CALLS_PER_TASK = 5
+
+        for turn in range(max_turns):
+            chain_progress = len({oc.tool_name for oc in oracle_calls if oc.action != "clarification"})
+
+            # BUG-2 hard cap: stop emitting new oracle entries once we hit 5.
+            real_oracle_count = sum(1 for oc in oracle_calls if oc.action != "clarification")
+            if real_oracle_count >= MAX_ORACLE_CALLS_PER_TASK:
+                break
+
+            action = teacher.decide_action(
+                tool_schemas=server_tools,
+                user_query=current_query,
+                execution_history=execution_history,
+                attempt=turn,
+                dep_hints=dep_hints,
+                difficulty=difficulty,
+                chain_seed=chain_seed if round_idx == 0 else None,
+                chain_progress=chain_progress,
+            )
+
+            if action.action == "ask_clarification":
+                if difficulty == "missing":
+                    _add_oracle(OracleCall(
+                        tool_name="ask_clarification",
+                        arguments={"question": action.text},
+                        action="clarification",
+                    ))
+                break
+
+            if action.action in ("final_answer", "report_error"):
+                if (round_idx == 0 and chain_seed and len(chain_seed) >= 2
+                        and chain_progress < len(chain_seed)
+                        and turn < max_turns - 1):
+                    remaining = chain_seed[chain_progress:]
+                    execution_history.append({
+                        "tool_name": "__reject__",
+                        "arguments": {},
+                        "observation": {
+                            "error": (
+                                f"Task incomplete — {chain_progress}/{len(chain_seed)} "
+                                f"steps done. Remaining tools (approximate): "
+                                f"{', '.join(remaining)}. Continue making tool calls."
+                            ),
+                        },
+                        "success": False,
+                    })
+                    continue
+                break
+
+            if action.action != "tool_call" or not action.tool_name:
+                continue
+
+            tool_name = action.tool_name
+            tool_name = _fuzzy_match_tool(tool_name, {t["name"] for t in server_tools}) or tool_name
+            required_tools.add(tool_name)
+
+            result = self.executor.execute(
+                session_id,
+                ToolCall(tool_name, dict(action.arguments), call_id=f"sm_{turn}"),
+                domain=server_name,
+            )
+
+            perturbed_obs = apply_perturbation(
+                result.observation, server_name, local_rng,
+            )
+
+            if isinstance(perturbed_obs, dict) and perturbed_obs.get("retry"):
+                execution_history.append({
+                    "tool_name": tool_name,
+                    "arguments": dict(action.arguments),
+                    "observation": perturbed_obs,
+                    "success": False,
+                })
+                # Retry triggered: don't add failed call to oracle.
+                # If the next turn succeeds, the success path will add it once.
+                continue
+
+            if not result.success:
+                execution_history.append({
+                    "tool_name": tool_name,
+                    "arguments": dict(action.arguments),
+                    "observation": perturbed_obs if perturbed_obs is not None else result.observation,
+                    "success": False,
+                })
+
+                recovery = teacher.decide_recovery(
+                    last_tool_name=tool_name,
+                    last_arguments=dict(action.arguments),
+                    error_observation=perturbed_obs if perturbed_obs is not None else {"error": str(result.observation)},
+                    tool_schemas=server_tools,
+                    execution_history=execution_history,
+                )
+                rec_action = recovery.get("action", "give_up")
+
+                if rec_action == "give_up":
+                    break
+                elif rec_action in ("retry", "retry_same"):
+                    corrected = recovery.get("corrected_args", dict(action.arguments))
+                    retry_result = self.executor.execute(
+                        session_id,
+                        ToolCall(tool_name, corrected, call_id=f"sm_recover_{turn}"),
+                        domain=server_name,
+                    )
+                    if retry_result.success:
+                        execution_history.append({
+                            "tool_name": tool_name,
+                            "arguments": corrected,
+                            "observation": retry_result.observation if retry_result.observation is not None else {},
+                            "success": True,
+                        })
+                        _add_oracle(OracleCall(
+                            tool_name=tool_name,
+                            arguments=corrected,
+                        ))
+                elif rec_action == "retry_alt":
+                    alt_tool = recovery.get("tool_name", "")
+                    if alt_tool and alt_tool in {t["name"] for t in server_tools}:
+                        alt_result = self.executor.execute(
+                            session_id,
+                            ToolCall(alt_tool, recovery.get("arguments", {}), call_id=f"sm_alt_{turn}"),
+                            domain=server_name,
+                        )
+                        if alt_result.success:
+                            required_tools.add(alt_tool)
+                            execution_history.append({
+                                "tool_name": alt_tool,
+                                "arguments": recovery.get("arguments", {}),
+                                "observation": alt_result.observation if alt_result.observation is not None else {},
+                                "success": True,
+                            })
+                            _add_oracle(OracleCall(
+                                tool_name=alt_tool,
+                                arguments=recovery.get("arguments", {}),
+                            ))
+                continue
+
+            obs_to_record = perturbed_obs if perturbed_obs is not None else result.observation
+            execution_history.append({
+                "tool_name": tool_name,
+                "arguments": dict(action.arguments),
+                "observation": obs_to_record if obs_to_record is not None else {},
+                "success": True,
+            })
+
+            _add_oracle(OracleCall(
+                tool_name=tool_name,
+                arguments=dict(action.arguments),
+            ))
+
+            if not ContinuationPolicy.should_continue(
+                turn, target_turns, result.success,
+                sum(1 for oc in oracle_calls if oc.action != "clarification"),
+            ):
+                break
+
+        return oracle_calls, execution_history, required_tools
+
     def generate_one(
         self,
         server_name: str,
@@ -91,6 +325,9 @@ class TaskOrchestrator:
         if chains and rng.random() < 0.80:  # 80% of tasks have a chain seed
             chain_seed = rng.choice(chains)
 
+        # ── Conversation-level continuation (PROVE §3.2 Step 3.5) ──
+        conversation_rounds = ContinuationPolicy.conversation_rounds(rng)
+
         # ── Retry with different seed if LLM refuses to call tools ──
         for retry_attempt in range(3):
             local_seed = seed + retry_attempt * 1000
@@ -121,176 +358,124 @@ class TaskOrchestrator:
                     chain_seed=chain_seed,
                 )
 
-                oracle_calls: list[OracleCall] = []
-                execution_history: list[dict[str, Any]] = []
-                required_tools: set[str] = set()
+                # Accumulators across conversation rounds (PROVE CONTINUATION)
+                all_oracle_calls: list[OracleCall] = []
+                all_execution_history: list[dict[str, Any]] = []
+                all_required_tools: set[str] = set()
+                conversation_queries: list[str] = [user_query]  # track all user messages
+                oracle_calls_per_round: list[list[OracleCall]] = []  # per-round for prompt construction
+                execution_history_per_round: list[list[dict]] = []
                 task_id = f"{server_name}_{local_seed}_{local_rng.randint(0, 99999)}"
                 retry_label = f" (retry {retry_attempt})" if retry_attempt > 0 else ""
 
-                # Turn-decay schedule (PROVE §6)
-                target_turns = ContinuationPolicy.target_turns(
-                    len(chain_seed) if chain_seed else 3, local_rng,
+                current_query = user_query
+
+                logger.debug(
+                    f"CONTINUATION: {server_name} task {task_id} "
+                    f"starting {conversation_rounds} conversation round(s)"
                 )
-                max_turns = min(target_turns + 2, 8)  # allow perturbations to add turns
 
-                for turn in range(max_turns):
-                    action = teacher.decide_action(
-                        tool_schemas=server_tools,
-                        user_query=user_query,
-                        execution_history=execution_history,
-                        attempt=turn,
-                        dep_hints=dep_hints,
-                        difficulty=difficulty,
-                    )
-
-                    if action.action == "ask_clarification":
-                        # For 'missing' difficulty, ask_clarification is the expected
-                        # first action — record it as a valid oracle step.
-                        # For other difficulties, it signals inability to proceed
-                        # and will trigger retry (oracle_calls will be empty).
-                        if difficulty == "missing":
-                            oracle_calls.append(OracleCall(
-                                tool_name="ask_clarification",
-                                arguments={"question": action.text},
-                                action="clarification",
-                            ))
-                        break
-
-                    if action.action in ("final_answer", "report_error"):
-                        break
-
-                    if action.action != "tool_call" or not action.tool_name:
-                        continue
-
-                    tool_name = action.tool_name
-                    tool_name = _fuzzy_match_tool(tool_name, {t["name"] for t in server_tools}) or tool_name
-                    required_tools.add(tool_name)
-
-                    result = self.executor.execute(
-                        session_id,
-                        ToolCall(tool_name, dict(action.arguments), call_id=f"sm_{turn}"),
-                        domain=server_name,
-                    )
-
-                    perturbed_obs = apply_perturbation(
-                        result.observation, server_name, local_rng,
-                    )
-
-                    # ── Intermittent error perturbation: real execution succeeded,
-                    #     but the model sees a fake error. Do NOT re-execute —
-                    #     state side effects already committed. Record the real
-                    #     success in oracle_calls and the perturbed obs in history.
-                    if isinstance(perturbed_obs, dict) and perturbed_obs.get("retry"):
-                        execution_history.append({
-                            "tool_name": tool_name,
-                            "arguments": dict(action.arguments),
-                            "observation": perturbed_obs,
-                            "success": False,
-                        })
-                        oracle_calls.append(OracleCall(
-                            tool_name=tool_name,
-                            arguments=dict(action.arguments),
-                        ))
-                        # Continue to next turn — model sees the error
-                        # and will decide whether to retry on its own.
-                        continue
-
-                    # ── PROVE recovery: explicit retry states on genuine failure ──
-                    if not result.success:
-                        execution_history.append({
-                            "tool_name": tool_name,
-                            "arguments": dict(action.arguments),
-                            "observation": perturbed_obs if perturbed_obs is not None else result.observation,
-                            "success": False,
-                        })
-
-                        # Run recovery decision (PROVE §6 step 5a)
-                        recovery = teacher.decide_recovery(
-                            last_tool_name=tool_name,
-                            last_arguments=dict(action.arguments),
-                            error_observation=perturbed_obs if perturbed_obs is not None else {"error": str(result.observation)},
-                            tool_schemas=server_tools,
-                            execution_history=execution_history,
-                        )
-                        rec_action = recovery.get("action", "give_up")
-
-                        if rec_action == "give_up":
-                            break  # unrecoverable, end conversation
-                        elif rec_action in ("retry", "retry_same"):
-                            # Retry with corrected (or same) args → execute as new turn
-                            corrected = recovery.get("corrected_args", dict(action.arguments))
-                            retry_result = self.executor.execute(
-                                session_id,
-                                ToolCall(tool_name, corrected, call_id=f"sm_recover_{turn}"),
-                                domain=server_name,
-                            )
-                            if retry_result.success:
-                                execution_history.append({
-                                    "tool_name": tool_name,
-                                    "arguments": corrected,
-                                    "observation": retry_result.observation if retry_result.observation is not None else {},
-                                    "success": True,
-                                })
-                                oracle_calls.append(OracleCall(
-                                    tool_name=tool_name,
-                                    arguments=corrected,
-                                ))
-                        elif rec_action == "retry_alt":
-                            # Try alternative tool
-                            alt_tool = recovery.get("tool_name", "")
-                            if alt_tool and alt_tool in {t["name"] for t in server_tools}:
-                                alt_result = self.executor.execute(
-                                    session_id,
-                                    ToolCall(alt_tool, recovery.get("arguments", {}), call_id=f"sm_alt_{turn}"),
-                                    domain=server_name,
-                                )
-                                if alt_result.success:
-                                    required_tools.add(alt_tool)
-                                    execution_history.append({
-                                        "tool_name": alt_tool,
-                                        "arguments": recovery.get("arguments", {}),
-                                        "observation": alt_result.observation if alt_result.observation is not None else {},
-                                        "success": True,
-                                    })
-                                    oracle_calls.append(OracleCall(
-                                        tool_name=alt_tool,
-                                        arguments=recovery.get("arguments", {}),
-                                    ))
-                        continue
-
-                    # ── Successful execution ──
-                    obs_to_record = perturbed_obs if perturbed_obs is not None else result.observation
-                    execution_history.append({
-                        "tool_name": tool_name,
-                        "arguments": dict(action.arguments),
-                        "observation": obs_to_record if obs_to_record is not None else {},
-                        "success": True,
-                    })
-
-                    oracle_calls.append(OracleCall(
-                        tool_name=tool_name,
-                        arguments=dict(action.arguments),
-                    ))
-
-                    # Continuation check (PROVE turn-decay)
-                    if not ContinuationPolicy.should_continue(
-                        turn, target_turns, result.success, len(oracle_calls),
-                    ):
-                        break
-
-                # ── If oracle_calls still empty after retries, raise ──
-                if not oracle_calls:
-                    if retry_attempt < 2:
+                for round_idx in range(conversation_rounds):
+                    if round_idx > 0:
                         logger.debug(
-                            f"No tool calls recorded for {server_name}{retry_label}, "
-                            f"retrying with new seed ({retry_attempt + 1}/3)"
+                            f"CONTINUATION: {server_name} round {round_idx + 1}/{conversation_rounds} "
+                            f"generating follow-up query"
                         )
-                        self.manager.close_session(session_id)
-                        continue
-                    raise RuntimeError(
-                        f"No tool calls recorded for {server_name} task {task_id} "
-                        f"(LLM answered without using tools)"
+                        grounded_state_update = self.manager.get_state(session_id)
+                        domain_state_update = grounded_state_update.get(server_name, {})
+                        current_query = teacher.generate_followup(
+                            tool_schemas=server_tools,
+                            grounded_state=domain_state_update,
+                            previous_query=user_query,
+                            execution_history=all_execution_history,
+                            difficulty=difficulty,
+                            rng=local_rng,
+                            persona=persona,
+                            reference_date=reference_date,
+                        )
+                        conversation_queries.append(current_query)
+
+                    round_ocs, round_hist, round_reqs = self._run_turn_loop(
+                        teacher=teacher,
+                        current_query=current_query,
+                        server_tools=server_tools,
+                        server_name=server_name,
+                        session_id=session_id,
+                        difficulty=difficulty,
+                        dep_hints=dep_hints,
+                        local_rng=local_rng,
+                        chain_seed=chain_seed,
+                        round_idx=round_idx,
                     )
+
+                    if round_idx == 0:
+                        _real_round = [c for c in round_ocs if getattr(c, "action", "tool_call") != "clarification"]
+                        _clar_round = [c for c in round_ocs if getattr(c, "action", "tool_call") == "clarification"]
+                        if not _real_round and not (difficulty == "missing" and _clar_round):
+                            if retry_attempt < 2:
+                                logger.debug(
+                                    f"No tool calls recorded for {server_name}{retry_label}, "
+                                    f"retrying with new seed ({retry_attempt + 1}/3)"
+                                )
+                                break  # break conversation loop → continue retry loop
+                            raise RuntimeError(
+                                f"No tool calls recorded for {server_name} task {task_id} "
+                                f"(LLM answered without using tools)"
+                            )
+
+                    # Cross-round dedup + total length cap to align with PROVE
+                    # red lines.  _run_turn_loop dedups within a single round,
+                    # but seen_read_tools / seen_oracle_keys reset between
+                    # rounds, so a 4-round task can still emit list_invoices
+                    # 4 times.  Apply the same rules globally here.
+                    global_seen_read = {oc.tool_name for oc in all_oracle_calls
+                                        if getattr(oc, "action", "tool_call") != "clarification"
+                                        and (oc.tool_name or "").startswith("list_")}
+                    global_seen_keys = set()
+                    for _oc in all_oracle_calls:
+                        try:
+                            _args_repr = json.dumps(_oc.arguments or {}, sort_keys=True, default=str, ensure_ascii=False)
+                        except Exception:
+                            _args_repr = repr(_oc.arguments)
+                        global_seen_keys.add((_oc.tool_name, _args_repr))
+
+                    real_so_far = sum(1 for oc in all_oracle_calls if getattr(oc, "action", "tool_call") != "clarification")
+                    filtered_round_ocs = []
+                    for oc in round_ocs:
+                        action = getattr(oc, "action", "tool_call")
+                        if action == "clarification":
+                            filtered_round_ocs.append(oc)
+                            continue
+                        if real_so_far >= 5:
+                            break
+                        tname = oc.tool_name or ""
+                        if tname.startswith("list_"):
+                            if tname in global_seen_read:
+                                continue
+                            global_seen_read.add(tname)
+                        try:
+                            args_repr = json.dumps(oc.arguments or {}, sort_keys=True, default=str, ensure_ascii=False)
+                        except Exception:
+                            args_repr = repr(oc.arguments)
+                        key = (tname, args_repr)
+                        if key in global_seen_keys:
+                            continue
+                        global_seen_keys.add(key)
+                        filtered_round_ocs.append(oc)
+                        real_so_far += 1
+
+                    all_oracle_calls.extend(filtered_round_ocs)
+                    all_execution_history.extend(round_hist)
+                    all_required_tools |= round_reqs
+                    oracle_calls_per_round.append(list(filtered_round_ocs))
+                    execution_history_per_round.append(list(round_hist))
+
+                # If we broke out of conversation loop early (first round failed)
+                _real_now = [c for c in all_oracle_calls if getattr(c, "action", "tool_call") != "clarification"]
+                _clar_now = [c for c in all_oracle_calls if getattr(c, "action", "tool_call") == "clarification"]
+                if not _real_now and not (difficulty == "missing" and _clar_now):
+                    self.manager.close_session(session_id)
+                    continue  # retry loop
 
                 # ── Derive success criteria from state delta ──
                 final_state_full = self.manager.get_state(session_id)
@@ -298,13 +483,13 @@ class TaskOrchestrator:
                 success_criteria = derive_success_criteria(
                     initial_state=initial_state_snapshot,
                     final_state=final_state,
-                    oracle_calls=oracle_calls,
+                    oracle_calls=all_oracle_calls,
                     domain=server_name,
                 )
 
                 # ── Replay validate (PROVE §3.2 Step 5: ≤30% error rate) ──
                 valid, error_rate, num_errors, num_calls = replay_validate(
-                    oracle_calls=oracle_calls,
+                    oracle_calls=all_oracle_calls,
                     manager=self.manager,
                     executor=self.executor,
                     seed=local_seed,
@@ -326,9 +511,9 @@ class TaskOrchestrator:
 
                 # ── Provenance check (PROVE §3.2 Step 5: sensitive params) ──
                 prov_ok, prov_violations = provenance_check(
-                    oracle_calls=oracle_calls,
+                    oracle_calls=all_oracle_calls,
                     user_query=user_query,
-                    execution_history=execution_history,
+                    execution_history=all_execution_history,
                 )
                 if not prov_ok:
                     if retry_attempt < 2:
@@ -351,10 +536,30 @@ class TaskOrchestrator:
             finally:
                 self.manager.close_session(session_id)
 
+        # ── Final guard: ensure oracle has at least 1 real tool_call ──
+        # BUG-D fix: retry loop may have exited via fall-through with empty
+        # oracle (e.g., every retry the LLM only emitted ask_clarification at
+        # round 0). task_planner-typed tasks must execute tools; if not, raise
+        # so generate_many counts it as a failure rather than emitting a 0-call
+        # row that pollutes the dataset.
+        #
+        # Exception: difficulty="missing" expects clarification-only behavior
+        # (PROVE missing-required information level). If the oracle has at
+        # least one ask_clarification, that's a valid task — don't raise.
+        real_calls = [c for c in all_oracle_calls
+                      if getattr(c, "action", "tool_call") != "clarification"]
+        clarification_calls = [c for c in all_oracle_calls
+                               if getattr(c, "action", "tool_call") == "clarification"]
+        if not real_calls and not (difficulty == "missing" and clarification_calls):
+            raise RuntimeError(
+                f"No real tool_call recorded for {server_name} task {task_id} "
+                f"after 3 retries (LLM only produced clarifications/refusals)"
+            )
+
         # ── Build final task ──
         oracle_program = OracleProgram(
             task_id=task_id,
-            calls=oracle_calls,
+            calls=all_oracle_calls,
             success_criteria=success_criteria,
         )
 
@@ -362,8 +567,11 @@ class TaskOrchestrator:
             server_name=server_name, query=user_query,
             session_id=session_id, seed=local_seed,
             all_tools=all_tools, oracle_program=oracle_program,
-            required_tools=sorted(required_tools),
+            required_tools=sorted(all_required_tools),
             difficulty=difficulty, task_id=task_id,
+            conversation_queries=conversation_queries,
+            oracle_calls_per_round=oracle_calls_per_round,
+            execution_history_per_round=execution_history_per_round,
         )
 
     def generate_many(self, server_name: str, count: int, seed: int,
@@ -396,6 +604,14 @@ class TaskOrchestrator:
         remainder = n_normal % len(servers)
         global_seed_offset = 0
         failed = 0
+        # BUG-B fix: dedup tasks by first user query string. The teacher LLM
+        # tends to emit identical queries ("link deal_0001 to contact_0001")
+        # across different seeds because its query-generation prompt is
+        # template-y. Same query → same task semantically; we drop duplicates
+        # before they reach Jaccard-on-tool-seq dedup (which only catches
+        # tool-sequence overlap, not query-string repetition).
+        seen_queries: set[str] = set()
+        dropped_dup_query = 0
 
         # ── tqdm progress bar ──
         try:
@@ -429,6 +645,18 @@ class TaskOrchestrator:
                     task = self.generate_one(
                         current_server, seed=task_seed, difficulty=difficulty,
                     )
+                    # BUG-B fix: drop duplicate first-user-query tasks early.
+                    q_key = (task.user_prompt or "").strip().lower()
+                    if q_key and q_key in seen_queries:
+                        dropped_dup_query += 1
+                        logger.debug(
+                            f"{current_server}: dropping duplicate query "
+                            f"(seen #{dropped_dup_query}): {q_key[:80]}"
+                        )
+                        continue  # don't count as ok or failed; let attempt budget cover it
+                    if q_key:
+                        seen_queries.add(q_key)
+
                     rng_knob = random.Random(task_seed)
                     if rng_knob.random() < distractor_rate:
                         self._apply_distractors(task)
@@ -487,13 +715,16 @@ class TaskOrchestrator:
 
         logger.info(
             f"LLM teacher: {len(tasks)} tasks (target {count}, {failed} failures, "
-            f"{removed} dedup removed)"
+            f"{removed} dedup removed, {dropped_dup_query} dup-query dropped)"
         )
         return tasks
 
     def _to_live_task(self, server_name: str, query: str, session_id: str, seed: int,
                       all_tools: list[dict], oracle_program, required_tools: list[str],
-                      difficulty: str, task_id: str) -> LiveTask:
+                      difficulty: str, task_id: str,
+                      conversation_queries: list[str] | None = None,
+                      oracle_calls_per_round: list[list] | None = None,
+                      execution_history_per_round: list[list] | None = None) -> LiveTask:
         if required_tools:
             # Show all domain tools — model must figure out which to use.
             # Don't leak required_tools by only showing those.
@@ -514,6 +745,9 @@ class TaskOrchestrator:
             max_turns=int(self.suite_config.rollout.get("max_turns", 8)),
             difficulty=difficulty, task_type="task_planner",
             metadata={"generation_method": "task_planner"},
+            conversation_queries=conversation_queries or [],
+            oracle_calls_per_round=oracle_calls_per_round or [],
+            execution_history_per_round=execution_history_per_round or [],
         )
 
     def _apply_distractors(self, task: LiveTask) -> None:
@@ -578,6 +812,22 @@ class TaskOrchestrator:
         task.task_type = "missing_function"
         task.metadata["has_missing_function"] = True
         task.metadata["unavailable_required_tool"] = hidden
+
+        # BUG-1 fix (PROVE alignment): missing_function semantics demand the
+        # model abstain (report_error) without invoking tools.  However the
+        # task was generated *with* a successful trajectory still cached in
+        # ``oracle_calls_per_round`` / ``execution_history_per_round`` /
+        # ``conversation_queries`` (multi-turn followups).  If we keep those,
+        # generate_data.py renders a multi-turn prompt that *shows* the model
+        # successfully calling tools — but extra_info[oracle_calls] is now
+        # empty.  Result: prompt and oracle disagree, model trains on noise.
+        # Collapse the task to single-turn abstain shape so prompt matches
+        # oracle.
+        task.oracle_calls_per_round = []
+        task.execution_history_per_round = []
+        if task.conversation_queries:
+            task.conversation_queries = [task.conversation_queries[0]]
+        # user_prompt already holds the first query; nothing to change there.
 
     def _generate_irrelevant_tasks(self, n: int, seed: int) -> list[LiveTask]:
         """Generate tasks whose query is unrelated to any available tool.

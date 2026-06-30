@@ -29,21 +29,70 @@ except ImportError:
     LambdaState = None  # type: ignore
     DEFAULT_STATE_PATH = "/tmp/ssgrpo_lambda_state.json"
 
+try:
+    from src.training.livemcp_hyperparams import get_config
+except ImportError:
+    get_config = None  # type: ignore
 
-# ── 模块级单例 ──
+# ── 模块级单例（延迟初始化，由 _get_cfg() 统一管理） ──
 _safety_verifier = SafetyVerifier()
 _task_reward = TaskReward()
 _progress_tracker = ProgressTracker()
-_process_scorer = ProcessScorer(p_max=0.3)
 
-# ── 消融开关（环境变量控制，默认全开） ──
-_I_SHAPE = int(os.environ.get("OVAL_I_SHAPE", "0"))
-_I_PROCESS = int(os.environ.get("OVAL_I_PROCESS", "1"))
-_LAMBDA_SHAPE = float(os.environ.get("OVAL_LAMBDA_SHAPE", "0.5"))
-_LAMBDA_PROCESS = float(os.environ.get("OVAL_LAMBDA_PROCESS", "0.3"))
-_GAMMA = float(os.environ.get("OVAL_GAMMA", "1.0"))
 
-_LAMBDA_SAFE_DEFAULT = 1.0
+def _get_cfg():
+    """获取配置：优先从 LiveMCPHyperparams，fallback 到环境变量。"""
+    if get_config is not None:
+        return get_config()
+    # Fallback: 从环境变量手动构建（兼容未安装 livemcp_hyperparams 的场景）
+    from dataclasses import dataclass
+    @dataclass
+    class _FallbackCfg:
+        i_shape: int = int(os.environ.get("OVAL_I_SHAPE", "0"))
+        i_process: int = int(os.environ.get("OVAL_I_PROCESS", "1"))
+        lambda_shape: float = float(os.environ.get("OVAL_LAMBDA_SHAPE", "0.5"))
+        lambda_process: float = float(os.environ.get("OVAL_LAMBDA_PROCESS", "0.3"))
+        gamma: float = float(os.environ.get("OVAL_GAMMA", "1.0"))
+        lambda_safe_default: float = 1.0
+        p_max: float = float(os.environ.get("OVAL_P_MAX", "0.3"))
+        w_val: float = 0.5
+        w_cov: float = 0.5
+        w_eff: float = 0.15
+        w_name: float = 0.2
+        w_arg: float = 0.1
+        w_struct: float = 0.6
+        w_exec: float = 0.4
+        alpha_eff: float = 0.3
+        beta_budget: float = 0.3
+    return _FallbackCfg()
+
+# 模块加载时解析一次配置
+_cfg = _get_cfg()
+
+# ── 消融开关（从统一配置读取，环境变量由 export_env() 保证一致性） ──
+_I_SHAPE = _cfg.i_shape
+_I_PROCESS = _cfg.i_process
+_LAMBDA_SHAPE = _cfg.lambda_shape
+_LAMBDA_PROCESS = _cfg.lambda_process
+_GAMMA = _cfg.gamma
+
+_LAMBDA_SAFE_DEFAULT = _cfg.lambda_safe_default
+
+# ── P_process scorer（可用 OVAL_P_MAX 环境变量覆盖） ──
+_process_scorer = ProcessScorer(p_max=_cfg.p_max)
+
+# ── 使用配置中的权重初始化 TaskReward（而非硬编码 DEFAULT_WEIGHTS） ──
+_task_reward = TaskReward(weights={
+    "w_val": _cfg.w_val,
+    "w_cov": _cfg.w_cov,
+    "w_eff": _cfg.w_eff,
+    "w_name": _cfg.w_name,
+    "w_arg": _cfg.w_arg,
+    "w_struct": _cfg.w_struct,
+    "w_exec": _cfg.w_exec,
+    "alpha_eff": _cfg.alpha_eff,
+    "beta_budget": _cfg.beta_budget,
+})
 
 
 def _dict_to_audit_event(d: dict) -> AuditEvent:
@@ -116,9 +165,21 @@ def _build_task_dict(extra_info: dict) -> dict:
         required_tools = [t.strip() for t in required_tools.split(",") if t.strip()]
 
     # Use saved oracle calls for accurate arg matching
-    oracle_calls = extra_info.get("oracle_calls", [])
-    if not oracle_calls:
-        # Fallback: build from ground_truth if available
+    oracle_calls_raw = extra_info.get("oracle_calls", [])
+    # P1-11: oracle_calls may be a JSON string (to prevent pyarrow struct
+    # unification) or a legacy list[dict]. Parse accordingly.
+    if isinstance(oracle_calls_raw, str):
+        try:
+            oracle_calls = _json.loads(oracle_calls_raw)
+        except (_json.JSONDecodeError, TypeError):
+            oracle_calls = []
+    elif isinstance(oracle_calls_raw, list):
+        oracle_calls = oracle_calls_raw
+    elif hasattr(oracle_calls_raw, "tolist"):
+        oracle_calls = oracle_calls_raw.tolist()
+    else:
+        oracle_calls = []
+    if not isinstance(oracle_calls, list):
         oracle_calls = []
 
     # P0-3: Detect clarification-type oracle calls. Clarification is a

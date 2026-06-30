@@ -1,4 +1,4 @@
-"""lambda_safe 跨进程共享状态管理器（含 stall protection）。
+"""lambda_safe 跨进程共享状态管理器（含 stall protection 和进程安全锁）。
 
 OVAL-MCP §9 要求：
   - lambda_safe 在 batch 边界更新（projected dual ascent）
@@ -10,14 +10,23 @@ Stall protection (§9.3)：
   - 冻结期间 λ 不再增大，但允许减小（hat_C 回到正常范围时自动解冻）
   - streak 和 frozen 状态持久化到文件中，跨进程重启不丢失
 
+进程安全：
+  - atomic_update() 在整个 load→update→save 周期持有 fcntl 排他锁
+  - 防止 Ray 多 actor 并发更新时的 write-after-read 覆盖
+  - 锁文件跟随进程生命周期，进程崩溃自动释放
+
 使用方式:
+  # 推荐：原子更新（进程安全）
+  state, new_lambda, skipped = LambdaState.atomic_update(c_safety_values)
+
+  # 只读（无锁，os.replace 本身原子安全）
   state = LambdaState.load_or_default()
-  new_lambda, skipped = state.update(c_safety_values, k_stall=10, tau_unsafe_stall=0.5)
-  state.save()
+  lambda_val = state.lambda_safe
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import threading
@@ -26,15 +35,39 @@ import threading
 DEFAULT_STATE_PATH = "/tmp/ovalmcp_lambda_state.json"
 
 
+def _lock_file(path: str) -> int:
+    """获取排他文件锁的文件描述符。"""
+    lock_path = path + ".lock"
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def _unlock_file(fd: int) -> None:
+    """释放文件锁并关闭 fd。"""
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        os.close(fd)
+    except Exception:
+        pass
+
+
 class LambdaState:
-    """File-backed shared state for lambda_safe with stall protection."""
+    """File-backed shared state for lambda_safe with stall protection.
+
+    Threading lock (_lock) 保护单进程内 save() 并发。
+    跨进程安全由 atomic_update() 的 fcntl 文件锁保证。
+    """
 
     def __init__(
         self,
         lambda_safe: float = 1.0,
         alpha_lambda: float = 0.01,
         epsilon: float = 0.05,
-        lambda_safe_max: float = 10.0,
+        lambda_safe_max: float = 3.0,
         step: int = 0,
         state_path: str = DEFAULT_STATE_PATH,
         lambda_increase_streak: int = 0,
@@ -51,6 +84,35 @@ class LambdaState:
         # stall protection (persisted across process restarts)
         self._lambda_increase_streak: int = lambda_increase_streak
         self._stall_frozen: bool = stall_frozen
+
+    # ── 原子更新（跨进程安全） ──────────────────────────────────────
+
+    @classmethod
+    def atomic_update(
+        cls,
+        c_safety_values: list[int],
+        path: str = DEFAULT_STATE_PATH,
+        k_stall: int = 10,
+        tau_unsafe_stall: float = 0.5,
+    ) -> tuple["LambdaState", float, float, bool]:
+        """跨进程安全的 load→update→save 原子操作。
+
+        持有 fcntl 排他锁，防止并发 write-after-read 覆盖。
+        返回 (state, old_lambda, new_lambda, update_skipped)。
+        """
+        fd = _lock_file(path)
+        try:
+            state = cls.load_or_default(path=path)
+            old_lambda = state.lambda_safe
+            new_lambda, skipped = state.update(
+                c_safety_values,
+                k_stall=k_stall,
+                tau_unsafe_stall=tau_unsafe_stall,
+            )
+            state.save()
+            return state, old_lambda, new_lambda, skipped
+        finally:
+            _unlock_file(fd)
 
     # ── update ──────────────────────────────────────────────────────
 
@@ -159,10 +221,14 @@ class LambdaState:
 
     @classmethod
     def reset(cls, path: str = DEFAULT_STATE_PATH) -> None:
+        """含锁重置：删除状态文件，下次 load_or_default 返回默认值。"""
+        fd = _lock_file(path)
         try:
             os.remove(path)
         except FileNotFoundError:
             pass
+        finally:
+            _unlock_file(fd)
 
 
 __all__ = ["LambdaState", "DEFAULT_STATE_PATH"]

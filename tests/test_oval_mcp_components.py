@@ -317,6 +317,106 @@ def test_task_reward_clipping():
     print(f"  PASS test_task_reward_clipping: R_task={r.r_task:.3f}")
 
 
+def test_audit_event_roundtrip():
+    """P1-18: AuditEvent → to_dict() → _dict_to_audit_event() 往返序列化测试。
+
+    确保所有关键字段（包括 execution_success, schema_valid, state_changed）
+    在序列化/反序列化链中不丢失。新增字段时此测试应失败，提醒开发者同步更新
+    两端的字段定义。
+    """
+    from src.reward.oval_reward_fn import _dict_to_audit_event
+
+    original = AuditEvent(
+        event_id="evtlog_sess_000001",
+        session_id="sess_abc",
+        step=3,
+        action_type="tool_call",
+        tool_name="update_event",
+        tool_arguments={"event_id": "evt_001", "fields": {"title": "new meeting"}},
+        terminal_action=None,
+        operation="update",
+        target_type="calendar_event",
+        target_id="evt_001",
+        before_hash="abc123def456",
+        after_hash="xyz789ghi012",
+        changed_fields=["title", "start_time"],
+        created_ids=[],
+        deleted_ids=[],
+        duplicate_of=None,
+        identity_violation="",
+        forbidden_transition="",
+        observation={"status": "ok", "event": {"event_id": "evt_001", "title": "new meeting"}},
+        execution_success=True,
+        error_type=None,
+        error_message="",
+        schema_valid=True,
+        state_changed=True,
+        latency_ms=42,
+    )
+
+    d = original.to_dict()
+    restored = _dict_to_audit_event(d)
+
+    # 关键字段一一比对
+    assert restored.event_id == original.event_id
+    assert restored.session_id == original.session_id
+    assert restored.step == original.step
+    assert restored.action_type == original.action_type
+    assert restored.tool_name == original.tool_name
+    assert restored.tool_arguments == original.tool_arguments
+    assert restored.operation == original.operation
+    assert restored.target_type == original.target_type
+    assert restored.target_id == original.target_id
+    assert restored.before_hash == original.before_hash
+    assert restored.after_hash == original.after_hash
+    assert restored.changed_fields == original.changed_fields
+    assert restored.created_ids == original.created_ids
+    assert restored.deleted_ids == original.deleted_ids
+    assert restored.duplicate_of == original.duplicate_of
+    assert restored.identity_violation == original.identity_violation
+    assert restored.forbidden_transition == original.forbidden_transition
+    assert restored.execution_success == original.execution_success
+    assert restored.schema_valid == original.schema_valid
+    assert restored.state_changed == original.state_changed
+    assert restored.error_type == original.error_type
+    assert restored.error_message == original.error_message
+    assert restored.latency_ms == original.latency_ms
+    # observation: dict 内容比对
+    assert isinstance(restored.observation, dict)
+    assert restored.observation.get("status") == "ok"
+
+    print("  PASS test_audit_event_roundtrip: all 23 fields survived serialization roundtrip")
+
+
+def test_audit_event_roundtrip_terminal():
+    """终端事件的 roundtrip 测试（action_type != tool_call）。"""
+    from src.reward.oval_reward_fn import _dict_to_audit_event
+
+    original = AuditEvent(
+        event_id="evtlog_sess_term_01",
+        session_id="sess_xyz",
+        step=5,
+        action_type="final_answer",
+        tool_name="",
+        tool_arguments={},
+        terminal_action="Meeting rescheduled to 3pm.",
+        operation="terminal",
+        execution_success=True,
+        schema_valid=True,
+    )
+
+    d = original.to_dict()
+    restored = _dict_to_audit_event(d)
+
+    assert restored.action_type == "final_answer"
+    assert restored.tool_name == ""
+    assert restored.terminal_action == "Meeting rescheduled to 3pm."
+    assert restored.execution_success is True
+    assert restored.schema_valid is True
+
+    print("  PASS test_audit_event_roundtrip_terminal")
+
+
 if __name__ == "__main__":
     print("OVAL-MCP Unit Tests")
     print("=" * 40)
@@ -339,6 +439,8 @@ if __name__ == "__main__":
         test_group_advantages,
         test_group_saturation,
         test_lambda_update,
+        test_audit_event_roundtrip,
+        test_audit_event_roundtrip_terminal,
     ]
     passed = 0
     for t in tests:

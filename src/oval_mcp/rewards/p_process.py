@@ -135,14 +135,17 @@ class ProcessScorer:
         result.p_process = max(-self.p_max, min(self.p_max, p_sum))
         return result
 
-    # Mapping from predicate names to bonus keys
+    # Mapping from predicate names to bonus keys.
+    # NOTE: "produced_required_response" is deliberately excluded — it is a
+    # terminal-action predicate whose reward is already covered by R_task
+    # (terminal predicate check).  Awarding a P_process bonus for it would
+    # double-count the terminal action and inject noise into the process signal.
     _PREDICATE_BONUS_MAP: dict[str, str] = {
         "resolved_required_entity": "B_resolve_required_entity",
         "satisfied_dependency_edge": "B_satisfy_dependency_edge",
         "preserve_required_identity": "B_preserve_required_identity",
         "completed_required_transition": "B_complete_required_transition",
         "verified_postcondition": "B_verify_postcondition",
-        "produced_required_response": "B_recover_from_tool_error",
     }
 
     def _score_step(

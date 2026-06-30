@@ -81,12 +81,17 @@ PROVE Teacher（LLM-in-the-loop，每轮决策）
 - `reward_model.ground_truth.success_criteria` 是 **JSON 字符串**（非 list[dict]），避免 pyarrow 混合类型崩溃
 - `reward_model.ground_truth.oracle_calls` 中每个 call 包含 `action` 字段，区分 `tool_call` / `clarification`
 - `prompt` 是 JSON 字符串，OVAL loop 端自动 `json.loads` 恢复
+- `oracle_calls` 在 `extra_info` 中也是 JSON 字符串序列化，避免 pyarrow struct 统一化导致的字段丢失
 
 ---
 
 ## 数据生成命令
 
 ```bash
+# 统一生成脚本（推荐，自动检测并行策略）
+bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 500
+bash scripts/generate_data.sh --model models/Qwen/Qwen3-32B --count 500 --val-count 100
+
 # vLLM 模式（32B 必须用此模式）
 python scripts/generate_data.py \
   --count 500 --val-count 100 \
@@ -105,15 +110,14 @@ python scripts/generate_data.py \
   --seed 42
 
 # 单 domain 快速测试
-python scripts/generate_data.py \
-  --domain calendar --count 5 --val-count 2 \
-  --model Qwen3-32B-Instruct \
-  --api-base http://localhost:8000/v1
+bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --domain calendar --count 200
 
 # 记录实验配置与结果（自动写入 data/experiments/）
 python scripts/generate_data.py \
   --experiment-tag prove_v1 \
-  ...
+  --count 500 --val-count 100 \
+  --model Qwen3-32B-Instruct \
+  --api-base http://localhost:8000/v1
 ```
 
 ---
@@ -158,4 +162,13 @@ python scripts/generate_data.py \
   "scenario_distribution": {"task_planner": 239, "distractor": 143, "missing_function": 93},
   "difficulty_distribution": {"complete": 285, "missing": 95, "minimal": 95}
 }
+```
+
+## 训练数据读取
+
+训练时通过环境变量指定数据路径：
+```bash
+export OVAL_TRAIN_FILE=data/train.parquet
+export OVAL_VAL_FILE=data/val.parquet
+bash scripts/train_grpo.sh
 ```

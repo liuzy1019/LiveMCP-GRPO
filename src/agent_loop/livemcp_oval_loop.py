@@ -177,11 +177,21 @@ class LiveMCPOvalLoop(AgentLoopBase):
         self.apply_chat_template_kwargs = self.config.data.get("apply_chat_template_kwargs", {})
 
         # Oval 配置
-        self.suite_path = os.environ.get(
-            "OVAL_SUITE_PATH",
-            "configs/live_mcp/suite_mvp.yaml",
+        try:
+            from src.training.livemcp_hyperparams import get_config
+            cfg = get_config()
+        except ImportError:
+            cfg = None
+        self.suite_path = (
+            os.environ.get("OVAL_SUITE_PATH")
+            or (cfg.suite_path if cfg else None)
+            or "configs/live_mcp/suite_mvp.yaml"
         )
-        domains_str = os.environ.get("OVAL_DOMAINS", "calendar,shopping,banking,email,filesystem,payments,crm,issue_tracker,team_chat,food_delivery")
+        domains_str = (
+            os.environ.get("OVAL_DOMAINS")
+            or (cfg.domains if cfg else None)
+            or "calendar,shopping,banking,email,filesystem,payments,crm,issue_tracker,team_chat,food_delivery"
+        )
         self.domains = [d.strip() for d in domains_str.split(",") if d.strip()]
 
         self._ctx: OvalMCPWorkerContext | None = None
@@ -228,6 +238,22 @@ class LiveMCPOvalLoop(AgentLoopBase):
         if isinstance(hidden_tools, str):
             hidden_tools = [t.strip() for t in hidden_tools.split(",") if t.strip()]
         blocked_tools: set[str] | None = set(hidden_tools) if hidden_tools else None
+
+        # P1-3: 校验 visible_tools 与 hidden_tools 一致性。
+        # missing_function 场景的核心机制是从 prompt 中移除 blocked 工具。
+        # 如果 visible_tools 中仍包含 blocked 工具，模型会看到不可用的
+        # 工具而产生困惑。
+        visible_tool_names = extra_info.get("visible_tool_names", [])
+        if isinstance(visible_tool_names, str):
+            visible_tool_names = [t.strip() for t in visible_tool_names.split(",")]
+        if blocked_tools and visible_tool_names:
+            still_visible = blocked_tools & set(visible_tool_names)
+            if still_visible:
+                logger.warning(
+                    f"[oval {rid_short}] hidden_tools 一致性警告: "
+                    f"被标记为 hidden 的工具 {still_visible} 仍然出现在 "
+                    f"visible_tool_names 中。模型可能会尝试调用不可用的工具。"
+                )
 
         if self.tokenizer is None:
             self.tokenizer = kwargs.get("tokenizer")

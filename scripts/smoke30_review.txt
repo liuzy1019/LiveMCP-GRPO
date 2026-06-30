@@ -1,0 +1,27 @@
+============================================================
+PROVE QUALITY COMPLIANCE REPORT
+============================================================
+
+##### 1. PROMPT STRUCTURE #####
+
+Row 0: domain=calendar scenario=task_planner rounds=2
+  Pattern: system → user → assistant → user
+  assistant: tool_calls=NO content="<ask_clarification>What is the new proposed time for the Team Sync meeting? Also"
+  user[0]: "reschedule the Team Sync meeting — it’s on fire — but I haven’t figured out the new time yet"
+
+Row 3: domain=shopping scenario=missing_function rounds=2
+  Pattern: system → user → assistant → tool → tool → user
+  assistant: tool_calls=NO content="<tool_call>{"name": "remove_from_wishlist", "arguments": {"product_id": "prd_001"
+  user[0]: "this is the third time prd_001 showed up in my wishlist by mistake — remove it"
+Traceback (most recent call last):
+  File "/mnt/data2/liuzhanyi/livemcp-grpo/scripts/prove_check.py", line 16, in <module>
+    ei = eval(train['extra_info'].iloc[idx]) if isinstance(train['extra_info'].iloc[idx], str) else train['extra_info'].iloc[idx]
+                                                           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/lib/python3.11/site-packages/pandas/core/indexing.py", line 1207, in __getitem__
+    return self._getitem_axis(maybe_callable, axis=axis)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/lib/python3.11/site-packages/pandas/core/indexing.py", line 1773, in _getitem_axis
+    self._validate_integer(key, axis)
+  File "/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/lib/python3.11/site-packages/pandas/core/indexing.py", line 1706, in _validate_integer
+    raise IndexError("single positional indexer is out-of-bounds")
+IndexError: single positional indexer is out-of-bounds

@@ -171,10 +171,12 @@ def generate_data(args: argparse.Namespace):
 def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
     """Convert LiveTask list to verl-compatible data rows."""
     rows = []
+    skipped_no_tools = 0
     for i, task in enumerate(tasks):
         # Determine visible tools — use task-provided tools, fall back to required
         visible_tools = task.visible_tools if task.visible_tools else []
         if not visible_tools:
+            skipped_no_tools += 1
             logger.warning(
                 f"Skipping task {task.task_id}: no visible_tools "
                 f"(required_tools={task.required_tools}, "
@@ -197,6 +199,7 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
                     f"    - {pname} ({ptype}{req}): {pdesc}"
                 )
         tools_block = "\n".join(tools_desc_lines)
+        visible_tool_names = [t.get("name", "") for t in visible_tools if t.get("name")]
 
         domain = task.target_servers[0] if task.target_servers else "unknown"
 
@@ -211,24 +214,145 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             f"- To ask clarification: <ask_clarification>your question</ask_clarification>"
         )
 
-        prompt = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": task.user_prompt},
-        ]
+        # ── Build multi-turn prompt from conversation_queries (PROVE CONTINUATION) ──
+        # Inject oracle's actual tool_calls and execution results for all rounds
+        # except the last, so the model sees a realistic multi-turn trajectory.
+        conv_queries = getattr(task, "conversation_queries", None) or []
+        oracle_per_round = getattr(task, "oracle_calls_per_round", None) or []
+        exec_per_round = getattr(task, "execution_history_per_round", None) or []
+
+        if len(conv_queries) > 1 and oracle_per_round:
+            # Multi-turn with real tool-call history
+            prompt_messages = [{"role": "system", "content": system_prompt}]
+            for ri, q in enumerate(conv_queries):
+                prompt_messages.append({"role": "user", "content": q})
+                if ri < len(conv_queries) - 1:
+                    round_ocs = oracle_per_round[ri] if ri < len(oracle_per_round) else []
+                    round_exec = exec_per_round[ri] if ri < len(exec_per_round) else []
+
+                    # Build assistant message with action-specific tags.
+                    # System prompt defines: <tool_call>, <final_answer>,
+                    # <ask_clarification>, <report_error>.  sglang's
+                    # FunctionCallParser handles <tool_call> exclusively;
+                    # the other three are parsed by ActionParser during rollout.
+                    tc_parts = []
+                    for oc in round_ocs:
+                        action = getattr(oc, "action", "tool_call") if hasattr(oc, "action") else oc.get("action", "tool_call") if isinstance(oc, dict) else "tool_call"
+                        if action == "tool_call":
+                            name = oc.tool_name if hasattr(oc, "tool_name") else oc.get("tool_name", "")
+                            args = oc.arguments if hasattr(oc, "arguments") else oc.get("arguments", {})
+                            tc_json = json.dumps({"name": name, "arguments": args}, ensure_ascii=False, default=str)
+                            tc_parts.append(f"<tool_call>{tc_json}</tool_call>")
+                        elif action == "clarification":
+                            # Extract clarification question from arguments
+                            args = oc.arguments if hasattr(oc, "arguments") else oc.get("arguments", {})
+                            question = args.get("question", "") if isinstance(args, dict) else ""
+                            tc_parts.append(f"<ask_clarification>{question}</ask_clarification>")
+
+                    if tc_parts:
+                        prompt_messages.append({
+                            "role": "assistant",
+                            "content": "\n".join(tc_parts),
+                        })
+                    else:
+                        # Round had no tool calls / clarifications recorded
+                        # (e.g. all calls were filtered as duplicates, or the
+                        # round was a missing_function abstain).  Emit a
+                        # legal final_answer tag so the trajectory has the
+                        # canonical assistant action shape.
+                        prompt_messages.append({
+                            "role": "assistant",
+                            "content": "<final_answer>Done.</final_answer>",
+                        })
+
+                    # Append tool result messages (role: tool) — only for
+                    # successful calls that match oracle entries.
+                    # BUG-5 fix (v2): cross-round dedup and within-round dedup
+                    # filter oracle_calls but leave execution_history intact.
+                    # Simple positional truncation causes misalignment.  Match
+                    # by (tool_name, serialised_arguments) instead — only emit
+                    # results for calls whose oracle survived dedup.
+                    exec_index: dict[tuple[str, str], dict] = {}
+                    for ex in round_exec:
+                        if not isinstance(ex, dict) or not ex.get("success", True):
+                            continue  # skip failed/retry entries
+                        ekey = (
+                            ex.get("tool_name", ""),
+                            json.dumps(ex.get("arguments", {}) or {}, sort_keys=True, default=str, ensure_ascii=False),
+                        )
+                        if ekey[0] and ekey not in exec_index:
+                            exec_index[ekey] = ex
+
+                    for oc in round_ocs:
+                        action = getattr(oc, "action", "tool_call") if hasattr(oc, "action") else oc.get("action", "tool_call") if isinstance(oc, dict) else "tool_call"
+                        if action != "tool_call":
+                            continue
+                        oc_name = oc.tool_name if hasattr(oc, "tool_name") else oc.get("tool_name", "")
+                        oc_args = oc.arguments if hasattr(oc, "arguments") else oc.get("arguments", {})
+                        ockey = (
+                            oc_name,
+                            json.dumps(oc_args or {}, sort_keys=True, default=str, ensure_ascii=False),
+                        )
+                        matched = exec_index.get(ockey)
+                        if matched is None:
+                            # cross-round dedup dropped the call — no result
+                            continue
+                        obs = matched.get("observation", {})
+                        if isinstance(obs, dict):
+                            obs_text = json.dumps(obs, ensure_ascii=False, default=str)
+                        else:
+                            obs_text = str(obs)
+                        prompt_messages.append({
+                            "role": "tool",
+                            "content": obs_text,
+                        })
+
+            prompt = prompt_messages
+            has_conversation = True
+            n_conversation_rounds = len(conv_queries)
+        elif len(conv_queries) > 1:
+            # Fallback: multi-turn queries exist but no per-round oracle data
+            # (e.g., tasks generated by older code, or missing_function tasks
+            # whose per-round data was cleared).  Use minimal final_answer.
+            prompt_messages = [{"role": "system", "content": system_prompt}]
+            for qi, q in enumerate(conv_queries):
+                prompt_messages.append({"role": "user", "content": q})
+                if qi < len(conv_queries) - 1:
+                    prompt_messages.append({
+                        "role": "assistant",
+                        "content": "<final_answer>Done.</final_answer>",
+                    })
+            prompt = prompt_messages
+            has_conversation = True
+            n_conversation_rounds = len(conv_queries)
+        else:
+            prompt = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": task.user_prompt},
+            ]
+            has_conversation = False
+            n_conversation_rounds = 1
 
         task_type = task.task_type
         has_distractors = task.metadata.get("has_distractors", False)
         has_missing_func = task.metadata.get("has_missing_function", False)
 
+        # BUG-E fix: perturbation_level encodes the PROVE information level
+        # (complete/missing/minimal at 60/20/20), NOT the perturbation knob
+        # (distractor/missing-function). Previously we overwrote this field
+        # to "hard"/"medium" whenever a knob fired, which destroyed the
+        # information-level stratification needed for GRPO advantage
+        # computation. Keep difficulty intact; expose knob status via the
+        # separate scenario_type/has_* fields.
+        perturbation_level = task.difficulty
         if has_missing_func:
             scenario_type = "missing_function"
-            perturbation_level = "hard"
+        elif task_type == "irrelevant":
+            scenario_type = "irrelevant"
         elif has_distractors:
             scenario_type = "distractor"
-            perturbation_level = "medium"
         else:
             scenario_type = task_type or "normal"
-            perturbation_level = task.difficulty
 
         # 每个 task 独立一组：verl repeat(N) 后同一 prompt 的 N 个 rollout
         # 自然形成一个 group，回归标准 GRPO per-prompt 对比语义
@@ -277,9 +401,17 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             "has_distractors": has_distractors,
             "has_missing_function": has_missing_func,
             "generation_method": task.metadata.get("generation_method", "task_planner"),
-            "oracle_calls": oracle_calls_serialized,
+            # P1-11: serialize oracle_calls to JSON string to prevent
+            # pyarrow struct unification. When different oracle_calls have
+            # heterogeneous arguments (e.g. {"event_id": "x"} vs
+            # {"title": "x", "start_time": "x"}), pyarrow collapses all
+            # keys into a unified struct with null fill. Serializing
+            # oracle_calls as JSON preserves sparse argument dicts.
+            "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
             "success_criteria": success_criteria_json,
             "hidden_tools": list(task.hidden_tools) if task.hidden_tools else [],
+            "visible_tool_names": visible_tool_names,
+            "conversation_rounds": n_conversation_rounds,
         }
 
         row = {
@@ -289,7 +421,8 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
                 "style": "rule",
                 "ground_truth": {
                     "task_id": task.task_id,
-                    "oracle_calls": oracle_calls_serialized,
+                    # Same JSON serialization as extra_info.oracle_calls
+                    "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
                     "success_criteria": success_criteria_json,
                     "required_tools": task.required_tools,
                 },
@@ -301,6 +434,13 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             "scenario_type": scenario_type,
         }
         rows.append(row)
+
+    if skipped_no_tools > 0:
+        logger.warning(
+            f"_tasks_to_rows 跳过了 {skipped_no_tools}/{len(tasks)} 个任务 "
+            f"（visible_tools 为空）。请检查 task_planner 是否正确产出了 "
+            f"visible_tools 字段。"
+        )
 
     return rows
 
