@@ -809,25 +809,16 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             f"Assistant: <final_answer>Transferred $200 from savings to checking. Remaining balance: $300.</final_answer>"
         )
 
-        # One row always starts from reset(session_seed).  Tool observations
-        # make the live rollout multi-turn; teacher calls must never be exposed
-        # in the initial prompt unless they are also replayed into the session.
+        # One row always starts from reset(session_seed).  Teacher tool calls
+        # are never exposed in the initial prompt.  For PROVE continuation
+        # data, the rollout loop injects conversation_queries[1:] after
+        # intermediate terminal actions in the same live MCP session.
         prompt = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": task.user_prompt},
         ]
         n_conversation_rounds = len(task.conversation_queries) or 1
-
-        # Guard: multi-round tasks have oracle traces that span follow-up
-        # queries, but the prompt only contains the first user message.
-        # The model would see an impossible oracle contract.
-        # Reject until multi-round prompt replay is implemented.
-        if n_conversation_rounds > 1:
-            raise RuntimeError(
-                f"Task {task.task_id} has {n_conversation_rounds} conversation "
-                f"rounds but multi-round prompt rendering is not implemented. "
-                f"Rounds > 1 will produce oracle/prompt mismatch."
-            )
+        conversation_queries = list(task.conversation_queries) if task.conversation_queries else [task.user_prompt]
 
         has_distractors = task.metadata.get("has_distractors", False)
         has_missing_func = task.metadata.get("has_missing_function", False)
@@ -932,6 +923,11 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             "hidden_tools": list(task.hidden_tools) if task.hidden_tools else [],
             "visible_tool_names": visible_tool_names,
             "conversation_rounds": n_conversation_rounds,
+            # JSON string avoids pyarrow nested-list surprises and lets the
+            # live rollout inject follow-up user turns deterministically.
+            "conversation_queries": json.dumps(
+                conversation_queries, ensure_ascii=False, default=str
+            ),
         }
 
         row = {

@@ -205,15 +205,12 @@ class ContinuationPolicy:
     def conversation_rounds(rng: random.Random) -> int:
         """PROVE §3.2 Step 3.5: turn-decay schedule.
 
-        ALWAYS 1 for now.  Multi-round generation builds an oracle trace that
-        spans follow-up queries, but _tasks_to_rows() only writes the first
-        user query into the prompt.  The model would see "search events" while
-        the oracle expects [search, get, delete, final_answer] — an impossible
-        contract.  Re-enable multi-round only after the follow-up conversation
-        history is correctly rendered into the prompt AND the rollout session
-        replays the prior-round teacher trace.
+        PROVE keeps generated conversations between 2 and 3 user turns.  The
+        training rollout injects these follow-up user turns after intermediate
+        terminal actions, so the oracle remains a single live conversation
+        instead of hidden teacher history in the initial prompt.
         """
-        return 1
+        return 2 if rng.random() < 0.7 else 3
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -259,7 +256,9 @@ class TaskPlanner:
         """LLM generates a natural-language user query grounded in live state.
 
         PROVE §4: injects persona (character role) and reference_date (temporal anchor)
-        to increase query diversity. chain_seed constrains tools to a dependency chain.
+        to increase query diversity. chain_seed guides the query toward a
+        realistic dependency chain without making that chain the only valid
+        tool trajectory.
         """
         difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(
             difficulty, DIFFICULTY_DESCRIPTIONS["complete"]
@@ -344,7 +343,7 @@ Return only:
                 raw = self.client.generate_chat(
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
-                    temperature=0.6 + 0.1 * attempt,
+                    temperature=0.4 + 0.1 * attempt,
                 )
                 data = _extract_json(raw)
                 if not isinstance(data, dict):
@@ -449,7 +448,7 @@ Return only:
                 raw = self.client.generate_chat(
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
-                    temperature=0.5 + 0.1 * attempt,
+                    temperature=0.4 + 0.1 * attempt,
                 )
                 data = _extract_json(raw)
                 if not isinstance(data, dict):
@@ -548,24 +547,19 @@ Return only:
                 desc = tool_desc_map.get(tn, tn)
                 lines.append(f"  {i+1}. {tn} ({desc}) {marker}")
             lines.append(
-                "Follow this dependency chain in order. The NEXT tool is mandatory; "
-                "do not skip it or substitute an unrelated tool. Only call "
-                "final_answer after ALL steps are complete."
+                "Use this dependency chain as a planning prior. Prefer the NEXT "
+                "tool when it fits the user request and live state, but choose "
+                "another valid action if the observation indicates a better path."
             )
             chain_guide = "\n".join(lines) + "\n"
 
-        # ── P1 PROVE-alignment: explicit next-tool enforcement ──
-        # The chain_guide marks the next tool with "← NEXT", but the LLM
-        # still has to parse this from natural language.  When chain_seed
-        # is active, inject a hard constraint into the system prompt so
-        # the LLM knows its action space BEFORE generating, not after we
-        # reject an incorrect tool_name.
+        # Chain-seed guidance: PROVE uses dependency chains to seed grounded
+        # multi-step queries.  The chain is a planning prior, not a hidden
+        # script that the teacher must match exactly.
         next_tool_hint = ""
         tool_desc = ""
-        # Skip hard tool constraint for missing difficulty: the LLM is
-        # expected to ask_clarification on the first turn, not blindly
-        # call the next chain tool.  Injecting "MUST call tool X" would
-        # produce unverifiable samples that fail replay/provenance checks.
+        # Missing-difficulty tasks may need clarification instead of the next
+        # chain tool, so keep this hint out of that path.
         if (chain_seed and chain_progress < len(chain_seed)
                 and difficulty != "missing"):
             next_tool = chain_seed[chain_progress]
@@ -575,11 +569,10 @@ Return only:
                     tool_desc = f" — {desc}" if desc else ""
                     break
             next_tool_hint = (
-                f"\n## Hard Constraint\n"
-                f"Your next tool_call MUST use \"tool_name\": \"{next_tool}\"{tool_desc}. "
-                f"No other tool is acceptable right now. "
-                f"Look at the execution history and domain state to decide the "
-                f"arguments for this tool.\n"
+                f"\n## Planning Hint\n"
+                f"The sampled dependency chain suggests \"{next_tool}\"{tool_desc} "
+                f"as the next useful tool. Prefer it when it fits the user request "
+                f"and current state; otherwise choose the best valid tool or terminal action.\n"
             )
 
         date_guide = (
@@ -614,8 +607,8 @@ Return only:
         )
         if next_tool_hint:
             system += (
-                "\n\nCRITICAL: This turn you MUST call tool `" + next_tool + "`"
-                + tool_desc + ". No other action is allowed. Do not output final_answer."
+                "\n\nUse the planning hint as guidance, but keep the trajectory "
+                "consistent with the user request and live execution state."
             )
         user = f"""## Domain
 {self.domain_desc}
@@ -640,7 +633,7 @@ Output one JSON object:
                 raw = self.client.generate_chat(
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
-                    temperature=0.6 + 0.1 * attempt,
+                    temperature=0.3 + 0.05 * _retry,
                 )
                 data = _extract_json(raw)
                 if not isinstance(data, dict):
@@ -1267,13 +1260,14 @@ def replay_validate(
     seed: int,
     domain: str,
     success_criteria: list[dict[str, Any]] | None = None,
+    max_error_rate: float = 0.30,
 ) -> tuple[bool, float, int, int]:
     """Replay oracle trace against a fresh session to verify it's reproducible.
 
     Counts only schema-level and execution errors (not empty-result responses).
-    PROVE's corpus filter permits up to 30%, but an oracle used directly as a
-    GRPO verifier must be fully executable, so this implementation requires
-    zero replay errors.
+    PROVE's corpus filter permits up to 30% replay errors; use the same
+    threshold here. Training export still applies a separate contract filter
+    for terminal shape and tool-call budget.
 
     Returns:
         (passed, error_rate, num_errors, num_calls)
@@ -1348,7 +1342,7 @@ def replay_validate(
             num_errors += criteria_errors if criteria_errors > threshold else 0
 
         error_rate = num_errors / num_calls if num_calls > 0 else float(num_errors > 0)
-        passed = num_errors == 0
+        passed = error_rate <= max_error_rate
 
         return passed, error_rate, num_errors, num_calls
     finally:

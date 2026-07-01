@@ -5,8 +5,6 @@ Per environment:
   2. State machine alternating LLM decisions and tool execution
      against a live MCP server
   3. Replay-validate each conversation before conversion
-
-No replay filtering needed — oracle trace was built by actual execution.
 """
 
 from __future__ import annotations
@@ -156,8 +154,6 @@ class TaskOrchestrator:
         # 6-9 length chains for greedy LLMs.
         MAX_ORACLE_CALLS_PER_TASK = 5
 
-        MAX_CHAIN_REJECTS = 3
-        remaining_chain_rejects = MAX_CHAIN_REJECTS
         attempt = 0          # raw LLM call count (for temperature scaling)
         _turn: int = 0       # real turn count (tool exec + terminal)
         while _turn < max_turns:
@@ -199,25 +195,6 @@ class TaskOrchestrator:
                 break
 
             if action.action in ("final_answer", "report_error"):
-                if (round_idx == 0 and chain_seed and len(chain_seed) >= 2
-                        and chain_progress < len(chain_seed)
-                        and remaining_chain_rejects > 0):
-                    remaining = chain_seed[chain_progress:]
-                    remaining_chain_rejects -= 1
-                    attempt += 1
-                    execution_history.append({
-                        "tool_name": "__reject__",
-                        "arguments": {},
-                        "observation": {
-                            "error": (
-                                f"Task incomplete — {chain_progress}/{len(chain_seed)} "
-                                f"steps done. Remaining tools (approximate): "
-                                f"{', '.join(remaining)}. Continue making tool calls."
-                            ),
-                        },
-                        "success": False,
-                    })
-                    continue
                 _add_oracle(OracleCall(
                     tool_name=action.action,
                     arguments={"text": action.text},
@@ -231,30 +208,11 @@ class TaskOrchestrator:
             tool_name = action.tool_name
             tool_name = _fuzzy_match_tool(tool_name, {t["name"] for t in server_tools}) or tool_name
 
-            # The dependency seed is the executable task specification.  A
-            # teacher deviation would create a fluent but unverifiable trace;
-            # reject it and ask for the mandatory next tool instead.
-            if chain_seed and chain_progress < len(chain_seed):
-                expected_tool = chain_seed[chain_progress]
-                # P1-3: missing-difficulty tasks are designed to surface
-                # under-specified queries; the LLM may legitimately choose
-                # ask_clarification instead of the next chain tool.  Skip
-                # chain enforcement so the natural clarification path can
-                # produce valid samples.
-                if tool_name != expected_tool and difficulty != "missing":
-                    if remaining_chain_rejects > 0:
-                        remaining_chain_rejects -= 1
-                        attempt += 1
-                        execution_history.append({
-                            "tool_name": "__reject__",
-                            "arguments": {},
-                            "observation": {
-                                "error": f"Expected next dependency tool: {expected_tool}."
-                            },
-                            "success": False,
-                        })
-                        continue
-                    # No reject budget left — accept the deviation and execute.
+            # PROVE uses the sampled dependency chain to seed grounded
+            # multi-step queries, then lets the state-machine teacher execute
+            # and recover against live state.  Do not force exact chain-prefix
+            # matching here; replay validation and outcome predicates decide
+            # whether the realized trajectory is usable.
             if _has_stale_year(action.arguments, reference_date):
                 execution_history.append({
                     "tool_name": "__reject__",
@@ -642,7 +600,7 @@ class TaskOrchestrator:
                 # ── Provenance check (PROVE §3.2 Step 5: sensitive params) ──
                 prov_ok, prov_violations = provenance_check(
                     oracle_calls=all_oracle_calls,
-                    user_query=user_query,
+                    user_query="\n".join(conversation_queries),
                     execution_history=all_execution_history,
                 )
                 if not prov_ok:
@@ -690,13 +648,6 @@ class TaskOrchestrator:
                 f"Oracle chain length {len(real_calls)} outside required 2-5 "
                 f"for {server_name} task {task_id}"
             )
-        if chain_seed and real_calls:
-            realized_prefix = [call.tool_name for call in real_calls[:len(chain_seed)]]
-            if realized_prefix != chain_seed:
-                raise RuntimeError(
-                    f"Dependency chain incomplete for {server_name} task {task_id}: "
-                    f"expected {chain_seed}, got {realized_prefix}"
-                )
 
         # ── Build final task ──
         oracle_program = OracleProgram(
@@ -963,6 +914,12 @@ class TaskOrchestrator:
             # Defensive: if oracle's last tool somehow not in required_tools
             # (e.g. filtered earlier), fall back to required_tools[-1].
             hidden = task.required_tools[-1]
+        if not _missing_function_candidate_is_semantically_required(task, hidden):
+            logger.debug(
+                f"{task.task_id}: skip missing_function perturbation because "
+                f"{hidden} is not required by the visible user request"
+            )
+            return
         missing = {"type": "missing_function", "server": task.target_servers[0], "tool": hidden}
         task.metadata["original_required_tools"] = list(task.required_tools)
         task.metadata["original_success_criteria"] = list(task.success_criteria)
@@ -1641,6 +1598,105 @@ _UNSAFE_SHORTCUT_TOOLS: dict[str, set[str]] = {
     "issue_tracker": {"transition_issue", "update_issue", "assign_issue"},
     "food_delivery": {"create_order", "cancel_order", "update_order_status"},
 }
+
+
+_READ_INTENT_MARKERS = {
+    "what", "what's", "whats", "which", "who", "when", "where", "show",
+    "list", "check", "view", "get", "find", "search", "look up", "lookup",
+    "confirm", "status", "details", "schedule", "agenda", "calendar",
+    "history", "balance", "track", "report", "summary",
+}
+
+
+_WRITE_INTENT_BY_PREFIX: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (
+        ("create_", "mkdir", "touch"),
+        ("create", "make", "new", "book", "draft", "register", "open"),
+    ),
+    (
+        ("update_", "edit_", "change_", "set_", "mark_", "transition_", "assign_",
+         "complete_", "time_track"),
+        ("update", "edit", "change", "modify", "set", "mark", "move", "reschedule",
+         "rename", "assign", "complete", "transition", "log"),
+    ),
+    (
+        ("delete_", "remove_", "rm", "cancel_", "archive_", "clear_"),
+        ("delete", "remove", "cancel", "archive", "clear", "drop"),
+    ),
+    (
+        ("add_", "apply_", "react_", "rate_"),
+        ("add", "apply", "attach", "invite", "react", "rate", "review", "label"),
+    ),
+    (
+        ("send_", "reply_", "forward_", "pay_", "refund_", "transfer", "wire_",
+         "checkout", "return_", "reorder", "deposit", "withdraw", "freeze_",
+         "unfreeze_", "convert_"),
+        ("send", "reply", "forward", "pay", "refund", "transfer", "wire", "checkout",
+         "return", "reorder", "deposit", "withdraw", "freeze", "unfreeze", "convert"),
+    ),
+)
+
+
+def _tool_annotations(task: LiveTask, tool_name: str) -> dict[str, Any]:
+    for tool in task.visible_tools:
+        if tool.get("name") == tool_name:
+            annotations = tool.get("annotations") or {}
+            return annotations if isinstance(annotations, dict) else {}
+    return {}
+
+
+def _query_has_read_intent(query: str) -> bool:
+    q = f" {query.lower()} "
+    return any(f" {marker} " in q or marker in q for marker in _READ_INTENT_MARKERS)
+
+
+def _query_has_write_intent_for_tool(query: str, tool_name: str) -> bool:
+    q = f" {query.lower().replace('_', ' ')} "
+    name = tool_name.lower()
+    for prefixes, markers in _WRITE_INTENT_BY_PREFIX:
+        if any(name.startswith(prefix) for prefix in prefixes):
+            return any(f" {marker} " in q or marker in q for marker in markers)
+
+    # Unknown mutating tool shape.  Fall back to direct token overlap with the
+    # tool name so explicit requests such as "run foo_bar" are still eligible.
+    tool_tokens = [part for part in name.replace("_", " ").split() if len(part) > 2]
+    return bool(tool_tokens and all(token in q for token in tool_tokens))
+
+
+def _missing_function_candidate_is_semantically_required(
+    task: LiveTask,
+    hidden_tool: str,
+) -> bool:
+    """Return whether hiding hidden_tool creates a valid abstention task.
+
+    PROVE-style missing_function samples must be impossible because a required
+    tool is absent.  They must not turn a read-only request into report_error
+    just because the teacher trajectory happened to include an unrelated write
+    tool later in the conversation.
+    """
+    if not hidden_tool:
+        return False
+
+    oracle_calls = getattr(task.oracle_program, "calls", None) or []
+    if hidden_tool not in {
+        call.tool_name for call in oracle_calls
+        if getattr(call, "action", "tool_call") == "tool_call"
+    }:
+        return False
+
+    annotations = _tool_annotations(task, hidden_tool)
+    is_mutating = bool(annotations.get("mutating")) and not bool(annotations.get("readonly"))
+    if not is_mutating:
+        return True
+
+    query = task.user_prompt or ""
+    if task.conversation_queries:
+        query = task.conversation_queries[0] or query
+
+    if _query_has_read_intent(query) and not _query_has_write_intent_for_tool(query, hidden_tool):
+        return False
+
+    return _query_has_write_intent_for_tool(query, hidden_tool)
 
 
 def _classify_scenario(

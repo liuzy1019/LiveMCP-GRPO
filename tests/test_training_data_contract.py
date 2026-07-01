@@ -9,11 +9,12 @@ from src.live_mcp.types import LiveTask, OracleCall, OracleProgram
 from src.reward.oval_reward_fn import _build_task_dict
 
 
-def _tool(name: str) -> dict:
+def _tool(name: str, *, mutating: bool = False) -> dict:
     return {
         "name": name,
         "description": name,
         "input_schema": {"type": "object", "properties": {}, "required": []},
+        "annotations": {"mutating": mutating, "readonly": not mutating},
     }
 
 
@@ -166,6 +167,73 @@ def test_no_tool_task_has_terminal_but_no_fake_tool_call():
     }]
 
 
+def test_missing_function_does_not_turn_read_request_into_abstention():
+    from src.live_mcp.orchestrator import TaskOrchestrator
+
+    task = _task(100)
+    task.user_prompt = "what’s my schedule for tomorrow"
+    task.conversation_queries = [task.user_prompt]
+    task.visible_tools = [
+        _tool("list_events"),
+        _tool("create_event", mutating=True),
+    ]
+    task.required_tools = ["list_events", "create_event"]
+    task.oracle_program.calls = [
+        OracleCall("list_events", {"date_range": "tomorrow"}),
+        OracleCall(
+            "create_event",
+            {
+                "title": "Follow up",
+                "start_time": "2026-07-02T10:00:00",
+                "end_time": "2026-07-02T10:30:00",
+            },
+        ),
+        OracleCall("final_answer", {"text": "Done"}, action="final_answer"),
+    ]
+
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator._apply_missing_function(task)
+
+    assert task.task_type == "task_planner"
+    assert task.hidden_tools == []
+    assert task.required_tools == ["list_events", "create_event"]
+    assert [call.tool_name for call in task.oracle_program.calls[:2]] == [
+        "list_events", "create_event"
+    ]
+
+
+def test_missing_function_allows_matching_write_request():
+    from src.live_mcp.orchestrator import TaskOrchestrator
+
+    task = _task(101)
+    task.user_prompt = "remove jdoe from evt_002"
+    task.conversation_queries = [task.user_prompt]
+    task.visible_tools = [
+        _tool("get_event"),
+        _tool("remove_attendee", mutating=True),
+    ]
+    task.required_tools = ["get_event", "remove_attendee"]
+    task.oracle_program.calls = [
+        OracleCall("get_event", {"event_id": "evt_002"}),
+        OracleCall("remove_attendee", {"event_id": "evt_002", "email": "jdoe"}),
+        OracleCall("final_answer", {"text": "Done"}, action="final_answer"),
+    ]
+
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator._apply_missing_function(task)
+
+    assert task.task_type == "missing_function"
+    assert task.hidden_tools == ["remove_attendee"]
+    assert task.required_tools == []
+    assert task.oracle_program.calls == [
+        OracleCall(
+            "report_error",
+            {"text": "Required tool 'remove_attendee' is unavailable."},
+            action="report_error",
+        )
+    ]
+
+
 def test_classify_scenario_ignores_clarification_when_tool_calls_present():
     """P0-1 regression: a task that ran real tool_calls and finished with
     ask_clarification must NOT be tagged clarification_required, otherwise
@@ -257,6 +325,37 @@ def test_tasks_to_rows_drops_intermediate_terminals():
         "tool_call", "tool_call", "final_answer"
     ]
     assert row["extra_info"]["allowed_terminal_actions"] == ["final_answer"]
+
+
+def test_tasks_to_rows_exports_prove_continuation_queries():
+    task = _task(431)
+    task.user_prompt = "check my calendar first"
+    task.conversation_queries = [
+        "check my calendar first",
+        "great, now open the event details",
+    ]
+    task.oracle_program.calls = [
+        OracleCall("list_events", {"date_range": "2026-06-24"}),
+        OracleCall("final_answer", {"text": "I found one event."}, action="final_answer"),
+        OracleCall("get_event", {"event_id": "evt_431"}),
+        OracleCall("final_answer", {"text": "Done"}, action="final_answer"),
+    ]
+
+    row = _tasks_to_rows([task], 431)[0]
+    prompt = json.loads(row["prompt"])
+    calls = json.loads(row["extra_info"]["oracle_calls"])
+    queries = json.loads(row["extra_info"]["conversation_queries"])
+
+    assert [message["role"] for message in prompt] == ["system", "user"]
+    assert prompt[1]["content"] == "check my calendar first"
+    assert queries == [
+        "check my calendar first",
+        "great, now open the event details",
+    ]
+    assert row["extra_info"]["conversation_rounds"] == 2
+    assert [call["action"] for call in calls] == [
+        "tool_call", "tool_call", "final_answer"
+    ]
 
 
 def test_tasks_to_rows_rejects_stale_explicit_years():

@@ -20,6 +20,18 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
+if [ -z "${PYTHON_BIN:-}" ]; then
+    if [ -x "/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python" ]; then
+        PYTHON_BIN="/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python"
+    elif [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/python" ]; then
+        PYTHON_BIN="${CONDA_PREFIX}/bin/python"
+    else
+        PYTHON_BIN="python"
+    fi
+fi
+export PYTHON_BIN
+export PYTHONNOUSERSITE=1
+
 # ── Parse args ─────────────────────────────────────────────────────
 MODEL=""
 COUNT=5000
@@ -76,7 +88,7 @@ else
     MODEL_PATH="${PROJECT_ROOT}/${MODEL}"
 fi
 
-MODEL_INFO=$(python -c "
+MODEL_INFO=$("${PYTHON_BIN}" -c "
 import json, sys
 try:
     cfg_path = '${MODEL_PATH}/config.json'
@@ -108,7 +120,7 @@ echo ""
 echo "Model: ${MODEL_PARAMS_B}B params (~${MODEL_BF16_GB} GB BF16), ${MODEL_NUM_HEADS} heads"
 
 # Heuristic: model fits if BF16 size < 70% of single GPU memory
-FITS_SINGLE_GPU=$(python -c "
+FITS_SINGLE_GPU=$("${PYTHON_BIN}" -c "
 fits = ${MODEL_BF16_GB} < ${GPU_MEM_GB} * 0.70
 print('1' if fits else '0')
 ")
@@ -159,7 +171,7 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
 
         echo "  [shard $i] GPU=${GPU_ID}, train=${PER_GPU_TRAIN}, val=${PER_GPU_VAL}, seed=${SHARD_SEED}"
 
-        CUDA_VISIBLE_DEVICES="${GPU_ID}" python scripts/generate_data.py \
+        CUDA_VISIBLE_DEVICES="${GPU_ID}" "${PYTHON_BIN}" scripts/generate_data.py \
             --count "${PER_GPU_TRAIN}" \
             --val-count "${PER_GPU_VAL}" \
             --seed "${SHARD_SEED}" \
@@ -186,7 +198,7 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
     fi
 
     # Merge with global semantic dedup and integrity audit.
-    python -c "
+    "${PYTHON_BIN}" -c "
 import pandas as pd, json, sys, hashlib
 from pathlib import Path
 
@@ -251,7 +263,7 @@ print(f'  merge ok: {len(train_df)} train + {len(val_df)} val, fp_overlap={len(f
 else
     # Calculate optimal TP and number of vLLM instances.
     # vLLM requires TP to divide num_attention_heads evenly
-    TP_SIZE=$(python -c "
+    TP_SIZE=$("${PYTHON_BIN}" -c "
 import math
 mem_need = ${MODEL_BF16_GB}
 mem_gpu = ${GPU_MEM_GB}
@@ -271,15 +283,30 @@ print(tp)
 ")
 
     NUM_INSTANCES=$(( GPU_COUNT / TP_SIZE ))
+    if [ -n "${VLLM_NUM_INSTANCES:-}" ]; then
+        if [ "${VLLM_NUM_INSTANCES}" -lt 1 ]; then
+            echo "ERROR: VLLM_NUM_INSTANCES must be >= 1, got ${VLLM_NUM_INSTANCES}" >&2
+            exit 1
+        fi
+        if [ "${VLLM_NUM_INSTANCES}" -gt "${NUM_INSTANCES}" ]; then
+            echo "ERROR: VLLM_NUM_INSTANCES=${VLLM_NUM_INSTANCES} requires $(( VLLM_NUM_INSTANCES * TP_SIZE )) GPUs, have ${GPU_COUNT}" >&2
+            exit 1
+        fi
+        NUM_INSTANCES="${VLLM_NUM_INSTANCES}"
+    fi
     if [ "$NUM_INSTANCES" -lt 1 ]; then
         echo "ERROR: Need ${TP_SIZE} GPUs for TP=${TP_SIZE}, have ${GPU_COUNT}" >&2
         exit 1
     fi
 
     PORT_START="${VLLM_PORT_START:-8001}"
+    VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.82}"
+    VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-12288}"
+    VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-4}"
 
     echo ""
     echo "Strategy: vLLM API — TP=${TP_SIZE}, ${NUM_INSTANCES} instance(s)"
+    echo "vLLM: gpu_memory_utilization=${VLLM_GPU_MEMORY_UTILIZATION}, max_model_len=${VLLM_MAX_MODEL_LEN}, max_num_seqs=${VLLM_MAX_NUM_SEQS}"
 
     PER_INSTANCE_TRAIN=$(( (COUNT + NUM_INSTANCES - 1) / NUM_INSTANCES ))
     PER_INSTANCE_VAL=$(( (VAL_COUNT + NUM_INSTANCES - 1) / NUM_INSTANCES ))
@@ -295,16 +322,25 @@ print(tp)
         PORT=$(( PORT_START + inst ))
         LOG="${OUTPUT_DIR}/vllm_instance${inst}_$(date +%H%M).log"
 
+        # Derive served model name from directory name:
+        #   Qwen3-32B    → Qwen3-32B-Instruct
+        #   Gemma-4-31B-it → Gemma-4-31B-it (keep as-is)
+        SERVED_MODEL="$(basename "${MODEL}")"
+        if [[ "$SERVED_MODEL" == Qwen* && "$SERVED_MODEL" != *Instruct* ]]; then
+            SERVED_MODEL="${SERVED_MODEL}-Instruct"
+        fi
+
         echo "  Starting vLLM instance ${inst} on GPUs ${GPU_LIST}, port ${PORT}"
 
-        CUDA_VISIBLE_DEVICES="${GPU_LIST}" python -m vllm.entrypoints.openai.api_server \
+        CUDA_VISIBLE_DEVICES="${GPU_LIST}" "${PYTHON_BIN}" -m vllm.entrypoints.openai.api_server \
             --model "${MODEL}" \
-            --served-model-name "$(basename ${MODEL})-Instruct" \
+            --served-model-name "${SERVED_MODEL}" \
             --tensor-parallel-size "${TP_SIZE}" \
-            --gpu-memory-utilization 0.82 \
-        --max-model-len 12288 \
-            --max-num-seqs 4 \
+            --gpu-memory-utilization "${VLLM_GPU_MEMORY_UTILIZATION}" \
+            --max-model-len "${VLLM_MAX_MODEL_LEN}" \
+            --max-num-seqs "${VLLM_MAX_NUM_SEQS}" \
             --port "${PORT}" \
+            --trust-remote-code \
             > "${LOG}" 2>&1 &
         VLLM_PIDS+=($!)
     done
@@ -317,7 +353,10 @@ print(tp)
     for ((inst=0; inst<NUM_INSTANCES; inst++)); do
         PORT=$(( PORT_START + inst ))
         PID="${VLLM_PIDS[$inst]}"
-        SERVED_MODEL="$(basename "${MODEL}")-Instruct"
+        SERVED_MODEL="$(basename "${MODEL}")"
+        if [[ "$SERVED_MODEL" == Qwen* && "$SERVED_MODEL" != *Instruct* ]]; then
+            SERVED_MODEL="${SERVED_MODEL}-Instruct"
+        fi
         WAITED=0
         while [ $WAITED -lt $MAX_WAIT ]; do
             if ! kill -0 "${PID}" 2>/dev/null; then
@@ -350,7 +389,7 @@ print(tp)
 
         echo "  Instance ${inst}: train=${PER_INSTANCE_TRAIN}, val=${PER_INSTANCE_VAL}, seed=${SHARD_SEED}"
 
-        python scripts/generate_data.py \
+        "${PYTHON_BIN}" scripts/generate_data.py \
             --count "${PER_INSTANCE_TRAIN}" \
             --val-count "${PER_INSTANCE_VAL}" \
             --seed "${SHARD_SEED}" \
@@ -378,7 +417,7 @@ print(tp)
     fi
 
     # Merge with global semantic dedup and integrity audit.
-    python -c "
+"${PYTHON_BIN}" -c "
 import pandas as pd, json, sys, hashlib
 from pathlib import Path
 
@@ -438,16 +477,8 @@ fi
 # ── Print stats ────────────────────────────────────────────────────
 echo ""
 echo "=== Generation Complete ==="
-python -c "
-import pandas as pd
-for path in ['${OUTPUT_DIR}/train.parquet', '${OUTPUT_DIR}/val.parquet']:
-    df = pd.read_parquet(path)
-    domains = sorted(set(row['extra_info']['domain'] for _, row in df.iterrows()))
-    print(f'{path}: {len(df)} rows, domains={domains}')
-    if len(df) > 0:
-        ei = df.iloc[0]['extra_info']
-        print(f'  sample: domain={ei.get(\"domain\")}, scenario={ei.get(\"scenario_type\")}')
-"
+echo "Train parquet: ${OUTPUT_DIR}/train.parquet"
+echo "Val parquet:   ${OUTPUT_DIR}/val.parquet"
 
 echo ""
 echo "Done. [$(date '+%Y-%m-%d %H:%M:%S')]"

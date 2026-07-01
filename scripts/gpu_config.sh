@@ -16,6 +16,7 @@
 #   GPU_MEM_GB      — total memory per GPU in GiB (floor)
 
 set -euo pipefail
+GPU_DETECT_PYTHON="${GPU_DETECT_PYTHON:-${PYTHON_BIN:-python}}"
 
 # ── Resolve requested GPUs ──────────────────────────────────────────
 if [ $# -ge 1 ]; then
@@ -27,7 +28,13 @@ else
         IFS=',' read -ra GPU_INDEX_ARRAY <<< "${CUDA_VISIBLE_DEVICES}"
     else
         # Detect all available GPUs
-        DETECTED_COUNT=$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null | wc -l || echo 0)
+        if DETECTED_GPU_INDEXES=$(nvidia-smi --query-gpu=index --format=csv,noheader 2>/dev/null); then
+            DETECTED_COUNT=$(printf '%s\n' "${DETECTED_GPU_INDEXES}" | awk 'NF {n++} END {print n+0}')
+        elif TORCH_GPU_COUNT=$("${GPU_DETECT_PYTHON}" -c 'import torch; print(torch.cuda.device_count() if torch.cuda.is_available() else 0)' 2>/dev/null); then
+            DETECTED_COUNT="${TORCH_GPU_COUNT:-0}"
+        else
+            DETECTED_COUNT=0
+        fi
         if [ "${DETECTED_COUNT}" -eq 0 ]; then
             echo "ERROR: No GPUs detected via nvidia-smi" >&2
             exit 1
@@ -76,8 +83,20 @@ GPU_IDS=$(IFS=','; echo "${GPU_INDEX_ARRAY[*]}")
 export CUDA_VISIBLE_DEVICES="${GPU_IDS}"
 
 # ── Detect GPU model & tier ─────────────────────────────────────────
-GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | awk 'NR==1{print $1, $2}' || echo "unknown")
-GPU_MEM_MB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | awk 'NR==1{print $1}' || echo "0")
+if GPU_INFO=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | awk 'NR==1{print}' || true); then
+    GPU_MODEL=$(printf '%s\n' "${GPU_INFO}" | awk -F',' 'NF {gsub(/^ +| +$/, "", $1); print $1; exit}')
+    GPU_MEM_MB=$(printf '%s\n' "${GPU_INFO}" | awk -F',' 'NF > 1 {gsub(/^ +| +$/, "", $2); if ($2 ~ /^[0-9]+$/) print $2; exit}')
+fi
+GPU_MODEL="${GPU_MODEL:-}"
+GPU_MEM_MB="${GPU_MEM_MB:-}"
+if [ -z "${GPU_MODEL}" ] || [ -z "${GPU_MEM_MB}" ]; then
+    if TORCH_GPU_INFO=$("${GPU_DETECT_PYTHON}" -c 'import torch; p=torch.cuda.get_device_properties(0); print(torch.cuda.get_device_name(0)); print(p.total_memory // 1024 // 1024)' 2>/dev/null); then
+        GPU_MODEL=$(printf '%s\n' "${TORCH_GPU_INFO}" | sed -n '1p')
+        GPU_MEM_MB=$(printf '%s\n' "${TORCH_GPU_INFO}" | sed -n '2p')
+    fi
+fi
+GPU_MODEL="${GPU_MODEL:-unknown}"
+GPU_MEM_MB="${GPU_MEM_MB:-0}"
 GPU_MEM_GB=0
 if [ "${GPU_MEM_MB}" != "0" ] && [ -n "${GPU_MEM_MB}" ]; then
     GPU_MEM_GB=$(( GPU_MEM_MB / 1024 ))

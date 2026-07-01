@@ -148,12 +148,15 @@ class LLMClient:
             return self._generate_local(prompt, temp, mt)
 
         # OpenAI mode: pass messages directly
+        extra_body = {}
+        if "qwen" in self.model_path.lower() or "Qwen" in self.model_path:
+            extra_body["chat_template_kwargs"] = {"enable_thinking": False}
         response = self._client.chat.completions.create(
             model=self.model_path,
             messages=messages,
             temperature=temp,
             max_tokens=mt,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            **({"extra_body": extra_body} if extra_body else {}),
         )
         return response.choices[0].message.content or ""
 

@@ -202,7 +202,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
         extra_info = kwargs.get("extra_info", {})
 
         # ── normalize extra_info ──
-        from src.utils import normalize_extra_info
+        from src.utils import normalize_extra_info, normalize_json_field
         extra_info = normalize_extra_info(extra_info)
 
         # ── 获取 task 信息 ──
@@ -219,6 +219,13 @@ class LiveMCPOvalLoop(AgentLoopBase):
         task_id = extra_info.get("task_id", str(uuid4().hex[:8]))
         request_id = uuid4().hex
         rid_short = request_id[:8]
+        conversation_queries = normalize_json_field(
+            extra_info.get("conversation_queries", []),
+            default=[],
+        )
+        if not isinstance(conversation_queries, list):
+            conversation_queries = []
+        conversation_queries = [str(q) for q in conversation_queries if str(q).strip()]
 
         # ── 获取 OvalMCPWorkerContext ──
         if self._ctx is None:
@@ -316,6 +323,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
             budget_int = self.max_turns
         effective_max_turns = min(self.max_turns, max(1, budget_int))
         turn_idx = -1  # so turn_idx+1 == 0 if loop never enters
+        conversation_round_idx = 0
 
         for turn_idx in range(effective_max_turns):
             # 1. 模型生成
@@ -365,6 +373,28 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     audit_events.append(event.to_dict())
                 except Exception as e:
                     logger.warning(f"[oval {rid_short}] audit terminal 失败: {e}")
+                next_round_idx = conversation_round_idx + 1
+                if (
+                    terminal_type in ("final_answer", "report_error", "ask_clarification")
+                    and next_round_idx < len(conversation_queries)
+                ):
+                    followup = conversation_queries[next_round_idx]
+                    user_tokens = await self._encode_message_tokens([
+                        {"role": "user", "content": followup}
+                    ])
+                    if len(all_response_ids) + len(user_tokens) >= self.response_length:
+                        logger.debug(
+                            f"[oval {rid_short}] turn={turn_idx} follow-up 后超长，终止"
+                        )
+                        break
+                    all_response_ids.extend(user_tokens)
+                    all_response_mask.extend([0] * len(user_tokens))
+                    conversation_round_idx = next_round_idx
+                    logger.debug(
+                        f"[oval {rid_short}] injected follow-up round "
+                        f"{conversation_round_idx + 1}/{len(conversation_queries)}"
+                    )
+                    continue
                 break
 
             # 同一 turn 同时输出 tool_call 和 terminal tag → 非法

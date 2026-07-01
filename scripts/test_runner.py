@@ -309,6 +309,8 @@ class DataAuditor:
         - unsafe_temptation: delete+create shortcut pattern
         - missing_dependency: later tool needs entity not produced by earlier step
         """
+        if len(self.val) == 0:
+            return True
         val_scenarios = set()
         for _, r in self.val.iterrows():
             ei = self._pe(r["extra_info"])
@@ -323,7 +325,45 @@ class DataAuditor:
         if not ok:
             self.issues.append(f"Val missing REQUIRED scenarios: {missing}")
         if missing_desired:
-            self.issues.append(f"Val missing desired scenarios (non-blocking): {missing_desired}")
+            # Non-blocking: print warning but don't pollute self.issues.
+            print(
+                f"  [INFO] Val missing desired scenarios (non-blocking): "
+                f"{sorted(missing_desired)}"
+            )
+        return ok
+
+    @staticmethod
+    def _semantic_fingerprint(row) -> str:
+        """Domain + query + oracle_calls semantic hash for cross-dataset dedup."""
+        import hashlib
+        ei = row["extra_info"] if isinstance(row["extra_info"], dict) else json.loads(row["extra_info"])
+        domain = ei.get("domain", "")
+        query = " ".join((ei.get("user_query", "") or "").lower().split())
+        oc = ei.get("oracle_calls", [])
+        if isinstance(oc, str):
+            oc = json.loads(oc)
+        sig = json.dumps(
+            {"d": domain, "q": query, "c": oc},
+            sort_keys=True, ensure_ascii=False, default=str,
+        )
+        return hashlib.sha256(sig.encode()).hexdigest()
+
+    def check_train_val_no_semantic_overlap(self) -> bool:
+        """train 和 val 之间不能有语义重复（domain + query + oracle 一致）。"""
+        if len(self.train) == 0 or len(self.val) == 0:
+            return True
+        train_fps = {self._semantic_fingerprint(row) for _, row in self.train.iterrows()}
+        train_fps.discard("")
+        overlap = 0
+        for _, row in self.val.iterrows():
+            fp = self._semantic_fingerprint(row)
+            if fp and fp in train_fps:
+                overlap += 1
+        ok = overlap == 0
+        if not ok:
+            self.issues.append(
+                f"{overlap} semantic fingerprint overlaps between train and val"
+            )
         return ok
 
     def check_missing_function_oracle_empty(self) -> bool:
@@ -362,6 +402,29 @@ class DataAuditor:
         ok = len(violations) == 0
         if not ok:
             self.issues.append(f"irrelevant with wrong oracle shape: {violations[:5]}")
+        return ok
+
+    def check_abstention_oracle_shape(self) -> bool:
+        """no_tool_or_abstention 的 oracle_calls 应恰好包含 1 个 report_error terminal，0 个 tool_call。
+
+        当前生成侧将 missing_function 和 irrelevant 统一为 scenario_type="no_tool_or_abstention"。
+        此检查覆盖该实际标签（不同于上面的 missing_function/irrelevant 遗留检查）。
+        """
+        violations = []
+        for _, r in self.all_data.iterrows():
+            ei = self._pe(r["extra_info"])
+            if ei.get("scenario_type") != "no_tool_or_abstention":
+                continue
+            oc = ei.get("oracle_calls", [])
+            if isinstance(oc, str):
+                oc = json.loads(oc)
+            tool_calls = [c for c in oc if c.get("action", "tool_call") == "tool_call"]
+            terminals = [c for c in oc if c.get("action") in ("report_error", "final_answer", "ask_clarification")]
+            if tool_calls or len(terminals) != 1 or terminals[0].get("action") != "report_error":
+                violations.append(ei.get("task_id", "?"))
+        ok = len(violations) == 0
+        if not ok:
+            self.issues.append(f"abstention oracle shape wrong: {violations[:5]}")
         return ok
 
     def check_oracle_struct(self) -> bool:
@@ -449,6 +512,85 @@ class DataAuditor:
             self.issues.append(f"has_missing_function inconsistent: {violations[:5]}")
         return ok
 
+    @staticmethod
+    def _has_word(text: str, markers: set[str]) -> bool:
+        normalized = str(text).lower().replace("_", " ").replace("’", "'")
+        q = f" {normalized} "
+        return any(f" {marker} " in q or marker in q for marker in markers)
+
+    @staticmethod
+    def _hidden_tools(ei: dict) -> list[str]:
+        hidden = ei.get("hidden_tools", [])
+        if isinstance(hidden, str):
+            try:
+                loaded = json.loads(hidden)
+                hidden = loaded if isinstance(loaded, list) else [hidden]
+            except json.JSONDecodeError:
+                hidden = [t.strip() for t in hidden.split(",") if t.strip()]
+        if hasattr(hidden, "tolist"):
+            hidden = hidden.tolist()
+        return [str(t) for t in hidden if str(t)]
+
+    def check_missing_function_semantic_alignment(self) -> bool:
+        """missing_function 不能把读请求错误标成缺少写工具。
+
+        This is intentionally conservative: if a no-tool row hides a mutating
+        tool, the visible user query must contain an explicit write intent.
+        """
+        read_markers = {
+            "what", "what's", "whats", "which", "who", "when", "where",
+            "show", "list", "check", "view", "get", "find", "search",
+            "confirm", "status", "details", "schedule", "agenda",
+            "calendar", "history", "balance", "track", "report", "summary",
+        }
+        write_markers = {
+            "create", "make", "new", "book", "draft", "register",
+            "update", "edit", "change", "modify", "set", "mark", "move",
+            "reschedule", "rename", "assign", "complete", "transition",
+            "log", "delete", "remove", "cancel", "archive", "clear",
+            "drop", "add", "apply", "attach", "invite", "react", "rate",
+            "review", "label", "send", "reply", "forward", "pay", "refund",
+            "transfer", "wire", "checkout", "return", "reorder", "deposit",
+            "withdraw", "freeze", "unfreeze", "convert",
+        }
+        mutating_prefixes = (
+            "create_", "update_", "delete_", "remove_", "add_", "set_",
+            "send_", "reply_", "forward_", "pay_", "refund_", "transfer",
+            "wire_", "checkout", "return_", "cancel_", "archive_", "clear_",
+            "change_", "respond_", "mark_", "assign_", "transition_",
+            "complete_", "convert_", "deposit", "withdraw", "freeze_",
+            "unfreeze_",
+        )
+
+        violations = []
+        for _, r in self.all_data.iterrows():
+            ei = self._pe(r["extra_info"])
+            if not ei.get("has_missing_function"):
+                continue
+            if ei.get("scenario_type") not in {"missing_function", "no_tool_or_abstention"}:
+                continue
+            hidden = self._hidden_tools(ei)
+            if not hidden or not any(t.lower().startswith(mutating_prefixes) for t in hidden):
+                continue
+            query = ei.get("user_query", "")
+            if not query:
+                try:
+                    prompt = json.loads(r["prompt"])
+                    query = prompt[1].get("content", "") if len(prompt) > 1 else ""
+                except Exception:
+                    query = ""
+            if self._has_word(query, read_markers) and not self._has_word(query, write_markers):
+                violations.append(
+                    f"{ei.get('task_id', '?')} query={query!r} hidden={hidden}"
+                )
+
+        ok = len(violations) == 0
+        if not ok:
+            self.issues.append(
+                f"missing_function semantic mismatch: {violations[:5]}"
+            )
+        return ok
+
     def check_conversation_rounds(self) -> bool:
         """验证 val 包含单轮任务，且所有任务轮数在 1-5 范围内。"""
         issues_local = []
@@ -466,16 +608,23 @@ class DataAuditor:
             self.issues.extend(issues_local)
         return ok
 
-    def check_domain_coverage(self, min_domains: int = 2) -> bool:
+    def check_domain_coverage(self, min_domains: int | None = None) -> bool:
         """验证域覆盖。
         
-        min_domains 默认为 2（多域训练时至少覆盖 2 个域）。
-        单域定位实验时应传入 min_domains=1。
+        默认行为：从实际数据中自动推断所需的最小域数。
+        - 如果数据中只有 1 个域 → 要求 ≥1（单域实验合法）
+        - 如果数据中有 2+ 个域 → 要求 ≥2（多域训练至少覆盖 2 个域）
+        - 可通过 min_domains 参数显式覆盖。
         """
         domains = Counter()
         for _, r in self.all_data.iterrows():
             ei = self._pe(r["extra_info"])
             domains[ei.get("domain", "?")] += 1
+
+        if min_domains is None:
+            # Auto-detect: if only 1 domain exists, require ≥1; else ≥2.
+            min_domains = 1 if len(domains) == 1 else 2
+
         ok = len(domains) >= min_domains
         if not ok:
             self.issues.append(
@@ -483,18 +632,21 @@ class DataAuditor:
             )
         return ok
 
-    def run_all(self) -> tuple[bool, list[str], dict]:
+    def run_all(self, min_domains: int | None = None) -> tuple[bool, list[str], dict]:
         checks = [
             ("oracle_chain_length", self.check_oracle_chain_length),
             ("scenario_coverage", self.check_scenario_coverage),
             ("missing_function_empty_oracle", self.check_missing_function_oracle_empty),
             ("irrelevant_empty_oracle", self.check_irrelevant_oracle_empty),
+            ("abstention_oracle_shape", self.check_abstention_oracle_shape),
             ("oracle_struct", self.check_oracle_struct),
             ("no_duplicate_oracle_calls", self.check_no_duplicate_oracle_calls),
             ("train_val_no_overlap", self.check_train_val_no_overlap),
+            ("train_val_no_semantic_overlap", self.check_train_val_no_semantic_overlap),
             ("has_missing_function_consistent", self.check_has_missing_function_consistency),
+            ("missing_function_semantic_alignment", self.check_missing_function_semantic_alignment),
             ("conversation_rounds", self.check_conversation_rounds),
-            ("domain_coverage", self.check_domain_coverage),
+            ("domain_coverage", lambda: self.check_domain_coverage(min_domains=min_domains)),
         ]
         passed = 0
         failed_checks = []
@@ -525,7 +677,7 @@ def check_data_audit(args: argparse.Namespace) -> TestResult:
         return TestResult("L3_audit", False, 0, f"Train file not found: {train_path}", {})
 
     auditor = DataAuditor(train_path, val_path)
-    ok, issues, metrics = auditor.run_all()
+    ok, issues, metrics = auditor.run_all(min_domains=args.min_domains)
 
     detail = "OK" if ok else f"{len(issues)} issues:\n  " + "\n  ".join(issues[:10])
     return TestResult("L3_audit", ok, (time.time() - t0) * 1000, detail, metrics)
@@ -593,6 +745,8 @@ def main():
     parser.add_argument("--model", default=None, help="Model name (required for L2)")
     parser.add_argument("--train", default=None, help="Train parquet path (for L3)")
     parser.add_argument("--val", default=None, help="Val parquet path (for L3)")
+    parser.add_argument("--min-domains", type=int, default=None,
+                        help="Minimum domain count required (L3 domain_coverage). Default: auto-detect from data.")
     parser.add_argument("--test-output", default="data/test_integration",
                         help="Output directory for L2 test data")
     parser.add_argument("--json", action="store_true", help="Output JSON report")
