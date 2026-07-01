@@ -818,6 +818,17 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
         ]
         n_conversation_rounds = len(task.conversation_queries) or 1
 
+        # Guard: multi-round tasks have oracle traces that span follow-up
+        # queries, but the prompt only contains the first user message.
+        # The model would see an impossible oracle contract.
+        # Reject until multi-round prompt replay is implemented.
+        if n_conversation_rounds > 1:
+            raise RuntimeError(
+                f"Task {task.task_id} has {n_conversation_rounds} conversation "
+                f"rounds but multi-round prompt rendering is not implemented. "
+                f"Rounds > 1 will produce oracle/prompt mismatch."
+            )
+
         has_distractors = task.metadata.get("has_distractors", False)
         has_missing_func = task.metadata.get("has_missing_function", False)
 

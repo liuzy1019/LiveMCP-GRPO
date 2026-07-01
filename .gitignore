@@ -55,6 +55,10 @@ wandb/
 # Misc
 tmp_*
 
+# Internal project docs (not for public repo)
+修复记录.MD
+*.修复记录.*
+
 # Model cache / temp files
 *.msc
 *.mdl

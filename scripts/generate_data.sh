@@ -221,17 +221,27 @@ def merge(pattern, outpath, target):
         merged = merged.head(target).reset_index(drop=True)
     merged.to_parquet(outpath, index=False)
     print(f'  {outpath}: {len(merged)} rows (target={target})')
+    if target is not None and target > 0 and len(merged) < target:
+        print(f'  FATAL: {outpath} has {len(merged)} rows, below target {target}')
+        return False, merged
     return True, merged
 
 ok1, train_df = merge('shard_*_train.parquet', '${OUTPUT_DIR}/train.parquet', ${COUNT})
 ok2, val_df = merge('shard_*_val.parquet', '${OUTPUT_DIR}/val.parquet', ${VAL_COUNT})
 if not (ok1 and ok2): sys.exit(1)
-# P1-5: cross-dataset integrity quickcheck.
+# P1-5: cross-dataset semantic-fingerprint integrity check.
+train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
+val_fps = {_row_fingerprint(row) for _, row in val_df.iterrows()}
+fp_overlap = train_fps & val_fps
+if fp_overlap:
+    print(f'  FATAL: {len(fp_overlap)} semantic fingerprint overlaps between train and val!')
+    sys.exit(1)
+# Also check task_id overlap.
 train_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in train_df.iterrows()}
 val_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in val_df.iterrows()}
-overlap = train_ids & val_ids
-if overlap: print(f'WARNING: {len(overlap)} train/val task_id overlaps!')
-print(f'  merge ok: {len(train_df)} train + {len(val_df)} val, {len(overlap)} overlaps')
+tid_overlap = train_ids & val_ids
+if tid_overlap: print(f'WARNING: {len(tid_overlap)} train/val task_id overlaps!')
+print(f'  merge ok: {len(train_df)} train + {len(val_df)} val, fp_overlap={len(fp_overlap)}, tid_overlap={len(tid_overlap)}')
 "
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 
@@ -402,16 +412,25 @@ def merge(pattern, outpath, target):
         merged = merged.head(target).reset_index(drop=True)
     merged.to_parquet(outpath, index=False)
     print(f'  {outpath}: {len(merged)} rows (target={target})')
+    if target is not None and target > 0 and len(merged) < target:
+        print(f'  FATAL: {outpath} has {len(merged)} rows, below target {target}')
+        return False, merged
     return True, merged
 
 ok1, train_df = merge('shard_*_train.parquet', '${OUTPUT_DIR}/train.parquet', ${COUNT})
 ok2, val_df = merge('shard_*_val.parquet', '${OUTPUT_DIR}/val.parquet', ${VAL_COUNT})
 if not (ok1 and ok2): sys.exit(1)
+train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
+val_fps = {_row_fingerprint(row) for _, row in val_df.iterrows()}
+fp_overlap = train_fps & val_fps
+if fp_overlap:
+    print(f'  FATAL: {len(fp_overlap)} semantic fingerprint overlaps between train and val!')
+    sys.exit(1)
 train_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in train_df.iterrows()}
 val_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in val_df.iterrows()}
-overlap = train_ids & val_ids
-if overlap: print(f'WARNING: {len(overlap)} train/val task_id overlaps!')
-print(f'  merge ok: {len(train_df)} train + {len(val_df)} val, {len(overlap)} overlaps')
+tid_overlap = train_ids & val_ids
+if tid_overlap: print(f'WARNING: {len(tid_overlap)} train/val task_id overlaps!')
+print(f'  merge ok: {len(train_df)} train + {len(val_df)} val, fp_overlap={len(fp_overlap)}, tid_overlap={len(tid_overlap)}')
 "
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 fi
