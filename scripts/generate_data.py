@@ -343,6 +343,40 @@ def _validate_task_training_contract(task) -> None:
             f"{len(real_required_tools)}, expected 2-5"
         )
 
+    # ── P3c: Detect final_answer tasks whose oracle did not produce state
+    # criteria despite the user query requesting a write/mutate action.
+    # These tasks teach models to call a few tools then final_answer without
+    # actually completing the user's request.  We only WARN (not reject)
+    # because some legitimate operations (e.g. send_email) are not tracked
+    # in the state machine and naturally have empty criteria.
+    terminal_action = terminal_actions[0] if terminal_actions else ""
+    if terminal_action == "final_answer" and real_required_tools:
+        criteria = _task_success_criteria(task)
+        if not criteria:
+            # Self-contained network tools (send/reply/forward) don't change
+            # tracked state — empty criteria is legitimate for them.
+            _SELF_CONTAINED_WRITE = (
+                "send_email", "send_message", "send_dm", "reply_email",
+                "forward_email", "create_filter", "create_webhook",
+            )
+            # State-changing tools that MUST produce criteria
+            _STATE_CHANGING_PREFIXES = (
+                "create_", "update_", "delete_", "remove_", "cancel_", "add_",
+                "pay_", "refund_", "transfer", "checkout", "return_",
+                "deposit", "withdraw", "convert_", "archive_", "chmod",
+                "chown", "mv", "rm", "bill_pay", "wire_", "assign_",
+                "transition_", "mark_", "set_", "reorder",
+            )
+            state_changing = [t for t in real_required_tools
+                             if any(t.lower().startswith(p) for p in _STATE_CHANGING_PREFIXES)
+                             and t not in _SELF_CONTAINED_WRITE]
+            if state_changing:
+                raise ValueError(
+                    f"Task {task.task_id}: final_answer with no state criteria "
+                    f"despite state-changing tools {state_changing}. "
+                    f"The oracle did not complete the user's intended mutation."
+                )
+
 
 def _filter_training_eligible_tasks(tasks: list) -> list:
     eligible = []

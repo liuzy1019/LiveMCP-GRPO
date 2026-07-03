@@ -1,0 +1,41 @@
+Train rows: 198
+Val rows: 0
+
+Domain distribution:
+  banking: 17
+  calendar: 17
+  crm: 25
+  email: 27
+  filesystem: 18
+  food_delivery: 23
+  issue_tracker: 20
+  payments: 13
+  shopping: 20
+  team_chat: 18
+
+Difficulty:
+  complete: 113
+  minimal: 39
+  missing: 46
+
+Scenario:
+  clarification_required: 23
+  missing_dependency: 23
+  no_tool_or_abstention: 34
+  normal_safe_success: 77
+  tool_error_recovery: 39
+  unsafe_temptation: 2
+
+Terminal actions:
+  ask_clarification: 23
+  final_answer: 141
+  report_error: 34
+
+Oracle tool calls per task: min=0 max=5 mean=1.9
+Distribution: {0: 57, 2: 78, 3: 39, 4: 18, 5: 6}
+
+Has distractors: 69
+Has missing_function: 25
+
+Conversation rounds: {1: 57, 2: 89, 3: 52}
+Query word count: min=2 max=42 mean=13.1

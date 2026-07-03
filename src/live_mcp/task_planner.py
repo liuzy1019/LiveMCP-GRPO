@@ -24,12 +24,17 @@ import copy
 import json as _json
 import random
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from loguru import logger
 
 from src.live_mcp.types import OracleCall
 from src.utils import extract_json as _extract_json
+
+if TYPE_CHECKING:
+    from src.live_mcp.llm_client import LLMClient
+    from src.live_mcp.manager import LiveMCPManager
+    from src.live_mcp.executor import LiveMCPExecutor
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -210,12 +215,13 @@ class ContinuationPolicy:
     def conversation_rounds(rng: random.Random) -> int:
         """PROVE §3.2 Step 3.5: turn-decay schedule.
 
-        PROVE keeps generated conversations between 2 and 3 user turns.  The
-        training rollout injects these follow-up user turns after intermediate
-        terminal actions, so the oracle remains a single live conversation
-        instead of hidden teacher history in the initial prompt.
+        PROVE keeps generated conversations between 2 and 3 user turns,
+        sampled per task for diversity.  The training rollout injects
+        follow-up user turns after intermediate terminal actions, so the
+        oracle remains a single live conversation instead of hidden teacher
+        history in the initial prompt.
         """
-        return ContinuationPolicy.MIN_CONVERSATION_ROUNDS
+        return rng.choices([2, 3], weights=[0.7, 0.3], k=1)[0]
 
     @staticmethod
     def should_continue_conversation(
@@ -284,7 +290,7 @@ class TaskPlanner:
     understanding of real state values, not from heuristic inference.
     """
 
-    def __init__(self, client: object, domain: str, seed: int = 0):
+    def __init__(self, client: "LLMClient", domain: str, seed: int = 0):
         self.client = client
         self.domain = domain
         self.domain_desc = DOMAIN_DESCRIPTIONS.get(domain, "")
@@ -409,6 +415,7 @@ class TaskPlanner:
 ## What this assistant can help with
 {self.domain_desc}
 {chain_hint}
+{dep_hints}
 ## Current State (real IDs and values)
 {state_text}
 {anti_halluc_block}
@@ -605,8 +612,11 @@ Return only:
                 blocked_first = ("final_answer", "report_error")
         else:
             # After the first turn, check if the chain has remaining steps.
-            # If so, continue pushing for tool calls (PROVE: chain is a
-            # planning prior — the LLM should try to satisfy the whole chain).
+            # If so, the LLM should continue making tool calls, but
+            # report_error and ask_clarification are legitimate responses
+            # when the tool execution fails or parameters are genuinely
+            # missing.  Only block final_answer — the LLM shouldn't give
+            # up and answer without completing the chain.
             # Once chain is complete, the LLM is free to terminate.
             chain_remaining = (
                 chain_seed and chain_progress < len(chain_seed)
@@ -618,7 +628,7 @@ Return only:
                     "Continue calling tools to finish the remaining work before answering.\n"
                 )
                 default_action = "tool_call"
-                blocked_first = ("final_answer", "report_error", "ask_clarification")
+                blocked_first = ("final_answer",)
             else:
                 first_turn_hint = ""
                 # PROVE state machine: chain_seed is a planning prior, not a hard
@@ -773,10 +783,11 @@ Output one JSON object:
                     continue
                 action = data.get("action", default_action)
 
-                # Reject blocked action types: on first turn only (prevent
-                # answering without tools). After the first turn, the LLM is
-                # free to terminate at any time — chain_seed is a planning
-                # prior, not a hard execution script.
+                # Reject blocked action types. On the first turn, block
+                # final_answer and report_error to prevent answering without
+                # tools. On subsequent turns with chain remaining, block
+                # final_answer only — report_error and ask_clarification are
+                # legitimate when tools fail. After chain completion, no blocks.
                 if action in blocked_first:
                     logger.debug(
                         f"decide_action rejected '{action}' for {self.domain} "
@@ -1019,6 +1030,7 @@ def _perturb_partial_batch_failure(
             break
     if not items:
         return None
+    assert batch_key is not None  # guaranteed by the loop above: items is non-empty
     fail_count = max(1, len(items) // 3)
     fail_indices = rng.sample(range(len(items)), fail_count)
     new_items = list(items)
@@ -1114,14 +1126,22 @@ def derive_success_criteria(
                 })
                 entity = final_val[nk]
                 if isinstance(entity, dict):
-                    for ek in ("status", "stage", "type", "state"):
-                        if ek in entity and entity[ek] is not None:
-                            criteria.append({
-                                "type": "state_equals", "server": domain,
-                                "path": f"{key}.{nk}.{ek}",
-                                "path_parts": [key, nk, ek],
-                                "value": entity[ek],
-                            })
+                    # PROVE: verify all scalar fields of newly created entities,
+                    # not just a hardcoded 4-field whitelist that misses
+                    # domain-specific fields like "phase", "priority", "amount".
+                    for ek, ev in entity.items():
+                        if ev is None:
+                            continue
+                        if isinstance(ev, (dict, list)):
+                            continue
+                        if not isinstance(ev, (str, int, float, bool)):
+                            continue
+                        criteria.append({
+                            "type": "state_equals", "server": domain,
+                            "path": f"{key}.{nk}.{ek}",
+                            "path_parts": [key, nk, ek],
+                            "value": ev,
+                        })
             for rk in (init_keys - final_keys):
                 criteria.append({
                     "type": "state_absent", "server": domain,
@@ -1407,8 +1427,8 @@ def _domain_criteria(
 
 def replay_validate(
     oracle_calls: list[OracleCall],
-    manager: object,
-    executor: object,
+    manager: "LiveMCPManager",
+    executor: "LiveMCPExecutor",
     seed: int,
     domain: str,
     success_criteria: list[dict[str, Any]] | None = None,
@@ -1492,6 +1512,38 @@ def replay_validate(
             # does not silently accept the only failing criterion when N=1.
             threshold = int(len(success_criteria) * 0.25)
             num_errors += criteria_errors if criteria_errors > threshold else 0
+        else:
+            # P3c / Defect 5 fix: empty success_criteria with mutating tool
+            # calls is a HARD reject — the teacher did not execute the user's
+            # intended state changes (e.g., query said "pay invoice" but oracle
+            # only did get_invoice).  Previously this was weighted by num_calls
+            # and diluted by max_error_rate=0.30, letting traces with 4+ calls
+            # pass despite producing no criteria.
+            #
+            # Read-only traces (list_/get_/search_ only) legitimately have no
+            # state criteria and are NOT rejected — this preserves training
+            # data for lookup-only scenarios.
+            tool_call_count = sum(1 for c in oracle_calls if c.action == "tool_call")
+            if tool_call_count > 0:
+                _mutate_prefixes = (
+                    "create_", "update_", "delete_", "remove_", "add_",
+                    "send_", "transfer", "pay_", "checkout", "transition_",
+                    "convert_", "archive_", "mkdir", "touch", "mv", "cp",
+                    "chmod", "write_", "set_", "apply_", "cancel_", "refund_",
+                    "bill_pay", "deposit", "withdraw", "rm", "sed",
+                    "unzip", "zip", "tar_create", "freeze_", "unfreeze_",
+                    "dispute_", "verify_", "rate_order", "return_order",
+                    "clear_cart", "reorder", "complete_task", "register_",
+                    "schedule_", "mark_read", "mark_unread", "change_",
+                    "reply_to", "forward_",
+                )
+                has_mutating = any(
+                    any(c.tool_name.lower().startswith(p) for p in _mutate_prefixes)
+                    for c in oracle_calls if c.action == "tool_call"
+                )
+                if has_mutating:
+                    return False, 1.0, 1, max(num_calls, 1)
+                # Pure read-only trace with no criteria: acceptable, no penalty
 
         error_rate = num_errors / num_calls if num_calls > 0 else float(num_errors > 0)
         passed = error_rate <= max_error_rate

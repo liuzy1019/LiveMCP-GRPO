@@ -1,0 +1,42 @@
+=== CONVERSATION ROUNDS DEBUG ===
+[0] rounds=3 cq_len=303 cq_sample=["Can you help me check the status of order ord_379_0002 and see if it has shipped yet?", "Once I know about that order, uid=shopping_73_36675
+[1] rounds=3 cq_len=178 cq_sample=["get md5 checksums for all pipeline.sh files under /home/user", "compute md5 checksum for /home/user/pipeline.sh", "com uid=filesystem_126_75048
+[2] rounds=1 cq_len=55 cq_sample=["Tell me a story about a dragon who learns to paint."] uid=email_irrelevant_10041_6
+[3] rounds=1 cq_len=61 cq_sample=["reschedule the team sync to Friday but keep the same time"] uid=calendar_54_18019
+[4] rounds=1 cq_len=45 cq_sample=["How do I fix my car's check engine light?"] uid=payments_irrelevant_10041_1
+
+Total mismatches: 198
+  ('rounds3_bad_cq', 'shopping_73_36675', 3, 303)
+  ('rounds3_bad_cq', 'filesystem_126_75048', 3, 178)
+  ('rounds1_nonzero_cq', 'email_irrelevant_10041_6', 1, 55)
+  ('rounds1_nonzero_cq', 'calendar_54_18019', 1, 61)
+  ('rounds1_nonzero_cq', 'payments_irrelevant_10041_1', 1, 45)
+  ('rounds2_bad_cq', 'shopping_65_54361', 2, 145)
+  ('rounds3_bad_cq', 'crm_144_58755', 3, 260)
+  ('rounds2_bad_cq', 'issue_tracker_169_33492', 2, 197)
+  ('rounds3_bad_cq', 'crm_155_76137', 3, 244)
+  ('rounds2_bad_cq', 'team_chat_177_28415', 2, 260)
+
+=== EMPTY ARGUMENTS DEBUG ===
+Empty tool args by tool: {'get_cart': 5, 'list_inbox': 1, 'list_leads': 2, 'list_restaurants': 1, 'list_accounts': 4}
+  uid=shopping_73_36675 tool=get_cart args={}
+  uid=shopping_65_54361 tool=get_cart args={}
+  uid=email_107_32306 tool=list_inbox args={}
+
+=== REQUIRED TOOLS DEBUG ===
+[0] uid=shopping_73_36675 required_tools=['get_order', 'search_products', 'add_to_cart', 'get_cart', 'checkout'] type=<class 'numpy.ndarray'>
+[1] uid=filesystem_126_75048 required_tools=['find', 'md5sum', 'md5sum'] type=<class 'numpy.ndarray'>
+[2] uid=email_irrelevant_10041_6 required_tools=[] type=<class 'numpy.ndarray'>
+[3] uid=calendar_54_18019 required_tools=[] type=<class 'numpy.ndarray'>
+[4] uid=payments_irrelevant_10041_1 required_tools=[] type=<class 'numpy.ndarray'>
+
+Empty required_tools: 57 tasks
+  email_irrelevant_10041_6
+  calendar_54_18019
+  payments_irrelevant_10041_1
+  issue_tracker_irrelevant_10041_4
+  team_chat_178_14768
+
+=== DISTRACTORS DEBUG ===
+[0] uid=shopping_73_36675 distractors=True hidden_tools=[] scenario=missing_dependency visible_tools_num=27
+[7] uid=issue_tracker_169_33492 distractors=True hidden_tools=[] scenario=normal_safe_success visible_tools_num=24

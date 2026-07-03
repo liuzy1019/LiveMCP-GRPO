@@ -346,14 +346,15 @@ class TaskOrchestrator:
                 domain=server_name,
             )
 
-            # Observation perturbations are safe only for read-only calls.
-            # Applying a synthetic "retry" after a successful mutation leaves
-            # an unrecorded state change that replay can never reproduce.
-            perturbed_obs = (
-                apply_perturbation(result.observation, server_name, local_rng)
-                if result.success and not result.state_changed
-                else None
-            )
+            # Perturbations that modify the observation payload (pagination,
+            # incomplete_intermediate, partial_batch_failure) are safe on both
+            # read and write calls — they alter the returned data shape but not
+            # the underlying state.  Only the "retry" perturbation (intermittent
+            # error) is blocked on writes because it would trigger a re-execution
+            # after state already changed.
+            perturbed_obs = apply_perturbation(result.observation, server_name, local_rng)
+            if result.success and isinstance(perturbed_obs, dict) and perturbed_obs.get("retry") and result.state_changed:
+                perturbed_obs = None
 
             if isinstance(perturbed_obs, dict) and perturbed_obs.get("retry"):
                 execution_history.append({
@@ -540,15 +541,40 @@ class TaskOrchestrator:
             ContinuationPolicy.MIN_CONVERSATION_ROUNDS
             if enable_continuation else 1
         )
-        max_conversation_rounds = (
-            ContinuationPolicy.MAX_CONVERSATION_ROUNDS
-            if enable_continuation else 1
-        )
+        # max_conversation_rounds is sampled per-task inside the retry loop
+        # (PROVE turn-decay schedule §3.2 Step 3.5).
+
+        # ── Defensive initialisation (all variables reused after the retry loop).
+        # Python guarantees range(3) iterates at least once, but Pylance cannot
+        # prove that and flags "possibly unbound".  Initialising here silences
+        # the linter and protects against edge cases.
+        all_oracle_calls: list = []
+        all_execution_history: list = []
+        all_required_tools: set = set()
+        conversation_queries: list = []
+        oracle_calls_per_round: list = []
+        execution_history_per_round: list = []
+        task_id = ""
+        user_query = ""
+        session_id = ""
+        local_seed = seed
+        all_tools: list = []
+        chain_context: dict = {}
+        live_sampling_context: dict = {}
+        initial_state_snapshot: dict = {}
+        success_criteria: list = []
+        progress_predicates: list = []
+        teacher = None
 
         # ── Retry with different seed if LLM refuses to call tools ──
         for retry_attempt in range(3):
             local_seed = seed + retry_attempt * 1000
             local_rng = random.Random(local_seed)
+
+            max_conversation_rounds = (
+                ContinuationPolicy.conversation_rounds(local_rng)
+                if enable_continuation else 1
+            )
 
             teacher = TaskPlanner(self.client, server_name, seed=local_seed)
 
@@ -585,7 +611,7 @@ class TaskOrchestrator:
                 # Extract real entity IDs from live state that are relevant to the
                 # sampled chain.  This constrains the teacher LLM to use only
                 # grounded IDs, preventing hallucination.
-                chain_context: dict[str, Any] = {}
+                chain_context = {}
                 if chain_seed:
                     chain_context = _extract_chain_context(
                         chain_seed=chain_seed,
@@ -606,12 +632,13 @@ class TaskOrchestrator:
                 )
 
                 # Accumulators across conversation rounds (PROVE CONTINUATION)
-                all_oracle_calls: list[OracleCall] = []
-                all_execution_history: list[dict[str, Any]] = []
-                all_required_tools: set[str] = set()
-                conversation_queries: list[str] = [user_query]  # track all user messages
-                oracle_calls_per_round: list[list[OracleCall]] = []  # per-round for prompt construction
-                execution_history_per_round: list[list[dict]] = []
+                # (re-assigned each retry; types declared before the loop)
+                all_oracle_calls = []
+                all_execution_history = []
+                all_required_tools = set()
+                conversation_queries = [user_query]  # track all user messages
+                oracle_calls_per_round = []  # per-round for prompt construction
+                execution_history_per_round = []
                 task_id = f"{server_name}_{local_seed}_{local_rng.randint(0, 99999)}"
                 retry_label = f" (retry {retry_attempt})" if retry_attempt > 0 else ""
 
@@ -1421,6 +1448,24 @@ class TaskOrchestrator:
 
         try:
             graph = self._classify_edges_llm(server_tools, server_name) or {}
+
+            # ── P3c: Schema-based deterministic edges as a pre-pass ──
+            # Merge deterministic edges into the LLM-classified graph so
+            # critical read-before-write chains (get_lead→convert_lead,
+            # get_cart→checkout, etc.) are never lost, even if the LLM
+            # classifier misses them.
+            det = _deterministic_schema_edges(server_tools, server_name)
+            for src, edge_info in det.items():
+                if src not in graph:
+                    graph[src] = edge_info
+                else:
+                    ex = set(graph[src].get("explicit", []))
+                    im = set(graph[src].get("implicit", []))
+                    graph[src] = {
+                        "explicit": sorted(ex | set(edge_info.get("explicit", []))),
+                        "implicit": sorted((im | set(edge_info.get("implicit", []))) - ex),
+                    }
+
             self._save_cached_graph(server_name, schema_hash, server_tools, graph)
         finally:
             self.manager.close_session(session.session_id)
@@ -1487,7 +1532,7 @@ class TaskOrchestrator:
         # pairs; each request just carries the schemas needed for its batch.
         BATCH_SIZE = 24
         all_classifications: dict[str, str] = {}  # "A → B" → "explicit"|"implicit"
-        classified_pairs: set[tuple[str, str]] = set()
+        classified_pairs: set = set()
 
         for batch_start in range(0, len(pairs), BATCH_SIZE):
             batch_pairs = pairs[batch_start:batch_start + BATCH_SIZE]
@@ -2069,14 +2114,18 @@ def _missing_function_candidate_is_semantically_required(
     if not is_mutating:
         return True
 
-    query = task.user_prompt or ""
-    if task.conversation_queries:
-        query = task.conversation_queries[0] or query
+    # Check ALL conversation queries, not just the first round.
+    # In multi-round tasks, the write operation may only appear in a later
+    # query (e.g., round 1 is read-only, round 2 requests a payment).
+    queries_text: str = " ".join([
+        q for q in ([task.user_prompt or ""] + list(task.conversation_queries or []))
+        if q
+    ])
 
-    if _query_has_read_intent(query) and not _query_has_write_intent_for_tool(query, hidden_tool):
+    if _query_has_read_intent(queries_text) and not _query_has_write_intent_for_tool(queries_text, hidden_tool):
         return False
 
-    return _query_has_write_intent_for_tool(query, hidden_tool)
+    return _query_has_write_intent_for_tool(queries_text, hidden_tool)
 
 
 def _classify_scenario(
@@ -3064,3 +3113,79 @@ def _extract_chain_context(
         "relevant_types": sorted(relevant_types),
         "source": "live_readonly_probe",
     }
+
+
+def _deterministic_schema_edges(
+    server_tools: list[dict],
+    server_name: str,
+) -> dict[str, dict[str, list[str]]]:
+    """Schema-based deterministic dependency edges (PROVE §3.2 Step 1 pre-pass).
+
+    LLM pairwise classification can miss obvious read-before-write edges.
+    This function injects known dependencies deterministically, ensuring
+    critical chains (get_lead→convert_lead, get_cart→checkout, etc.) are
+    never lost.
+    """
+    graph: dict[str, dict[str, list[str]]] = {}
+    names = set(t["name"] for t in server_tools)
+
+    def _add_explicit(src: str, dst: str) -> None:
+        if src in names and dst in names and src != dst:
+            node = graph.setdefault(dst, {"explicit": [], "implicit": []})
+            if src not in node["explicit"]:
+                node["explicit"].append(src)
+
+    # Universal read-before-write patterns: get_E → {update_E, delete_E, ...}
+    _WRITE_SUFFIXES = {
+        "_event": ["update_event", "delete_event", "cancel_event"],
+        "_order": ["cancel_order", "return_order", "reorder"],
+        "_account": ["transfer", "wire_transfer", "bill_pay", "withdraw"],
+        "_invoice": ["pay_invoice", "refund_invoice", "cancel_payment"],
+        "_product": ["add_to_cart", "remove_from_cart"],
+        "_issue": ["transition_issue", "update_issue", "assign_issue"],
+        "_lead": ["convert_lead", "update_lead"],
+        "_deal": ["update_deal"],
+        "_channel": ["archive_channel", "send_message", "send_dm"],
+        "_email": ["reply_email", "forward_email", "archive_email"],
+        "_contact": ["update_contact", "delete_contact"],
+        "_message": ["react_message", "create_thread"],
+    }
+    for t in server_tools:
+        tname = t["name"]
+        if not tname.startswith("get_"):
+            continue
+        for suffix, targets in _WRITE_SUFFIXES.items():
+            if tname.endswith(suffix):
+                for wt in targets:
+                    _add_explicit(tname, wt)
+                break
+
+    # Domain-specific compound edges
+    _EDGES: dict[str, list[tuple[str, str]]] = {
+        "shopping": [
+            ("search_products", "get_product"), ("get_cart", "checkout"),
+            ("get_cart", "clear_cart"), ("get_cart", "remove_from_cart"),
+        ],
+        "calendar": [("search_events", "get_event")],
+        "email": [("list_inbox", "get_email")],
+        "crm": [
+            ("search_leads", "get_lead"), ("search_contacts", "get_contact"),
+            ("search_deals", "get_deal"),
+        ],
+        "issue_tracker": [("search_issues", "get_issue")],
+        "filesystem": [
+            ("find", "mv"), ("find", "rm"), ("find", "chmod"), ("find", "chown"),
+            ("ls", "mv"), ("ls", "chmod"), ("cat", "rm"),
+        ],
+        "banking": [("search_transactions", "get_transaction")],
+        "payments": [("list_invoices", "get_invoice")],
+        "team_chat": [("search_messages", "get_message")],
+        "food_delivery": [
+            ("search_restaurants", "get_restaurant"),
+            ("get_cart", "create_order"), ("get_cart", "cancel_order"),
+        ],
+    }
+    for src, dst in _EDGES.get(server_name, []):
+        _add_explicit(src, dst)
+
+    return graph
