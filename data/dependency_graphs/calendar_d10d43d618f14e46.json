@@ -1,0 +1,121 @@
+{
+  "server_name": "calendar",
+  "schema_hash": "d10d43d618f14e46",
+  "tool_names": [
+    "add_attendee",
+    "change_timezone",
+    "check_conflicts",
+    "create_event",
+    "create_recurring",
+    "delete_event",
+    "export_calendar",
+    "get_event",
+    "get_free_busy",
+    "get_recurring_info",
+    "get_working_hours",
+    "list_events",
+    "remove_attendee",
+    "respond_to_event",
+    "search_events",
+    "set_reminder",
+    "update_event"
+  ],
+  "graph": {
+    "list_events": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_events": {
+      "explicit": [
+        "get_event"
+      ],
+      "implicit": []
+    },
+    "get_event": {
+      "explicit": [
+        "respond_to_event",
+        "get_recurring_info"
+      ],
+      "implicit": []
+    },
+    "create_event": {
+      "explicit": [
+        "get_event",
+        "update_event",
+        "delete_event",
+        "add_attendee",
+        "remove_attendee",
+        "set_reminder",
+        "respond_to_event",
+        "get_recurring_info"
+      ],
+      "implicit": []
+    },
+    "update_event": {
+      "explicit": [
+        "set_reminder"
+      ],
+      "implicit": [
+        "delete_event"
+      ]
+    },
+    "delete_event": {
+      "explicit": [
+        "remove_attendee",
+        "set_reminder",
+        "respond_to_event"
+      ],
+      "implicit": []
+    },
+    "create_recurring": {
+      "explicit": [
+        "add_attendee",
+        "remove_attendee",
+        "set_reminder"
+      ],
+      "implicit": []
+    },
+    "add_attendee": {
+      "explicit": [
+        "delete_event"
+      ],
+      "implicit": []
+    },
+    "remove_attendee": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_free_busy": {
+      "explicit": [],
+      "implicit": []
+    },
+    "check_conflicts": {
+      "explicit": [],
+      "implicit": []
+    },
+    "set_reminder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_working_hours": {
+      "explicit": [],
+      "implicit": []
+    },
+    "change_timezone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "respond_to_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "export_calendar": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_recurring_info": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

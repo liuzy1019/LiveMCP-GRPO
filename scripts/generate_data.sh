@@ -66,6 +66,8 @@ if [ -z "$MODEL" ]; then
     exit 1
 fi
 
+mkdir -p "${OUTPUT_DIR}"
+
 # ── GPU detection (via shared gpu_config.sh) ────────────────────────
 source scripts/gpu_config.sh
 GPU_MEM_GB=${GPU_MEM_GB:-0}
@@ -149,8 +151,6 @@ trap _cleanup EXIT INT TERM
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export NVCC_APPEND_FLAGS=-allow-unsupported-compiler
-
-mkdir -p "${OUTPUT_DIR}"
 
 # ═══════════════════════════════════════════════════════════════════
 # MODE 1: Local transformers — 1 process per GPU
@@ -394,7 +394,7 @@ print(tp)
             --val-count "${PER_INSTANCE_VAL}" \
             --seed "${SHARD_SEED}" \
             --domain "${DOMAIN}" \
-            --model "$(basename ${MODEL})-Instruct" \
+            --model "${SERVED_MODEL}" \
             --api-base "http://localhost:${PORT}/v1" \
             --suite "${SUITE}" \
             --output "${TMPDIR_SHARD}/shard_${inst}_train.parquet" \

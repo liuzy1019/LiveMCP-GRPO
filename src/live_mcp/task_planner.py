@@ -170,14 +170,19 @@ _REFERENCE_DATES: list[str] = [
 class ContinuationPolicy:
     """PROVE-style turn-decay schedule for deciding when to end a conversation.
 
-    The target turn count depends on chain length:
-      chain_len=2 → 2-3 turns
-      chain_len=3 → 3-4 turns
-      chain_len=4 → 4-5 turns
-      chain_len=5 → 5-6 turns
+    PROVE §3.2 Step 3.5: min_turns=2, max_turns=3 for conversation rounds
+    (user follow-up turns).  The dependency chain is distributed across
+    rounds via max_calls_this_round so each follow-up continues a meaningful
+    unfinished operation rather than creating unrelated goals.
 
     Perturbations (intermittent errors, pagination) may add 1-2 extra turns.
     """
+
+    # PROVE §3.2 Step 3.5 explicitly requires min_turns=2 (i.e., conversations
+    # must span at least two user turns with at least one follow-up).
+    MIN_CONVERSATION_ROUNDS = 2
+    MAX_CONVERSATION_ROUNDS = 3
+    CONTINUE_AFTER_MIN_PROB = 0.30
 
     @staticmethod
     def target_turns(chain_length: int, rng: random.Random) -> int:
@@ -210,7 +215,52 @@ class ContinuationPolicy:
         terminal actions, so the oracle remains a single live conversation
         instead of hidden teacher history in the initial prompt.
         """
-        return 2 if rng.random() < 0.7 else 3
+        return ContinuationPolicy.MIN_CONVERSATION_ROUNDS
+
+    @staticmethod
+    def should_continue_conversation(
+        rounds_done: int,
+        max_rounds: int,
+        chain_seed: list[str] | None,
+        chain_progress: int,
+        rng: random.Random,
+        min_rounds: int | None = None,
+    ) -> bool:
+        """PROVE continuation decision: end, follow up, or clarify.
+
+        PROVE §3.2 Step 3.5: "A decision module *samples* whether to end the
+        conversation, generate a follow-up, or ask a clarification, using a
+        turn-decay schedule bounded by min_turns=2 and max_turns=3."
+
+        The key word is "samples" — this is a probabilistic decision, not a
+        deterministic one.  After min_rounds are done and the chain is complete,
+        there is still a CONTINUE_AFTER_MIN_PROB chance of generating one more
+        follow-up turn (up to max_rounds).  This matches PROVE's turn-decay
+        schedule and prevents all conversations from being exactly 2 turns when
+        chains are short.
+        """
+        min_rounds = (
+            ContinuationPolicy.MIN_CONVERSATION_ROUNDS
+            if min_rounds is None else min_rounds
+        )
+        if rounds_done >= max_rounds:
+            return False
+        if rounds_done < min_rounds:
+            return True
+        # PROVE §3.2 Step 3.5: "A decision module *samples* whether to end the
+        # conversation, generate a follow-up, or ask a clarification, using a
+        # turn-decay schedule bounded by min_turns=2 and max_turns=3."
+        #
+        # chain_seed is a planning prior, NOT a hard script. Even when the chain
+        # has remaining steps, the continuation decision is probabilistic — the
+        # teacher may have already satisfied the user's intent via a different
+        # valid trajectory. Forcing continuation when chain_progress < len(chain_seed)
+        # reintroduces the same hard-scripting problem we removed from decide_action.
+        #
+        # After min_rounds, always sample with turn-decay probability regardless
+        # of chain progress. The chain guides query generation and provides hints,
+        # but does not determine conversation length.
+        return rng.random() < ContinuationPolicy.CONTINUE_AFTER_MIN_PROB
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -252,6 +302,7 @@ class TaskPlanner:
         persona: str = "",
         reference_date: str = "",
         chain_seed: list[str] | None = None,
+        chain_context: dict[str, Any] | None = None,
     ) -> str:
         """LLM generates a natural-language user query grounded in live state.
 
@@ -259,6 +310,10 @@ class TaskPlanner:
         to increase query diversity. chain_seed guides the query toward a
         realistic dependency chain without making that chain the only valid
         tool trajectory.
+
+        chain_context (PROVE §3.2 Step 2): a compact, chain-aligned subset of
+        live-state entity IDs extracted by _extract_chain_context().  The
+        anti-hallucination constraint uses this to prevent ID invention.
         """
         difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(
             difficulty, DIFFICULTY_DESCRIPTIONS["complete"]
@@ -318,8 +373,36 @@ class TaskPlanner:
             chain_hint = (
                 f"\n## Underlying Task Flow\n"
                 f"The user's task requires this sequence: {flow_text}\n"
-                f"Express this as a SINGLE natural goal — do NOT list steps or mention tool names.\n"
+                f"Express a SINGLE natural goal whose completion genuinely requires "
+                f"the whole sequence above, especially the final operation. Do NOT "
+                f"list steps or mention tool names. Do NOT ask for a simpler task "
+                f"that could be completed with only the first step.\n"
             )
+
+        # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
+        # Chain-aligned entity context: only these IDs are known to exist
+        # in the live state.  The teacher MUST reference only these, never
+        # invent IDs.  Without this constraint, the LLM hallucinates entity
+        # IDs that don't exist in any seed, causing 100% replay failure.
+        anti_halluc_block = ""
+        if chain_context and chain_context.get("entity_summaries"):
+            summaries_text = "\n".join(chain_context["entity_summaries"][:15])
+            anti_halluc_block = (
+                f"\n## Chain-Aligned Entities (ONLY these IDs exist)\n"
+                f"{summaries_text}\n\n"
+                f"⚠️ CRITICAL: You MUST ONLY reference entity IDs from this list "
+                f"or from Current State above. Do NOT invent, modify, or guess IDs. "
+                f"If an ID is 'evt_001', write 'evt_001' — not 'evt_005' or 'evt_0001'.\n"
+            )
+        elif difficulty == "complete":
+            # Even without chain_context, enforce anti-hallucination on
+            # the full state for complete-difficulty tasks.
+            anti_halluc_block = (
+                "\n## Anti-Hallucination Rule\n"
+                "⚠️ CRITICAL: Reference ONLY entity IDs that appear in Current State "
+                "above. Do NOT invent or modify IDs. Copy them exactly as shown.\n"
+            )
+
         user = f"""## Persona
 {persona if persona else 'A normal user messaging their AI assistant.'}
 {date_block}
@@ -328,7 +411,7 @@ class TaskPlanner:
 {chain_hint}
 ## Current State (real IDs and values)
 {state_text}
-
+{anti_halluc_block}
 ## Your task
 Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
 
@@ -365,7 +448,6 @@ Return only:
         tool_schemas: list[dict[str, Any]],
         grounded_state: dict[str, Any],
         previous_query: str,
-        execution_history: list[dict[str, Any]],
         difficulty: str,
         rng: random.Random,
         persona: str = "",
@@ -373,43 +455,38 @@ Return only:
         chain_seed: list[str] | None = None,
         chain_progress: int = 0,
     ) -> str:
-        """Generate a follow-up user message grounded in previous results.
+        """Generate a follow-up user message from the user's perspective.
 
-        PROVE §3.2 Step 3.5: the user continues the conversation based on
-        what the assistant just did. The follow-up should reference previous
-        outputs naturally (e.g., "that looks right, now also...") without
-        mentioning tool names.
+        PROVE §3.2 Step 3.5: the user continues the conversation without
+        knowing what tools the assistant called internally. The follow-up
+        is grounded only in the live server state (real entity IDs) and the
+        remaining dependency chain — NOT in the oracle execution history.
+
+        Passing execution_history to the follow-up generator was wrong: it
+        caused the LLM to adopt the assistant's confirmation tone ("Got it,
+        the transfer is scheduled...") instead of a genuine user perspective.
 
         chain_seed + chain_progress: guides the follow-up to ask for the
         remaining dependency chain steps naturally.
         """
         state_text = _format_state_compact(grounded_state, max_entities=20)
-        # Summarize last few tool results for the follow-up generator
-        recent = execution_history[-5:]
-        history_lines = []
-        for step in recent:
-            tool = step.get("tool_name", "?")
-            obs = step.get("observation", {})
-            if isinstance(obs, dict):
-                summary = _json.dumps(obs, ensure_ascii=False, default=str)[:300]
-            else:
-                summary = str(obs)[:300]
-            history_lines.append(f"  called {tool} → {summary}")
-        history_text = "\n".join(history_lines) if history_lines else "(no history)"
 
         date_block = ""
         if reference_date:
             date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
 
         system = (
-            "You are role-playing as a real person who just received a response "
-            "from their AI assistant. Write ONE short follow-up message — the way "
-            "a real human would actually type it.\n\n"
-            "Real people react to what they just heard and ask for the NEXT thing. "
-            "They might say 'great, now also...' or 'actually, can you change...' "
-            "or 'oh wait, I also need...'. They don't re-explain the original task.\n\n"
-            "DO NOT mention tool names or steps. Just state what you want next.\n"
-            "Keep it to 1-2 sentences. Be natural and casual."
+            "You are role-playing as a real user who sent a request to an AI assistant "
+            "and is now sending a follow-up message.\n\n"
+            "IMPORTANT: You do NOT know what tools the assistant used internally. "
+            "You only know what you originally asked for. "
+            "Write the follow-up purely from your own perspective — what you want next.\n\n"
+            "DO NOT write confirmation phrases like 'Got it', 'Great', 'Thanks', "
+            "'That looks right', or any acknowledgment of the assistant's actions. "
+            "Just state your next request directly.\n"
+            "DO NOT mention tool names or internal steps.\n"
+            "Keep it to 1-2 sentences. Be natural and direct.\n"
+            "Do not introduce an unrelated new goal; continue the same task."
         )
 
         # Chain context: guide the follow-up to ask for remaining dependency steps
@@ -419,26 +496,23 @@ Return only:
             tool_desc_map = {t["name"]: t.get("description", "").split(".")[0].strip() or t["name"] for t in tool_schemas}
             remaining_descs = [tool_desc_map.get(tn, tn) for tn in remaining]
             chain_guide = (
-                f"\n## Remaining task flow\n"
-                f"The task still needs these operations (in order): {' → '.join(remaining_descs)}.\n"
-                f"Your follow-up should naturally steer toward the next step without mentioning tool names.\n"
+                f"\n## What you still need\n"
+                f"You still need these things done (in order): {' → '.join(remaining_descs)}.\n"
+                f"Ask for the next one naturally without mentioning tool names.\n"
             )
 
         user = f"""## Persona
 {persona if persona else 'A normal user messaging their AI assistant.'}
 {date_block}
-## Original request
+## Your original request
 "{previous_query}"
-
-## Recent results (what the assistant just did)
-{history_text}
 {chain_guide}
-## Current State (real IDs and values)
+## Current State (real IDs and values you can reference)
 {state_text}
 
 ## Your task
-Write ONE short follow-up message. Difficulty: {difficulty}.
-React to what just happened and ask for the next thing naturally.
+Write ONE short follow-up message as the user. Difficulty: {difficulty}.
+Ask for the next thing you need. Do NOT acknowledge or confirm what the assistant did.
 
 Return only:
 {{"user_query": "<the follow-up message>"}}
@@ -476,6 +550,7 @@ Return only:
         chain_seed: list[str] | None = None,
         chain_progress: int = 0,
         reference_date: str = "",
+        chain_context: dict[str, Any] | None = None,
     ) -> ActionPlan:
         """LLM decides the next action given full context.
 
@@ -488,6 +563,8 @@ Return only:
 
         chain_seed + chain_progress: guides the LLM toward multi-step tasks,
         showing which tools have been called and which remain.
+
+        chain_context: live-probed entities used to ground ID arguments.
         """
         tools_text = _format_tools(tool_schemas, strip_enums=self._strip_enums)
         history_text = _format_history(execution_history)
@@ -527,12 +604,36 @@ Return only:
                 default_action = "tool_call"
                 blocked_first = ("final_answer", "report_error")
         else:
-            first_turn_hint = ""
-            default_action = "final_answer"
-            blocked_first = ()
+            # After the first turn, check if the chain has remaining steps.
+            # If so, continue pushing for tool calls (PROVE: chain is a
+            # planning prior — the LLM should try to satisfy the whole chain).
+            # Once chain is complete, the LLM is free to terminate.
+            chain_remaining = (
+                chain_seed and chain_progress < len(chain_seed)
+                and len(chain_seed) >= 2
+            )
+            if chain_remaining:
+                first_turn_hint = (
+                    "\nYou have completed some steps but the task is not yet fully addressed. "
+                    "Continue calling tools to finish the remaining work before answering.\n"
+                )
+                default_action = "tool_call"
+                blocked_first = ("final_answer", "report_error", "ask_clarification")
+            else:
+                first_turn_hint = ""
+                # PROVE state machine: chain_seed is a planning prior, not a hard
+                # script. The LLM is free to decide the next action — including
+                # final_answer — based on the full execution context. The chain
+                # guides query generation and provides a planning hint, but does
+                # NOT block the teacher from terminating early when it judges the
+                # task complete. (PROVE §3.2 Step 3: "samples whether to end the
+                # conversation, generate a follow-up, or ask a clarification.")
+                default_action = "final_answer"
+                blocked_first = ()
 
         # Chain progress guide: show the LLM which tools have been called
-        # and which remain, preventing premature final_answer.
+        # and which remain. This is a planning prior — the LLM uses it to
+        # understand task progress but is free to choose any valid action.
         chain_guide = ""
         if chain_seed and len(chain_seed) >= 2:
             tool_desc_map = {t["name"]: t.get("description", "").split(".")[0].strip() or t["name"] for t in tool_schemas}
@@ -580,6 +681,37 @@ Return only:
             if reference_date else ""
         )
 
+        # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
+        # Mirror the generate_query constraint: entity IDs in tool_call arguments
+        # must come from the known entity context, not invented by the LLM.
+        anti_halluc_block = ""
+        if chain_context and chain_context.get("entity_summaries"):
+            summaries_text = "\n".join(chain_context["entity_summaries"][:15])
+            anti_halluc_block = (
+                f"\n## Chain-Aligned Entities (ONLY these IDs exist)\n"
+                f"{summaries_text}\n\n"
+                f"⚠️ CRITICAL — ID Provenance Rule:\n"
+                f"- Entity IDs (event_id, account_id, invoice_id, order_id, etc.) "
+                f"MUST come from one of these sources:\n"
+                f"  1. The Chain-Aligned Entities list above\n"
+                f"  2. Current State (shown in the Execution History)\n"
+                f"  3. Prior tool observations in the Execution History\n"
+                f"- If you don't know the correct ID, call a read/search/list tool first "
+                f"to discover it — NEVER guess or invent an ID.\n"
+                f"- Copy IDs exactly as they appear. Do NOT modify, renumber, or "
+                f"create IDs that look similar (e.g., if you see 'evt_aa3_001', "
+                f"don't write 'evt_aa3_002' unless you observed it).\n"
+            )
+        elif difficulty == "complete":
+            # Even without chain_context, enforce anti-hallucination for
+            # complete-difficulty tasks that use entity IDs.
+            anti_halluc_block = (
+                "\n## Anti-Hallucination Rule\n"
+                "⚠️ Entity IDs (event_id, account_id, invoice_id, etc.) MUST come "
+                "from the Execution History or Current State. If unsure, call a "
+                "read/search/list tool to find the correct ID. NEVER guess.\n"
+            )
+
         system = (
             "You are an AI assistant helping a user complete a task via tool calls. "
             "Think about what the user needs, then take the best next step.\n"
@@ -618,6 +750,7 @@ Return only:
 
 {dep_hints}
 {chain_guide}
+{anti_halluc_block}
 {date_guide}
 ## User Task
 {user_query}
@@ -640,11 +773,16 @@ Output one JSON object:
                     continue
                 action = data.get("action", default_action)
 
-                # On first turn, reject blocked action types (only final_answer/report_error)
-                if not execution_history and action in blocked_first:
+                # Reject blocked action types: on first turn only (prevent
+                # answering without tools). After the first turn, the LLM is
+                # free to terminate at any time — chain_seed is a planning
+                # prior, not a hard execution script.
+                if action in blocked_first:
                     logger.debug(
-                        f"decide_action first turn rejected '{action}' for {self.domain} "
-                        f"(difficulty={difficulty}), retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
+                        f"decide_action rejected '{action}' for {self.domain} "
+                        f"(difficulty={difficulty}, chain_progress={chain_progress}/"
+                        f"{len(chain_seed) if chain_seed else 0}), "
+                        f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
                     )
                     continue
 
@@ -1105,15 +1243,29 @@ def derive_progress_predicates(
                 "target_id": target,
             })
 
-    # Step 3: satisfied_dependency_edge for consecutive calls where predecessor's
-    # entity type is used by successor
+    # Step 3: satisfied_dependency_edge for consecutive calls where a read/discovery
+    # step precedes a mutation step on the same entity type. This is the PROVE
+    # dependency edge definition: a read resolves an entity that a subsequent
+    # mutation consumes. Simple entity-type equality between any two adjacent
+    # steps produces too many false positives (e.g., two consecutive reads on
+    # the same entity type would be flagged, which is not a dependency edge).
+    read_prefixes_dep = ("list_", "search_", "get_", "find_", "check_", "lookup_",
+                         "view_", "browse_", "ls", "cat", "stat", "head", "tail")
+    mutate_prefixes_dep = ("create_", "update_", "delete_", "remove_", "add_",
+                           "send_", "transfer", "pay_", "checkout", "transition_",
+                           "convert_", "archive_", "mkdir", "touch", "mv", "cp",
+                           "chmod", "write_", "set_", "apply_")
     for i in range(1, len(real_calls)):
         prev = real_calls[i - 1]
         curr = real_calls[i]
-        # A dependency edge is satisfied when prev resolved/produced an entity
-        # type that curr consumes or mutates
+        prev_is_read = any(prev.tool_name.lower().startswith(p) for p in read_prefixes_dep)
+        curr_is_mutate = any(curr.tool_name.lower().startswith(p) for p in mutate_prefixes_dep)
+        if not (prev_is_read and curr_is_mutate):
+            continue
         prev_entity = _tool_entity(prev.tool_name)
         curr_entity = _tool_entity(curr.tool_name)
+        # A dependency edge is satisfied when a read resolves an entity that
+        # the subsequent mutation consumes (same entity type).
         if prev_entity == curr_entity:
             predicates.append({
                 "step": i,
@@ -1392,12 +1544,9 @@ def provenance_check(
     """
     violations: list[dict[str, Any]] = []
 
-    # Build corpus of traceable values from user query and prior tool outputs.
-    # P1-8 fix: previously this loaded the ENTIRE execution_history before
-    # checking the first call — the first call could "validate" against a
-    # value that only appeared in a later step's observation. Now we walk
-    # the timeline strictly: only step i-1's observation is visible when
-    # checking call i's arguments.
+    # Build corpus of traceable values from the user query and observations
+    # that occurred before the current oracle call. Future observations must
+    # never validate an earlier argument.
     initial_traceable: list[str] = [user_query]
 
     # Check each oracle call's arguments for sensitive params

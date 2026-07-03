@@ -153,6 +153,15 @@ class LiveMCPExecutor:
         state_changed: bool,
         metadata: dict[str, Any] | None = None,
     ) -> ToolExecutionResult:
+        # PROVE §3.2 Step 3: classify execution into SUCCESS / PARTIAL_SUCCESS / FAILURE.
+        # PARTIAL_SUCCESS: tool returned success=True but observation signals partial
+        # results (empty list, empty dict, or explicit "partial"/"warning" keys).
+        if not success:
+            execution_status = "FAILURE"
+        elif _is_partial_observation(observation, tool_name=tool_call.name):
+            execution_status = "PARTIAL_SUCCESS"
+        else:
+            execution_status = "SUCCESS"
         return ToolExecutionResult(
             success=success,
             tool_name=tool_call.name,
@@ -166,4 +175,51 @@ class LiveMCPExecutor:
             state_changed=state_changed,
             latency_ms=int((time.monotonic() - started) * 1000),
             metadata=metadata or {},
+            execution_status=execution_status,
         )
+
+
+def _is_partial_observation(observation: Any, tool_name: str = "") -> bool:
+    """PROVE §3.2 Step 3: detect PARTIAL_SUCCESS from observation content.
+
+    A successful tool call is PARTIAL_SUCCESS when:
+    - The observation is an empty list (no results found) — only for read/list tools.
+    - The observation dict contains a "partial" or "warning" key.
+    - A list-valued *primary result key* contains zero items — only for read/list tools.
+
+    Write-class tools (create_*, update_*, delete_*, pay_*, etc.) may return
+    dicts with empty list fields (e.g., {"event_id": "evt_001", "attendees": []})
+    as a normal successful response. These must NOT be flagged as PARTIAL_SUCCESS.
+
+    None means the server returned no body — treated as SUCCESS for write-class
+    tools that return no payload.
+    """
+    if observation is None:
+        return False
+
+    # Determine if this is a read/discovery tool (list_/search_/get_/find_/check_)
+    is_read_tool = bool(tool_name) and any(
+        tool_name.lower().startswith(p)
+        for p in ("list_", "search_", "get_", "find_", "check_", "lookup_",
+                  "view_", "browse_", "ls", "cat", "stat", "head", "tail",
+                  "get_cart", "get_wishlist", "get_coupons")
+    )
+
+    if isinstance(observation, list):
+        # Empty list result is PARTIAL_SUCCESS only for read tools.
+        return is_read_tool and len(observation) == 0
+
+    if isinstance(observation, dict):
+        if not observation:
+            # Completely empty dict: PARTIAL_SUCCESS only for read tools.
+            return is_read_tool
+        if "partial" in observation or "warning" in observation:
+            return True
+        # Check if the primary result list is empty — only for read tools.
+        # Write-class tools may have empty list fields (attendees, labels, etc.)
+        # that are normal parts of a newly created entity.
+        if is_read_tool:
+            for value in observation.values():
+                if isinstance(value, list) and len(value) == 0:
+                    return True
+    return False

@@ -39,6 +39,11 @@ class ToolExecutionResult:
     state_changed: bool
     latency_ms: int
     metadata: dict[str, Any] = field(default_factory=dict)
+    # PROVE §3.2 Step 3: three-way execution status classification.
+    # SUCCESS: tool executed and returned complete results.
+    # PARTIAL_SUCCESS: tool executed but returned partial/empty results (not an error).
+    # FAILURE: tool failed (schema error, execution error, or server error).
+    execution_status: str = "SUCCESS"  # "SUCCESS" | "PARTIAL_SUCCESS" | "FAILURE"
 
 
 @dataclass

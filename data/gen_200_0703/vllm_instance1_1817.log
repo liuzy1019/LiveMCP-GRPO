@@ -1,0 +1,8 @@
+INFO 07-03 18:17:21 [__init__.py:216] Automatically detected platform cuda.
+[1;36m(APIServer pid=240062)[0;0m INFO 07-03 18:17:24 [api_server.py:1839] vLLM API server version 0.11.0
+[1;36m(APIServer pid=240062)[0;0m INFO 07-03 18:17:24 [utils.py:233] non-default args: {'port': 8002, 'model': 'models/Qwen/Qwen3-32B', 'trust_remote_code': True, 'max_model_len': 12288, 'served_model_name': ['Qwen3-32B-Instruct'], 'tensor_parallel_size': 4, 'gpu_memory_utilization': 0.82, 'max_num_seqs': 4}
+[1;36m(APIServer pid=240062)[0;0m The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
+[1;36m(APIServer pid=240062)[0;0m INFO 07-03 18:17:24 [model.py:547] Resolved architecture: Qwen3ForCausalLM
+[1;36m(APIServer pid=240062)[0;0m `torch_dtype` is deprecated! Use `dtype` instead!
+[1;36m(APIServer pid=240062)[0;0m INFO 07-03 18:17:24 [model.py:1510] Using max model len 12288
+[1;36m(APIServer pid=240062)[0;0m INFO 07-03 18:17:24 [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=2048.

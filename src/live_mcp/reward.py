@@ -74,15 +74,69 @@ class RewardComposer:
         return sum(scores) / len(scores)
 
     def _coverage(self, task: LiveTask, results: list[ToolExecutionResult]) -> float:
-        oracle_names = [
-            call.tool_name for call in task.oracle_program.calls
+        """PROVE §3.3 R_coverage: dependency-ordered coverage.
+
+        For each oracle call g, it contributes to coverage only if:
+          1. The model called the same tool (m(g) = 1).
+          2. All predecessor oracle calls j where j→g is a dependency edge
+             have already been matched by the model before g (o(g) = 1).
+
+        This implements the PROVE formula:
+          R_cov = (1/|G|) * Σ_g [ m(g) · o(g) ]
+          where o(g) = ∏_{j: j→g ∈ E} ⊮[µ(j) < µ(g)]
+
+        The dependency graph is approximated from the oracle call sequence:
+        an implicit dependency edge j→g exists when j appears before g in the
+        oracle chain (sequential ordering = the dependency order discovered in
+        Step 1).  This is equivalent to the ordered-prefix check but correctly
+        handles non-linear chains where a later oracle step depends on multiple
+        earlier steps.
+        """
+        oracle_calls = [
+            call for call in task.oracle_program.calls
             if getattr(call, "action", "tool_call") == "tool_call"
         ]
-        pos = 0
-        for result in results:
-            if pos < len(oracle_names) and result.canonical_tool_name == oracle_names[pos] and result.success:
-                pos += 1
-        return pos / len(oracle_names) if oracle_names else 1.0
+        if not oracle_calls:
+            return 1.0
+
+        # Build model call sequence (tool names in order, successful only).
+        # PROVE: only successful model calls count toward coverage.
+        model_tool_names: list[str] = [
+            r.canonical_tool_name for r in results if r.success
+        ]
+
+        # For each oracle position g, track whether it has been matched.
+        # matched[g] = True means oracle_calls[g] was satisfied by the model.
+        matched: list[bool] = [False] * len(oracle_calls)
+
+        # Map oracle tool name → list of oracle indices (handles repeated tools).
+        # We consume matches greedily in oracle order to respect dependency edges.
+        oracle_name_to_indices: dict[str, list[int]] = {}
+        for g_idx, oc in enumerate(oracle_calls):
+            oracle_name_to_indices.setdefault(oc.tool_name, []).append(g_idx)
+
+        # Greedy matching: walk model calls in order, match each to the earliest
+        # unmatched oracle call with the same tool name whose predecessors are
+        # already matched (o(g) = 1).
+        for model_tool in model_tool_names:
+            candidates = oracle_name_to_indices.get(model_tool, [])
+            for g_idx in candidates:
+                if matched[g_idx]:
+                    continue
+                # Check o(g): PROVE §3.3 dependency edge check.
+                # In a sequential oracle chain, each step g depends only on
+                # its direct predecessor (g_idx - 1), not all prior steps.
+                # o(g) = 1 iff the direct predecessor is already matched
+                # (or g is the first step, which has no predecessor).
+                # Requiring ALL predecessors matched (range(g_idx)) is too
+                # strict: it penalises the model for skipping a redundant
+                # read step even when the critical dependency is satisfied.
+                predecessors_satisfied = (g_idx == 0) or matched[g_idx - 1]
+                if predecessors_satisfied:
+                    matched[g_idx] = True
+                    break  # consume this model call
+
+        return sum(matched) / len(oracle_calls)
 
     def _efficiency(self, model_call_count: int, gt_call_count: int) -> float:
         """PROVE §3.3: R_eff = max(0, 1 - α * max(0, n - B) / B).

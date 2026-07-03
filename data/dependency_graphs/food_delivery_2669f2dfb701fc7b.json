@@ -1,0 +1,121 @@
+{
+  "server_name": "food_delivery",
+  "schema_hash": "2669f2dfb701fc7b",
+  "tool_names": [
+    "add_tip",
+    "cancel_order",
+    "contact_support",
+    "create_order",
+    "filter_by_dietary",
+    "get_estimated_time",
+    "get_menu",
+    "get_popular_items",
+    "get_restaurant",
+    "list_restaurants",
+    "rate_order",
+    "reorder",
+    "search_restaurants",
+    "track_rider",
+    "update_order_status"
+  ],
+  "graph": {
+    "list_restaurants": {
+      "explicit": [
+        "get_restaurant",
+        "get_menu",
+        "filter_by_dietary",
+        "get_popular_items",
+        "create_order"
+      ],
+      "implicit": []
+    },
+    "search_restaurants": {
+      "explicit": [
+        "get_restaurant",
+        "get_menu",
+        "filter_by_dietary",
+        "get_popular_items",
+        "create_order"
+      ],
+      "implicit": []
+    },
+    "get_restaurant": {
+      "explicit": [
+        "get_menu",
+        "filter_by_dietary",
+        "get_popular_items",
+        "create_order"
+      ],
+      "implicit": []
+    },
+    "get_menu": {
+      "explicit": [
+        "filter_by_dietary",
+        "create_order",
+        "add_tip"
+      ],
+      "implicit": []
+    },
+    "filter_by_dietary": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_popular_items": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_order": {
+      "explicit": [
+        "update_order_status",
+        "cancel_order",
+        "get_estimated_time",
+        "track_rider",
+        "rate_order",
+        "add_tip",
+        "reorder",
+        "contact_support"
+      ],
+      "implicit": []
+    },
+    "update_order_status": {
+      "explicit": [],
+      "implicit": [
+        "rate_order",
+        "add_tip"
+      ]
+    },
+    "cancel_order": {
+      "explicit": [
+        "update_order_status",
+        "rate_order",
+        "add_tip",
+        "contact_support"
+      ],
+      "implicit": []
+    },
+    "get_estimated_time": {
+      "explicit": [],
+      "implicit": []
+    },
+    "track_rider": {
+      "explicit": [],
+      "implicit": []
+    },
+    "rate_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_tip": {
+      "explicit": [],
+      "implicit": []
+    },
+    "reorder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "contact_support": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

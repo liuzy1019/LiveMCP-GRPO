@@ -1,0 +1,123 @@
+{
+  "server_name": "banking",
+  "schema_hash": "40a459ae3f3d781a",
+  "tool_names": [
+    "apply_loan",
+    "bill_pay",
+    "cancel_transfer",
+    "deposit",
+    "freeze_account",
+    "get_account_info",
+    "get_balance",
+    "get_exchange_rate",
+    "get_history",
+    "get_statement",
+    "list_accounts",
+    "schedule_transfer",
+    "transfer",
+    "unfreeze_account",
+    "verify_account",
+    "wire_transfer",
+    "withdraw"
+  ],
+  "graph": {
+    "list_accounts": {
+      "explicit": [
+        "get_account_info",
+        "get_balance",
+        "get_history",
+        "get_statement",
+        "transfer",
+        "wire_transfer",
+        "deposit",
+        "withdraw",
+        "bill_pay",
+        "schedule_transfer",
+        "freeze_account",
+        "unfreeze_account",
+        "verify_account",
+        "apply_loan"
+      ],
+      "implicit": []
+    },
+    "get_account_info": {
+      "explicit": [
+        "get_balance",
+        "get_history",
+        "get_statement",
+        "transfer",
+        "wire_transfer",
+        "deposit",
+        "withdraw",
+        "bill_pay"
+      ],
+      "implicit": []
+    },
+    "get_balance": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_history": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_statement": {
+      "explicit": [],
+      "implicit": []
+    },
+    "transfer": {
+      "explicit": [],
+      "implicit": []
+    },
+    "wire_transfer": {
+      "explicit": [],
+      "implicit": []
+    },
+    "deposit": {
+      "explicit": [],
+      "implicit": []
+    },
+    "withdraw": {
+      "explicit": [],
+      "implicit": []
+    },
+    "bill_pay": {
+      "explicit": [],
+      "implicit": []
+    },
+    "schedule_transfer": {
+      "explicit": [
+        "cancel_transfer"
+      ],
+      "implicit": []
+    },
+    "cancel_transfer": {
+      "explicit": [],
+      "implicit": []
+    },
+    "freeze_account": {
+      "explicit": [
+        "unfreeze_account"
+      ],
+      "implicit": []
+    },
+    "unfreeze_account": {
+      "explicit": [],
+      "implicit": []
+    },
+    "verify_account": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_exchange_rate": {
+      "explicit": [
+        "apply_loan"
+      ],
+      "implicit": []
+    },
+    "apply_loan": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

@@ -136,13 +136,13 @@ elif [ "${GPU_TIER}" = "A100" ] || [ "${GPU_TIER}" = "Hopper" ]; then
     : "${OVAL_MINI_BATCH_SIZE:=16}"
     : "${OVAL_ROLLOUT_N:=16}"
 elif [ "${GPU_TIER}" = "A10" ]; then
-    : "${OVAL_PROMPT_LENGTH:=10240}"
-    : "${OVAL_RESPONSE_LENGTH:=4096}"
-    : "${OVAL_MAX_NUM_SEQS:=8}"
+    : "${OVAL_PROMPT_LENGTH:=12384}"   # PROVE: 12,384
+    : "${OVAL_RESPONSE_LENGTH:=16384}" # PROVE: 16,384
+    : "${OVAL_MAX_NUM_SEQS:=16}"
     : "${OVAL_MICRO_BATCH:=1}"
-    : "${OVAL_TRAIN_BATCH_SIZE:=8}"
+    : "${OVAL_TRAIN_BATCH_SIZE:=16}"
     : "${OVAL_MINI_BATCH_SIZE:=8}"
-    : "${OVAL_ROLLOUT_N:=8}"
+    : "${OVAL_ROLLOUT_N:=16}"          # PROVE: 16
 else
     : "${OVAL_PROMPT_LENGTH:=10240}"
     : "${OVAL_RESPONSE_LENGTH:=2048}"

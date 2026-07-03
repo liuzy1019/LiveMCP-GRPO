@@ -1,0 +1,173 @@
+{
+  "server_name": "shopping",
+  "schema_hash": "8cdf8ded6943683d",
+  "tool_names": [
+    "add_review",
+    "add_to_cart",
+    "add_to_wishlist",
+    "apply_coupon",
+    "checkout",
+    "clear_cart",
+    "compare_products",
+    "get_cart",
+    "get_coupons",
+    "get_order",
+    "get_order",
+    "get_product",
+    "get_recommendations",
+    "get_return_status",
+    "get_reviews",
+    "get_wishlist",
+    "list_categories",
+    "list_orders",
+    "list_orders",
+    "remove_from_cart",
+    "remove_from_wishlist",
+    "return_order",
+    "search_products",
+    "track_order",
+    "update_cart_quantity"
+  ],
+  "graph": {
+    "search_products": {
+      "explicit": [
+        "get_product",
+        "add_to_cart",
+        "update_cart_quantity",
+        "remove_from_cart",
+        "add_review",
+        "get_reviews",
+        "add_to_wishlist",
+        "remove_from_wishlist"
+      ],
+      "implicit": []
+    },
+    "get_product": {
+      "explicit": [
+        "compare_products",
+        "add_to_cart",
+        "update_cart_quantity",
+        "remove_from_cart",
+        "add_review",
+        "get_reviews",
+        "add_to_wishlist",
+        "remove_from_wishlist"
+      ],
+      "implicit": []
+    },
+    "list_categories": {
+      "explicit": [],
+      "implicit": [
+        "compare_products"
+      ]
+    },
+    "compare_products": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_recommendations": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_to_cart": {
+      "explicit": [],
+      "implicit": [
+        "update_cart_quantity",
+        "remove_from_cart",
+        "clear_cart",
+        "checkout"
+      ]
+    },
+    "update_cart_quantity": {
+      "explicit": [],
+      "implicit": [
+        "checkout"
+      ]
+    },
+    "remove_from_cart": {
+      "explicit": [],
+      "implicit": [
+        "checkout"
+      ]
+    },
+    "get_cart": {
+      "explicit": [],
+      "implicit": []
+    },
+    "clear_cart": {
+      "explicit": [],
+      "implicit": [
+        "checkout"
+      ]
+    },
+    "apply_coupon": {
+      "explicit": [
+        "checkout"
+      ],
+      "implicit": []
+    },
+    "get_coupons": {
+      "explicit": [],
+      "implicit": [
+        "checkout"
+      ]
+    },
+    "checkout": {
+      "explicit": [
+        "get_order",
+        "track_order",
+        "return_order"
+      ],
+      "implicit": []
+    },
+    "get_order": {
+      "explicit": [
+        "return_order",
+        "add_review"
+      ],
+      "implicit": []
+    },
+    "list_orders": {
+      "explicit": [
+        "track_order",
+        "return_order",
+        "get_order"
+      ],
+      "implicit": []
+    },
+    "track_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "return_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_return_status": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_review": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_reviews": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_to_wishlist": {
+      "explicit": [
+        "remove_from_wishlist"
+      ],
+      "implicit": []
+    },
+    "remove_from_wishlist": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_wishlist": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

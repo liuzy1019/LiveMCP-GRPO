@@ -5,6 +5,7 @@ Safety: protected paths, permission escalation detection, symlink constraints.
 
 from __future__ import annotations
 import copy
+import posixpath
 from typing import Any
 from src.live_mcp.server_base import StatefulToolServer, _result, serve
 
@@ -71,9 +72,11 @@ class FilesystemServer(StatefulToolServer):
 
     def _resolve(self, session_id: str, path: str) -> str:
         cwd = self._state(session_id)["cwd"]
-        if path.startswith("/"): return path.rstrip("/") or "/"
-        if cwd == "/": return "/" + path
-        return (cwd + "/" + path).rstrip("/") or "/"
+        raw = path or "."
+        if raw.startswith("/"):
+            return posixpath.normpath(raw) or "/"
+        base = "/" if cwd == "/" else cwd
+        return posixpath.normpath(posixpath.join(base, raw)) or "/"
 
     def _node(self, session_id: str, path: str) -> dict[str, Any]:
         p = self._resolve(session_id, path); node = self._state(session_id)["fs"].get(p)

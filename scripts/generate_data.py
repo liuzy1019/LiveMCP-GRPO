@@ -213,7 +213,7 @@ def generate_data(args: argparse.Namespace):
     df_val.to_parquet(Path(args.val_output), index=False)
 
     if args.experiment_tag:
-        _save_experiment_record(args, df_train, df_val, start_time)
+        _save_experiment_record(args, df_train, df_val, start_time, difficulty_mix)
 
     _print_stats(df_train, df_val, Path(args.output), Path(args.val_output), args)
 
@@ -756,57 +756,14 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             )
             continue  # Skip tasks without tool schemas
 
-        tools_desc_lines = []
-        strip_enums = bool(task.metadata.get("strip_enums", False))
-        for t in visible_tools:
-            name = t.get("name", "")
-            desc = t.get("description", "")
-            params = t.get("input_schema", {}).get("properties", {})
-            required = t.get("input_schema", {}).get("required", [])
-            tools_desc_lines.append(f"- {name}: {desc}")
-            for pname, pinfo in params.items():
-                req = " (required)" if pname in required else ""
-                ptype = pinfo.get("type", "any")
-                pdesc = pinfo.get("description", "")
-                enum_values = pinfo.get("enum")
-                enum_desc = (
-                    f" Allowed values: {json.dumps(enum_values, ensure_ascii=False)}."
-                    if enum_values is not None and not strip_enums else ""
-                )
-                tools_desc_lines.append(
-                    f"    - {pname} ({ptype}{req}): {pdesc}{enum_desc}"
-                )
-        tools_block = "\n".join(tools_desc_lines)
         visible_tool_names = [t.get("name", "") for t in visible_tools if t.get("name")]
 
         domain = task.target_servers[0] if task.target_servers else "unknown"
 
         system_prompt = (
-            f"You are a helpful assistant with access to the following tools. "
-            f"Use them when needed to answer the user's question.\n\n"
-            f"Available tools:\n{tools_block}\n\n"
-            f"Response format:\n"
-            f'- To call a tool: <tool_call>{{"name": "tool_name", "arguments": {{...}}}}</tool_call>\n'
-            f"  Emit exactly ONE tool_call per assistant turn, then wait for its tool result.\n"
-            f"- To give final answer: <final_answer>your answer</final_answer>\n"
-            f"- To report error: <report_error>error description</report_error>\n"
-            f"- To ask clarification: <ask_clarification>your question</ask_clarification>\n"
-            f"\n"
-            f"Examples:\n"
-            f"---\n"
-            f"Example 1 (single-step query):\n"
-            f"User: what events do I have next Tuesday?\n"
-            f"Assistant: <tool_call>{{\"name\": \"search_something\", \"arguments\": {{\"keyword\": \"next Tuesday\"}}}}</tool_call>\n"
-            f"Tool result: [{{\"id\": \"evt_01\", \"title\": \"Team Standup\", \"time\": \"10:00\"}}]\n"
-            f"Assistant: <final_answer>You have one event on Tuesday: Team Standup at 10:00.</final_answer>\n"
-            f"\n"
-            f"Example 2 (multi-step with dependency):\n"
-            f"User: move $200 from my savings to checking\n"
-            f"Assistant: <tool_call>{{\"name\": \"check_balance\", \"arguments\": {{\"account\": \"savings\"}}}}</tool_call>\n"
-            f"Tool result: {{\"balance\": 500}}\n"
-            f"Assistant: <tool_call>{{\"name\": \"transfer_money\", \"arguments\": {{\"from\": \"savings\", \"to\": \"checking\", \"amount\": 200}}}}</tool_call>\n"
-            f"Tool result: {{\"status\": \"success\", \"new_balance\": 300}}\n"
-            f"Assistant: <final_answer>Transferred $200 from savings to checking. Remaining balance: $300.</final_answer>"
+            f"You are a helpful assistant. Use the available tools to complete "
+            f"the user's request step by step. Call one tool at a time and wait "
+            f"for its result before proceeding."
         )
 
         # One row always starts from reset(session_seed).  Teacher tool calls
@@ -823,12 +780,8 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
         has_distractors = task.metadata.get("has_distractors", False)
         has_missing_func = task.metadata.get("has_missing_function", False)
 
-        # BUG-E fix: perturbation_level encodes the PROVE information level
-        # (complete/missing/minimal at 60/20/20), NOT the perturbation knob
-        # (distractor/missing-function). Previously we overwrote this field
-        # to "hard"/"medium" whenever a knob fired, which destroyed the
-        # information-level stratification needed for GRPO advantage
-        # computation. Keep difficulty intact; expose knob status via the
+        # perturbation_level encodes the PROVE information level, not the
+        # robustness knob. Keep difficulty intact; expose knob status via the
         # separate scenario_type/has_* fields.
         perturbation_level = task.difficulty
         scenario_type = _task_scenario(task)
@@ -847,12 +800,9 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
 
         success_criteria = _task_success_criteria(task)
 
-        # P0-1 fix: success_criteria is a list[dict] whose 'value' field holds
-        # mixed types (str status, numeric balance, etc.). Storing the raw list
-        # in a Parquet dict column makes pyarrow infer a single value type and
-        # crash with ArrowInvalid ("Could not convert 'paid' with type str:
-        # tried to convert to double"). Serialize to JSON string for safe
-        # round-trip; reward side parses it back via json.loads.
+        # success_criteria is a list[dict] whose 'value' field can hold mixed
+        # types. Serialize to JSON for a stable Parquet round-trip; reward side
+        # parses it back via json.loads.
         success_criteria_json = json.dumps(
             success_criteria, ensure_ascii=False, default=str
         )
@@ -897,7 +847,7 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             "uid": task.task_id,
             "has_distractors": has_distractors,
             "has_missing_function": has_missing_func,
-            "enum_stripped": strip_enums,
+            "enum_stripped": task.metadata.get("strip_enums", False),
             "identity_policy": task.metadata.get("identity_policy", _identity_policy(domain)),
             "target_resource_ids": task.metadata.get("target_resource_ids", []),
             "protected_resources": task.metadata.get("protected_resources", []),
@@ -912,12 +862,8 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             "allowed_terminal_actions": allowed_terminal_actions,
             "semantic_fingerprint": task.metadata.get("semantic_fingerprint", ""),
             "generation_method": task.metadata.get("generation_method", "task_planner"),
-            # P1-11: serialize oracle_calls to JSON string to prevent
-            # pyarrow struct unification. When different oracle_calls have
-            # heterogeneous arguments (e.g. {"event_id": "x"} vs
-            # {"title": "x", "start_time": "x"}), pyarrow collapses all
-            # keys into a unified struct with null fill. Serializing
-            # oracle_calls as JSON preserves sparse argument dicts.
+            # Serialize oracle_calls as JSON so sparse heterogeneous argument
+            # dicts round-trip through Parquet without struct unification.
             "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
             "success_criteria": success_criteria_json,
             "hidden_tools": list(task.hidden_tools) if task.hidden_tools else [],
@@ -962,7 +908,7 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
     return rows
 
 
-def _save_experiment_record(args, df_train, df_val, start_time: datetime):
+def _save_experiment_record(args, df_train, df_val, start_time: datetime, difficulty_mix: dict):
     """Save experiment config and results to data/experiments/{date}_{tag}/."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     exp_dir = PROJECT_ROOT / "data" / "experiments" / f"{today}_{args.experiment_tag}"
@@ -1002,7 +948,7 @@ def _save_experiment_record(args, df_train, df_val, start_time: datetime):
         "distractor_rate": args.distractor_rate,
         "missing_function_rate": args.missing_function_rate,
         "irrelevance_ratio": args.irrelevance_ratio,
-        "difficulty_mix": {"complete": 0.6, "missing": 0.2, "minimal": 0.2},
+        "difficulty_mix": difficulty_mix,
         "git_commit": git_commit,
         "gpu_model": gpu_info,
         "timestamp": start_time.isoformat(),

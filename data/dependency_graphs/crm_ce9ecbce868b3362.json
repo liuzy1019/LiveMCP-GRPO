@@ -1,0 +1,129 @@
+{
+  "server_name": "crm",
+  "schema_hash": "ce9ecbce868b3362",
+  "tool_names": [
+    "add_note",
+    "complete_task",
+    "convert_lead",
+    "create_contact",
+    "create_deal",
+    "create_lead",
+    "create_task",
+    "delete_contact",
+    "delete_lead",
+    "get_deal",
+    "list_deals",
+    "list_leads",
+    "list_tasks",
+    "update_contact",
+    "update_deal",
+    "update_lead"
+  ],
+  "graph": {
+    "create_lead": {
+      "explicit": [
+        "update_lead",
+        "convert_lead",
+        "delete_lead",
+        "create_deal",
+        "create_task"
+      ],
+      "implicit": [
+        "update_deal"
+      ]
+    },
+    "update_lead": {
+      "explicit": [
+        "convert_lead",
+        "delete_lead",
+        "create_deal"
+      ],
+      "implicit": [
+        "update_deal"
+      ]
+    },
+    "convert_lead": {
+      "explicit": [
+        "delete_lead",
+        "update_contact",
+        "create_deal",
+        "update_deal",
+        "create_task",
+        "add_note"
+      ],
+      "implicit": []
+    },
+    "delete_lead": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_leads": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_contact": {
+      "explicit": [
+        "update_contact",
+        "delete_contact",
+        "create_deal",
+        "create_task"
+      ],
+      "implicit": []
+    },
+    "update_contact": {
+      "explicit": [],
+      "implicit": [
+        "delete_contact",
+        "create_deal",
+        "create_task"
+      ]
+    },
+    "delete_contact": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_deal": {
+      "explicit": [
+        "update_deal",
+        "get_deal"
+      ],
+      "implicit": [
+        "create_task"
+      ]
+    },
+    "update_deal": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_deals": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_deal": {
+      "explicit": [
+        "create_task"
+      ],
+      "implicit": []
+    },
+    "create_task": {
+      "explicit": [
+        "complete_task"
+      ],
+      "implicit": []
+    },
+    "list_tasks": {
+      "explicit": [
+        "complete_task"
+      ],
+      "implicit": []
+    },
+    "complete_task": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_note": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

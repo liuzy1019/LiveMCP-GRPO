@@ -61,8 +61,8 @@ def _get_cfg():
         w_arg: float = 0.1
         w_struct: float = 0.6
         w_exec: float = 0.4
-        alpha_eff: float = 0.3
-        beta_budget: float = 0.3
+        alpha_eff: float = 0.5   # PROVE §4.1: α = 0.5
+        beta_budget: float = 0.5  # PROVE §4.1: β = 0.5
     return _FallbackCfg()
 
 # 模块加载时解析一次配置

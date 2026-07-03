@@ -65,6 +65,7 @@ class LLMClient:
         api_key: str = "not-needed",
         temperature: float = 0.7,
         max_tokens: int = 1024,
+        timeout_s: float | None = None,
         device: int | str | None = None,
     ):
         self.mode = mode
@@ -73,6 +74,11 @@ class LLMClient:
         self.api_key = api_key or os.environ.get("LLM_API_KEY", "not-needed")
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.timeout_s = (
+            float(timeout_s)
+            if timeout_s is not None
+            else float(os.environ.get("LLM_API_TIMEOUT_S", "180"))
+        )
         self._pipe = None
         self._tokenizer = None
         self._client = None
@@ -111,7 +117,11 @@ class LLMClient:
             logger.info("Model loaded")
         elif self.mode == "openai" and self._client is None:
             from openai import OpenAI
-            self._client = OpenAI(base_url=self.api_base, api_key=self.api_key)
+            self._client = OpenAI(
+                base_url=self.api_base,
+                api_key=self.api_key,
+                timeout=self.timeout_s,
+            )
 
     def generate(
         self,

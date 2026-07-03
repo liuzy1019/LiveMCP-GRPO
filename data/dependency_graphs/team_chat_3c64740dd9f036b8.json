@@ -1,0 +1,76 @@
+{
+  "server_name": "team_chat",
+  "schema_hash": "3c64740dd9f036b8",
+  "tool_names": [
+    "archive_channel",
+    "create_channel",
+    "create_thread",
+    "get_channel",
+    "get_user_status",
+    "list_channels",
+    "react_message",
+    "search_messages",
+    "send_dm",
+    "send_message"
+  ],
+  "graph": {
+    "list_channels": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_channel": {
+      "explicit": [
+        "archive_channel",
+        "get_channel",
+        "send_message",
+        "create_thread",
+        "react_message"
+      ],
+      "implicit": []
+    },
+    "archive_channel": {
+      "explicit": [
+        "send_message",
+        "create_thread",
+        "react_message"
+      ],
+      "implicit": []
+    },
+    "get_channel": {
+      "explicit": [],
+      "implicit": []
+    },
+    "send_message": {
+      "explicit": [
+        "create_thread",
+        "react_message"
+      ],
+      "implicit": []
+    },
+    "send_dm": {
+      "explicit": [
+        "create_thread",
+        "react_message"
+      ],
+      "implicit": []
+    },
+    "create_thread": {
+      "explicit": [
+        "react_message"
+      ],
+      "implicit": []
+    },
+    "react_message": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_messages": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_user_status": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

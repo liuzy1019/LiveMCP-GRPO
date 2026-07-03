@@ -47,15 +47,29 @@ def normalize_json_field(value: Any, default: Any = None) -> Any:
 
 
 def strip_think_tags(text: str) -> str:
-    """Strip Qwen3 <think>...</think> blocks from model output.
+    """Strip Qwen3 <think>...</think> and <response>...</response> blocks from model output.
 
     Handles both closed tags and unclosed (dangling) <think> tags.
+    vLLM 0.11 with Qwen3 may not honor enable_thinking=False; this function
+    strips both the thinking block and the <response> wrapper so only the
+    actual response content remains.
     """
     import re
+    # Strip <think>...</think> blocks
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     if "<think>" in text:
         after_think = re.sub(r"<think>[\s\S]+", "", text)
         text = after_think.strip() if after_think.strip() else ""
+
+    # Strip <response> wrapper tags (Qwen3 vLLM output format)
+    # Case 1: <response>content</response> → content
+    match = re.search(r"<response>\s*(.*?)\s*</response>", text, flags=re.DOTALL)
+    if match:
+        text = match.group(1).strip()
+    # Case 2: <response>content (no closing tag)
+    elif "<response>" in text:
+        text = text.split("<response>", 1)[1].strip()
+
     return text.strip()
 
 

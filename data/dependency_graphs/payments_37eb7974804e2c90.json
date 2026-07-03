@@ -1,0 +1,78 @@
+{
+  "server_name": "payments",
+  "schema_hash": "37eb7974804e2c90",
+  "tool_names": [
+    "cancel_payment",
+    "create_invoice",
+    "create_webhook",
+    "delete_webhook",
+    "dispute_invoice",
+    "get_invoice",
+    "list_invoices",
+    "list_webhooks",
+    "pay_invoice",
+    "refund_invoice"
+  ],
+  "graph": {
+    "create_invoice": {
+      "explicit": [
+        "get_invoice",
+        "pay_invoice",
+        "dispute_invoice"
+      ],
+      "implicit": [
+        "refund_invoice"
+      ]
+    },
+    "get_invoice": {
+      "explicit": [
+        "pay_invoice",
+        "refund_invoice",
+        "dispute_invoice"
+      ],
+      "implicit": []
+    },
+    "list_invoices": {
+      "explicit": [
+        "pay_invoice",
+        "refund_invoice",
+        "dispute_invoice"
+      ],
+      "implicit": []
+    },
+    "pay_invoice": {
+      "explicit": [
+        "refund_invoice"
+      ],
+      "implicit": []
+    },
+    "refund_invoice": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cancel_payment": {
+      "explicit": [],
+      "implicit": []
+    },
+    "dispute_invoice": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_webhook": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "list_webhooks": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "delete_webhook": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

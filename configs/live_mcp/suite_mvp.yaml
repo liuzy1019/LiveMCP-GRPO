@@ -23,7 +23,7 @@ live:
   trace_dir: data/live_mcp/traces
 
 rollout:
-  max_turns: 8  # 单 episode 最大交互轮数
+  max_turns: 10  # 单 episode 最大交互轮数（PROVE: 10 assistant turns）
   max_parallel_tool_calls: 4  # 并行 tool call 上限
   observation_max_chars: 4096  # 工具返回截断长度
   stop_on_execution_error: false  # 执行错误不中断 episode
