@@ -1098,6 +1098,56 @@ def apply_perturbation(
 # Success criteria derivation (from state delta)
 # ═══════════════════════════════════════════════════════════════════════
 
+# ── Centralized mutating-tool definitions (PROVE §3.2) ──
+# Single source of truth for "does this tool change live server state?"
+# Replaces three independent hand-maintained prefix lists that had drifted
+# apart across derive_progress_predicates, replay_validate, and
+# _validate_task_training_contract.
+
+_MUTATING_PREFIXES: tuple[str, ...] = (
+    "create_", "update_", "delete_", "remove_", "add_",
+    "send_", "transfer", "pay_", "checkout", "transition_",
+    "convert_", "archive_", "mkdir", "touch", "mv", "cp",
+    "chmod", "write_", "set_", "apply_",
+    "cancel_", "refund_", "return_", "deposit", "withdraw",
+    "bill_pay", "rm", "sed", "unzip", "zip", "tar_create",
+    "freeze_", "unfreeze_", "dispute_", "verify_",
+    "rate_order", "clear_cart", "reorder",
+    "complete_task", "register_", "schedule_",
+    "mark_read", "mark_unread", "change_",
+    "reply_to", "forward_", "chown", "wire_", "assign_",
+    "comment_", "time_track", "respond_", "react_",
+    "contact_",
+    # Domain-specific compound names that don't start with a prefix:
+    "move_to_thread", "cd", "umask", "symlink",
+)
+
+# Tools that perform writes without observable state changes in the
+# tracked state machine (e.g. network side-effects: send email, send DM).
+# These legitimately produce empty success_criteria even though they
+# are mutating the outside world.
+_SELF_CONTAINED_WRITE_TOOLS: frozenset[str] = frozenset({
+    "send_email", "send_message", "send_dm", "reply_email",
+    "forward_email", "create_filter", "create_webhook",
+})
+
+
+def _is_mutating_tool(tool_name: str) -> bool:
+    """Return True if *tool_name* mutates live server state.
+
+    Uses a unified prefix set + domain-specific exceptions, keeping
+    derive_progress_predicates, replay_validate and the training
+    contract in sync.
+    """
+    name_lower = tool_name.lower()
+    if name_lower in _SELF_CONTAINED_WRITE_TOOLS:
+        return True
+    for prefix in _MUTATING_PREFIXES:
+        if name_lower.startswith(prefix):
+            return True
+    return False
+
+
 def derive_success_criteria(
     initial_state: dict[str, Any],
     final_state: dict[str, Any],
@@ -1167,6 +1217,26 @@ def derive_success_criteria(
                                 "path_parts": [key, ck, fk],
                                 "value": fe[fk],
                             })
+                    # ── P3c: list-field changes (e.g. wishlist.append, watchers, labels) ──
+                    # Entity dicts may have list-type fields tracking ordered
+                    # collections.  Changes here are real state mutations that
+                    # must produce success_criteria to avoid reward-coverage gaps.
+                    for fk in fe:
+                        if fk not in ie:
+                            continue
+                        iv = ie[fk]
+                        fv = fe[fk]
+                        if not isinstance(iv, list) or not isinstance(fv, list):
+                            continue
+                        if iv == fv:
+                            continue
+                        # List content changed: verify final list equals expected
+                        criteria.append({
+                            "type": "state_equals", "server": domain,
+                            "path": f"{key}.{ck}.{fk}",
+                            "path_parts": [key, ck, fk],
+                            "value": fv,
+                        })
 
     # Domain-specific semantic criteria
     tool_names = [c.tool_name for c in oracle_calls if c.action == "tool_call"]
@@ -1241,13 +1311,8 @@ def derive_progress_predicates(
             })
 
     # Step 2: completed_required_transition for mutation calls
-    mutate_prefixes = ("create_", "update_", "delete_", "remove_", "add_",
-                       "send_", "transfer", "pay_", "checkout", "transition_",
-                       "convert_", "archive_", "mkdir", "touch", "mv", "cp",
-                       "chmod", "write_", "set_", "apply_")
     for i, call in enumerate(real_calls):
-        is_mutate = any(call.tool_name.lower().startswith(p) for p in mutate_prefixes)
-        if is_mutate:
+        if _is_mutating_tool(call.tool_name):
             entity = _tool_entity(call.tool_name)
             # Extract target entity ID from arguments
             target = ""
@@ -1271,15 +1336,11 @@ def derive_progress_predicates(
     # the same entity type would be flagged, which is not a dependency edge).
     read_prefixes_dep = ("list_", "search_", "get_", "find_", "check_", "lookup_",
                          "view_", "browse_", "ls", "cat", "stat", "head", "tail")
-    mutate_prefixes_dep = ("create_", "update_", "delete_", "remove_", "add_",
-                           "send_", "transfer", "pay_", "checkout", "transition_",
-                           "convert_", "archive_", "mkdir", "touch", "mv", "cp",
-                           "chmod", "write_", "set_", "apply_")
     for i in range(1, len(real_calls)):
         prev = real_calls[i - 1]
         curr = real_calls[i]
         prev_is_read = any(prev.tool_name.lower().startswith(p) for p in read_prefixes_dep)
-        curr_is_mutate = any(curr.tool_name.lower().startswith(p) for p in mutate_prefixes_dep)
+        curr_is_mutate = _is_mutating_tool(curr.tool_name)
         if not (prev_is_read and curr_is_mutate):
             continue
         prev_entity = _tool_entity(prev.tool_name)
@@ -1525,20 +1586,8 @@ def replay_validate(
             # data for lookup-only scenarios.
             tool_call_count = sum(1 for c in oracle_calls if c.action == "tool_call")
             if tool_call_count > 0:
-                _mutate_prefixes = (
-                    "create_", "update_", "delete_", "remove_", "add_",
-                    "send_", "transfer", "pay_", "checkout", "transition_",
-                    "convert_", "archive_", "mkdir", "touch", "mv", "cp",
-                    "chmod", "write_", "set_", "apply_", "cancel_", "refund_",
-                    "bill_pay", "deposit", "withdraw", "rm", "sed",
-                    "unzip", "zip", "tar_create", "freeze_", "unfreeze_",
-                    "dispute_", "verify_", "rate_order", "return_order",
-                    "clear_cart", "reorder", "complete_task", "register_",
-                    "schedule_", "mark_read", "mark_unread", "change_",
-                    "reply_to", "forward_",
-                )
                 has_mutating = any(
-                    any(c.tool_name.lower().startswith(p) for p in _mutate_prefixes)
+                    _is_mutating_tool(c.tool_name)
                     for c in oracle_calls if c.action == "tool_call"
                 )
                 if has_mutating:

@@ -38,6 +38,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import pandas as pd
 from loguru import logger
 
+from src.live_mcp.task_planner import (
+    _is_mutating_tool, _SELF_CONTAINED_WRITE_TOOLS,
+    DOMAIN_DESCRIPTIONS, _format_tools,
+)
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -353,23 +358,9 @@ def _validate_task_training_contract(task) -> None:
     if terminal_action == "final_answer" and real_required_tools:
         criteria = _task_success_criteria(task)
         if not criteria:
-            # Self-contained network tools (send/reply/forward) don't change
-            # tracked state — empty criteria is legitimate for them.
-            _SELF_CONTAINED_WRITE = (
-                "send_email", "send_message", "send_dm", "reply_email",
-                "forward_email", "create_filter", "create_webhook",
-            )
-            # State-changing tools that MUST produce criteria
-            _STATE_CHANGING_PREFIXES = (
-                "create_", "update_", "delete_", "remove_", "cancel_", "add_",
-                "pay_", "refund_", "transfer", "checkout", "return_",
-                "deposit", "withdraw", "convert_", "archive_", "chmod",
-                "chown", "mv", "rm", "bill_pay", "wire_", "assign_",
-                "transition_", "mark_", "set_", "reorder",
-            )
             state_changing = [t for t in real_required_tools
-                             if any(t.lower().startswith(p) for p in _STATE_CHANGING_PREFIXES)
-                             and t not in _SELF_CONTAINED_WRITE]
+                             if _is_mutating_tool(t)
+                             and t not in _SELF_CONTAINED_WRITE_TOOLS]
             if state_changing:
                 raise ValueError(
                     f"Task {task.task_id}: final_answer with no state criteria "
@@ -794,10 +785,28 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
 
         domain = task.target_servers[0] if task.target_servers else "unknown"
 
+        domain_desc = DOMAIN_DESCRIPTIONS.get(domain, "")
+        strip_enums = task.metadata.get("strip_enums", False)
+        reference_date = task.metadata.get("reference_date", "")
+        tools_text = _format_tools(visible_tools, strip_enums=strip_enums)
+        date_line = f"\nToday's date: {reference_date}." if reference_date else ""
+
         system_prompt = (
-            f"You are a helpful assistant. Use the available tools to complete "
-            f"the user's request step by step. Call one tool at a time and wait "
-            f"for its result before proceeding."
+            f"You are an AI assistant for the following domain:\n{domain_desc}\n\n"
+            f"## Available Tools\n{tools_text}\n\n"
+            f"## Response Format\n"
+            f"Output exactly ONE action per turn using XML tags:\n\n"
+            f"- <tool_call>{{\"name\": \"<tool_name>\", \"arguments\": {{...}}}}</tool_call>\n"
+            f"  Call a tool with its required parameters.\n\n"
+            f"- <final_answer>your answer</final_answer>\n"
+            f"  When the task is fully completed.\n\n"
+            f"- <report_error>brief reason</report_error>\n"
+            f"  When the task cannot be completed with available tools.\n\n"
+            f"- <ask_clarification>what you need to know</ask_clarification>\n"
+            f"  When genuinely missing critical information and no tool can resolve it.\n\n"
+            f"## Rules\n"
+            f"- Call ONE tool at a time. Wait for the result before the next action.\n"
+            f"- Use ONLY entity IDs that appear in tool results. Never invent or guess IDs.{date_line}"
         )
 
         # One row always starts from reset(session_seed).  Teacher tool calls

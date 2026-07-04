@@ -565,6 +565,7 @@ class TaskOrchestrator:
         success_criteria: list = []
         progress_predicates: list = []
         teacher = None
+        scenario_type = ""
 
         # ── Retry with different seed if LLM refuses to call tools ──
         for retry_attempt in range(3):
@@ -630,6 +631,25 @@ class TaskOrchestrator:
                     chain_seed=chain_seed,
                     chain_context=chain_context,
                 )
+
+                # ── P3c: query-chain alignment validation ──
+                # The chain_hint prompt asks the LLM to "express a goal whose
+                # completion genuinely requires the whole sequence, especially
+                # the final operation".  Without a post-generation check, the
+                # LLM can produce e.g. "check order status" while the oracle
+                # runs get_order → search_products → add_to_cart → checkout,
+                # creating a reward-target mismatch.
+                query_chain_ok, query_chain_reason = _validate_query_chain(
+                    user_query=user_query,
+                    chain_seed=chain_seed,
+                )
+                if not query_chain_ok:
+                    logger.debug(
+                        f"Query-chain mismatch for {server_name}: {query_chain_reason} "
+                        f"retrying generate_query (retry outer loop if needed)"
+                    )
+                    self.manager.close_session(session_id)
+                    continue
 
                 # Accumulators across conversation rounds (PROVE CONTINUATION)
                 # (re-assigned each retry; types declared before the loop)
@@ -865,6 +885,40 @@ class TaskOrchestrator:
                         f"{len(prov_violations)} untraceable sensitive params"
                     )
 
+                # ── Scenario classification + missing_dependency gate ──
+                # Classify before break so we can retry (continue) from inside
+                # the for loop when the tracer flags a missing dependency.
+                # real_calls computed here (same as post-loop guard later).
+                _real = [c for c in all_oracle_calls
+                         if getattr(c, "action", "tool_call") == "tool_call"]
+                _terminal = next(
+                    (c.action for c in reversed(all_oracle_calls)
+                     if c.action != "tool_call"),
+                    "final_answer",
+                )
+                scenario_type = _classify_scenario(
+                    server_name=server_name,
+                    oracle_calls=_real,
+                    execution_history=all_execution_history,
+                    terminal_action=_terminal,
+                    seed=local_seed,
+                )
+                if scenario_type == "missing_dependency":
+                    if retry_attempt < 2:
+                        logger.debug(
+                            f"Scenario {scenario_type} for {server_name} task {task_id}, "
+                            f"retrying (attempt {retry_attempt + 1}/3)"
+                        )
+                        self.manager.close_session(session_id)
+                        continue
+                    raise RuntimeError(
+                        f"Scenario {scenario_type} for {server_name} task {task_id} "
+                        f"after 3 retries — rejecting. Oracle trace has a later "
+                        f"write/mutate tool without a preceding read or create on "
+                        f"the same entity. This trajectory would pollute training "
+                        f"data as a normal final_answer target."
+                    )
+
                 # ── Success ──
                 break
 
@@ -922,13 +976,9 @@ class TaskOrchestrator:
             (c.action for c in reversed(all_oracle_calls) if c.action != "tool_call"),
             "final_answer",
         )
-        scenario_type = _classify_scenario(
-            server_name=server_name,
-            oracle_calls=real_calls,
-            execution_history=all_execution_history,
-            terminal_action=terminal_action,
-            seed=local_seed,
-        )
+        # scenario_type already computed inside the retry loop (with
+        # missing_dependency gate applied there).  Re-use the value from
+        # the successful iteration that broke out of the loop.
         live_task.metadata.update({
             "initial_state_hash": _stable_state_hash(initial_state_snapshot),
             "identity_policy": identity_policy,
@@ -941,6 +991,7 @@ class TaskOrchestrator:
             "scenario_type": scenario_type,
             "terminal_action": terminal_action,
             "strip_enums": bool(getattr(teacher, "_strip_enums", False)),
+            "reference_date": reference_date,
         })
         return live_task
 
@@ -1209,7 +1260,7 @@ class TaskOrchestrator:
         task.task_type = "missing_function"
         task.metadata["has_missing_function"] = True
         task.metadata["unavailable_required_tool"] = hidden
-        task.metadata["scenario_type"] = "no_tool_or_abstention"
+        task.metadata["scenario_type"] = "missing_function"
 
         # missing_function semantics demand report_error without invoking
         # tools. Collapse the task to single-turn abstain shape so prompt,
@@ -2252,7 +2303,10 @@ def _detect_missing_dependency(
     read_prefixes = ("list_", "search_", "get_", "find_", "lookup_", "check_",
                      "view_", "browse_", "ls", "cat", "pwd", "stat", "head", "tail")
     # Tools that produce entities without needing a preceding read.
-    creator_prefixes = ("create_", "mkdir", "touch")
+    # "add_*" tools (add_to_cart, add_to_wishlist, add_attendee, etc.)
+    # produce/modify entity state and serve as valid dependency-chain
+    # predecessors for executor tools like checkout.
+    creator_prefixes = ("create_", "add_", "mkdir", "touch")
     # Tools in executor set that are self-contained (don't need preceding reads).
     self_contained = {"send_email", "send_message", "send_dm", "apply_loan",
                       "apply_coupon", "bill_pay", "deposit", "withdraw",
@@ -2306,8 +2360,142 @@ def _has_entity_keyword(name: str) -> bool:
             return True
     return False
 
+# ── Query-to-chain semantic alignment validation ──
+
+# Semantic action keywords: mapping from tool-name fragments to words that
+# should appear in a user query whose goal genuinely targets that tool.
+# Only the *final* tool in chain_seed is checked — it's the peak of the
+# dependency chain and the query must naturally request it.
+_ACTION_KEYWORD_MAP: dict[str, list[str]] = {
+    "checkout": ["checkout", "check out", "buy", "purchase", "place order",
+                  "place the order", "placing", "placing the order",
+                  "ordering", "complete order", "finish order", "pay"],
+    "refund": ["refund", "return", "money back", "reimburse"],
+    "cancel": ["cancel", "stop", "remove"],
+    "add_to_cart": ["add to cart", "add"],
+    "remove_from_cart": ["remove from cart", "remove", "clear cart"],
+    "pay_invoice": ["pay", "invoice", "bill", "settle"],
+    "create_event": ["create event", "schedule", "set up event", "new event", "make event"],
+    "delete_event": ["delete event", "remove event", "cancel event"],
+    "create_order": ["create order", "place order", "new order"],
+    "transfer": ["transfer", "send money", "move money"],
+    "deposit": ["deposit", "add money"],
+    "withdraw": ["withdraw", "take money"],
+    "archive": ["archive", "hide"],
+    "send_email": ["send email", "email", "mail"],
+    "forward_email": ["forward email", "forward"],
+    "reply_email": ["reply", "respond"],
+    "mark_read": ["mark read", "mark as read", "read"],
+    "chmod": ["permission", "chmod", "access"],
+    "mv": ["move", "rename", "mv"],
+    "rm": ["delete", "remove file", "rm", "clean"],
+    "mkdir": ["create directory", "make directory", "mkdir", "new folder"],
+    "touch": ["create file", "make file", "touch", "new file"],
+}
+
+# Stopwords stripped from query before keyword matching so that
+# "place the order" → "place order" can match keyword "place order".
+_QUERY_STOPWORDS: frozenset[str] = frozenset(
+    {"a", "an", "the", "my", "our", "your", "his", "her", "its", "their",
+     "this", "that", "these", "those", "some", "any", "please", "can",
+     "could", "would", "should", "will", "do", "does", "did", "just",
+     "now", "then", "also", "really", "very", "quite", "maybe", "perhaps",
+     "i", "you", "he", "she", "it", "we", "they", "me", "him", "us", "them",
+     "to", "for", "from", "with", "without", "about", "after", "before"}
+)
+
+
+def _validate_query_chain(
+    user_query: str,
+    chain_seed: list[str] | None,
+) -> tuple[bool, str]:
+    """Check the user query semantically covers the chain's final operation.
+
+    PROVE §3.2: the query must request a goal whose completion requires
+    the whole chain.  Without validation, LLMs produce e.g. "check order
+    status" while the oracle runs get_order→checkout, creating a reward
+    signal that rewards incomplete trajectories.
+    """
+    if not chain_seed or len(chain_seed) < 2:
+        return True, "no chain_seed to validate"
+
+    final_tool = chain_seed[-1].lower()
+    query_lower = user_query.lower()
+
+    # Strip stopwords so "place the order" can match keyword "place order".
+    query_normalized = " ".join(
+        w for w in query_lower.split() if w not in _QUERY_STOPWORDS
+    )
+
+    # Direct match: the tool name itself or its action keywords
+    keywords = _ACTION_KEYWORD_MAP.get(final_tool)
+    if keywords is None:
+        parts = final_tool.replace("_", " ").split()
+        skip = {"get", "list", "search", "find", "lookup", "view", "browse",
+                "check", "show", "display", "read", "fetch", "query",
+                "to", "from", "for", "by", "all", "the", "a", "an",
+                "of", "in", "on", "at", "with", "and", "or"}
+        keywords = [p for p in parts if p not in skip]
+        if not keywords:
+            keywords = [final_tool]
+
+    for kw in keywords:
+        kw_lower = kw.lower()
+        # Original query substring match
+        if kw_lower in query_lower:
+            return True, ""
+        # Normalized query substring match (bridge stopword gaps)
+        if kw_lower in query_normalized:
+            return True, ""
+
+    return False, (
+        f"Query '{user_query}' does not semantically cover final chain step "
+        f"'{chain_seed[-1]}' (expected keywords: {keywords})"
+    )
+
+
+# ── Tool-to-conceptual-entity override ──
+# Some tools operate on entities whose name cannot be extracted from the tool
+# name itself (e.g. "checkout" → cart, "transfer" → account).  Without these
+# overrides _detect_missing_dependency falsely flags get_cart→checkout and
+# get_balance→transfer as missing a dependency.
+_TOOL_ENTITY_OVERRIDE: dict[str, str] = {
+    # Shopping domain
+    "checkout": "order",          # checkout completes an order
+    "get_cart": "order",          # cart IS the order-in-progress
+    "clear_cart": "order",
+    "add_to_cart": "order",
+    "remove_from_cart": "order",
+    "rate_order": "order",
+    "return_order": "order",
+    "reorder": "order",
+    "apply_coupon": "order",
+    # Banking domain
+    "get_balance": "account",     # balance is a property of account
+    "transfer": "account",        # transfer moves money between accounts
+    "wire_transfer": "account",
+    "deposit": "account",
+    "withdraw": "account",
+    "apply_loan": "account",
+    "bill_pay": "account",
+    # Payments domain — all invoice/payment tools share the invoice entity
+    "pay_invoice": "invoice",
+    "get_invoice": "invoice",
+    "refund_invoice": "invoice",
+    "cancel_payment": "invoice",
+    "get_payment": "invoice",    # Calendar / email domains
+    "add_to_wishlist": "wishlist",  # shopping: wishlist entity (not in keyword list)
+    "move_to_thread": "email",    # email threading
+}
+
 
 def _tool_entity(name: str) -> str:
+    """Extract the conceptual entity a tool operates on.
+
+    Checks override map first, then entity keyword list, then fallback.
+    """
+    if name.lower() in _TOOL_ENTITY_OVERRIDE:
+        return _TOOL_ENTITY_OVERRIDE[name.lower()]
     for et in ("event", "order", "account", "email", "invoice",
                 "issue", "lead", "deal", "product", "restaurant",
                 "channel", "message", "file", "contact", "payment",
@@ -2359,7 +2547,7 @@ def _fuzzy_match_tool(raw: str, valid_names: set[str]) -> str | None:
 
 _CREATED_ENTITY_BY_TOOL: dict[str, set[str]] = {
     "create_event": {"event"},
-    "create_recurring_event": {"event"},
+    "create_recurring": {"event"},
     "create_invoice": {"invoice"},
     "pay_invoice": {"payment"},
     "refund_invoice": {"refund"},
@@ -2398,7 +2586,7 @@ _DOMAIN_TOOL_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
         "add_attendee": {"event"},
         "remove_attendee": {"event"},
         "set_reminder": {"event"},
-        "create_recurring_event": {"event"},
+        "create_recurring": {"event"},
     },
     "banking": {
         "get_balance": {"account"},
