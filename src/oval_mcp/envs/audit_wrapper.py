@@ -26,6 +26,18 @@ from src.oval_mcp.verifier.events import (
 )
 
 
+def _normalization_observation(result: ToolExecutionResult | None) -> dict[str, Any] | str | None:
+    if result is None:
+        return None
+    if result.success:
+        return result.observation
+    return {
+        "error_message": result.error_message,
+        "error_type": result.error_type,
+        "observation": result.observation,
+    }
+
+
 class AuditWrapper:
     """Wraps LiveMCP executor to produce audited event logs.
 
@@ -39,8 +51,8 @@ class AuditWrapper:
 
     def __init__(
         self,
-        executor: LiveMCPExecutor,
-        manager: LiveMCPManager,
+        executor: LiveMCPExecutor | None,
+        manager: LiveMCPManager | None,
         adapter: DomainAdapter | None = None,
         domain_name: str = "calendar",
     ):
@@ -103,7 +115,7 @@ class AuditWrapper:
             action_type="tool_call",
             tool_name=call.name,
             tool_arguments=call.arguments,
-            observation=result.observation if result else None,
+            observation=_normalization_observation(result),
             execution_success=result.success if result else False,
             state_changed=result.state_changed if result else False,
             before_state=pre_state,
@@ -219,7 +231,7 @@ class AuditWrapper:
             action_type="tool_call",
             tool_name=call.name,
             tool_arguments=call.arguments,
-            observation=result.observation if result else None,
+            observation=_normalization_observation(result),
             execution_success=result.success if result else False,
             state_changed=result.state_changed if result else False,
             before_state=pre_state,
@@ -239,9 +251,10 @@ class AuditWrapper:
             if pre_state:
                 # state format: {"calendar": {"events": {...}}, ...} or {"events": {...}}
                 domain_state = pre_state.get(self.adapter.domain_name, pre_state)
-                events = domain_state.get("events", {}) if isinstance(domain_state, dict) else {}
-                if isinstance(events, dict) and target_id in events:
-                    self._deleted_entities[session_id][target_id] = dict(events[target_id])
+                container_key = getattr(self.adapter, "entity_container_key", "events")
+                entities = domain_state.get(container_key, {}) if isinstance(domain_state, dict) else {}
+                if isinstance(entities, dict) and target_id in entities:
+                    self._deleted_entities[session_id][target_id] = dict(entities[target_id])
                 else:
                     self._deleted_entities[session_id][target_id] = {}
             else:
@@ -360,6 +373,8 @@ class AuditWrapper:
 
     def _get_state_safe(self, session_id: str) -> dict[str, Any] | None:
         """Get server state, returning None if unavailable."""
+        if self.manager is None:
+            return None
         try:
             return self.manager.get_state(session_id)
         except Exception:

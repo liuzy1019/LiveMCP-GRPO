@@ -1,0 +1,124 @@
+{
+  "server_name": "email",
+  "schema_hash": "c686961ea35ebebd",
+  "tool_names": [
+    "add_label",
+    "archive_email",
+    "create_draft",
+    "create_filter",
+    "forward_email",
+    "get_attachments",
+    "get_email",
+    "get_thread",
+    "list_filters",
+    "list_inbox",
+    "mark_read",
+    "mark_unread",
+    "move_to_thread",
+    "remove_label",
+    "reply_email",
+    "search_emails",
+    "send_email"
+  ],
+  "graph": {
+    "add_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "archive_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_draft": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_filter": {
+      "explicit": [],
+      "implicit": []
+    },
+    "forward_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_attachments": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_email": {
+      "explicit": [
+        "reply_email",
+        "forward_email",
+        "archive_email",
+        "add_label",
+        "remove_label",
+        "move_to_thread",
+        "mark_read",
+        "mark_unread",
+        "get_attachments",
+        "get_thread"
+      ],
+      "implicit": []
+    },
+    "get_thread": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_filters": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_inbox": {
+      "explicit": [
+        "get_email"
+      ],
+      "implicit": [
+        "add_label",
+        "archive_email"
+      ]
+    },
+    "mark_read": {
+      "explicit": [],
+      "implicit": []
+    },
+    "mark_unread": {
+      "explicit": [],
+      "implicit": []
+    },
+    "move_to_thread": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "reply_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_emails": {
+      "explicit": [
+        "reply_email",
+        "forward_email",
+        "archive_email",
+        "get_email"
+      ],
+      "implicit": []
+    },
+    "send_email": {
+      "explicit": [],
+      "implicit": [
+        "get_thread",
+        "add_label",
+        "archive_email",
+        "get_email",
+        "mark_read",
+        "mark_unread",
+        "reply_email",
+        "forward_email",
+        "get_attachments"
+      ]
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "server_name": "food_delivery",
+  "schema_hash": "a99a8ce2d9dd4ea3",
+  "tool_names": [
+    "add_tip",
+    "cancel_order",
+    "contact_support",
+    "create_order",
+    "filter_by_dietary",
+    "get_estimated_time",
+    "get_menu",
+    "get_order",
+    "get_popular_items",
+    "get_restaurant",
+    "list_orders",
+    "list_restaurants",
+    "rate_order",
+    "reorder",
+    "search_restaurants",
+    "track_rider",
+    "update_order_status"
+  ],
+  "graph": {
+    "add_tip": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cancel_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "contact_support": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_order": {
+      "explicit": [
+        "cancel_order",
+        "reorder",
+        "get_order",
+        "get_estimated_time",
+        "update_order_status"
+      ],
+      "implicit": [
+        "add_tip",
+        "contact_support",
+        "rate_order",
+        "track_rider"
+      ]
+    },
+    "get_order": {
+      "explicit": [
+        "cancel_order",
+        "reorder",
+        "update_order_status",
+        "rate_order",
+        "add_tip",
+        "contact_support",
+        "get_estimated_time"
+      ],
+      "implicit": []
+    },
+    "filter_by_dietary": {
+      "explicit": [],
+      "implicit": [
+        "create_order"
+      ]
+    },
+    "get_estimated_time": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_menu": {
+      "explicit": [
+        "create_order"
+      ],
+      "implicit": []
+    },
+    "get_popular_items": {
+      "explicit": [],
+      "implicit": [
+        "create_order"
+      ]
+    },
+    "get_restaurant": {
+      "explicit": [
+        "get_menu"
+      ],
+      "implicit": []
+    },
+    "list_orders": {
+      "explicit": [
+        "cancel_order",
+        "reorder",
+        "get_order"
+      ],
+      "implicit": []
+    },
+    "list_restaurants": {
+      "explicit": [
+        "get_restaurant",
+        "get_menu"
+      ],
+      "implicit": []
+    },
+    "rate_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "reorder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_restaurants": {
+      "explicit": [
+        "get_restaurant",
+        "get_menu"
+      ],
+      "implicit": []
+    },
+    "track_rider": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_order_status": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

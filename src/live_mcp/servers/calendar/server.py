@@ -21,7 +21,7 @@ TOOLS = [
     {"name": "set_reminder", "description": "Set a reminder for an event.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "minutes_before": {"type": "integer"}, "method": {"type": "string"}}, "required": ["event_id", "minutes_before"]}, "annotations": {"mutating": True}},
     {"name": "get_working_hours", "description": "Get working hours for specified working days.", "input_schema": {"type": "object", "properties": {"date": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "change_timezone", "description": "Change the display timezone for event times.", "input_schema": {"type": "object", "properties": {"timezone": {"type": "string"}}, "required": ["timezone"]}, "annotations": {"mutating": True}},
-    {"name": "respond_to_event", "description": "Respond to an event invitation (accept/decline/tentative).", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": {"type": "string"}, "response": {"type": "string"}}, "required": ["event_id", "email", "response"]}, "annotations": {"mutating": True}},
+    {"name": "respond_to_event", "description": "Respond to an event invitation.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": {"type": "string"}, "response": {"type": "string", "enum": ["accepted", "declined", "tentative"]}}, "required": ["event_id", "email", "response"]}, "annotations": {"mutating": True}},
     {"name": "export_calendar", "description": "Export events in a date range to iCal/JSON format.", "input_schema": {"type": "object", "properties": {"start_date": {"type": "string"}, "end_date": {"type": "string"}, "format": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_recurring_info", "description": "Get recurrence metadata for a recurring event.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}}, "required": ["event_id"]}, "annotations": {"readonly": True, "mutating": False}},
 ]
@@ -58,6 +58,8 @@ class CalendarServer(StatefulToolServer):
         return _result(True, {"event": self._evt(self._state(session_id), arguments["event_id"])}, None, "", False)
 
     def create_event(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if arguments["start_time"] >= arguments["end_time"]:
+            raise KeyError("start_time must be before end_time")
         state = self._state(session_id); eid = self._eid(state)
         event = {"event_id": eid, "title": arguments["title"], "start_time": arguments["start_time"], "end_time": arguments["end_time"], "description": arguments.get("description", ""), "location": arguments.get("location", ""), "attendees": list(arguments.get("attendees", [])), "reminders": list(arguments.get("reminders", [])), "recurrence": None}
         state["events"][eid] = event
@@ -65,9 +67,17 @@ class CalendarServer(StatefulToolServer):
 
     def update_event(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); evt = self._evt(state, arguments["event_id"])
-        for k, v in arguments["fields"].items():
-            if k in ALLOWED_FIELDS: evt[k] = v
-        return _result(True, {"event": evt}, None, "", True)
+        fields = arguments["fields"]
+        start_time = fields.get("start_time", evt["start_time"])
+        end_time = fields.get("end_time", evt["end_time"])
+        if start_time >= end_time:
+            raise KeyError("start_time must be before end_time")
+        changed = False
+        for k, v in fields.items():
+            if k in ALLOWED_FIELDS and evt.get(k) != v:
+                evt[k] = v
+                changed = True
+        return _result(True, {"event": evt}, None, "", changed)
 
     def delete_event(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid = arguments["event_id"]; evt = self._evt(state, eid)
@@ -75,6 +85,8 @@ class CalendarServer(StatefulToolServer):
         return _result(True, {"deleted_event": evt}, None, "", True)
 
     def create_recurring(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if arguments["start_time"] >= arguments["end_time"]:
+            raise KeyError("start_time must be before end_time")
         state = self._state(session_id); eid = self._eid(state)
         event = {"event_id": eid, "title": arguments["title"], "start_time": arguments["start_time"], "end_time": arguments["end_time"], "description": "", "location": "", "attendees": list(arguments.get("attendees", [])), "reminders": [], "recurrence": arguments["recurrence"], "recurrence_until": arguments.get("until"), "recurrence_count": arguments.get("count")}
         state["events"][eid] = event
@@ -82,12 +94,20 @@ class CalendarServer(StatefulToolServer):
 
     def add_attendee(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         evt = self._evt(self._state(session_id), arguments["event_id"]); email = arguments["email"]
-        if email not in evt.setdefault("attendees", []): evt["attendees"].append(email)
+        if not email.strip(): raise KeyError("email must be non-empty")
+        if email in evt.setdefault("attendees", []):
+            return _result(True, {"event_id": evt["event_id"], "attendees": evt["attendees"]}, None, "", False)
+        evt["attendees"].append(email)
         return _result(True, {"event_id": evt["event_id"], "attendees": evt["attendees"]}, None, "", True)
 
     def remove_attendee(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         evt = self._evt(self._state(session_id), arguments["event_id"])
-        email = arguments["email"]; evt["attendees"] = [a for a in evt.get("attendees", []) if a != email]
+        email = arguments["email"]
+        if not email.strip(): raise KeyError("email must be non-empty")
+        attendees = evt.get("attendees", [])
+        if email not in attendees:
+            return _result(True, {"event_id": evt["event_id"], "attendees": attendees}, None, "", False)
+        evt["attendees"] = [a for a in attendees if a != email]
         return _result(True, {"event_id": evt["event_id"], "attendees": evt["attendees"]}, None, "", True)
 
     def get_free_busy(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -109,6 +129,7 @@ class CalendarServer(StatefulToolServer):
     def set_reminder(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         evt = self._evt(self._state(session_id), arguments["event_id"])
         rid = f"rem_{len(evt.get('reminders', [])) + 1}"; mins = int(arguments["minutes_before"]); method = arguments.get("method", "popup")
+        if mins <= 0: raise KeyError("minutes_before must be positive")
         evt.setdefault("reminders", []).append({"id": rid, "minutes_before": mins, "method": method})
         return _result(True, {"event_id": evt["event_id"], "reminders": evt["reminders"]}, None, "", True)
 
@@ -116,14 +137,18 @@ class CalendarServer(StatefulToolServer):
         return _result(True, {"working_hours": {"monday": "09:00-18:00", "tuesday": "09:00-18:00", "wednesday": "09:00-18:00", "thursday": "09:00-18:00", "friday": "09:00-17:00", "saturday": None, "sunday": None}, "timezone": "America/New_York"}, None, "", False)
 
     def change_timezone(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); tz = arguments["timezone"]; state["timezone"] = tz
-        return _result(True, {"timezone": tz, "message": f"timezone changed to {tz}"}, None, "", True)
+        state = self._state(session_id); tz = arguments["timezone"]; old = state.get("timezone")
+        state["timezone"] = tz
+        return _result(True, {"timezone": tz, "message": f"timezone changed to {tz}"}, None, "", old != tz)
 
     def respond_to_event(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         evt = self._evt(self._state(session_id), arguments["event_id"]); email = arguments["email"]; resp = arguments["response"]
+        if not email.strip(): raise KeyError("email must be non-empty")
+        if email not in evt.get("attendees", []): raise KeyError(f"attendee not found: {email}")
         if resp not in ("accepted", "declined", "tentative"): raise KeyError(f"invalid response: {resp}")
+        old = evt.setdefault("responses", {}).get(email)
         evt.setdefault("responses", {})[email] = resp
-        return _result(True, {"event_id": evt["event_id"], "email": email, "response": resp}, None, "", True)
+        return _result(True, {"event_id": evt["event_id"], "email": email, "response": resp}, None, "", old != resp)
 
     def export_calendar(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); fmt = arguments.get("format", "json")

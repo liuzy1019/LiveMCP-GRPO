@@ -1,6 +1,6 @@
 {
   "server_name": "calendar",
-  "schema_hash": "d10d43d618f14e46",
+  "schema_hash": "49362663223ba9c9",
   "tool_names": [
     "add_attendee",
     "change_timezone",
@@ -21,26 +21,50 @@
     "update_event"
   ],
   "graph": {
-    "list_events": {
+    "add_attendee": {
       "explicit": [],
       "implicit": []
     },
-    "search_events": {
+    "change_timezone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "check_conflicts": {
+      "explicit": [],
+      "implicit": [
+        "update_event"
+      ]
+    },
+    "create_event": {
       "explicit": [
-        "get_event"
+        "update_event",
+        "delete_event",
+        "add_attendee",
+        "set_reminder"
       ],
+      "implicit": []
+    },
+    "create_recurring": {
+      "explicit": [
+        "update_event",
+        "delete_event",
+        "add_attendee",
+        "get_event",
+        "get_recurring_info",
+        "set_reminder"
+      ],
+      "implicit": []
+    },
+    "delete_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "export_calendar": {
+      "explicit": [],
       "implicit": []
     },
     "get_event": {
       "explicit": [
-        "respond_to_event",
-        "get_recurring_info"
-      ],
-      "implicit": []
-    },
-    "create_event": {
-      "explicit": [
-        "get_event",
         "update_event",
         "delete_event",
         "add_attendee",
@@ -51,49 +75,11 @@
       ],
       "implicit": []
     },
-    "update_event": {
-      "explicit": [
-        "set_reminder"
-      ],
-      "implicit": [
-        "delete_event"
-      ]
-    },
-    "delete_event": {
-      "explicit": [
-        "remove_attendee",
-        "set_reminder",
-        "respond_to_event"
-      ],
-      "implicit": []
-    },
-    "create_recurring": {
-      "explicit": [
-        "add_attendee",
-        "remove_attendee",
-        "set_reminder"
-      ],
-      "implicit": []
-    },
-    "add_attendee": {
-      "explicit": [
-        "delete_event"
-      ],
-      "implicit": []
-    },
-    "remove_attendee": {
-      "explicit": [],
-      "implicit": []
-    },
     "get_free_busy": {
       "explicit": [],
       "implicit": []
     },
-    "check_conflicts": {
-      "explicit": [],
-      "implicit": []
-    },
-    "set_reminder": {
+    "get_recurring_info": {
       "explicit": [],
       "implicit": []
     },
@@ -101,7 +87,19 @@
       "explicit": [],
       "implicit": []
     },
-    "change_timezone": {
+    "list_events": {
+      "explicit": [
+        "update_event",
+        "delete_event",
+        "get_event",
+        "add_attendee",
+        "remove_attendee",
+        "set_reminder",
+        "respond_to_event"
+      ],
+      "implicit": []
+    },
+    "remove_attendee": {
       "explicit": [],
       "implicit": []
     },
@@ -109,11 +107,23 @@
       "explicit": [],
       "implicit": []
     },
-    "export_calendar": {
+    "search_events": {
+      "explicit": [
+        "update_event",
+        "delete_event",
+        "get_event",
+        "add_attendee",
+        "remove_attendee",
+        "set_reminder",
+        "respond_to_event"
+      ],
+      "implicit": []
+    },
+    "set_reminder": {
       "explicit": [],
       "implicit": []
     },
-    "get_recurring_info": {
+    "update_event": {
       "explicit": [],
       "implicit": []
     }

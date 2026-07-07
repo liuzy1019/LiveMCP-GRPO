@@ -12,6 +12,26 @@ from src.live_mcp.transport import TransportError
 from src.live_mcp.types import ToolCall, ToolExecutionResult
 
 
+def _format_schema_error(validation, tool_name: str) -> str:
+    """Format schema validation errors into an actionable message for the LLM."""
+    from src.live_mcp.schema_registry import SchemaValidationResult
+
+    parts = [f"schema validation failed for '{tool_name}'"]
+    if validation.missing_required:
+        parts.append(
+            f"Missing required argument(s): {', '.join(validation.missing_required)}"
+        )
+    if validation.unexpected_keys:
+        parts.append(
+            f"Unexpected argument(s): {', '.join(validation.unexpected_keys)}"
+        )
+    if validation.type_errors:
+        parts.append(f"Type error(s): {'; '.join(validation.type_errors)}")
+    if validation.enum_errors:
+        parts.append(f"Enum error(s): {'; '.join(validation.enum_errors)}")
+    return ". ".join(parts) + "."
+
+
 class LiveMCPExecutor:
     def __init__(
         self,
@@ -34,7 +54,7 @@ class LiveMCPExecutor:
                 False, False,
             )
         canonical = self.schema_registry.canonical_name(tool_call.name)
-        schema = self.schema_registry.get_schema(tool_call.name)
+        schema = self.schema_registry.get_schema(tool_call.name, domain=domain)
         if schema is None:
             return self._result(
                 tool_call,
@@ -48,7 +68,7 @@ class LiveMCPExecutor:
                 False,
                 False,
             )
-        validation = self.schema_registry.validate_arguments(tool_call.name, tool_call.arguments)
+        validation = self.schema_registry.validate_arguments(tool_call.name, tool_call.arguments, domain=domain)
         if not validation.valid:
             return self._result(
                 tool_call,
@@ -63,7 +83,7 @@ class LiveMCPExecutor:
                     "enum_errors": validation.enum_errors,
                 },
                 errors.SCHEMA_INVALID,
-                "schema validation failed",
+                _format_schema_error(validation, tool_call.name),
                 False,
                 False,
             )

@@ -4,16 +4,79 @@ Design doc: `docs/OVAL-MCP.md`. Read it before making changes.
 
 ## Environment
 
+### 当前可用环境
+
 ```bash
-conda activate arl          # Python 3.11, PyTorch 2.8, CUDA 12.8
-nvidia-smi                  # Confirm GPU availability
+conda activate arl          # Python 3.11, PyTorch 2.7.0+cu126
+nvidia-smi                  # 确认 GPU 可用（L20 ×8, Driver 570.195.03）
 ```
 
-FlashInfer JIT must be disabled:
+关键版本：
+
+| 组件 | 当前版本 | pyproject.toml 目标 |
+|------|---------|-------------------|
+| PyTorch | 2.7.0+cu126 | 2.8.0 |
+| vLLM | 0.9.2 | 0.11.0 |
+| flashinfer-python | 0.6.4 | 0.6.4 |
+| flashinfer-cubin | 0.6.4 | 0.6.4 |
+| flash-attn | 2.7.3 | 2.7.3 |
+| nvcc (conda) | 12.9.86 | — |
+
+### FlashInfer JIT 编译配置（必须）
+
+系统 nvcc 11.8 不兼容，已通过 conda 安装 nvcc 12.9。flashinfer 0.6.4 需要 JIT 编译 sampling kernel，必须设置 `CUDA_HOME` 并补齐头文件/库：
 
 ```bash
-export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
-export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
+export CUDA_HOME=/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl
+export PATH=$CUDA_HOME/bin:$PATH
+```
+
+头文件和库符号链接已创建（一次性操作，重启后检查是否存在）：
+
+| 链接 | 源 | 目标 |
+|------|-----|------|
+| CUB/Thrust/CUDA headers | `$CUDA_HOME/targets/x86_64-linux/include/*` | `$CUDA_HOME/include/` |
+| curand headers | `$CUDA_HOME/lib/python3.11/site-packages/nvidia/curand/include/curand*.h` | `$CUDA_HOME/include/` |
+| libcuda.so | `/usr/lib64/libcuda.so` | `$CUDA_HOME/lib64/stubs/libcuda.so` |
+| libcudart.so | `$CUDA_HOME/targets/x86_64-linux/lib/libcudart.so` | `$CUDA_HOME/lib64/libcudart.so` |
+
+### FlashInfer JIT 降级方案（如果 JIT 编译失败）
+
+```bash
+export VLLM_USE_FLASHINFER_SAMPLER=0
+export VLLM_ATTENTION_BACKEND=FLASH_ATTN
+```
+
+此方案回退到 PyTorch 原生采样，性能略降但保证可用。flash-attn 2.7.3 在当前 PyTorch 2.7 下有 ABI 兼容问题（`undefined symbol: _ZN3c104cuda9SetDeviceEab`），但 vLLM V1 引擎默认使用 flashinfer attention backend，实际不依赖 flash_attn。
+
+### 环境安装步骤（从头构建）
+
+```bash
+# 1. 创建 conda 环境
+conda create -n arl python=3.11 -y
+conda activate arl
+
+# 2. 安装 PyTorch
+pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu126
+
+# 3. 安装项目依赖
+pip install -r requirements.txt
+
+# 4. 安装 verl（源码 editable）
+pip install -e ./verl
+
+# 5. 安装 nvcc 12.9（flashinfer JIT 编译需要）
+conda install -c nvidia/label/cuda-12.6.3 cuda-nvcc -y
+
+# 6. 补齐 CUDA 头文件和库符号链接（见上表）
+
+# 7. 清理 flashinfer JIT 缓存（如果之前编译失败过）
+rm -rf ~/.cache/flashinfer
+
+# 8. 验证
+python -c "import torch; print(torch.__version__)"
+python -c "import vllm; print(vllm.__version__)"
+CUDA_HOME=$CONDA_PREFIX python -c "import flashinfer; print(flashinfer.__version__)"
 ```
 
 ## Pipeline Status
@@ -76,6 +139,14 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 ## Common Commands
 
 ```bash
+# vLLM inference server（先设置 CUDA_HOME）
+export CUDA_HOME=/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl
+export PATH=$CUDA_HOME/bin:$PATH
+python -m vllm.entrypoints.openai.api_server \
+    --model models/Qwen/Qwen3-8B --port 8001 \
+    --tensor-parallel-size 2 --max-model-len 8192 \
+    --gpu-memory-utilization 0.85 --trust-remote-code
+
 # Data generation
 bash scripts/generate_data.sh --model models/Qwen/Qwen3-32B --count 500 --val-count 100
 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --domain calendar --count 200
@@ -90,6 +161,20 @@ python -m pytest tests/
 python -m compileall src scripts tests
 git diff --check
 ```
+
+## Logging
+
+运行日志统一写入 `logs/`，命名格式：`MMDD_HHMM_{任务描述}.log`
+
+```
+logs/0706_1430_gen_500.log          # 7月6日 14:30 生成500条数据
+logs/0706_1430_gen_500_console.log  # 同任务的 console 输出
+logs/0706_1500_train_grpo.log       # 7月6日 15:00 GRPO 训练
+```
+
+- 时间戳只写月日（`MMDD_HHMM`），不写年
+- 测试运行日志不允许在 `logs/` 中长期堆积，实验结束后及时清理
+- `.gitignore` 已忽略 `logs/*`，但保留 `.gitkeep````
 
 ## Git
 

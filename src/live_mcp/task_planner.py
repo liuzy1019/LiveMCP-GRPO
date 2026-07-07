@@ -131,6 +131,61 @@ DIFFICULTY_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
+
+def _chain_goal_phrase(final_tool: str) -> str:
+    """Natural-language outcome hint for chain-seeded query generation.
+
+    This keeps PROVE's chain-seeded query idea without exposing tool names or
+    forcing the user prompt to list internal workflow steps.
+    """
+    name = final_tool.lower()
+    explicit: dict[str, str] = {
+        "checkout": "place or complete an order from the cart",
+        "return_order": "return an order",
+        "track_order": "check an order's shipping or delivery status",
+        "refund_invoice": "refund an invoice",
+        "pay_invoice": "pay an invoice",
+        "dispute_invoice": "dispute an invoice",
+        "cancel_payment": "cancel a pending payment",
+        "complete_task": "mark a CRM task complete",
+        "create_thread": "start a thread from a message",
+        "react_message": "add a reaction to a message",
+        "rate_order": "rate a delivered food order",
+        "add_tip": "add a tip to a food order",
+        "cancel_order": "cancel a food order",
+        "update_order_status": "update a food order's status",
+        "remove_from_wishlist": "remove an item from the wishlist",
+        "remove_from_cart": "remove an item from the cart",
+        "update_cart_quantity": "change the quantity of an item in the cart",
+        "clear_cart": "clear the cart",
+    }
+    if name in explicit:
+        return explicit[name]
+    verb_map = {
+        "create_": "create",
+        "update_": "update",
+        "delete_": "delete",
+        "remove_": "remove",
+        "add_": "add",
+        "send_": "send",
+        "reply_": "reply to",
+        "forward_": "forward",
+        "archive_": "archive",
+        "mark_": "mark",
+        "set_": "set",
+        "assign_": "assign",
+        "transition_": "change the status of",
+        "convert_": "convert",
+        "freeze_": "freeze",
+        "unfreeze_": "unfreeze",
+    }
+    for prefix, verb in verb_map.items():
+        if name.startswith(prefix):
+            entity = name[len(prefix):].replace("_", " ")
+            return f"{verb} {entity}".strip()
+    return ""
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Persona templates & reference dates (PROVE §4 diversity injection)
 # ═══════════════════════════════════════════════════════════════════════
@@ -364,26 +419,20 @@ class TaskPlanner:
             "follow the difficulty for WHAT to include, but keep the persona's VOICE and TONE."
         )
 
-        # Chain hint: describe the multi-step flow in natural language
-        # so the generated query implies a sequence of operations
-        chain_hint = ""
-        if chain_seed and len(chain_seed) >= 2:
-            tool_desc_map = {t["name"]: t.get("description", "") for t in tool_schemas}
-            step_descs = []
-            for tn in chain_seed:
-                desc = tool_desc_map.get(tn, "")
-                # Use first sentence of description as the natural hint
-                first_sent = desc.split(".")[0].strip() if desc else tn
-                step_descs.append(first_sent)
-            flow_text = " → ".join(step_descs)
-            chain_hint = (
-                f"\n## Underlying Task Flow\n"
-                f"The user's task requires this sequence: {flow_text}\n"
-                f"Express a SINGLE natural goal whose completion genuinely requires "
-                f"the whole sequence above, especially the final operation. Do NOT "
-                f"list steps or mention tool names. Do NOT ask for a simpler task "
-                f"that could be completed with only the first step.\n"
-            )
+        # ── PROVE §3.2: chain_seed selects relevant entities from live state
+        # for anti-hallucination and the final goal semantics. We do not expose
+        # tool names or the full sequence to the user-query generator; we only
+        # provide a natural-language outcome hint so the query actually asks
+        # for the operation that the oracle chain will later execute.
+        chain_goal_block = ""
+        if chain_seed:
+            goal_phrase = _chain_goal_phrase(chain_seed[-1])
+            if goal_phrase:
+                chain_goal_block = (
+                    "\n## Intended Outcome\n"
+                    f"The user's message should naturally ask to {goal_phrase}. "
+                    "Do not mention tool names or list steps; express only the goal.\n"
+                )
 
         # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
         # Chain-aligned entity context: only these IDs are known to exist
@@ -414,10 +463,10 @@ class TaskPlanner:
 {date_block}
 ## What this assistant can help with
 {self.domain_desc}
-{chain_hint}
 {dep_hints}
 ## Current State (real IDs and values)
 {state_text}
+{chain_goal_block}
 {anti_halluc_block}
 ## Your task
 Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
@@ -496,24 +545,12 @@ Return only:
             "Do not introduce an unrelated new goal; continue the same task."
         )
 
-        # Chain context: guide the follow-up to ask for remaining dependency steps
-        chain_guide = ""
-        if chain_seed and chain_progress < len(chain_seed):
-            remaining = chain_seed[chain_progress:]
-            tool_desc_map = {t["name"]: t.get("description", "").split(".")[0].strip() or t["name"] for t in tool_schemas}
-            remaining_descs = [tool_desc_map.get(tn, tn) for tn in remaining]
-            chain_guide = (
-                f"\n## What you still need\n"
-                f"You still need these things done (in order): {' → '.join(remaining_descs)}.\n"
-                f"Ask for the next one naturally without mentioning tool names.\n"
-            )
-
         user = f"""## Persona
 {persona if persona else 'A normal user messaging their AI assistant.'}
 {date_block}
 ## Your original request
 "{previous_query}"
-{chain_guide}
+
 ## Current State (real IDs and values you can reference)
 {state_text}
 
@@ -605,85 +642,58 @@ Return only:
                 blocked_first = ("final_answer", "report_error")
             else:
                 first_turn_hint = (
-                    "\nThis is your FIRST turn. Call a tool to make progress on the task. "
-                    "Resolve ambiguities via tool calls before asking the user.\n"
+                    "\n⚠️  This is your FIRST turn. You MUST call a tool to "
+                    "make progress — do NOT produce final_answer or ask "
+                    "questions until you have used at least one tool. "
+                    "If you need information, use a read/list/search tool.\n"
                 )
                 default_action = "tool_call"
                 blocked_first = ("final_answer", "report_error")
         else:
-            # After the first turn, check if the chain has remaining steps.
-            # If so, the LLM should continue making tool calls, but
-            # report_error and ask_clarification are legitimate responses
-            # when the tool execution fails or parameters are genuinely
-            # missing.  Only block final_answer — the LLM shouldn't give
-            # up and answer without completing the chain.
-            # Once chain is complete, the LLM is free to terminate.
+            # After the first turn, the LLM should continue making tool
+            # calls if the dependency chain has remaining steps. We enforce
+            # this through blocked_first (block final_answer internally)
+            # rather than telling the LLM about the chain structure. The
+            # model must decide actions based on the user query and execution
+            # history alone.
             chain_remaining = (
                 chain_seed and chain_progress < len(chain_seed)
                 and len(chain_seed) >= 2
             )
-            if chain_remaining:
-                first_turn_hint = (
-                    "\nYou have completed some steps but the task is not yet fully addressed. "
-                    "Continue calling tools to finish the remaining work before answering.\n"
-                )
+            # Count successful tool calls in execution history so far.
+            # We only block final_answer when the model has fewer than
+            # 2 successful calls AND the chain has remaining steps.
+            # Once ≥2 tools have been called, the oracle has enough
+            # multi-step content for valid training data, so we let the
+            # model terminate freely. This prevents the "blocked 3×
+            # final_answer → exhausted retries → only 1 oracle call"
+            # failure mode observed after removing chain_guide hints.
+            n_ok_calls = sum(
+                1 for e in execution_history
+                if e.get("success")
+                and e.get("tool_name", "") not in ("__prior_round__", "__reject__")
+            )
+            if chain_remaining and n_ok_calls < 2:
+                first_turn_hint = ""
                 default_action = "tool_call"
                 blocked_first = ("final_answer",)
             else:
                 first_turn_hint = ""
-                # PROVE state machine: chain_seed is a planning prior, not a hard
-                # script. The LLM is free to decide the next action — including
-                # final_answer — based on the full execution context. The chain
-                # guides query generation and provides a planning hint, but does
-                # NOT block the teacher from terminating early when it judges the
-                # task complete. (PROVE §3.2 Step 3: "samples whether to end the
-                # conversation, generate a follow-up, or ask a clarification.")
                 default_action = "final_answer"
                 blocked_first = ()
 
-        # Chain progress guide: show the LLM which tools have been called
-        # and which remain. This is a planning prior — the LLM uses it to
-        # understand task progress but is free to choose any valid action.
-        chain_guide = ""
-        if chain_seed and len(chain_seed) >= 2:
-            tool_desc_map = {t["name"]: t.get("description", "").split(".")[0].strip() or t["name"] for t in tool_schemas}
-            lines = ["## Task Progress"]
-            for i, tn in enumerate(chain_seed):
-                if i < chain_progress:
-                    marker = "✓ done"
-                elif i == chain_progress:
-                    marker = "← NEXT"
-                else:
-                    marker = ""
-                desc = tool_desc_map.get(tn, tn)
-                lines.append(f"  {i+1}. {tn} ({desc}) {marker}")
-            lines.append(
-                "Use this dependency chain as a planning prior. Prefer the NEXT "
-                "tool when it fits the user request and live state, but choose "
-                "another valid action if the observation indicates a better path."
-            )
-            chain_guide = "\n".join(lines) + "\n"
-
-        # Chain-seed guidance: PROVE uses dependency chains to seed grounded
-        # multi-step queries.  The chain is a planning prior, not a hidden
-        # script that the teacher must match exactly.
-        next_tool_hint = ""
-        tool_desc = ""
-        # Missing-difficulty tasks may need clarification instead of the next
-        # chain tool, so keep this hint out of that path.
-        if (chain_seed and chain_progress < len(chain_seed)
-                and difficulty != "missing"):
-            next_tool = chain_seed[chain_progress]
-            for t in tool_schemas:
-                if t["name"] == next_tool:
-                    desc = t.get("description", "").split(".")[0].strip()
-                    tool_desc = f" — {desc}" if desc else ""
-                    break
-            next_tool_hint = (
-                f"\n## Planning Hint\n"
-                f"The sampled dependency chain suggests \"{next_tool}\"{tool_desc} "
-                f"as the next useful tool. Prefer it when it fits the user request "
-                f"and current state; otherwise choose the best valid tool or terminal action.\n"
+        chain_guidance = ""
+        if chain_seed and chain_progress < len(chain_seed):
+            remaining = chain_seed[chain_progress:]
+            completed = chain_seed[:chain_progress]
+            chain_guidance = (
+                "\n## Oracle Synthesis Target\n"
+                "You are generating the teacher oracle trace for training data, not the final policy prompt.\n"
+                "The user request was generated from a dependency chain, so keep using tools until the task is executed.\n"
+                f"- Completed chain tools: {completed if completed else '[]'}\n"
+                f"- Remaining chain tools in order: {remaining}\n"
+                "- Prefer the next remaining chain tool when it is applicable. If a prerequisite ID is missing, call a read/list/search tool first.\n"
+                "- Do not produce final_answer until the required tool work is complete or a real execution failure makes recovery impossible.\n"
             )
 
         date_guide = (
@@ -747,11 +757,6 @@ Return only:
             '✗ WRONG tool call:      {"action": "search_events", "arguments": {"keyword": "team meeting"}}\n'
             '✗ WRONG tool call:      {"action": "search_events", "tool_name": "search_events", "arguments": {...}}'
         )
-        if next_tool_hint:
-            system += (
-                "\n\nUse the planning hint as guidance, but keep the trajectory "
-                "consistent with the user request and live execution state."
-            )
         user = f"""## Domain
 {self.domain_desc}
 
@@ -759,7 +764,7 @@ Return only:
 {tools_text}
 
 {dep_hints}
-{chain_guide}
+{chain_guidance}
 {anti_halluc_block}
 {date_guide}
 ## User Task
@@ -1108,18 +1113,18 @@ _MUTATING_PREFIXES: tuple[str, ...] = (
     "create_", "update_", "delete_", "remove_", "add_",
     "send_", "transfer", "pay_", "checkout", "transition_",
     "convert_", "archive_", "mkdir", "touch", "mv", "cp",
-    "chmod", "write_", "set_", "apply_",
+    "chmod", "set_", "apply_",
     "cancel_", "refund_", "return_", "deposit", "withdraw",
-    "bill_pay", "rm", "sed", "unzip", "zip", "tar_create",
+    "bill_pay", "rm", "sed", "unzip", "zip", "tar_",
     "freeze_", "unfreeze_", "dispute_", "verify_",
     "rate_order", "clear_cart", "reorder",
-    "complete_task", "register_", "schedule_",
+    "complete_task", "schedule_",
     "mark_read", "mark_unread", "change_",
-    "reply_to", "forward_", "chown", "wire_", "assign_",
+    "forward_", "chown", "wire_", "assign_",
     "comment_", "time_track", "respond_", "react_",
     "contact_",
     # Domain-specific compound names that don't start with a prefix:
-    "move_to_thread", "cd", "umask", "symlink",
+    "move_to_thread", "cd", "umask", "symlink", "split", "truncate",
 )
 
 # Tools that perform writes without observable state changes in the
@@ -1254,11 +1259,88 @@ def derive_success_criteria(
     return criteria
 
 
-def _tool_entity(name: str) -> str:
+def _tool_entity(name: str, domain: str = "") -> str:
     """Extract entity type from tool name.
 
     Mirrors orchestrator._tool_entity.  Defined locally to avoid circular import.
+    Keep the override map in sync with orchestrator._TOOL_ENTITY_OVERRIDE.
     """
+    _ov: dict[str, str] = {
+        "checkout": "order", "get_cart": "order", "clear_cart": "order",
+        "add_to_cart": "order", "remove_from_cart": "order",
+        "update_cart_quantity": "order",
+        "rate_order": "order", "return_order": "order", "reorder": "order",
+        "apply_coupon": "order",
+        "get_balance": "account", "transfer": "account",
+        "wire_transfer": "account", "deposit": "account", "withdraw": "account",
+        "apply_loan": "account", "bill_pay": "account",
+        "get_history": "account", "get_statement": "account",
+        "pay_invoice": "invoice", "get_invoice": "invoice",
+        "refund_invoice": "invoice", "cancel_payment": "payment",
+        "get_payment": "invoice",
+        "add_to_wishlist": "wishlist",
+        "move_to_thread": "email", "list_inbox": "email",
+        "get_thread": "email", "get_attachments": "email",
+        "mark_read": "email", "mark_unread": "email",
+        "add_label": "email", "remove_label": "email",
+        "chmod": "file", "chown": "file", "cp": "file", "rm": "file", "mv": "file",
+        "mkdir": "file", "touch": "file",
+    }
+    _domain_ov: dict[str, dict[str, str]] = {
+        "banking": {
+            "schedule_transfer": "scheduled_transfer",
+            "cancel_transfer": "scheduled_transfer",
+        },
+        "issue_tracker": {
+            "add_label": "issue",
+            "remove_label": "issue",
+            "add_watcher": "issue",
+            "remove_watcher": "issue",
+            "set_milestone": "issue",
+            "time_track": "issue",
+            "add_to_sprint": "issue",
+            "remove_from_sprint": "issue",
+            "create_subtask": "issue",
+        },
+        "team_chat": {
+            "get_thread": "thread",
+            "get_user_status": "user",
+            "send_dm": "user",
+        },
+        "calendar": {
+            "add_attendee": "event",
+            "remove_attendee": "event",
+            "set_reminder": "event",
+            "create_recurring": "event",
+        },
+        "food_delivery": {
+            "get_menu": "restaurant",
+            "filter_by_dietary": "restaurant",
+            "get_popular_items": "restaurant",
+            "add_tip": "order",
+            "contact_support": "order",
+            "rate_order": "order",
+        },
+        "filesystem": {
+            "ls": "file",
+            "cat": "file",
+            "stat": "file",
+            "head": "file",
+            "tail": "file",
+            "find": "file",
+            "grep": "file",
+            "tree": "file",
+            "pwd": "file",
+            "du": "file",
+            "df": "file",
+        },
+    }
+    tool = name.lower()
+    server = domain.lower()
+    if server and tool in _domain_ov.get(server, {}):
+        return _domain_ov[server][tool]
+    if tool in _ov:
+        return _ov[tool]
     for et in ("event", "order", "account", "email", "invoice",
                 "issue", "lead", "deal", "product", "restaurant",
                 "channel", "message", "file", "contact", "payment",
@@ -1266,6 +1348,14 @@ def _tool_entity(name: str) -> str:
         if et in name:
             return et
     return name.split("_")[-1] if "_" in name else name
+
+
+def _tool_required_entities(name: str, domain: str = "") -> set[str]:
+    try:
+        from src.live_mcp.orchestrator import _tool_existing_entity_requirements
+        return set(_tool_existing_entity_requirements(name, domain))
+    except Exception:
+        return set()
 
 
 def derive_progress_predicates(
@@ -1300,7 +1390,7 @@ def derive_progress_predicates(
 
     for i, call in enumerate(real_calls):
         is_read = any(call.tool_name.lower().startswith(p) for p in read_prefixes)
-        entity = _tool_entity(call.tool_name)
+        entity = _tool_entity(call.tool_name, domain)
         if is_read and entity not in resolved_entities:
             resolved_entities.add(entity)
             predicates.append({
@@ -1313,7 +1403,7 @@ def derive_progress_predicates(
     # Step 2: completed_required_transition for mutation calls
     for i, call in enumerate(real_calls):
         if _is_mutating_tool(call.tool_name):
-            entity = _tool_entity(call.tool_name)
+            entity = _tool_entity(call.tool_name, domain)
             # Extract target entity ID from arguments
             target = ""
             for key, val in (call.arguments or {}).items():
@@ -1328,32 +1418,36 @@ def derive_progress_predicates(
                 "target_id": target,
             })
 
-    # Step 3: satisfied_dependency_edge for consecutive calls where a read/discovery
-    # step precedes a mutation step on the same entity type. This is the PROVE
-    # dependency edge definition: a read resolves an entity that a subsequent
-    # mutation consumes. Simple entity-type equality between any two adjacent
-    # steps produces too many false positives (e.g., two consecutive reads on
-    # the same entity type would be flagged, which is not a dependency edge).
+    # Step 3: satisfied_dependency_edge for consecutive calls where a read or
+    # creator step resolves/produces an entity consumed by a later mutation.
+    # The producer's entity can differ from the mutation's primary output
+    # entity, e.g. get_product -> add_to_cart or send_message -> create_thread.
     read_prefixes_dep = ("list_", "search_", "get_", "find_", "check_", "lookup_",
                          "view_", "browse_", "ls", "cat", "stat", "head", "tail")
+    creator_prefixes_dep = ("create_", "add_", "send_", "schedule_", "mkdir", "touch")
     for i in range(1, len(real_calls)):
         prev = real_calls[i - 1]
         curr = real_calls[i]
         prev_is_read = any(prev.tool_name.lower().startswith(p) for p in read_prefixes_dep)
+        prev_is_creator = any(prev.tool_name.lower().startswith(p) for p in creator_prefixes_dep)
         curr_is_mutate = _is_mutating_tool(curr.tool_name)
-        if not (prev_is_read and curr_is_mutate):
+        if not ((prev_is_read or prev_is_creator) and curr_is_mutate):
             continue
-        prev_entity = _tool_entity(prev.tool_name)
-        curr_entity = _tool_entity(curr.tool_name)
+        prev_entity = _tool_entity(prev.tool_name, domain)
+        curr_entity = _tool_entity(curr.tool_name, domain)
+        curr_required_entities = _tool_required_entities(curr.tool_name, domain)
+        acceptable_entities = set(curr_required_entities) | {curr_entity}
         # A dependency edge is satisfied when a read resolves an entity that
-        # the subsequent mutation consumes (same entity type).
-        if prev_entity == curr_entity:
+        # the subsequent mutation consumes.  The mutation's primary output
+        # entity can differ from the required input entity, e.g.
+        # get_product -> add_to_cart or get_channel -> send_message.
+        if prev_entity in acceptable_entities:
             predicates.append({
                 "step": i,
                 "type": "satisfied_dependency_edge",
                 "tool": curr.tool_name,
                 "from_step": i - 1,
-                "entity": curr_entity,
+                "entity": prev_entity,
             })
 
     # Step 4: verified_postcondition for terminal or verification calls
@@ -1504,7 +1598,7 @@ def replay_validate(
 
     Returns:
         (passed, error_rate, num_errors, num_calls)
-        - passed: True if no schema/execution error occurred
+        - passed: True if error_rate <= max_error_rate (default 0.30)
         - error_rate: fraction of calls that failed
         - num_errors: count of schema/execution errors
         - num_calls: total tool calls replayed

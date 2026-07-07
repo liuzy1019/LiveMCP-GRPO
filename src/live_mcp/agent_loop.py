@@ -118,7 +118,8 @@ class MCPToolsAgentLoop:
                                 raw_text=output,
                             )
                         )
-                    execution_results = self.executor.execute_many(task.session_id, tool_calls)
+                    domain = task.target_servers[0] if len(task.target_servers) == 1 else None
+                    execution_results = self.executor.execute_many(task.session_id, tool_calls, domain=domain)
                     observation_text = json.dumps(
                         [r.observation if r.success else {"error": r.error_type, "message": r.error_message} for r in execution_results],
                         ensure_ascii=True,

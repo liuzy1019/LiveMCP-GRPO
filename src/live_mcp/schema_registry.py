@@ -41,26 +41,34 @@ class SchemaRegistry:
             key = f"{server_name}{self._PREFIX_SEP}{name}"
             self._schemas[key] = schema
 
-    def _matching_keys(self, tool_name: str) -> list[str]:
+    def _matching_keys(self, tool_name: str, domain: str | None = None) -> list[str]:
         """Return all schema keys matching tool_name."""
+        def filter_domain(keys: list[str]) -> list[str]:
+            if not domain:
+                return keys
+            return [key for key in keys if self._server_from_key(key) == domain]
+
         if self._PREFIX_SEP in tool_name and tool_name in self._schemas:
-            return [tool_name]
+            return filter_domain([tool_name])
         canonical = self._name_map.get(tool_name, tool_name)
         if self._PREFIX_SEP in canonical and canonical in self._schemas:
-            return [canonical]
+            return filter_domain([canonical])
         suffix = f"{self._PREFIX_SEP}{tool_name}"
-        return [k for k in self._schemas if k.endswith(suffix)]
+        keys = [k for k in self._schemas if k.endswith(suffix)]
+        if domain:
+            return filter_domain(keys)
+        return keys
 
     def _server_from_key(self, key: str) -> str:
         return key.split(self._PREFIX_SEP, 1)[0]
 
-    def get_schema(self, tool_name: str) -> dict[str, Any] | None:
-        keys = self._matching_keys(tool_name)
+    def get_schema(self, tool_name: str, domain: str | None = None) -> dict[str, Any] | None:
+        keys = self._matching_keys(tool_name, domain=domain)
         return self._schemas.get(keys[0]) if keys else None
 
     def server_for_tool(self, tool_name: str, arguments: dict[str, Any] | None = None, domain: str | None = None) -> str | None:
         """Return server name for a tool. Disambiguates by argument validation or domain hint if needed."""
-        keys = self._matching_keys(tool_name)
+        keys = self._matching_keys(tool_name, domain=domain)
         if not keys:
             return None
         if len(keys) == 1:
@@ -79,7 +87,10 @@ class SchemaRegistry:
         return self._server_from_key(keys[0])
 
     def canonical_name(self, visible_name: str) -> str:
-        return self._name_map.get(visible_name, visible_name)
+        canonical = self._name_map.get(visible_name, visible_name)
+        if self._PREFIX_SEP in canonical:
+            return canonical.split(self._PREFIX_SEP, 1)[1]
+        return canonical
 
     def all_tools(self) -> list[dict[str, Any]]:
         return list(self._schemas.values())
@@ -92,8 +103,9 @@ class SchemaRegistry:
         self,
         tool_name: str,
         arguments: dict[str, Any],
+        domain: str | None = None,
     ) -> SchemaValidationResult:
-        keys = self._matching_keys(tool_name)
+        keys = self._matching_keys(tool_name, domain=domain)
         if not keys:
             return SchemaValidationResult(valid=False, type_errors=["arguments must be object"]) if not isinstance(arguments, dict) else SchemaValidationResult(valid=False)
         # Try all matching schemas; return the first valid result

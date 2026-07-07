@@ -1,5 +1,5 @@
-# Live MCP 全量套件配置（10 domain，对齐 PROVE Table 2 精选子集）
-# 默认 backend=replay，不会误接正式训练链路
+# Live MCP 10-domain 套件配置（PROVE Table 2 精选子集）
+# 当前配置使用 live backend，通过 MCP subprocess 执行。
 
 suite_name: live_mcp_full
 servers:

@@ -29,7 +29,7 @@ class LiveMCPManager:
     @property
     def subprocess_stdio_used(self) -> bool:
         return bool(self._transports) and all(
-            isinstance(transport, MCPStdioTransport) for transport in self._transports.values()
+            isinstance(transport, SubprocessStdioTransport) for transport in self._transports.values()
         )
 
     def start_suite(self) -> None:

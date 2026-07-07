@@ -24,7 +24,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.utils import extract_json
+from src.utils import extract_json, strip_think_tags
 
 # Lazy imports to avoid hard dependency on model packages
 _HAS_TRANSFORMERS = False
@@ -157,16 +157,23 @@ class LLMClient:
                 prompt = "\n".join(m["content"] for m in messages)
             return self._generate_local(prompt, temp, mt)
 
-        # OpenAI mode: pass messages directly
-        extra_body = {}
+        # OpenAI mode: pass messages directly.
+        # For Qwen3 models, request non-thinking mode.  Some serving stacks may
+        # still emit <think> blocks, so callers also strip them before parsing.
+        # The OpenAI SDK only accepts vLLM-specific request fields through
+        # extra_body; the SDK merges this dict into the JSON request body.
+        # Do not send a literal {"extra_body": ...} in raw HTTP requests.
+        create_kwargs: dict = {}
         if "qwen" in self.model_path.lower() or "Qwen" in self.model_path:
-            extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+            create_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
         response = self._client.chat.completions.create(
             model=self.model_path,
             messages=messages,
             temperature=temp,
             max_tokens=mt,
-            **({"extra_body": extra_body} if extra_body else {}),
+            **create_kwargs,
         )
         return response.choices[0].message.content or ""
 
@@ -347,7 +354,7 @@ def _gpu_worker(
                 top_p=0.95,
                 return_full_text=False,
             )
-            text = result[0]["generated_text"]
+            text = strip_think_tags(result[0]["generated_text"])
             logger.debug(f"[GPU {device_id}] {i}/{len(prompts)} done")
         except Exception as e:
             logger.error(f"[GPU {device_id}] Error on prompt {i}: {e}")

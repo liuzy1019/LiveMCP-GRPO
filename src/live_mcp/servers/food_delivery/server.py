@@ -76,6 +76,8 @@ class FoodDeliveryServer(StatefulToolServer):
     def create_order(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); rid = arguments["restaurant_id"]; r = self._rest(state, rid)
         items = arguments["items"]; menu_map = {m["name"]: m for m in r["menu"]}; total = 0.0
+        if not items:
+            raise KeyError("order must contain at least one item")
         for item in items:
             name = item["name"]; qty = item.get("quantity", 1)
             if name not in menu_map: raise KeyError(f"item not on menu: {name}")
@@ -126,13 +128,15 @@ class FoodDeliveryServer(StatefulToolServer):
         order = self._order(self._state(session_id), arguments["order_id"]); rating = int(arguments["rating"])
         if order["status"] != "delivered": raise KeyError("can only rate delivered orders")
         if not 1 <= rating <= 5: raise KeyError("rating must be 1-5")
+        if order.get("rating") is not None: raise KeyError("order already rated")
         order["rating"] = rating; order["review"] = arguments.get("review", "")
         return _result(True, {"order_id": order["order_id"], "rating": rating}, None, "", True)
 
     def add_tip(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         order = self._order(self._state(session_id), arguments["order_id"]); amount = float(arguments["amount"])
         if amount <= 0: raise KeyError("tip amount must be positive")
-        order["tip"] = (order.get("tip", 0) or 0) + amount; order["total"] = round(order["subtotal"] + order.get("delivery_fee", 0) + order["tip"], 2)
+        if order.get("tip", 0): raise KeyError("tip already added")
+        order["tip"] = amount; order["total"] = round(order["subtotal"] + order.get("delivery_fee", 0) + order["tip"], 2)
         return _result(True, {"order_id": order["order_id"], "tip": order["tip"], "total": order["total"]}, None, "", True)
 
     def reorder(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

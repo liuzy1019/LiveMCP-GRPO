@@ -77,6 +77,7 @@ class ShoppingServer(StatefulToolServer):
         state = self._state(session_id); pid, qty = arguments["product_id"], int(arguments["quantity"])
         p = state["products"].get(pid)
         if not p: raise KeyError(f"product not found: {pid}")
+        if qty <= 0: raise KeyError("quantity must be positive")
         if p["stock"] < qty: raise KeyError(f"insufficient stock: {pid} (have {p['stock']})")
         p["stock"] -= qty
         existing = next((item for item in state["cart"] if item["product_id"] == pid), None)
@@ -88,6 +89,7 @@ class ShoppingServer(StatefulToolServer):
         state = self._state(session_id); pid, qty = arguments["product_id"], int(arguments["quantity"])
         item = next((i for i in state["cart"] if i["product_id"] == pid), None)
         if not item: raise KeyError(f"product not in cart: {pid}")
+        if qty <= 0: raise KeyError("quantity must be positive")
         diff = qty - item["quantity"]; p = state["products"][pid]
         if diff > 0 and p["stock"] < diff: raise KeyError(f"insufficient stock: {pid}")
         p["stock"] -= diff; item["quantity"] = qty
@@ -116,17 +118,19 @@ class ShoppingServer(StatefulToolServer):
 
     def clear_cart(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
+        changed = bool(state["cart"]) or "applied_coupon" in state
         for item in state["cart"]:
             if item["product_id"] in state["products"]:
                 state["products"][item["product_id"]]["stock"] += item["quantity"]
         state["cart"] = []; state.pop("applied_coupon", None)
-        return _result(True, {"cart": [], "message": "cart cleared"}, None, "", True)
+        return _result(True, {"cart": [], "message": "cart cleared"}, None, "", changed)
 
     def apply_coupon(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); code = arguments["code"].upper()
         if code not in COUPONS: raise KeyError(f"invalid coupon: {code}")
+        old = state.get("applied_coupon")
         state["applied_coupon"] = code
-        return _result(True, {"coupon": code, "discount": f"{COUPONS[code]*100 if COUPONS[code] else 'free shipping'}%"}, None, "", True)
+        return _result(True, {"coupon": code, "discount": f"{COUPONS[code]*100 if COUPONS[code] else 'free shipping'}%"}, None, "", old != code)
 
     def get_coupons(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return _result(True, {"coupons": [{"code": k, "discount": f"{v*100}%" if v else "free shipping"} for k, v in COUPONS.items()]}, None, "", False)
@@ -134,6 +138,8 @@ class ShoppingServer(StatefulToolServer):
     def checkout(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
         if not state["cart"]: raise KeyError("cart is empty")
+        if any(int(i.get("quantity", 0)) <= 0 for i in state["cart"]):
+            raise KeyError("cart contains non-positive quantity")
         total = sum(i["quantity"] * i["unit_price"] for i in state["cart"])
         coupon = state.get("applied_coupon")
         if coupon and coupon in COUPONS and COUPONS[coupon]: total *= (1 - COUPONS[coupon])
@@ -161,7 +167,7 @@ class ShoppingServer(StatefulToolServer):
     def return_order(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); o = state["orders"].get(arguments["order_id"])
         if not o: raise KeyError(f"order not found: {arguments['order_id']}")
-        if o.get("status") == "returned": raise KeyError("order already returned")
+        if o.get("status") in ("returning", "returned"): raise KeyError("order return already initiated")
         rid = f"ret_{state['next_order_num']:03d}"; state["next_order_num"] += 1
         ret = {"return_id": rid, "order_id": o["order_id"], "reason": arguments["reason"], "items": arguments.get("items", []), "status": "initiated"}
         state.setdefault("returns", {})[rid] = ret; o["status"] = "returning"
@@ -193,13 +199,17 @@ class ShoppingServer(StatefulToolServer):
         state = self._state(session_id); pid = arguments["product_id"]
         if pid not in state["products"]: raise KeyError(f"product not found: {pid}")
         wl = state.setdefault("wishlist", [])
-        if pid not in wl: wl.append(pid)
+        if pid in wl:
+            return _result(True, {"wishlist": wl, "count": len(wl)}, None, "", False)
+        wl.append(pid)
         return _result(True, {"wishlist": wl, "count": len(wl)}, None, "", True)
 
     def remove_from_wishlist(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); pid = arguments["product_id"]
         wl = state.setdefault("wishlist", [])
-        if pid in wl: wl.remove(pid)
+        if pid not in wl:
+            return _result(True, {"wishlist": wl, "count": len(wl)}, None, "", False)
+        wl.remove(pid)
         return _result(True, {"wishlist": wl, "count": len(wl)}, None, "", True)
 
     def get_wishlist(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

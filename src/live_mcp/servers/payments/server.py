@@ -26,18 +26,31 @@ class PaymentsServer(StatefulToolServer):
         self.handlers = {t["name"]: getattr(self, t["name"]) for t in TOOLS}
 
     def create_invoice(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); inv_id = f"inv_{state['next_inv_num']:04d}"; state["next_inv_num"] += 1
-        inv = {"invoice_id": inv_id, "customer": arguments["customer"], "amount": float(arguments["amount"]), "currency": arguments.get("currency", "USD"), "description": arguments.get("description", ""), "due_date": arguments.get("due_date", ""), "status": "pending", "payment_id": None, "refund_id": None, "created_at": "2026-06-24"}
+        state = self._state(session_id)
+        amount = float(arguments["amount"])
+        if amount <= 0: raise KeyError("amount must be positive")
+        inv_id = f"inv_{state['next_inv_num']:04d}"; state["next_inv_num"] += 1
+        inv = {"invoice_id": inv_id, "customer": arguments["customer"], "amount": amount, "currency": arguments.get("currency", "USD"), "description": arguments.get("description", ""), "due_date": arguments.get("due_date", ""), "status": "pending", "payment_id": None, "refund_id": None, "created_at": "2026-06-24"}
         state["invoices"][inv_id] = inv
         return _result(True, {"invoice": inv}, None, "", True)
 
     def get_invoice(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        inv = self._state(session_id)["invoices"].get(arguments["invoice_id"])
+        state = self._state(session_id)
+        inv = state["invoices"].get(arguments["invoice_id"])
         if not inv: raise KeyError(f"invoice not found: {arguments['invoice_id']}")
-        return _result(True, {"invoice": inv}, None, "", False)
+        visible = dict(inv)
+        if inv.get("payment_id") and inv["payment_id"] in state["payments"]:
+            visible["payment_status"] = state["payments"][inv["payment_id"]]["status"]
+        return _result(True, {"invoice": visible}, None, "", False)
 
     def list_invoices(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); invs = list(state["invoices"].values())
+        state = self._state(session_id)
+        invs = []
+        for inv in state["invoices"].values():
+            visible = dict(inv)
+            if inv.get("payment_id") and inv["payment_id"] in state["payments"]:
+                visible["payment_status"] = state["payments"][inv["payment_id"]]["status"]
+            invs.append(visible)
         st = arguments.get("status"); cust = arguments.get("customer"); fd = arguments.get("from_date"); td = arguments.get("to_date")
         if st: invs = [i for i in invs if i["status"] == st]
         if cust: invs = [i for i in invs if i["customer"] == cust]
@@ -49,8 +62,9 @@ class PaymentsServer(StatefulToolServer):
         state = self._state(session_id); inv_id = arguments["invoice_id"]; inv = state["invoices"].get(inv_id)
         if not inv: raise KeyError(f"invoice not found: {inv_id}")
         if inv["status"] == "paid": raise KeyError("invoice already paid")
-        if inv["status"] == "refunded": raise KeyError("invoice already refunded")
+        if inv["status"] in ("refunded", "partially_refunded"): raise KeyError(f"invoice already {inv['status']}")
         amount = float(arguments["amount"])
+        if amount <= 0: raise KeyError("amount must be positive")
         if abs(amount - inv["amount"]) > 0.01: raise KeyError(f"amount mismatch: {amount} vs {inv['amount']}")
         method = arguments.get("method", "card"); pid = f"pay_{state['next_pay_num']:04d}"; state["next_pay_num"] += 1
         inv["status"] = "paid"; inv["payment_id"] = pid
@@ -60,22 +74,26 @@ class PaymentsServer(StatefulToolServer):
     def refund_invoice(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); inv_id = arguments["invoice_id"]; inv = state["invoices"].get(inv_id)
         if not inv: raise KeyError(f"invoice not found: {inv_id}")
-        if inv["status"] != "paid": raise KeyError(f"cannot refund invoice in status: {inv['status']}")
+        if inv["status"] not in ("paid", "partially_refunded"): raise KeyError(f"cannot refund invoice in status: {inv['status']}")
         amount = float(arguments["amount"])
+        if amount <= 0: raise KeyError("amount must be positive")
         if amount > inv["amount"]: raise KeyError(f"refund exceeds invoice: {amount} > {inv['amount']}")
         # Track cumulative refunds to prevent over-refunding
         total_refunded = inv.get("total_refunded", 0.0)
         if amount + total_refunded > inv["amount"]:
             raise KeyError(f"cumulative refunds ({amount} + {total_refunded}) exceed invoice amount {inv['amount']}")
         rid = f"ref_{state['next_ref_num']:04d}"; state["next_ref_num"] += 1
-        inv["status"] = "refunded"; inv["refund_id"] = rid; inv["total_refunded"] = total_refunded + amount
+        new_total = round(total_refunded + amount, 2)
+        inv["status"] = "refunded" if abs(new_total - inv["amount"]) <= 0.01 else "partially_refunded"
+        inv["refund_id"] = rid; inv["total_refunded"] = new_total
         state["refunds"][rid] = {"refund_id": rid, "invoice_id": inv_id, "amount": amount, "reason": arguments.get("reason", "")}
         return _result(True, {"invoice": inv, "refund": state["refunds"][rid]}, None, "", True)
 
     def cancel_payment(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); pid = arguments["payment_id"]; pmt = state["payments"].get(pid)
         if not pmt: raise KeyError(f"payment not found: {pid}")
-        if pmt["status"] != "settled": raise KeyError(f"payment already {pmt['status']}")
+        if pmt["status"] == "settled": raise KeyError("cannot cancel settled payment")
+        if pmt["status"] != "pending": raise KeyError(f"payment already {pmt['status']}")
         inv = state["invoices"][pmt["invoice_id"]]
         if inv.get("refund_id"): raise KeyError(f"cannot cancel refunded invoice: {inv['refund_id']}")
         pmt["status"] = "cancelled"; pmt["cancel_reason"] = arguments.get("reason", "")
@@ -86,12 +104,15 @@ class PaymentsServer(StatefulToolServer):
         state = self._state(session_id); inv_id = arguments["invoice_id"]; inv = state["invoices"].get(inv_id)
         if not inv: raise KeyError(f"invoice not found: {inv_id}")
         if inv["status"] not in ("paid", "pending"): raise KeyError(f"cannot dispute invoice in status: {inv['status']}")
+        if not arguments["reason"].strip(): raise KeyError("reason must be non-empty")
         did = f"dis_{state['next_inv_num']:04d}"; state["next_inv_num"] += 1
         dispute = {"dispute_id": did, "invoice_id": inv_id, "reason": arguments["reason"], "evidence": arguments.get("evidence", ""), "status": "open"}
         state.setdefault("disputes", {})[did] = dispute; inv["status"] = "disputed"
         return _result(True, {"dispute": dispute, "invoice_status": "disputed"}, None, "", True)
 
     def create_webhook(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if not arguments["url"].strip(): raise KeyError("url must be non-empty")
+        if not arguments["events"]: raise KeyError("events must be non-empty")
         state = self._state(session_id); wid = f"wh_{state['next_wh_num']:04d}"; state["next_wh_num"] += 1
         wh = {"webhook_id": wid, "url": arguments["url"], "events": arguments["events"], "active": True}
         state["webhooks"][wid] = wh
@@ -104,6 +125,8 @@ class PaymentsServer(StatefulToolServer):
     def delete_webhook(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); wid = arguments["webhook_id"]
         if wid not in state["webhooks"]: raise KeyError(f"webhook not found: {wid}")
+        if not state["webhooks"][wid].get("active", True):
+            return _result(True, {"webhook_id": wid, "deleted": True}, None, "", False)
         state["webhooks"][wid]["active"] = False
         return _result(True, {"webhook_id": wid, "deleted": True}, None, "", True)
 

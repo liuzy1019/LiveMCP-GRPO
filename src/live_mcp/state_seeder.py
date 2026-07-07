@@ -280,11 +280,19 @@ def _shopping_state(seed: int) -> dict[str, Any]:
         }
     order_1 = _seed_scoped_id("ord", seed, 0, width=4)
     order_2 = _seed_scoped_id("ord", seed, 1, width=4)
+    order_1_items = [
+        {"product_id": pid, "quantity": 1, "unit_price": products[pid]["price"]}
+        for pid in product_ids[:2]
+    ]
+    order_2_items = [
+        {"product_id": pid, "quantity": 1, "unit_price": products[pid]["price"]}
+        for pid in product_ids[2:3]
+    ]
     orders = {
-        order_1: {"order_id": order_1, "product_ids": product_ids[:2],
-                  "total": 114.00, "status": "shipped", "created_at": "2026-06-18"},
-        order_2: {"order_id": order_2, "product_ids": product_ids[2:3],
-                  "total": 349.00, "status": "pending", "created_at": "2026-06-22"},
+        order_1: {"order_id": order_1, "items": order_1_items, "product_ids": product_ids[:2],
+                  "total": round(sum(i["quantity"] * i["unit_price"] for i in order_1_items), 2), "status": "shipped", "created_at": "2026-06-18"},
+        order_2: {"order_id": order_2, "items": order_2_items, "product_ids": product_ids[2:3],
+                  "total": round(sum(i["quantity"] * i["unit_price"] for i in order_2_items), 2), "status": "pending", "created_at": "2026-06-22"},
     }
     return {"products": products, "cart": [], "orders": orders,
             "next_order_num": 3, "reviews": {}, "wishlist": []}
@@ -402,14 +410,9 @@ def _payments_state(seed: int) -> dict[str, Any]:
                  "2026-07-10", "2026-08-15", "2026-07-05", "2026-07-25"]
     created_dates = ["2026-06-01", "2026-06-05", "2026-06-10", "2026-06-15",
                      "2026-06-20", "2026-06-25"]
-    paid_invoice_id = None
-    paid_amount = 0.0
     for idx, (_iid, customer, amount, currency, desc, status) in enumerate(selected):
         iid = _seed_scoped_id("inv", seed, idx, width=4)
         pay_id = _seed_scoped_id("pay", seed, idx, width=4) if status == "paid" else None
-        if paid_invoice_id is None and status == "paid":
-            paid_invoice_id = iid
-            paid_amount = amount
         invoices[iid] = {
             "invoice_id": iid, "customer": customer, "amount": round(amount + rng.randint(-50, 50), 2),
             "currency": currency, "description": desc, "status": status,
@@ -419,19 +422,25 @@ def _payments_state(seed: int) -> dict[str, Any]:
             "created_at": created_dates[idx % len(created_dates)],
         }
     payments = {}
-    if paid_invoice_id:
-        pay_id = invoices[paid_invoice_id]["payment_id"]
-        payments[pay_id] = {
-            "payment_id": pay_id,
-            "invoice_id": paid_invoice_id,
-            "amount": paid_amount,
+    pending_payment_assigned = False
+    for iid, inv in invoices.items():
+        if not inv.get("payment_id"):
+            continue
+        status = "settled"
+        if not pending_payment_assigned:
+            status = "pending"
+            pending_payment_assigned = True
+        payments[inv["payment_id"]] = {
+            "payment_id": inv["payment_id"],
+            "invoice_id": iid,
+            "amount": inv["amount"],
             "method": "wire",
-            "status": "settled",
+            "status": status,
         }
     return {"invoices": invoices,
             "payments": payments,
             "refunds": {}, "webhooks": {}, "disputes": {},
-            "next_inv_num": len(invoices) + 1, "next_pay_num": 2,
+            "next_inv_num": len(invoices) + 1, "next_pay_num": len(payments) + 1,
             "next_ref_num": 1, "next_wh_num": 1}
 
 
@@ -441,13 +450,13 @@ def _crm_state(seed: int) -> dict[str, Any]:
     leads = {}
     statuses = ["new", "contacted", "qualified", "converted"]
     lead_ids: list[str] = []
-    converted_pairs: list[tuple[str, str, str, str]] = []
+    converted_pairs: list[tuple[str, str, str, str, str]] = []
     for idx, (_lid, name, company, source, status, email) in enumerate(leads_selected):
         lid = _seed_scoped_id("lead", seed, idx, width=4)
         contact_id = _seed_scoped_id("contact", seed, idx, width=4) if status == "converted" else None
         lead_ids.append(lid)
         if contact_id:
-            converted_pairs.append((contact_id, name, email, company))
+            converted_pairs.append((contact_id, name, email, company, lid))
         leads[lid] = {
             "lead_id": lid, "name": name, "company": company, "source": source,
             "email": email, "phone": f"555-{1000 + idx:04d}",
@@ -455,8 +464,8 @@ def _crm_state(seed: int) -> dict[str, Any]:
         }
     contacts = {
         cid: {"contact_id": cid, "name": name, "email": email, "phone": "",
-              "company": company, "lead_id": None}
-        for cid, name, email, company in converted_pairs
+              "company": company, "lead_id": lid}
+        for cid, name, email, company, lid in converted_pairs
     }
     deal_pool = [
         ("Cloud Migration", 50000.00, "prospecting"),

@@ -16,8 +16,8 @@ TOOLS = [
     {"name": "create_contact", "description": "Create a contact directly.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "company": {"type": "string"}}, "required": ["name", "email"]}, "annotations": {"mutating": True}},
     {"name": "update_contact", "description": "Update contact fields.", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}, "fields": {"type": "object"}}, "required": ["contact_id", "fields"]}, "annotations": {"mutating": True}},
     {"name": "delete_contact", "description": "Delete a contact (fails if referenced by deals).", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}}, "required": ["contact_id"]}, "annotations": {"mutating": True}},
-    {"name": "create_deal", "description": "Create a deal linked to contact/lead.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "amount": {"type": "number"}, "contact_id": {"type": "string"}, "lead_id": {"type": "string"}, "stage": {"type": "string"}}, "required": ["name", "amount"]}, "annotations": {"mutating": True}},
-    {"name": "update_deal", "description": "Update deal stage or amount.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}, "stage": {"type": "string"}, "amount": {"type": "number"}}, "required": ["deal_id"]}, "annotations": {"mutating": True}},
+    {"name": "create_deal", "description": "Create a deal linked to contact/lead.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "amount": {"type": "number"}, "contact_id": {"type": "string"}, "lead_id": {"type": "string"}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}}, "required": ["name", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "update_deal", "description": "Update deal stage or amount.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}, "amount": {"type": "number"}}, "required": ["deal_id"]}, "annotations": {"mutating": True}},
     {"name": "list_deals", "description": "List deals by stage/contact/lead.", "input_schema": {"type": "object", "properties": {"stage": {"type": "string"}, "contact_id": {"type": "string"}, "lead_id": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_deal", "description": "Get full deal details with linked contact/lead.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}}, "required": ["deal_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "create_task", "description": "Create a task related to a deal or contact.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "deal_id": {"type": "string"}, "contact_id": {"type": "string"}, "due_date": {"type": "string"}, "priority": {"type": "string"}}, "required": ["title"]}, "annotations": {"mutating": True}},
@@ -42,9 +42,12 @@ class CRMServer(StatefulToolServer):
     def update_lead(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); lead = state["leads"].get(arguments["lead_id"])
         if not lead: raise KeyError(f"lead not found: {arguments['lead_id']}")
+        changed = False
         for k, v in arguments["fields"].items():
-            if k in ("name", "company", "source", "email", "phone"): lead[k] = v
-        return _result(True, {"lead": lead}, None, "", True)
+            if k in ("name", "company", "source", "email", "phone") and lead.get(k) != v:
+                lead[k] = v
+                changed = True
+        return _result(True, {"lead": lead}, None, "", changed)
 
     def convert_lead(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); lid = arguments["lead_id"]; lead = state["leads"].get(lid)
@@ -60,6 +63,8 @@ class CRMServer(StatefulToolServer):
         state = self._state(session_id); lid = arguments["lead_id"]; lead = state["leads"].get(lid)
         if not lead: raise KeyError(f"lead not found: {lid}")
         if lead["status"] == "converted": raise KeyError("cannot delete converted lead")
+        refs = [d for d in state["deals"].values() if d.get("lead_id") == lid]
+        if refs: raise KeyError(f"lead referenced by {len(refs)} deal(s)")
         state["leads"].pop(lid)
         return _result(True, {"deleted_lead": lead}, None, "", True)
 
@@ -79,9 +84,12 @@ class CRMServer(StatefulToolServer):
     def update_contact(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); contact = state["contacts"].get(arguments["contact_id"])
         if not contact: raise KeyError(f"contact not found: {arguments['contact_id']}")
+        changed = False
         for k, v in arguments["fields"].items():
-            if k in ("name", "email", "phone", "company"): contact[k] = v
-        return _result(True, {"contact": contact}, None, "", True)
+            if k in ("name", "email", "phone", "company") and contact.get(k) != v:
+                contact[k] = v
+                changed = True
+        return _result(True, {"contact": contact}, None, "", changed)
 
     def delete_contact(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); cid = arguments["contact_id"]
@@ -92,23 +100,35 @@ class CRMServer(StatefulToolServer):
         return _result(True, {"deleted_contact_id": cid}, None, "", True)
 
     def create_deal(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); did = f"deal_{state['next_deal_num']:04d}"; state["next_deal_num"] += 1
+        state = self._state(session_id)
         cid = arguments.get("contact_id"); lid = arguments.get("lead_id")
         if cid and cid not in state["contacts"]: raise KeyError(f"contact not found: {cid}")
         if lid and lid not in state["leads"]: raise KeyError(f"lead not found: {lid}")
-        deal = {"deal_id": did, "name": arguments["name"], "amount": float(arguments["amount"]), "stage": arguments.get("stage", "prospecting"), "contact_id": cid, "lead_id": lid, "created_at": "2026-06-24"}
-        if deal["stage"] not in VALID_STAGES: raise KeyError(f"invalid stage: {deal['stage']}")
+        amount = float(arguments["amount"])
+        if amount <= 0: raise KeyError("amount must be positive")
+        stage = arguments.get("stage", "prospecting")
+        if stage not in VALID_STAGES: raise KeyError(f"invalid stage: '{stage}'. Valid stages: {VALID_STAGES}")
+        did = f"deal_{state['next_deal_num']:04d}"; state["next_deal_num"] += 1
+        deal = {"deal_id": did, "name": arguments["name"], "amount": amount, "stage": stage, "contact_id": cid, "lead_id": lid, "created_at": "2026-06-24"}
         state["deals"][did] = deal
         return _result(True, {"deal": deal}, None, "", True)
 
     def update_deal(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); deal = state["deals"].get(arguments["deal_id"])
         if not deal: raise KeyError(f"deal not found: {arguments['deal_id']}")
+        changed = False
         if "stage" in arguments:
             if arguments["stage"] not in VALID_STAGES: raise KeyError(f"invalid stage: {arguments['stage']}")
-            deal["stage"] = arguments["stage"]
-        if "amount" in arguments: deal["amount"] = float(arguments["amount"])
-        return _result(True, {"deal": deal}, None, "", True)
+            if deal.get("stage") != arguments["stage"]:
+                deal["stage"] = arguments["stage"]
+                changed = True
+        if "amount" in arguments:
+            amount = float(arguments["amount"])
+            if amount <= 0: raise KeyError("amount must be positive")
+            if deal.get("amount") != amount:
+                deal["amount"] = amount
+                changed = True
+        return _result(True, {"deal": deal}, None, "", changed)
 
     def list_deals(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); deals = list(state["deals"].values())
@@ -125,7 +145,12 @@ class CRMServer(StatefulToolServer):
         return _result(True, {"deal": deal, "contact": contact, "lead": lead}, None, "", False)
 
     def create_task(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); tid = f"task_{state['next_task_num']:04d}"; state["next_task_num"] += 1
+        state = self._state(session_id)
+        if arguments.get("deal_id") and arguments["deal_id"] not in state["deals"]:
+            raise KeyError(f"deal not found: {arguments['deal_id']}")
+        if arguments.get("contact_id") and arguments["contact_id"] not in state["contacts"]:
+            raise KeyError(f"contact not found: {arguments['contact_id']}")
+        tid = f"task_{state['next_task_num']:04d}"; state["next_task_num"] += 1
         task = {"task_id": tid, "title": arguments["title"], "deal_id": arguments.get("deal_id"), "contact_id": arguments.get("contact_id"), "due_date": arguments.get("due_date", ""), "priority": arguments.get("priority", "medium"), "status": "open"}
         state.setdefault("tasks", {})[tid] = task
         return _result(True, {"task": task}, None, "", True)
@@ -140,8 +165,9 @@ class CRMServer(StatefulToolServer):
     def complete_task(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); tid = arguments["task_id"]
         if tid not in state.get("tasks", {}): raise KeyError(f"task not found: {tid}")
+        changed = state["tasks"][tid].get("status") != "completed"
         state["tasks"][tid]["status"] = "completed"
-        return _result(True, {"task": state["tasks"][tid]}, None, "", True)
+        return _result(True, {"task": state["tasks"][tid]}, None, "", changed)
 
     def add_note(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); etype, eid = arguments["entity_type"], arguments["entity_id"]

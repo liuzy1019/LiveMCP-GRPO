@@ -44,56 +44,78 @@
     "zip"
   ],
   "graph": {
-    "ls": {
-      "explicit": [],
+    "find": {
+      "explicit": [
+        "cat",
+        "chmod",
+        "chown",
+        "cp",
+        "mv",
+        "rm"
+      ],
       "implicit": []
     },
-    "cd": {
-      "explicit": [],
-      "implicit": [
-        "mv",
-        "cp",
-        "rm",
+    "ls": {
+      "explicit": [
+        "cat",
         "chmod",
-        "chown"
+        "cp",
+        "mv",
+        "rm"
+      ],
+      "implicit": [
+        "cd"
       ]
     },
-    "pwd": {
+    "cd": {
       "explicit": [],
       "implicit": []
     },
     "cat": {
-      "explicit": [],
-      "implicit": []
-    },
-    "head": {
-      "explicit": [],
-      "implicit": []
-    },
-    "tail": {
-      "explicit": [],
-      "implicit": []
-    },
-    "wc": {
-      "explicit": [],
-      "implicit": []
-    },
-    "stat": {
-      "explicit": [],
-      "implicit": []
-    },
-    "find": {
       "explicit": [
-        "mv",
-        "cp",
-        "rm",
-        "chmod",
-        "chown",
-        "md5sum",
-        "sha256sum",
-        "file_info",
-        "xxd"
+        "rm"
       ],
+      "implicit": [
+        "cp",
+        "grep",
+        "mv",
+        "sed",
+        "awk"
+      ]
+    },
+    "touch": {
+      "explicit": [
+        "chmod"
+      ],
+      "implicit": [
+        "cat",
+        "symlink"
+      ]
+    },
+    "mkdir": {
+      "explicit": [],
+      "implicit": [
+        "cd"
+      ]
+    },
+    "mv": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cp": {
+      "explicit": [],
+      "implicit": []
+    },
+    "du": {
+      "explicit": [
+        "rm"
+      ],
+      "implicit": [
+        "rm"
+      ]
+    },
+    "symlink": {
+      "explicit": [],
       "implicit": []
     },
     "grep": {
@@ -104,34 +126,13 @@
       "explicit": [],
       "implicit": []
     },
-    "mkdir": {
+    "stat": {
       "explicit": [],
-      "implicit": []
-    },
-    "touch": {
-      "explicit": [
-        "md5sum",
-        "sha256sum",
-        "file_info",
-        "xxd"
-      ],
-      "implicit": []
-    },
-    "mv": {
-      "explicit": [
-        "rm",
+      "implicit": [
         "chmod"
-      ],
-      "implicit": []
+      ]
     },
-    "cp": {
-      "explicit": [
-        "chmod",
-        "chown"
-      ],
-      "implicit": []
-    },
-    "rm": {
+    "awk": {
       "explicit": [],
       "implicit": []
     },
@@ -143,11 +144,7 @@
       "explicit": [],
       "implicit": []
     },
-    "umask": {
-      "explicit": [],
-      "implicit": []
-    },
-    "du": {
+    "cut": {
       "explicit": [],
       "implicit": []
     },
@@ -155,11 +152,55 @@
       "explicit": [],
       "implicit": []
     },
-    "symlink": {
+    "diff": {
+      "explicit": [],
+      "implicit": []
+    },
+    "file_info": {
+      "explicit": [],
+      "implicit": []
+    },
+    "head": {
+      "explicit": [],
+      "implicit": []
+    },
+    "join": {
+      "explicit": [],
+      "implicit": []
+    },
+    "md5sum": {
+      "explicit": [],
+      "implicit": []
+    },
+    "pwd": {
       "explicit": [],
       "implicit": []
     },
     "readlink": {
+      "explicit": [],
+      "implicit": []
+    },
+    "rm": {
+      "explicit": [],
+      "implicit": []
+    },
+    "sed": {
+      "explicit": [],
+      "implicit": []
+    },
+    "sha256sum": {
+      "explicit": [],
+      "implicit": []
+    },
+    "sort": {
+      "explicit": [],
+      "implicit": []
+    },
+    "split": {
+      "explicit": [],
+      "implicit": []
+    },
+    "tail": {
       "explicit": [],
       "implicit": []
     },
@@ -171,19 +212,11 @@
       "explicit": [],
       "implicit": []
     },
-    "zip": {
+    "truncate": {
       "explicit": [],
       "implicit": []
     },
-    "unzip": {
-      "explicit": [],
-      "implicit": []
-    },
-    "diff": {
-      "explicit": [],
-      "implicit": []
-    },
-    "sort": {
+    "umask": {
       "explicit": [],
       "implicit": []
     },
@@ -191,27 +224,11 @@
       "explicit": [],
       "implicit": []
     },
-    "cut": {
+    "unzip": {
       "explicit": [],
       "implicit": []
     },
-    "sed": {
-      "explicit": [],
-      "implicit": []
-    },
-    "awk": {
-      "explicit": [],
-      "implicit": []
-    },
-    "md5sum": {
-      "explicit": [],
-      "implicit": []
-    },
-    "sha256sum": {
-      "explicit": [],
-      "implicit": []
-    },
-    "file_info": {
+    "wc": {
       "explicit": [],
       "implicit": []
     },
@@ -219,15 +236,7 @@
       "explicit": [],
       "implicit": []
     },
-    "truncate": {
-      "explicit": [],
-      "implicit": []
-    },
-    "split": {
-      "explicit": [],
-      "implicit": []
-    },
-    "join": {
+    "zip": {
       "explicit": [],
       "implicit": []
     }

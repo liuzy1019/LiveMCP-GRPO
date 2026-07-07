@@ -63,7 +63,7 @@ class BankingServer(StatefulToolServer):
         state = self._state(session_id)
         aid = arguments["account_id"]; self._acct(state, aid)
         limit = int(arguments.get("limit", 10)); start_date = arguments.get("start_date"); txn_type = arguments.get("txn_type")
-        txns = [t for t in state["transactions"] if t["from_account"] == aid or t["to_account"] == aid]
+        txns = [t for t in state["transactions"] if t.get("from_account") == aid or t.get("to_account") == aid]
         if start_date: txns = [t for t in txns if t.get("timestamp", "") >= start_date]
         if txn_type: txns = [t for t in txns if t.get("type") == txn_type]
         return _result(True, {"account_id": aid, "transactions": txns[-limit:], "count": len(txns)}, None, "", False)
@@ -72,9 +72,9 @@ class BankingServer(StatefulToolServer):
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
         year, month = int(arguments["year"]), int(arguments["month"])
         period = f"{year}-{month:02d}"
-        txns = [t for t in state["transactions"] if (t["from_account"] == aid or t["to_account"] == aid) and t.get("timestamp", "").startswith(period)]
-        debits = sum(t["amount"] for t in txns if t["from_account"] == aid)
-        credits = sum(t["amount"] for t in txns if t["to_account"] == aid)
+        txns = [t for t in state["transactions"] if (t.get("from_account") == aid or t.get("to_account") == aid) and t.get("timestamp", "").startswith(period)]
+        debits = sum(t["amount"] for t in txns if t.get("from_account") == aid)
+        credits = sum(t["amount"] for t in txns if t.get("to_account") == aid)
         return _result(True, {"account_id": aid, "period": period, "opening_balance": acct["balance"] - credits + debits, "closing_balance": acct["balance"], "total_debits": debits, "total_credits": credits, "transactions": txns}, None, "", False)
 
     def transfer(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -93,6 +93,7 @@ class BankingServer(StatefulToolServer):
         state = self._state(session_id); from_aid, amount = arguments["from_account"], float(arguments["amount"])
         acct = self._acct(state, from_aid)
         if acct.get("frozen"): raise KeyError(f"account frozen: {from_aid}")
+        if amount <= 0: raise KeyError("amount must be positive")
         fee = max(15.0, amount * 0.01); total = amount + fee
         if acct["balance"] < total: raise KeyError(f"insufficient funds (need {total} including {fee} fee)")
         acct["balance"] -= total
@@ -125,6 +126,7 @@ class BankingServer(StatefulToolServer):
         state = self._state(session_id); aid, amount = arguments["account_id"], float(arguments["amount"]); payee = arguments["payee"]
         acct = self._acct(state, aid)
         if acct.get("frozen"): raise KeyError(f"account frozen: {aid}")
+        if amount <= 0: raise KeyError("amount must be positive")
         if acct["balance"] < amount: raise KeyError("insufficient funds")
         acct["balance"] -= amount
         tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": aid, "amount": amount, "currency": acct["currency"], "type": "bill_pay", "payee": payee, "due_date": arguments.get("due_date", ""), "timestamp": "2026-06-24"}
@@ -145,11 +147,15 @@ class BankingServer(StatefulToolServer):
         sched = state.get("scheduled_transfers", {}).get(sid)
         if not sched: raise KeyError(f"scheduled transfer not found: {sid}")
         if sched["status"] == "executed": raise KeyError("already executed")
+        if sched["status"] == "cancelled":
+            return _result(True, {"scheduled_transfer": sched}, None, "", False)
         sched["status"] = "cancelled"
         return _result(True, {"scheduled_transfer": sched}, None, "", True)
 
     def freeze_account(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
+        if acct.get("frozen"):
+            return _result(True, {"account_id": aid, "frozen": True, "reason": arguments.get("reason", "unspecified")}, None, "", False)
         reason = arguments.get("reason", "unspecified"); acct["frozen"] = True
         state["freeze_log"].append({"account_id": aid, "reason": reason, "frozen": True, "timestamp": "2026-06-24"})
         return _result(True, {"account_id": aid, "frozen": True, "reason": reason}, None, "", True)
@@ -158,6 +164,8 @@ class BankingServer(StatefulToolServer):
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
         if arguments.get("authorization_code") != "AUTH_SECURE":
             raise KeyError("invalid authorization code")
+        if not acct.get("frozen"):
+            return _result(True, {"account_id": aid, "frozen": False}, None, "", False)
         acct["frozen"] = False
         state["freeze_log"].append({"account_id": aid, "reason": "unfrozen", "frozen": False, "timestamp": "2026-06-24"})
         return _result(True, {"account_id": aid, "frozen": False}, None, "", True)
@@ -176,6 +184,8 @@ class BankingServer(StatefulToolServer):
     def apply_loan(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
         amount = float(arguments["amount"]); term = int(arguments["term_months"])
+        if amount <= 0: raise KeyError("amount must be positive")
+        if term <= 0: raise KeyError("term_months must be positive")
         if acct["balance"] < amount * 0.1: raise KeyError("insufficient balance for loan collateral")
         lid = f"loan_{state['next_txn_num']:04d}"; state["next_txn_num"] += 1
         rate = 0.045 if term <= 12 else 0.055

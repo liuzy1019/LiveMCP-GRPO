@@ -1,6 +1,6 @@
 {
   "server_name": "crm",
-  "schema_hash": "ce9ecbce868b3362",
+  "schema_hash": "3eab3e72e102a369",
   "tool_names": [
     "add_note",
     "complete_task",
@@ -20,66 +20,28 @@
     "update_lead"
   ],
   "graph": {
-    "create_lead": {
-      "explicit": [
-        "update_lead",
-        "convert_lead",
-        "delete_lead",
-        "create_deal",
-        "create_task"
-      ],
-      "implicit": [
-        "update_deal"
-      ]
+    "add_note": {
+      "explicit": [],
+      "implicit": []
     },
-    "update_lead": {
-      "explicit": [
-        "convert_lead",
-        "delete_lead",
-        "create_deal"
-      ],
-      "implicit": [
-        "update_deal"
-      ]
+    "complete_task": {
+      "explicit": [],
+      "implicit": []
     },
     "convert_lead": {
       "explicit": [
-        "delete_lead",
-        "update_contact",
         "create_deal",
-        "update_deal",
-        "create_task",
-        "add_note"
+        "update_contact",
+        "delete_contact"
       ],
-      "implicit": []
-    },
-    "delete_lead": {
-      "explicit": [],
-      "implicit": []
-    },
-    "list_leads": {
-      "explicit": [],
       "implicit": []
     },
     "create_contact": {
       "explicit": [
         "update_contact",
         "delete_contact",
-        "create_deal",
-        "create_task"
+        "create_deal"
       ],
-      "implicit": []
-    },
-    "update_contact": {
-      "explicit": [],
-      "implicit": [
-        "delete_contact",
-        "create_deal",
-        "create_task"
-      ]
-    },
-    "delete_contact": {
-      "explicit": [],
       "implicit": []
     },
     "create_deal": {
@@ -88,20 +50,14 @@
         "get_deal"
       ],
       "implicit": [
-        "create_task"
+        "add_note"
       ]
     },
-    "update_deal": {
-      "explicit": [],
-      "implicit": []
-    },
-    "list_deals": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_deal": {
+    "create_lead": {
       "explicit": [
-        "create_task"
+        "convert_lead",
+        "update_lead",
+        "delete_lead"
       ],
       "implicit": []
     },
@@ -111,17 +67,52 @@
       ],
       "implicit": []
     },
+    "delete_contact": {
+      "explicit": [],
+      "implicit": []
+    },
+    "delete_lead": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_deal": {
+      "explicit": [
+        "update_deal"
+      ],
+      "implicit": [
+        "add_note"
+      ]
+    },
+    "list_deals": {
+      "explicit": [
+        "update_deal",
+        "get_deal"
+      ],
+      "implicit": []
+    },
+    "list_leads": {
+      "explicit": [
+        "convert_lead",
+        "update_lead",
+        "delete_lead"
+      ],
+      "implicit": []
+    },
     "list_tasks": {
       "explicit": [
         "complete_task"
       ],
       "implicit": []
     },
-    "complete_task": {
+    "update_contact": {
       "explicit": [],
       "implicit": []
     },
-    "add_note": {
+    "update_deal": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_lead": {
       "explicit": [],
       "implicit": []
     }

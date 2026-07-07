@@ -14,6 +14,7 @@
 #
 # Env override:
 #   OUTPUT_DIR=data  GPU_COUNT=8  VLLM_PORT_START=8001
+#   VLLM_CLIENTS_PER_INSTANCE=4  VLLM_MAX_NUM_SEQS=16
 
 set -euo pipefail
 
@@ -21,7 +22,9 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 if [ -z "${PYTHON_BIN:-}" ]; then
-    if [ -x "/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python" ]; then
+    if [ -x "/mnt/data2/liuzhanyi/envs/arl/bin/python" ]; then
+        PYTHON_BIN="/mnt/data2/liuzhanyi/envs/arl/bin/python"
+    elif [ -x "/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python" ]; then
         PYTHON_BIN="/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python"
     elif [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/python" ]; then
         PYTHON_BIN="${CONDA_PREFIX}/bin/python"
@@ -31,6 +34,44 @@ if [ -z "${PYTHON_BIN:-}" ]; then
 fi
 export PYTHON_BIN
 export PYTHONNOUSERSITE=1
+PYTHON_BIN_DIR="$(cd "$(dirname "${PYTHON_BIN}")" && pwd)"
+PYTHON_PREFIX="$(cd "${PYTHON_BIN_DIR}/.." && pwd)"
+export PATH="${PYTHON_BIN_DIR}:${PATH}"
+
+# Keep CUDA JIT compilation aligned with the selected Python environment.
+# vLLM/FlashInfer otherwise falls back to /usr/local/cuda, which can point to
+# a stale system toolkit or an older CUDA version than the torch wheel.
+if [ -x "${PYTHON_PREFIX}/bin/nvcc" ]; then
+    export CUDA_HOME="${CUDA_HOME:-${PYTHON_PREFIX}}"
+    export CUDA_PATH="${CUDA_PATH:-${CUDA_HOME}}"
+    export FLASHINFER_NVCC="${FLASHINFER_NVCC:-${CUDA_HOME}/bin/nvcc}"
+fi
+NVIDIA_SITE="${PYTHON_PREFIX}/lib/python3.11/site-packages/nvidia"
+CUDA_INCLUDE_DIRS=()
+if [ -d "${NVIDIA_SITE}" ]; then
+    while IFS= read -r inc_dir; do
+        CUDA_INCLUDE_DIRS+=("${inc_dir}")
+    done < <(find "${NVIDIA_SITE}" -maxdepth 3 -type d -name include | sort)
+fi
+if [ "${#CUDA_INCLUDE_DIRS[@]}" -gt 0 ]; then
+    CUDA_INCLUDE_PATH="$(IFS=:; echo "${CUDA_INCLUDE_DIRS[*]}")"
+    export CPATH="${CUDA_INCLUDE_PATH}${CPATH:+:${CPATH}}"
+fi
+CUDA_LIBRARY_DIRS=()
+for lib_dir in \
+    "${PYTHON_PREFIX}/lib" \
+    "${PYTHON_PREFIX}/targets/x86_64-linux/lib" \
+    "${PYTHON_PREFIX}/targets/x86_64-linux/lib/stubs"
+do
+    if [ -d "${lib_dir}" ]; then
+        CUDA_LIBRARY_DIRS+=("${lib_dir}")
+    fi
+done
+if [ "${#CUDA_LIBRARY_DIRS[@]}" -gt 0 ]; then
+    CUDA_LIBRARY_PATH="$(IFS=:; echo "${CUDA_LIBRARY_DIRS[*]}")"
+    export LIBRARY_PATH="${CUDA_LIBRARY_PATH}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+    export LD_LIBRARY_PATH="${CUDA_LIBRARY_PATH}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
 
 # ── Parse args ─────────────────────────────────────────────────────
 MODEL=""
@@ -40,6 +81,7 @@ DOMAIN="all"
 SUITE="configs/live_mcp/suite_mvp.yaml"
 SEED=42
 OUTPUT_DIR="${OUTPUT_DIR:-data}"
+GEN_OVERSAMPLE_PCT="${GEN_OVERSAMPLE_PCT:-20}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -78,6 +120,7 @@ echo "============================================"
 echo "Model:    ${MODEL}"
 echo "GPUs:     ${GPU_COUNT}x ${GPU_MODEL} (${GPU_MEM_GB}GB)"
 echo "Target:   ${COUNT} train + ${VAL_COUNT} val"
+echo "Oversample candidates: +${GEN_OVERSAMPLE_PCT}% before quality merge"
 echo "Domain:   ${DOMAIN}"
 echo "Output:   ${OUTPUT_DIR}/"
 echo "============================================"
@@ -129,6 +172,14 @@ print('1' if fits else '0')
 
 # ── Cleanup trap ────────────────────────────────────────────────────
 VLLM_PIDS=()
+VLLM_PORTS=()
+_pids_listening_on_port() {
+    local port="$1"
+    ss -ltnp "sport = :${port}" 2>/dev/null \
+        | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' \
+        | sort -u
+}
+
 _cleanup() {
     local exit_code=$?
     echo "[cleanup] stopping..." >&2
@@ -137,11 +188,27 @@ _cleanup() {
             kill -TERM "$pid" 2>/dev/null || true
         fi
     done
+    for port in "${VLLM_PORTS[@]}"; do
+        for pid in $(_pids_listening_on_port "${port}"); do
+            if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+                echo "[cleanup] stopping listener on port ${port}: pid=${pid}" >&2
+                kill -TERM "$pid" 2>/dev/null || true
+            fi
+        done
+    done
     sleep 2
     for pid in "${VLLM_PIDS[@]}"; do
         if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
             kill -KILL "$pid" 2>/dev/null || true
         fi
+    done
+    for port in "${VLLM_PORTS[@]}"; do
+        for pid in $(_pids_listening_on_port "${port}"); do
+            if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+                echo "[cleanup] force-stopping listener on port ${port}: pid=${pid}" >&2
+                kill -KILL "$pid" 2>/dev/null || true
+            fi
+        done
     done
     exit $exit_code
 }
@@ -149,7 +216,8 @@ trap _cleanup EXIT INT TERM
 
 # ── Environment ────────────────────────────────────────────────────
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
-export VLLM_USE_FLASHINFER_SAMPLER=0
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-1}"
+export FLASHINFER_WORKSPACE_BASE="${FLASHINFER_WORKSPACE_BASE:-/mnt/data2/liuzhanyi}"
 export NVCC_APPEND_FLAGS=-allow-unsupported-compiler
 
 # ═══════════════════════════════════════════════════════════════════
@@ -159,8 +227,10 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
     echo ""
     echo "Strategy: LOCAL — ${GPU_COUNT} parallel processes, 1 per GPU"
 
-    PER_GPU_TRAIN=$(( (COUNT + GPU_COUNT - 1) / GPU_COUNT ))
-    PER_GPU_VAL=$(( (VAL_COUNT + GPU_COUNT - 1) / GPU_COUNT ))
+    GEN_COUNT=$(( (COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
+    GEN_VAL_COUNT=$(( (VAL_COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
+    PER_GPU_TRAIN=$(( (GEN_COUNT + GPU_COUNT - 1) / GPU_COUNT ))
+    PER_GPU_VAL=$(( (GEN_VAL_COUNT + GPU_COUNT - 1) / GPU_COUNT ))
     TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
     mkdir -p "${TMPDIR_SHARD}"
 
@@ -197,70 +267,29 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
         exit 1
     fi
 
-    # Merge with global semantic dedup and integrity audit.
-    "${PYTHON_BIN}" -c "
-import pandas as pd, json, sys, hashlib
-from pathlib import Path
-
-def _row_fingerprint(row):
-    ei = row['extra_info']
-    if isinstance(ei, str): ei = json.loads(ei)
-    domain = ei.get('domain', '')
-    query = ' '.join((ei.get('user_query', '') or '').lower().split())
-    oc = ei.get('oracle_calls', [])
-    if isinstance(oc, str): oc = json.loads(oc)
-    sig = json.dumps({'d': domain, 'q': query, 'c': oc}, sort_keys=True, ensure_ascii=False, default=str)
-    return hashlib.sha256(sig.encode()).hexdigest()
-
-def merge(pattern, outpath, target):
-    dfs = [pd.read_parquet(p) for p in sorted(Path('${TMPDIR_SHARD}').glob(pattern))]
-    if not dfs: print(f'WARNING: no {pattern} data!'); return False
-    merged = pd.concat(dfs, ignore_index=True)
-    # P1-5: global semantic dedup across shards.
-    before = len(merged)
-    seen = set()
-    keep = []
-    for _, row in merged.iterrows():
-        fp = _row_fingerprint(row)
-        if fp not in seen:
-            seen.add(fp)
-            keep.append(row.to_dict())
-    merged = pd.DataFrame(keep)
-    dropped = before - len(merged)
-    if dropped:
-        print(f'  dedup: dropped {dropped} cross-shard duplicates, {len(merged)} remaining')
-    if target is not None and target > 0 and len(merged) > target:
-        merged = merged.head(target).reset_index(drop=True)
-    merged.to_parquet(outpath, index=False)
-    print(f'  {outpath}: {len(merged)} rows (target={target})')
-    if target is not None and target > 0 and len(merged) < target:
-        print(f'  FATAL: {outpath} has {len(merged)} rows, below target {target}')
-        return False, merged
-    return True, merged
-
-ok1, train_df = merge('shard_*_train.parquet', '${OUTPUT_DIR}/train.parquet', ${COUNT})
-ok2, val_df = merge('shard_*_val.parquet', '${OUTPUT_DIR}/val.parquet', ${VAL_COUNT})
-if not (ok1 and ok2): sys.exit(1)
-# P1-5: cross-dataset semantic-fingerprint integrity check.
-train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
-val_fps = {_row_fingerprint(row) for _, row in val_df.iterrows()}
-fp_overlap = train_fps & val_fps
-if fp_overlap:
-    print(f'  FATAL: {len(fp_overlap)} semantic fingerprint overlaps between train and val!')
-    sys.exit(1)
-# Also check task_id overlap.
-train_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in train_df.iterrows()}
-val_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in val_df.iterrows()}
-tid_overlap = train_ids & val_ids
-if tid_overlap: print(f'WARNING: {len(tid_overlap)} train/val task_id overlaps!')
-print(f'  merge ok: {len(train_df)} train + {len(val_df)} val, fp_overlap={len(fp_overlap)}, tid_overlap={len(tid_overlap)}')
-"
+    "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
+        --tmpdir "${TMPDIR_SHARD}" \
+        --output-dir "${OUTPUT_DIR}" \
+        --count "${COUNT}" \
+        --val-count "${VAL_COUNT}"
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 
 # ═════════════════════════════════════════════════════════════════
 # MODE 2: vLLM API — TP across multiple GPUs
 # ═════════════════════════════════════════════════════════════════
 else
+    EXPECTED_VLLM_VERSION="${EXPECTED_VLLM_VERSION:-0.11.0}"
+    VLLM_VERSION=$("${PYTHON_BIN}" -c "import vllm; print(vllm.__version__)" 2>/dev/null || true)
+    if [ -z "${VLLM_VERSION}" ]; then
+        echo "ERROR: vLLM is not importable from ${PYTHON_BIN}" >&2
+        exit 1
+    fi
+    if [ "${VLLM_VERSION}" != "${EXPECTED_VLLM_VERSION}" ]; then
+        echo "ERROR: vLLM version mismatch: expected ${EXPECTED_VLLM_VERSION}, got ${VLLM_VERSION} from ${PYTHON_BIN}" >&2
+        echo "       Fix the environment first, or set EXPECTED_VLLM_VERSION=${VLLM_VERSION} only for a deliberate compatibility run." >&2
+        exit 1
+    fi
+
     # Calculate optimal TP and number of vLLM instances.
     # vLLM requires TP to divide num_attention_heads evenly
     TP_SIZE=$("${PYTHON_BIN}" -c "
@@ -301,15 +330,22 @@ print(tp)
 
     PORT_START="${VLLM_PORT_START:-8001}"
     VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.82}"
-    VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-12288}"
-    VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-4}"
+    VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-8192}"
+    VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-32}"
+    VLLM_MAX_NUM_BATCHED_TOKENS="${VLLM_MAX_NUM_BATCHED_TOKENS:-16384}"
+    VLLM_CLIENTS_PER_INSTANCE="${VLLM_CLIENTS_PER_INSTANCE:-8}"
+    VLLM_ENFORCE_EAGER="${VLLM_ENFORCE_EAGER:-0}"
 
     echo ""
     echo "Strategy: vLLM API — TP=${TP_SIZE}, ${NUM_INSTANCES} instance(s)"
-    echo "vLLM: gpu_memory_utilization=${VLLM_GPU_MEMORY_UTILIZATION}, max_model_len=${VLLM_MAX_MODEL_LEN}, max_num_seqs=${VLLM_MAX_NUM_SEQS}"
+    echo "vLLM: version=${VLLM_VERSION}, gpu_memory_utilization=${VLLM_GPU_MEMORY_UTILIZATION}, max_model_len=${VLLM_MAX_MODEL_LEN}, max_num_seqs=${VLLM_MAX_NUM_SEQS}, max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS}"
+    echo "Clients: ${VLLM_CLIENTS_PER_INSTANCE} generation process(es) per vLLM instance"
 
-    PER_INSTANCE_TRAIN=$(( (COUNT + NUM_INSTANCES - 1) / NUM_INSTANCES ))
-    PER_INSTANCE_VAL=$(( (VAL_COUNT + NUM_INSTANCES - 1) / NUM_INSTANCES ))
+    TOTAL_GEN_CLIENTS=$(( NUM_INSTANCES * VLLM_CLIENTS_PER_INSTANCE ))
+    GEN_COUNT=$(( (COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
+    GEN_VAL_COUNT=$(( (VAL_COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
+    PER_CLIENT_TRAIN=$(( (GEN_COUNT + TOTAL_GEN_CLIENTS - 1) / TOTAL_GEN_CLIENTS ))
+    PER_CLIENT_VAL=$(( (GEN_VAL_COUNT + TOTAL_GEN_CLIENTS - 1) / TOTAL_GEN_CLIENTS ))
     TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
     mkdir -p "${TMPDIR_SHARD}"
 
@@ -320,6 +356,7 @@ print(tp)
         GPU_SLICE=("${GPU_INDEX_ARRAY[@]:$GPU_START:$TP_SIZE}")
         GPU_LIST=$(IFS=','; echo "${GPU_SLICE[*]}")
         PORT=$(( PORT_START + inst ))
+        VLLM_PORTS+=("${PORT}")
         LOG="${OUTPUT_DIR}/vllm_instance${inst}_$(date +%H%M).log"
 
         # Derive served model name from directory name:
@@ -332,16 +369,24 @@ print(tp)
 
         echo "  Starting vLLM instance ${inst} on GPUs ${GPU_LIST}, port ${PORT}"
 
-        CUDA_VISIBLE_DEVICES="${GPU_LIST}" "${PYTHON_BIN}" -m vllm.entrypoints.openai.api_server \
+        VLLM_ARGS=(
+            -m vllm.entrypoints.openai.api_server
             --model "${MODEL}" \
             --served-model-name "${SERVED_MODEL}" \
             --tensor-parallel-size "${TP_SIZE}" \
             --gpu-memory-utilization "${VLLM_GPU_MEMORY_UTILIZATION}" \
             --max-model-len "${VLLM_MAX_MODEL_LEN}" \
             --max-num-seqs "${VLLM_MAX_NUM_SEQS}" \
+            --max-num-batched-tokens "${VLLM_MAX_NUM_BATCHED_TOKENS}" \
+            --generation-config vllm \
             --port "${PORT}" \
-            --trust-remote-code \
-            > "${LOG}" 2>&1 &
+            --trust-remote-code
+        )
+        if [ "${VLLM_ENFORCE_EAGER}" = "1" ]; then
+            VLLM_ARGS+=(--enforce-eager)
+        fi
+
+        CUDA_VISIBLE_DEVICES="${GPU_LIST}" "${PYTHON_BIN}" "${VLLM_ARGS[@]}" > "${LOG}" 2>&1 &
         VLLM_PIDS+=($!)
     done
 
@@ -385,92 +430,45 @@ print(tp)
     GEN_PIDS=()
     for ((inst=0; inst<NUM_INSTANCES; inst++)); do
         PORT=$(( PORT_START + inst ))
-        SHARD_SEED=$((SEED + inst * 20000))
+        for ((client=0; client<VLLM_CLIENTS_PER_INSTANCE; client++)); do
+            CLIENT_ID=$(( inst * VLLM_CLIENTS_PER_INSTANCE + client ))
+            SHARD_SEED=$((SEED + CLIENT_ID * 20000))
 
-        echo "  Instance ${inst}: train=${PER_INSTANCE_TRAIN}, val=${PER_INSTANCE_VAL}, seed=${SHARD_SEED}"
+            echo "  Instance ${inst}/client ${client}: train=${PER_CLIENT_TRAIN}, val=${PER_CLIENT_VAL}, seed=${SHARD_SEED}"
 
-        "${PYTHON_BIN}" scripts/generate_data.py \
-            --count "${PER_INSTANCE_TRAIN}" \
-            --val-count "${PER_INSTANCE_VAL}" \
-            --seed "${SHARD_SEED}" \
-            --domain "${DOMAIN}" \
-            --model "${SERVED_MODEL}" \
-            --api-base "http://localhost:${PORT}/v1" \
-            --suite "${SUITE}" \
-            --output "${TMPDIR_SHARD}/shard_${inst}_train.parquet" \
-            --val-output "${TMPDIR_SHARD}/shard_${inst}_val.parquet" \
-            --log-file "${TMPDIR_SHARD}/shard_${inst}.log" \
-            > "${TMPDIR_SHARD}/shard_${inst}.stdout" 2>&1 &
-        GEN_PIDS+=($!)
+            "${PYTHON_BIN}" scripts/generate_data.py \
+                --count "${PER_CLIENT_TRAIN}" \
+                --val-count "${PER_CLIENT_VAL}" \
+                --seed "${SHARD_SEED}" \
+                --domain "${DOMAIN}" \
+                --model "${SERVED_MODEL}" \
+                --api-base "http://localhost:${PORT}/v1" \
+                --suite "${SUITE}" \
+                --output "${TMPDIR_SHARD}/shard_${inst}_${client}_train.parquet" \
+                --val-output "${TMPDIR_SHARD}/shard_${inst}_${client}_val.parquet" \
+                --log-file "${TMPDIR_SHARD}/shard_${inst}_${client}.log" \
+                > "${TMPDIR_SHARD}/shard_${inst}_${client}.stdout" 2>&1 &
+            GEN_PIDS+=($!)
+        done
     done
 
     echo ""
-    echo "Waiting for ${NUM_INSTANCES} generation processes..."
+    echo "Waiting for ${TOTAL_GEN_CLIENTS} generation processes..."
     FAILED=0
     for i in "${!GEN_PIDS[@]}"; do
         wait "${GEN_PIDS[$i]}" || { echo "  [Instance $i] FAILED" >&2; FAILED=$((FAILED + 1)); }
     done
 
     if [ "$FAILED" -gt 0 ]; then
-        echo "ERROR: ${FAILED}/${NUM_INSTANCES} generation processes failed" >&2
+        echo "ERROR: ${FAILED}/${TOTAL_GEN_CLIENTS} generation processes failed" >&2
         exit 1
     fi
 
-    # Merge with global semantic dedup and integrity audit.
-"${PYTHON_BIN}" -c "
-import pandas as pd, json, sys, hashlib
-from pathlib import Path
-
-def _row_fingerprint(row):
-    ei = row['extra_info']
-    if isinstance(ei, str): ei = json.loads(ei)
-    domain = ei.get('domain', '')
-    query = ' '.join((ei.get('user_query', '') or '').lower().split())
-    oc = ei.get('oracle_calls', [])
-    if isinstance(oc, str): oc = json.loads(oc)
-    sig = json.dumps({'d': domain, 'q': query, 'c': oc}, sort_keys=True, ensure_ascii=False, default=str)
-    return hashlib.sha256(sig.encode()).hexdigest()
-
-def merge(pattern, outpath, target):
-    dfs = [pd.read_parquet(p) for p in sorted(Path('${TMPDIR_SHARD}').glob(pattern))]
-    if not dfs: print(f'WARNING: no {pattern} data!'); return False
-    merged = pd.concat(dfs, ignore_index=True)
-    before = len(merged)
-    seen = set()
-    keep = []
-    for _, row in merged.iterrows():
-        fp = _row_fingerprint(row)
-        if fp not in seen:
-            seen.add(fp)
-            keep.append(row.to_dict())
-    merged = pd.DataFrame(keep)
-    dropped = before - len(merged)
-    if dropped:
-        print(f'  dedup: dropped {dropped} cross-shard duplicates, {len(merged)} remaining')
-    if target is not None and target > 0 and len(merged) > target:
-        merged = merged.head(target).reset_index(drop=True)
-    merged.to_parquet(outpath, index=False)
-    print(f'  {outpath}: {len(merged)} rows (target={target})')
-    if target is not None and target > 0 and len(merged) < target:
-        print(f'  FATAL: {outpath} has {len(merged)} rows, below target {target}')
-        return False, merged
-    return True, merged
-
-ok1, train_df = merge('shard_*_train.parquet', '${OUTPUT_DIR}/train.parquet', ${COUNT})
-ok2, val_df = merge('shard_*_val.parquet', '${OUTPUT_DIR}/val.parquet', ${VAL_COUNT})
-if not (ok1 and ok2): sys.exit(1)
-train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
-val_fps = {_row_fingerprint(row) for _, row in val_df.iterrows()}
-fp_overlap = train_fps & val_fps
-if fp_overlap:
-    print(f'  FATAL: {len(fp_overlap)} semantic fingerprint overlaps between train and val!')
-    sys.exit(1)
-train_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in train_df.iterrows()}
-val_ids = {r['extra_info'].get('task_id','') if isinstance(r['extra_info'],dict) else json.loads(r['extra_info']).get('task_id','') for _, r in val_df.iterrows()}
-tid_overlap = train_ids & val_ids
-if tid_overlap: print(f'WARNING: {len(tid_overlap)} train/val task_id overlaps!')
-print(f'  merge ok: {len(train_df)} train + {len(val_df)} val, fp_overlap={len(fp_overlap)}, tid_overlap={len(tid_overlap)}')
-"
+    "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
+        --tmpdir "${TMPDIR_SHARD}" \
+        --output-dir "${OUTPUT_DIR}" \
+        --count "${COUNT}" \
+        --val-count "${VAL_COUNT}"
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 fi
 

@@ -25,6 +25,9 @@ class TeamChatServer(StatefulToolServer):
         super().__init__("team_chat", TOOLS)
         self.handlers = {t["name"]: getattr(self, t["name"]) for t in TOOLS}
 
+    def _known_members(self, state: dict[str, Any]) -> set[str]:
+        return {m for ch in state["channels"].values() for m in ch["members"]} | {"current_user"}
+
     def list_channels(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); show_archived = arguments.get("archived", False)
         channels = [{"channel_id": c["channel_id"], "name": c["name"], "member_count": len(c["members"]), "archived": c.get("archived", False), "description": c.get("description", "")} for c in state["channels"].values() if show_archived or not c.get("archived")]
@@ -33,17 +36,27 @@ class TeamChatServer(StatefulToolServer):
     def create_channel(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
         # Use incrementing counter + name hash for unique IDs, avoiding case/whitespace collisions
-        base = arguments['name'].replace(' ', '_').lower()
+        name = arguments["name"].strip()
+        if not name: raise KeyError("channel name must be non-empty")
+        if any(ch["name"].lower() == name.lower() for ch in state["channels"].values()):
+            raise KeyError(f"channel already exists: {name}")
+        members = list(arguments.get("members", ["current_user"]))
+        known_members = self._known_members(state)
+        missing = [m for m in members if m not in known_members]
+        if missing: raise KeyError(f"unknown member(s): {', '.join(missing)}")
+        base = name.replace(' ', '_').lower()
         cid = f"ch_{state['next_ch_num']:03d}_{base}"
         state["next_ch_num"] += 1
         if cid in state["channels"]: raise KeyError(f"channel already exists: {cid}")
-        ch = {"channel_id": cid, "name": arguments["name"], "members": arguments.get("members", ["current_user"]), "description": arguments.get("description", ""), "archived": False, "messages": []}
+        ch = {"channel_id": cid, "name": name, "members": members, "description": arguments.get("description", ""), "archived": False, "messages": []}
         state["channels"][cid] = ch
         return _result(True, {"channel": ch}, None, "", True)
 
     def archive_channel(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); cid = arguments["channel_id"]
         if cid not in state["channels"]: raise KeyError(f"channel not found: {cid}")
+        if state["channels"][cid].get("archived"):
+            return _result(True, {"channel_id": cid, "archived": True}, None, "", False)
         state["channels"][cid]["archived"] = True
         return _result(True, {"channel_id": cid, "archived": True}, None, "", True)
 
@@ -57,17 +70,22 @@ class TeamChatServer(StatefulToolServer):
         state = self._state(session_id); cid = arguments["channel_id"]
         if cid not in state["channels"]: raise KeyError(f"channel not found: {cid}")
         if state["channels"][cid].get("archived"): raise KeyError("channel is archived")
+        if not arguments["content"].strip(): raise KeyError("content must be non-empty")
         tid = arguments.get("thread_id")
         if tid and tid not in state["threads"]: raise KeyError(f"thread not found: {tid}")
+        if tid and state["threads"][tid].get("channel_id") != cid: raise KeyError(f"thread not in channel: {tid}")
         mid = f"msg_{state['next_msg_num']:04d}"; state["next_msg_num"] += 1
         msg = {"message_id": mid, "channel_id": cid, "content": arguments["content"], "author": "current_user", "thread_id": tid, "reactions": [], "timestamp": "2026-06-24T21:40:00"}
         state["channels"][cid]["messages"].append(msg)
+        if tid:
+            state["threads"][tid].setdefault("messages", []).append(msg)
         return _result(True, {"message": msg}, None, "", True)
 
     def send_dm(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); recipient = arguments["recipient"]
-        members = {m for ch in state["channels"].values() for m in ch["members"]}
+        members = self._known_members(state)
         if recipient not in members: raise KeyError(f"user not found: {recipient}")
+        if not arguments["content"].strip(): raise KeyError("content must be non-empty")
         did = f"dm_{state['next_msg_num']:04d}"; state["next_msg_num"] += 1
         dm = {"dm_id": did, "sender": "current_user", "recipient": recipient, "content": arguments["content"], "timestamp": "2026-06-24T21:40:00"}
         state.setdefault("dms", []).append(dm)
@@ -92,9 +110,12 @@ class TeamChatServer(StatefulToolServer):
     def react_message(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); mid, cid, reaction = arguments["message_id"], arguments["channel_id"], arguments["reaction"]
         if cid not in state["channels"]: raise KeyError(f"channel not found: {cid}")
+        if not reaction.strip(): raise KeyError("reaction must be non-empty")
         msg = next((m for m in state["channels"][cid]["messages"] if m["message_id"] == mid), None)
         if not msg: raise KeyError(f"message not found: {mid}")
-        if reaction not in msg["reactions"]: msg["reactions"].append(reaction)
+        if reaction in msg["reactions"]:
+            return _result(True, {"message_id": mid, "reactions": msg["reactions"]}, None, "", False)
+        msg["reactions"].append(reaction)
         return _result(True, {"message_id": mid, "reactions": msg["reactions"]}, None, "", True)
 
     def search_messages(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

@@ -89,6 +89,15 @@ class FilesystemServer(StatefulToolServer):
     def _children(self, state, path: str) -> list[str]:
         prefix = path + "/" if path != "/" else "/"; return [p for p in state["fs"] if p.startswith(prefix) and "/" not in p[len(prefix):]]
 
+    def _is_protected(self, path: str) -> bool:
+        return path == "/protected" or path.startswith(self._protected_prefix)
+
+    def _ensure_parent_dir(self, state: dict[str, Any], path: str) -> str:
+        parent = self._parent(path)
+        if parent not in state["fs"] or state["fs"][parent]["type"] != "dir":
+            raise KeyError(f"parent not found: {parent}")
+        return parent
+
     # Navigation
     def ls(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); path = self._resolve(session_id, str(arguments.get("path", ".")))
@@ -116,11 +125,13 @@ class FilesystemServer(StatefulToolServer):
     def head(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         node = self._node(session_id, arguments["path"]); n = int(arguments.get("lines", 10))
         if node["type"] != "file": raise KeyError("not a file")
+        if n <= 0: raise KeyError("lines must be positive")
         lines = node.get("content", "").split("\n"); return _result(True, {"lines": lines[:n], "count": min(n, len(lines))}, None, "", False)
 
     def tail(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         node = self._node(session_id, arguments["path"]); n = int(arguments.get("lines", 10))
         if node["type"] != "file": raise KeyError("not a file")
+        if n <= 0: raise KeyError("lines must be positive")
         lines = node.get("content", "").split("\n"); return _result(True, {"lines": lines[-n:], "count": min(n, len(lines))}, None, "", False)
 
     def wc(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -174,44 +185,65 @@ class FilesystemServer(StatefulToolServer):
     # Create
     def mkdir(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); path = self._resolve(session_id, arguments["path"])
+        if self._is_protected(path): raise KeyError("cannot create protected paths")
         if path in state["fs"]: raise KeyError(f"already exists: {path}")
         parent = self._parent(path)
         if parent != "/" and parent not in state["fs"]:
             if arguments.get("parents"): self.mkdir(session_id, {"path": parent, "parents": True})
             else: raise KeyError(f"parent not found: {parent}")
+        self._ensure_parent_dir(state, path)
         state["fs"][path] = {"type": "dir", "content": "", "permissions": "755", "owner": "user"}
         return _result(True, {"path": path, "type": "dir"}, None, "", True)
 
     def touch(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); path = self._resolve(session_id, arguments["path"])
-        parent = self._parent(path)
-        if parent != "/" and parent not in state["fs"]: raise KeyError(f"parent not found: {parent}")
+        if self._is_protected(path): raise KeyError("cannot create protected paths")
+        self._ensure_parent_dir(state, path)
         if path in state["fs"]: return _result(True, {"path": path, "exists": True}, None, "", False)
         state["fs"][path] = {"type": "file", "content": "", "permissions": "644", "owner": "user"}
         return _result(True, {"path": path, "created": True}, None, "", True)
 
     def mv(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); src = self._resolve(session_id, arguments["source"]); dst = self._resolve(session_id, arguments["target"])
-        # Check protected path on both source and destination
-        if self._protected_prefix in src:
+        if self._is_protected(src):
             raise KeyError("cannot move protected paths")
-        if self._protected_prefix in dst:
+        if self._is_protected(dst):
             raise KeyError("cannot move into protected paths")
-        node = state["fs"].pop(src, None)
+        node = state["fs"].get(src)
         if not node: raise KeyError(f"source not found: {src}")
-        state["fs"][dst] = node
-        # Move all children if source was a directory
+        if src == "/" or dst == "/" or dst == src or dst.startswith(src + "/"):
+            raise KeyError("cannot move a directory into itself")
+        self._ensure_parent_dir(state, dst)
+        if dst in state["fs"]:
+            raise KeyError(f"target already exists: {dst}")
+        descendants = []
         if node["type"] == "dir":
-            for child in list(self._children(state, src)):
-                child_dst = dst + child[len(src):]
-                child_node = state["fs"].pop(child, None)
-                if child_node: state["fs"][child_dst] = child_node
+            descendants = sorted(
+                [p for p in state["fs"] if p.startswith(src + "/")],
+                key=len,
+            )
+        moved = [(src, dst, state["fs"].pop(src))]
+        for child in descendants:
+            moved.append((child, dst + child[len(src):], state["fs"].pop(child)))
+        for _old, new, child_node in moved:
+            state["fs"][new] = child_node
         return _result(True, {"source": src, "target": dst}, None, "", True)
 
     def cp(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); src = self._resolve(session_id, arguments["source"]); dst = self._resolve(session_id, arguments["target"])
         node = state["fs"].get(src)
         if not node: raise KeyError(f"source not found: {src}")
+        if self._is_protected(src):
+            raise KeyError("cannot copy protected paths")
+        if self._is_protected(dst):
+            raise KeyError("cannot copy into protected paths")
+        self._ensure_parent_dir(state, dst)
+        if dst in state["fs"]:
+            raise KeyError(f"target already exists: {dst}")
+        if node["type"] == "dir" and (dst == src or dst.startswith(src + "/")):
+            raise KeyError("cannot copy a directory into itself")
+        if node["type"] == "dir" and not arguments.get("recursive"):
+            raise KeyError("omitting directory; use recursive")
         state["fs"][dst] = copy.deepcopy(node)
         # Recursively copy children if dir
         if node["type"] == "dir" and arguments.get("recursive"):
@@ -224,7 +256,8 @@ class FilesystemServer(StatefulToolServer):
         state = self._state(session_id); path = self._resolve(session_id, arguments["path"])
         node = state["fs"].get(path)
         if not node: raise KeyError(f"path not found: {path}")
-        if self._protected_prefix in path: raise KeyError("cannot delete protected paths")
+        if self._is_protected(path): raise KeyError("cannot delete protected paths")
+        if path == "/": raise KeyError("cannot delete root")
         if node["type"] == "dir":
             kids = list(self._children(state, path))
             if kids and not arguments.get("recursive"): raise KeyError(f"directory not empty: {path}")
@@ -243,19 +276,25 @@ class FilesystemServer(StatefulToolServer):
 
     # Permissions
     def chmod(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        node = self._node(session_id, arguments["path"]); old = node.get("permissions", "")
+        path = self._resolve(session_id, arguments["path"])
+        if self._is_protected(path): raise KeyError("cannot chmod protected paths")
+        node = self._node(session_id, path); old = node.get("permissions", "")
         node["permissions"] = arguments["mode"]
-        return _result(True, {"path": self._resolve(session_id, arguments["path"]), "old_mode": old, "new_mode": arguments["mode"]}, None, "", True)
+        return _result(True, {"path": path, "old_mode": old, "new_mode": arguments["mode"]}, None, "", old != arguments["mode"])
 
     def chown(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        node = self._node(session_id, arguments["path"]); old = node.get("owner", "")
+        path = self._resolve(session_id, arguments["path"])
+        if self._is_protected(path): raise KeyError("cannot chown protected paths")
+        node = self._node(session_id, path); old = node.get("owner", "")
         if arguments["owner"] != "root" and old == "root": raise KeyError("cannot transfer ownership from root")
         node["owner"] = arguments["owner"]
-        return _result(True, {"path": self._resolve(session_id, arguments["path"]), "old_owner": old, "new_owner": arguments["owner"]}, None, "", True)
+        return _result(True, {"path": path, "old_owner": old, "new_owner": arguments["owner"]}, None, "", old != arguments["owner"])
 
     def umask(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
-        if arguments.get("mask"): state["umask"] = arguments["mask"]; return _result(True, {"umask": arguments["mask"]}, None, "", True)
+        if arguments.get("mask"):
+            old = state.get("umask", "022"); state["umask"] = arguments["mask"]
+            return _result(True, {"umask": arguments["mask"]}, None, "", old != arguments["mask"])
         return _result(True, {"umask": state.get("umask", "022")}, None, "", False)
 
     # Disk usage
@@ -271,6 +310,10 @@ class FilesystemServer(StatefulToolServer):
     # Links
     def symlink(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); target = arguments["target"]; link = self._resolve(session_id, arguments["link_path"])
+        target_path = self._resolve(session_id, target)
+        if self._is_protected(link): raise KeyError("cannot create symlink in protected paths")
+        if self._is_protected(target_path): raise KeyError("cannot link to protected paths")
+        self._ensure_parent_dir(state, link)
         if link in state["fs"]: raise KeyError(f"already exists: {link}")
         state["fs"][link] = {"type": "symlink", "target": target, "permissions": "777", "owner": "user"}
         return _result(True, {"link_path": link, "target": target}, None, "", True)
@@ -283,9 +326,12 @@ class FilesystemServer(StatefulToolServer):
     # Archives (simulated)
     def tar_create(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); archive = self._resolve(session_id, arguments["archive"]); paths = arguments["paths"]
+        if self._is_protected(archive): raise KeyError("cannot create archive in protected paths")
+        self._ensure_parent_dir(state, archive)
         content_parts = []
         for p in paths:
             rp = self._resolve(session_id, p); node = state["fs"].get(rp)
+            if self._is_protected(rp): raise KeyError("cannot archive protected paths")
             if node: content_parts.append(f"[{rp}] {node.get('content', '')[:200]}")
         state["fs"][archive] = {"type": "file", "content": "\n---\n".join(content_parts), "permissions": "644", "owner": "user"}
         return _result(True, {"archive": archive, "files_count": len(paths)}, None, "", True)
@@ -293,7 +339,9 @@ class FilesystemServer(StatefulToolServer):
     def tar_extract(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); archive = self._resolve(session_id, arguments["archive"])
         if archive not in state["fs"]: raise KeyError(f"archive not found: {archive}")
-        return _result(True, {"archive": archive, "extracted_to": arguments.get("target_dir", "."), "message": "extraction simulated"}, None, "", True)
+        target_dir = self._resolve(session_id, arguments.get("target_dir", "."))
+        if self._is_protected(target_dir): raise KeyError("cannot extract into protected paths")
+        return _result(True, {"archive": archive, "extracted_to": target_dir, "message": "extraction simulated"}, None, "", False)
 
     def zip(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return self.tar_create(session_id, arguments)
@@ -304,6 +352,7 @@ class FilesystemServer(StatefulToolServer):
     # Text processing
     def diff(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         n1 = self._node(session_id, arguments["file1"]); n2 = self._node(session_id, arguments["file2"])
+        if n1["type"] != "file" or n2["type"] != "file": raise KeyError("both arguments must be files")
         c1 = n1.get("content", "").split("\n"); c2 = n2.get("content", "").split("\n")
         diffs = []
         for i, (l1, l2) in enumerate(zip(c1, c2)):
@@ -418,16 +467,22 @@ class FilesystemServer(StatefulToolServer):
 
     # Utilities
     def truncate(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        node = self._node(session_id, arguments["path"]); size = int(arguments["size"])
+        path = self._resolve(session_id, arguments["path"])
+        if self._is_protected(path): raise KeyError("cannot truncate protected paths")
+        node = self._node(session_id, path); size = int(arguments["size"])
         if node["type"] != "file": raise KeyError("not a file")
+        if size < 0: raise KeyError("size must be non-negative")
         content = node.get("content", "")
         if size < len(content): node["content"] = content[:size]
         else: node["content"] = content + " " * (size - len(content))
-        return _result(True, {"path": self._resolve(session_id, arguments["path"]), "new_size": len(node["content"])}, None, "", True)
+        return _result(True, {"path": path, "new_size": len(node["content"])}, None, "", len(content) != len(node["content"]))
 
     def split(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); path = self._resolve(session_id, arguments["path"]); lines_per = int(arguments.get("lines_per_file", 100))
+        if self._is_protected(path): raise KeyError("cannot split protected paths")
+        if lines_per <= 0: raise KeyError("lines_per_file must be positive")
         node = self._node(session_id, path); lines = node.get("content", "").split("\n"); created = []
+        if node["type"] != "file": raise KeyError("not a file")
         for i in range(0, len(lines), lines_per):
             chunk_path = f"{path}.part{i // lines_per + 1:02d}"
             state["fs"][chunk_path] = {"type": "file", "content": "\n".join(lines[i:i + lines_per]), "permissions": "644", "owner": "user"}

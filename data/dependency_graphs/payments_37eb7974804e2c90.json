@@ -14,20 +14,39 @@
     "refund_invoice"
   ],
   "graph": {
+    "cancel_payment": {
+      "explicit": [],
+      "implicit": []
+    },
     "create_invoice": {
       "explicit": [
-        "get_invoice",
         "pay_invoice",
-        "dispute_invoice"
+        "refund_invoice"
       ],
       "implicit": [
-        "refund_invoice"
+        "get_invoice",
+        "dispute_invoice"
       ]
+    },
+    "create_webhook": {
+      "explicit": [],
+      "implicit": [
+        "delete_webhook"
+      ]
+    },
+    "delete_webhook": {
+      "explicit": [],
+      "implicit": []
+    },
+    "dispute_invoice": {
+      "explicit": [],
+      "implicit": []
     },
     "get_invoice": {
       "explicit": [
         "pay_invoice",
         "refund_invoice",
+        "cancel_payment",
         "dispute_invoice"
       ],
       "implicit": []
@@ -36,31 +55,9 @@
       "explicit": [
         "pay_invoice",
         "refund_invoice",
+        "cancel_payment",
+        "get_invoice",
         "dispute_invoice"
-      ],
-      "implicit": []
-    },
-    "pay_invoice": {
-      "explicit": [
-        "refund_invoice"
-      ],
-      "implicit": []
-    },
-    "refund_invoice": {
-      "explicit": [],
-      "implicit": []
-    },
-    "cancel_payment": {
-      "explicit": [],
-      "implicit": []
-    },
-    "dispute_invoice": {
-      "explicit": [],
-      "implicit": []
-    },
-    "create_webhook": {
-      "explicit": [
-        "delete_webhook"
       ],
       "implicit": []
     },
@@ -70,7 +67,15 @@
       ],
       "implicit": []
     },
-    "delete_webhook": {
+    "pay_invoice": {
+      "explicit": [
+        "cancel_payment"
+      ],
+      "implicit": [
+        "refund_invoice"
+      ]
+    },
+    "refund_invoice": {
       "explicit": [],
       "implicit": []
     }

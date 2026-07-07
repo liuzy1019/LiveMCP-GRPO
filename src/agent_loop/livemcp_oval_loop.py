@@ -27,6 +27,7 @@ from loguru import logger
 
 from src.agent_loop.oval_mcp_worker import OvalMCPWorkerContext
 from src.live_mcp.types import ToolCall
+from src.utils import strip_think_tags
 
 try:
     from verl.experimental.agent_loop.agent_loop import (
@@ -63,7 +64,7 @@ except ImportError:
 logger = logger.opt(colors=True)
 
 
-# ── 工具调用解析（与 replay loop 相同） ──
+# ── 工具调用解析 ──
 
 _TOOL_CALL_PATTERN = re.compile(
     r"<tool_call>(.*?)</tool_call>", re.DOTALL
@@ -174,7 +175,10 @@ class LiveMCPOvalLoop(AgentLoopBase):
         )
         self.max_obs_length = 1024
         self.response_length = int(rollout_cfg.response_length)
-        self.apply_chat_template_kwargs = self.config.data.get("apply_chat_template_kwargs", {})
+        self.apply_chat_template_kwargs = dict(
+            self.config.data.get("apply_chat_template_kwargs", {}) or {}
+        )
+        self.apply_chat_template_kwargs.setdefault("enable_thinking", False)
 
         # Oval 配置
         try:
@@ -295,6 +299,30 @@ class LiveMCPOvalLoop(AgentLoopBase):
         else:
             messages = list(raw_prompt)
 
+        prompt_text = json.dumps(messages, ensure_ascii=False, default=str)
+        leak_markers = (
+            "oracle_calls",
+            "success_criteria",
+            "ground_truth",
+            "allowed_terminal_actions",
+            "hidden_tools",
+        )
+        leaked_markers = [marker for marker in leak_markers if marker in prompt_text]
+        if leaked_markers:
+            ctx.close_session(session_id)
+            raise RuntimeError(
+                f"prompt leakage for task={task_id}: supervised field(s) "
+                f"visible in model prompt: {leaked_markers}"
+            )
+        if blocked_tools:
+            leaked_hidden = [tool for tool in blocked_tools if tool and tool in prompt_text]
+            if leaked_hidden:
+                ctx.close_session(session_id)
+                raise RuntimeError(
+                    f"prompt leakage for task={task_id}: hidden tool(s) "
+                    f"visible in model prompt: {leaked_hidden}"
+                )
+
         # 编码初始 prompt
         prompt_ids = await self.loop.run_in_executor(
             None,
@@ -343,7 +371,9 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 if hasattr(output.token_ids, "tolist")
                 else list(output.token_ids)
             )
-            response_text = self.tokenizer.decode(response_ids, skip_special_tokens=True)
+            response_text = strip_think_tags(
+                self.tokenizer.decode(response_ids, skip_special_tokens=True)
+            )
 
             all_response_ids.extend(response_ids)
             all_response_mask.extend([1] * len(response_ids))

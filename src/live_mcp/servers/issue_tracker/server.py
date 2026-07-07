@@ -15,7 +15,7 @@ TOOLS = [
     {"name": "list_issues", "description": "List issues with filters.", "input_schema": {"type": "object", "properties": {"state": {"type": "string"}, "assignee": {"type": "string"}, "priority": {"type": "string"}, "sprint_id": {"type": "string"}, "label": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "update_issue", "description": "Update issue fields (title, description, priority).", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "fields": {"type": "object"}}, "required": ["issue_id", "fields"]}, "annotations": {"mutating": True}},
     {"name": "assign_issue", "description": "Assign issue to a team member.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "assignee": {"type": "string"}}, "required": ["issue_id", "assignee"]}, "annotations": {"mutating": True}},
-    {"name": "transition_issue", "description": "Transition issue to a new workflow state.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "state": {"type": "string"}, "comment": {"type": "string"}}, "required": ["issue_id", "state"]}, "annotations": {"mutating": True}},
+    {"name": "transition_issue", "description": "Transition issue to a new workflow state. Valid states: open, in_progress, in_review, resolved, closed, blocked, cancelled. Transitions: open→in_progress/cancelled, in_progress→in_review/blocked, in_review→resolved/in_progress, resolved→closed/in_progress, blocked→in_progress/cancelled.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "state": {"type": "string", "enum": ["open", "in_progress", "in_review", "resolved", "closed", "blocked", "cancelled"]}, "comment": {"type": "string"}}, "required": ["issue_id", "state"]}, "annotations": {"mutating": True}},
     {"name": "comment_issue", "description": "Add a comment to an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "body": {"type": "string"}}, "required": ["issue_id", "body"]}, "annotations": {"mutating": True}},
     {"name": "add_label", "description": "Add a label to an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "label": {"type": "string"}}, "required": ["issue_id", "label"]}, "annotations": {"mutating": True}},
     {"name": "remove_label", "description": "Remove a label from an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "label": {"type": "string"}}, "required": ["issue_id", "label"]}, "annotations": {"mutating": True}},
@@ -61,20 +61,26 @@ class IssueTrackerServer(StatefulToolServer):
 
     def update_issue(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         issue = self._iss(self._state(session_id), arguments["issue_id"])
+        changed = False
         for k, v in arguments["fields"].items():
-            if k in ("title", "description", "priority"): issue[k] = v
-        return _result(True, {"issue": issue}, None, "", True)
+            if k in ("title", "description", "priority") and issue.get(k) != v:
+                issue[k] = v; changed = True
+        return _result(True, {"issue": issue}, None, "", changed)
 
     def assign_issue(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); issue = self._iss(state, arguments["issue_id"])
-        if arguments["assignee"] not in state["members"]: raise KeyError(f"member not found: {arguments['assignee']}")
+        if arguments["assignee"] not in state["members"]:
+            valid = ", ".join(sorted(state["members"].keys()))
+            raise KeyError(f"member not found: {arguments['assignee']}. Valid members: [{valid}]")
+        if issue.get("assignee") == arguments["assignee"]:
+            return _result(True, {"issue": issue}, None, "", False)
         issue["assignee"] = arguments["assignee"]
         return _result(True, {"issue": issue}, None, "", True)
 
     def transition_issue(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); issue = self._iss(state, arguments["issue_id"]); new_state = arguments["state"]
         old_state = issue["state"]; allowed = TRANSITIONS.get(old_state, [])
-        if new_state not in allowed: raise KeyError(f"invalid transition: {old_state} -> {new_state}")
+        if new_state not in allowed: raise KeyError(f"invalid transition: {old_state} -> {new_state}. Valid: {old_state} -> {allowed}")
         if new_state in ("in_review", "resolved", "closed") and issue["assignee"] is None: raise KeyError("cannot transition unassigned issue")
         issue["state"] = new_state
         if arguments.get("comment"): issue["comments"].append({"author": "system", "body": arguments["comment"]})
@@ -88,26 +94,37 @@ class IssueTrackerServer(StatefulToolServer):
 
     def add_label(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         issue = self._iss(self._state(session_id), arguments["issue_id"]); label = arguments["label"]
-        if label not in issue.setdefault("labels", []): issue["labels"].append(label)
+        if not label.strip(): raise KeyError("label must be non-empty")
+        if label in issue.setdefault("labels", []):
+            return _result(True, {"issue_id": issue["issue_id"], "labels": issue["labels"]}, None, "", False)
+        issue["labels"].append(label)
         return _result(True, {"issue_id": issue["issue_id"], "labels": issue["labels"]}, None, "", True)
 
     def remove_label(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         issue = self._iss(self._state(session_id), arguments["issue_id"]); label = arguments["label"]
+        if label not in issue.get("labels", []):
+            return _result(True, {"issue_id": issue["issue_id"], "labels": issue.get("labels", [])}, None, "", False)
         issue["labels"] = [l for l in issue.get("labels", []) if l != label]
         return _result(True, {"issue_id": issue["issue_id"], "labels": issue["labels"]}, None, "", True)
 
     def add_watcher(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); issue = self._iss(state, arguments["issue_id"]); user = arguments["user"]
         if user not in state["members"]: raise KeyError(f"member not found: {user}")
-        if user not in issue.setdefault("watchers", []): issue["watchers"].append(user)
+        if user in issue.setdefault("watchers", []):
+            return _result(True, {"issue_id": issue["issue_id"], "watchers": issue["watchers"]}, None, "", False)
+        issue["watchers"].append(user)
         return _result(True, {"issue_id": issue["issue_id"], "watchers": issue["watchers"]}, None, "", True)
 
     def remove_watcher(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         issue = self._iss(self._state(session_id), arguments["issue_id"]); user = arguments["user"]
+        if user not in issue.get("watchers", []):
+            return _result(True, {"issue_id": issue["issue_id"], "watchers": issue.get("watchers", [])}, None, "", False)
         issue["watchers"] = [w for w in issue.get("watchers", []) if w != user]
         return _result(True, {"issue_id": issue["issue_id"], "watchers": issue["watchers"]}, None, "", True)
 
     def create_sprint(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if arguments["start_date"] > arguments["end_date"]:
+            raise KeyError("start_date must be before or equal to end_date")
         state = self._state(session_id); sid = f"spr_{state['next_sprint_num']:04d}"; state["next_sprint_num"] += 1
         sprint = {"sprint_id": sid, "name": arguments["name"], "start_date": arguments["start_date"], "end_date": arguments["end_date"], "goal": arguments.get("goal", ""), "status": "active", "issues": []}
         state.setdefault("sprints", {})[sid] = sprint
@@ -121,7 +138,14 @@ class IssueTrackerServer(StatefulToolServer):
     def add_to_sprint(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); iid, sid = arguments["issue_id"], arguments["sprint_id"]
         issue = self._iss(state, iid)
-        if sid not in state.get("sprints", {}): raise KeyError(f"sprint not found: {sid}")
+        if sid not in state.get("sprints", {}):
+            valid_sprints = ", ".join(sorted(state.get("sprints", {}).keys())) or "(none)"
+            raise KeyError(f"sprint not found: {sid}. Valid sprint IDs: [{valid_sprints}]")
+        old_sid = issue.get("sprint_id")
+        if old_sid == sid and iid in state["sprints"][sid].setdefault("issues", []):
+            return _result(True, {"issue_id": iid, "sprint_id": sid}, None, "", False)
+        if old_sid and old_sid != sid and old_sid in state.get("sprints", {}):
+            state["sprints"][old_sid]["issues"] = [x for x in state["sprints"][old_sid].get("issues", []) if x != iid]
         issue["sprint_id"] = sid
         if iid not in state["sprints"][sid].setdefault("issues", []):
             state["sprints"][sid]["issues"].append(iid)
@@ -129,6 +153,8 @@ class IssueTrackerServer(StatefulToolServer):
 
     def remove_from_sprint(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); issue = self._iss(state, arguments["issue_id"])
+        if not issue.get("sprint_id"):
+            return _result(True, {"issue_id": issue["issue_id"], "removed_from_sprint": False}, None, "", False)
         if issue.get("sprint_id") and issue["sprint_id"] in state.get("sprints", {}):
             state["sprints"][issue["sprint_id"]]["issues"] = [x for x in state["sprints"][issue["sprint_id"]].get("issues", []) if x != issue["issue_id"]]
         issue["sprint_id"] = None
@@ -137,8 +163,12 @@ class IssueTrackerServer(StatefulToolServer):
     def create_subtask(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); iid = arguments["issue_id"];
         self._iss(state, iid)  # validate exists
+        assignee = arguments.get("assignee")
+        if assignee and assignee not in state["members"]:
+            valid = ", ".join(sorted(state["members"].keys()))
+            raise KeyError(f"member not found: {assignee}. Valid members: [{valid}]")
         sid = f"sub_{state['next_subtask_num']:04d}"; state["next_subtask_num"] += 1
-        subtask = {"subtask_id": sid, "issue_id": iid, "title": arguments["title"], "assignee": arguments.get("assignee"), "status": "open"}
+        subtask = {"subtask_id": sid, "issue_id": iid, "title": arguments["title"], "assignee": assignee, "status": "open"}
         state.setdefault("subtasks", {})[sid] = subtask
         return _result(True, {"subtask": subtask}, None, "", True)
 
@@ -149,6 +179,7 @@ class IssueTrackerServer(StatefulToolServer):
 
     def time_track(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); iid = arguments["issue_id"]; self._iss(state, iid); hours = float(arguments["hours"])
+        if hours <= 0: raise KeyError("hours must be positive")
         entry = {"entry_id": f"time_{state['next_time_entry_num']:04d}", "issue_id": iid, "hours": hours, "description": arguments.get("description", ""), "date": "2026-06-24", "user": "current_user"}
         state.setdefault("time_entries", []).append(entry); state["next_time_entry_num"] += 1
         return _result(True, {"time_entry": entry}, None, "", True)
@@ -156,6 +187,9 @@ class IssueTrackerServer(StatefulToolServer):
     def get_time_report(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); entries = state.get("time_entries", [])
         if arguments.get("issue_id"): entries = [e for e in entries if e["issue_id"] == arguments["issue_id"]]
+        if arguments.get("sprint_id"):
+            issues_in_sprint = {iid for iid, iss in state["issues"].items() if iss.get("sprint_id") == arguments["sprint_id"]}
+            entries = [e for e in entries if e["issue_id"] in issues_in_sprint]
         if arguments.get("assignee"):
             issues_by_assignee = {iid for iid, iss in state["issues"].items() if iss["assignee"] == arguments["assignee"]}
             entries = [e for e in entries if e["issue_id"] in issues_by_assignee]
@@ -164,6 +198,8 @@ class IssueTrackerServer(StatefulToolServer):
 
     def set_milestone(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         issue = self._iss(self._state(session_id), arguments["issue_id"])
+        if issue.get("milestone") == arguments["milestone"]:
+            return _result(True, {"issue_id": issue["issue_id"], "milestone": issue["milestone"]}, None, "", False)
         issue["milestone"] = arguments["milestone"]
         return _result(True, {"issue_id": issue["issue_id"], "milestone": issue["milestone"]}, None, "", True)
 

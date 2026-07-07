@@ -639,6 +639,10 @@ class FilesystemAdapter(DomainAdapter):
         "chmod": ("update", "file"),
     }
 
+    def _is_protected_path(self, path: Any) -> bool:
+        value = str(path)
+        return value == "/protected" or value.startswith("/protected/")
+
     def normalize_event(
         self, action_type, tool_name, tool_arguments, observation,
         execution_success, state_changed, before_state, after_state,
@@ -661,7 +665,7 @@ class FilesystemAdapter(DomainAdapter):
         elif tool_name == "rm":
             if execution_success:
                 result["deleted_ids"] = [path]
-            if "/protected/" in str(path):
+            if self._is_protected_path(path):
                 result["forbidden_transition"] = "deleting_protected_path"
         elif tool_name == "chmod":
             result["changed_fields"] = ["permissions"]

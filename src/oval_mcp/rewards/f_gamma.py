@@ -130,7 +130,19 @@ class ProgressTracker:
     def _get_task_progress_predicates(self, task: dict) -> list[str]:
         custom = task.get("progress_predicates")
         if custom and isinstance(custom, list):
-            return [p for p in custom if p in self._required]
+            predicates: list[str] = []
+            seen: set[str] = set()
+            for item in custom:
+                if isinstance(item, str):
+                    name = item
+                elif isinstance(item, dict):
+                    name = str(item.get("type", ""))
+                else:
+                    continue
+                if name in self._required and name not in seen:
+                    predicates.append(name)
+                    seen.add(name)
+            return predicates
         return list(self._required)
 
     def _eval_event(self, event, task: dict, domain_adapter: Any = None) -> frozenset[str]:

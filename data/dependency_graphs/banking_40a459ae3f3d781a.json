@@ -21,39 +21,51 @@
     "withdraw"
   ],
   "graph": {
-    "list_accounts": {
+    "apply_loan": {
+      "explicit": [],
+      "implicit": []
+    },
+    "bill_pay": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cancel_transfer": {
+      "explicit": [],
+      "implicit": []
+    },
+    "deposit": {
+      "explicit": [],
+      "implicit": []
+    },
+    "freeze_account": {
       "explicit": [
-        "get_account_info",
-        "get_balance",
-        "get_history",
-        "get_statement",
-        "transfer",
-        "wire_transfer",
-        "deposit",
-        "withdraw",
-        "bill_pay",
-        "schedule_transfer",
-        "freeze_account",
-        "unfreeze_account",
-        "verify_account",
-        "apply_loan"
+        "unfreeze_account"
       ],
       "implicit": []
     },
     "get_account_info": {
       "explicit": [
-        "get_balance",
-        "get_history",
-        "get_statement",
-        "transfer",
-        "wire_transfer",
+        "freeze_account",
         "deposit",
         "withdraw",
-        "bill_pay"
+        "bill_pay",
+        "schedule_transfer",
+        "transfer",
+        "wire_transfer"
       ],
       "implicit": []
     },
     "get_balance": {
+      "explicit": [],
+      "implicit": [
+        "transfer",
+        "withdraw",
+        "deposit",
+        "bill_pay",
+        "wire_transfer"
+      ]
+    },
+    "get_exchange_rate": {
       "explicit": [],
       "implicit": []
     },
@@ -65,24 +77,21 @@
       "explicit": [],
       "implicit": []
     },
-    "transfer": {
-      "explicit": [],
-      "implicit": []
-    },
-    "wire_transfer": {
-      "explicit": [],
-      "implicit": []
-    },
-    "deposit": {
-      "explicit": [],
-      "implicit": []
-    },
-    "withdraw": {
-      "explicit": [],
-      "implicit": []
-    },
-    "bill_pay": {
-      "explicit": [],
+    "list_accounts": {
+      "explicit": [
+        "transfer",
+        "wire_transfer",
+        "bill_pay",
+        "withdraw",
+        "get_account_info",
+        "get_balance",
+        "get_history",
+        "get_statement",
+        "freeze_account",
+        "deposit",
+        "schedule_transfer",
+        "apply_loan"
+      ],
       "implicit": []
     },
     "schedule_transfer": {
@@ -91,14 +100,8 @@
       ],
       "implicit": []
     },
-    "cancel_transfer": {
+    "transfer": {
       "explicit": [],
-      "implicit": []
-    },
-    "freeze_account": {
-      "explicit": [
-        "unfreeze_account"
-      ],
       "implicit": []
     },
     "unfreeze_account": {
@@ -109,13 +112,11 @@
       "explicit": [],
       "implicit": []
     },
-    "get_exchange_rate": {
-      "explicit": [
-        "apply_loan"
-      ],
+    "wire_transfer": {
+      "explicit": [],
       "implicit": []
     },
-    "apply_loan": {
+    "withdraw": {
       "explicit": [],
       "implicit": []
     }

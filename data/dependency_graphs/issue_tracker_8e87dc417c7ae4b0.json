@@ -1,0 +1,143 @@
+{
+  "server_name": "issue_tracker",
+  "schema_hash": "8e87dc417c7ae4b0",
+  "tool_names": [
+    "add_label",
+    "add_to_sprint",
+    "add_watcher",
+    "assign_issue",
+    "comment_issue",
+    "create_issue",
+    "create_sprint",
+    "create_subtask",
+    "get_issue",
+    "get_time_report",
+    "list_issues",
+    "list_sprints",
+    "list_subtasks",
+    "remove_from_sprint",
+    "remove_label",
+    "remove_watcher",
+    "set_milestone",
+    "time_track",
+    "transition_issue",
+    "update_issue"
+  ],
+  "graph": {
+    "add_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_to_sprint": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_watcher": {
+      "explicit": [],
+      "implicit": []
+    },
+    "assign_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "comment_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_issue": {
+      "explicit": [
+        "transition_issue",
+        "update_issue",
+        "assign_issue",
+        "add_label",
+        "comment_issue",
+        "create_subtask",
+        "time_track",
+        "set_milestone",
+        "add_watcher",
+        "add_to_sprint",
+        "get_issue"
+      ],
+      "implicit": []
+    },
+    "create_sprint": {
+      "explicit": [
+        "add_to_sprint"
+      ],
+      "implicit": []
+    },
+    "create_subtask": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_issue": {
+      "explicit": [
+        "transition_issue",
+        "update_issue",
+        "assign_issue",
+        "comment_issue",
+        "add_label",
+        "remove_label",
+        "add_watcher",
+        "remove_watcher",
+        "create_subtask",
+        "time_track",
+        "set_milestone",
+        "add_to_sprint"
+      ],
+      "implicit": []
+    },
+    "get_time_report": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_issues": {
+      "explicit": [
+        "transition_issue",
+        "update_issue",
+        "assign_issue",
+        "get_issue",
+        "add_to_sprint"
+      ],
+      "implicit": []
+    },
+    "list_sprints": {
+      "explicit": [
+        "add_to_sprint"
+      ],
+      "implicit": []
+    },
+    "list_subtasks": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_from_sprint": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_watcher": {
+      "explicit": [],
+      "implicit": []
+    },
+    "set_milestone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "time_track": {
+      "explicit": [],
+      "implicit": []
+    },
+    "transition_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_issue": {
+      "explicit": [],
+      "implicit": []
+    }
+  }
+}

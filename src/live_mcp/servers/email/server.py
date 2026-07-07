@@ -56,13 +56,16 @@ class EmailServer(StatefulToolServer):
         return _result(True, {"email": eml}, None, "", False)
 
     def send_email(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); eid = self._nxt_eml(state)
+        state = self._state(session_id)
         tid = arguments.get("thread_id") or f"thd_{state['next_thread_num']:03d}"
         if not arguments.get("thread_id"):
             state["next_thread_num"] += 1
+        elif tid not in state["threads"]:
+            raise KeyError(f"thread not found: {tid}")
+        eid = self._nxt_eml(state)
         if tid not in state["threads"]: state["threads"][tid] = []
         email = {"email_id": eid, "to": arguments["to"], "cc": arguments.get("cc", ""), "bcc": arguments.get("bcc", ""), "sender": "current_user@example.com", "subject": arguments["subject"], "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": "2026-06-24", "read": True, "attachments": arguments.get("attachments", [])}
-        state["emails"][eid] = email; state["inbox_order"].append(eid); state["threads"][tid].append(eid)
+        state["emails"][eid] = email; state["threads"][tid].append(eid)
         return _result(True, {"email": email}, None, "", True)
 
     def create_draft(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -78,7 +81,7 @@ class EmailServer(StatefulToolServer):
         body = f"---------- Forwarded message ----------\nFrom: {orig['sender']}\nSubject: {orig['subject']}\n\n{orig['body']}"
         if note: body = note + "\n\n" + body
         email = {"email_id": eid, "to": arguments["to"], "cc": "", "sender": "current_user@example.com", "subject": f"Fwd: {orig['subject']}", "body": body, "labels": [], "thread_id": f"thd_{state['next_thread_num']:03d}", "status": "sent", "date": "2026-06-24", "read": True}
-        state["emails"][eid] = email; state["inbox_order"].append(eid)
+        state["emails"][eid] = email
         state["threads"].setdefault(email["thread_id"], []).append(eid); state["next_thread_num"] += 1
         return _result(True, {"email": email}, None, "", True)
 
@@ -90,7 +93,7 @@ class EmailServer(StatefulToolServer):
             tid = f"thd_{state['next_thread_num']:03d}"
             state["next_thread_num"] += 1
         email = {"email_id": eid, "to": orig["sender"], "cc": "", "sender": "current_user@example.com", "subject": f"Re: {orig['subject']}", "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": "2026-06-24", "read": True}
-        state["emails"][eid] = email; state["inbox_order"].append(eid)
+        state["emails"][eid] = email
         state["threads"].setdefault(tid, []).append(eid)
         return _result(True, {"email": email}, None, "", True)
 
@@ -98,23 +101,30 @@ class EmailServer(StatefulToolServer):
         state = self._state(session_id); eid = arguments["email_id"]; label = arguments["label"]
         email = state["emails"].get(eid) or state["drafts"].get(eid)
         if not email: raise KeyError(f"email not found: {eid}")
-        if label not in email["labels"]: email["labels"].append(label)
+        if label in email["labels"]:
+            return _result(True, {"email_id": eid, "labels": email["labels"]}, None, "", False)
+        email["labels"].append(label)
         return _result(True, {"email_id": eid, "labels": email["labels"]}, None, "", True)
 
     def remove_label(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid = arguments["email_id"]; label = arguments["label"]
         email = state["emails"].get(eid) or state["drafts"].get(eid)
         if not email: raise KeyError(f"email not found: {eid}")
+        if label not in email["labels"]:
+            return _result(True, {"email_id": eid, "labels": email["labels"]}, None, "", False)
         email["labels"] = [l for l in email["labels"] if l != label]
         return _result(True, {"email_id": eid, "labels": email["labels"]}, None, "", True)
 
     def move_to_thread(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid, tid = arguments["email_id"], arguments["thread_id"]
         if eid not in state["emails"]: raise KeyError(f"email not found: {eid}")
+        if tid not in state["threads"]: raise KeyError(f"thread not found: {tid}")
         old_tid = state["emails"][eid].get("thread_id")
+        if old_tid == tid:
+            return _result(True, {"email_id": eid, "thread_id": tid}, None, "", False)
         if old_tid and old_tid in state["threads"] and eid in state["threads"][old_tid]: state["threads"][old_tid].remove(eid)
         state["emails"][eid]["thread_id"] = tid
-        state["threads"].setdefault(tid, []).append(eid)
+        if eid not in state["threads"][tid]: state["threads"][tid].append(eid)
         return _result(True, {"email_id": eid, "thread_id": tid}, None, "", True)
 
     def get_thread(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -126,21 +136,27 @@ class EmailServer(StatefulToolServer):
     def archive_email(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid = arguments["email_id"]
         if eid not in state["emails"]: raise KeyError(f"email not found: {eid}")
+        already_archived = bool(state["emails"][eid].get("archived"))
         state["emails"][eid]["archived"] = True
-        if eid in state["inbox_order"]: state["inbox_order"].remove(eid)
-        return _result(True, {"email_id": eid, "archived": True}, None, "", True)
+        was_in_inbox = eid in state["inbox_order"]
+        if was_in_inbox: state["inbox_order"].remove(eid)
+        return _result(True, {"email_id": eid, "archived": True}, None, "", was_in_inbox or not already_archived)
 
     def mark_read(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid = arguments["email_id"]
         if eid not in state["emails"] and eid not in state["drafts"]: raise KeyError(f"email not found: {eid}")
-        (state["emails"].get(eid) or state["drafts"].get(eid))["read"] = True
-        return _result(True, {"email_id": eid, "read": True}, None, "", True)
+        email = state["emails"].get(eid) or state["drafts"].get(eid)
+        changed = not bool(email.get("read"))
+        email["read"] = True
+        return _result(True, {"email_id": eid, "read": True}, None, "", changed)
 
     def mark_unread(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid = arguments["email_id"]
         if eid not in state["emails"] and eid not in state["drafts"]: raise KeyError(f"email not found: {eid}")
-        (state["emails"].get(eid) or state["drafts"].get(eid))["read"] = False
-        return _result(True, {"email_id": eid, "read": False}, None, "", True)
+        email = state["emails"].get(eid) or state["drafts"].get(eid)
+        changed = bool(email.get("read"))
+        email["read"] = False
+        return _result(True, {"email_id": eid, "read": False}, None, "", changed)
 
     def create_filter(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); fid = f"flt_{len(state.setdefault('filters', {})) + 1:04d}"

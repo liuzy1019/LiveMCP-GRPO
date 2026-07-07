@@ -46,7 +46,7 @@ from src.live_mcp.task_planner import (
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Generate GRPO GRPO training data with LLM teacher"
+        description="Generate PROVE-style GRPO training data with LLM teacher"
     )
     p.add_argument("--count", type=int, default=500,
                     help="Number of training tasks to generate")
@@ -273,7 +273,24 @@ def _task_fingerprint(task) -> str:
 
 
 def _serialize_training_oracle(task) -> list[dict]:
-    """Return tool calls plus exactly one terminal action for training."""
+    """Return tool calls plus exactly one terminal action for training.
+
+    For missing_function / abstention tasks that have no serialized oracle
+    calls, produce a synthetic report_error terminal so the training contract
+    validator and row exporter can process the task instead of dropping it.
+    """
+    # ── missing_function / abstention: synthetic report_error terminal ──
+    if task.task_type == "missing_function" or (
+        task.metadata.get("scenario_type") in ("missing_function", "no_tool_or_abstention")
+        and not (task.oracle_program and task.oracle_program.calls)
+    ):
+        hidden_tool = task.metadata.get("unavailable_required_tool", "required tool")
+        return [{
+            "tool_name": "",
+            "arguments": {"text": f"Required tool {hidden_tool} is not available."},
+            "action": "report_error",
+        }]
+
     raw_calls = []
     if task.oracle_program and task.oracle_program.calls:
         for oc in task.oracle_program.calls:
@@ -327,12 +344,29 @@ def _validate_task_training_contract(task) -> None:
         raise ValueError(
             f"Task {task.task_id} has {len(terminal_actions)} terminal oracle actions"
         )
+    terminal_action = terminal_actions[0]
 
     real_required_tools = [
         call["tool_name"] for call in oracle_calls_serialized
         if call.get("action", "tool_call") == "tool_call"
     ]
     scenario_type = _task_scenario(task)
+    expected_terminal_by_scenario = {
+        "normal_safe_success": {"final_answer"},
+        "missing_function": {"report_error"},
+        "no_tool_or_abstention": {"report_error"},
+        "irrelevant": {"report_error"},
+        "clarification_required": {"ask_clarification"},
+        "tool_error_recovery": {"final_answer", "report_error"},
+        "missing_dependency": {"final_answer", "ask_clarification", "report_error"},
+    }
+    expected_terminals = expected_terminal_by_scenario.get(scenario_type)
+    if expected_terminals and terminal_action not in expected_terminals:
+        raise ValueError(
+            f"Task {task.task_id} scenario={scenario_type} has terminal "
+            f"{terminal_action}, expected one of {sorted(expected_terminals)}"
+        )
+
     is_no_tool = scenario_type in (
         "no_tool_or_abstention", "clarification_required",
         "missing_function", "irrelevant",
@@ -354,7 +388,6 @@ def _validate_task_training_contract(task) -> None:
     # actually completing the user's request.  We only WARN (not reject)
     # because some legitimate operations (e.g. send_email) are not tracked
     # in the state machine and naturally have empty criteria.
-    terminal_action = terminal_actions[0] if terminal_actions else ""
     if terminal_action == "final_answer" and real_required_tools:
         criteria = _task_success_criteria(task)
         if not criteria:
@@ -765,11 +798,13 @@ def _assert_split_integrity(df_train, df_val, args) -> None:
             )
 
 
-def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
+def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
     """Convert LiveTask list to verl-compatible data rows."""
     rows = []
     skipped_no_tools = 0
-    for i, task in enumerate(tasks):
+    for task in tasks:
+        _validate_task_training_contract(task)
+
         # Determine visible tools — use task-provided tools, fall back to required
         visible_tools = task.visible_tools if task.visible_tools else []
         if not visible_tools:
@@ -806,6 +841,7 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             f"  When genuinely missing critical information and no tool can resolve it.\n\n"
             f"## Rules\n"
             f"- Call ONE tool at a time. Wait for the result before the next action.\n"
+            f"- Do not output hidden reasoning, chain-of-thought, or <think> tags.\n"
             f"- Use ONLY entity IDs that appear in tool results. Never invent or guess IDs.{date_line}"
         )
 
@@ -839,7 +875,6 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
         # can include per-round terminal actions; training rows keep only the
         # final terminal so the reward contract remains single-terminal.
         oracle_calls_serialized = _serialize_training_oracle(task)
-        _validate_task_training_contract(task)
 
         success_criteria = _task_success_criteria(task)
 
@@ -850,30 +885,19 @@ def _tasks_to_rows(tasks: list, base_seed: int) -> list[dict]:
             success_criteria, ensure_ascii=False, default=str
         )
 
+        # terminal_actions and real_required_tools were checked above by
+        # _validate_task_training_contract; keep the local assert as an internal
+        # consistency guard for this serialization block.
         terminal_actions = [
             c["action"] for c in oracle_calls_serialized
             if c.get("action") in ("final_answer", "ask_clarification", "report_error")
         ]
-        if len(terminal_actions) != 1:
-            raise ValueError(
-                f"Task {task.task_id} has {len(terminal_actions)} terminal oracle actions"
-            )
+        assert terminal_actions, f"Bug: {task.task_id} serialized oracle has no terminal"
         allowed_terminal_actions = [terminal_actions[-1]]
         real_required_tools = [
             c["tool_name"] for c in oracle_calls_serialized
             if c.get("action", "tool_call") == "tool_call"
         ]
-        is_no_tool = scenario_type in (
-            "no_tool_or_abstention", "clarification_required", "missing_function", "irrelevant"
-        )
-        if is_no_tool and real_required_tools:
-            raise ValueError(
-                f"No-tool task {task.task_id} unexpectedly has {len(real_required_tools)} tool calls"
-            )
-        if not is_no_tool and not (2 <= len(real_required_tools) <= 5):
-            raise ValueError(
-                f"Tool task {task.task_id} has oracle length {len(real_required_tools)}, expected 2-5"
-            )
 
         extra_info = {
             "task_id": task.task_id,
