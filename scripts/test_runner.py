@@ -13,7 +13,7 @@
   python scripts/test_runner.py --level L0 L1
 
   # 完整测试 (含LLM生成)
-  python scripts/test_runner.py --level all --api-base http://localhost:8001/v1 --model Qwen3-32B
+  python scripts/test_runner.py --level all --api-base https://your-proxy/v1 --model gemini-2.5-flash
 
   # 只审计已有数据
   python scripts/test_runner.py --level L3 --train data/train.parquet --val data/val.parquet

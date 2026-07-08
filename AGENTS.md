@@ -7,21 +7,14 @@
 ## 环境
 
 ```bash
-# Python
-python
-
-# GPU 确认
-nvidia-smi
-
-# 优先 4 卡 smoke
-CUDA_VISIBLE_DEVICES=0,1,2,3
+conda activate arl          # Python 3.11, PyTorch 2.10.0+cu128
+nvidia-smi                  # 确认 GPU 可用（L20 ×8）
 ```
 
-flashinfer JIT 必须禁用：
+FlashInfer JIT 编译配置见 `CLAUDE.md`。降级方案：
 
 ```bash
-export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
-export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
+export VLLM_USE_FLASHINFER_SAMPLER=0
 ```
 
 ## 依赖约束
@@ -30,16 +23,11 @@ verl 0.6.1 从 `./verl` editable 安装。关键版本：
 
 | Package | Version |
 |---|---|
-| python | 3.11.15 |
-| torch | 2.8.0+cu128 |
-| vllm | 0.11.0 |
-| deepspeed | 0.19.2 |
-| flash_attn | 2.7.3 |
-| transformers | 4.57.6 |
+| python | 3.11 |
+| torch | 2.10.0+cu128 |
+| vllm | 0.19.1 |
+| transformers | 5.13.0 |
 | ray | 2.54.1 |
-| numpy | ≥1.26.4 |
-| pandas | ≥2.2.3 |
-| protobuf | ≥5.29.6 |
 
 完整列表见 `requirements.txt` / `pyproject.toml`。
 
@@ -111,10 +99,9 @@ Conventional Commits：`<type>: <subject>`
 
 ## 当前环境事实
 
-- Teacher 模型：Qwen3-32B（vLLM TP=4，GPU 4-7，4×L20 44GB）
-- Policy 模型：Qwen3-4B（`models/Qwen3-4B`）
-- OVAL GRPO 是主训练路线（`bash scripts/train_grpo.sh`）
-- 数据生成管线 P0/P1 bug 全部修复，500+100 全量生成进行中
-- 训练尚未执行，待数据生成完成
+- Teacher 模型：用户通过 `--model` 和 `--api-base` 指定（推荐 Gemini via OpenAI-compatible API）
+- Policy 模型：Qwen3-4B（`models/Qwen/Qwen3-4B`），RL rollout 时通过 vLLM 本地 serving
+- OVAL GRPO 是唯一训练路线（`bash scripts/train_grpo.sh`）
+- 数据生成 P0/P1 bug 全部修复，参数已对齐 PROVE 论文 §3.2–§4.1
 - SFT cold-start 相关代码已清除
 - 训练默认环境为 8×L20 44GB

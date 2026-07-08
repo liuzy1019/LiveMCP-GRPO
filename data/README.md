@@ -8,6 +8,8 @@
 
 ```
 data/
+├── dependency_graphs/              # 各 domain 工具依赖图（precompute 产出）
+│   └── {domain}_{hash}.json        # 单个 domain 的拓扑依赖图
 ├── experiments/                    # 实验记录（配置+结果摘要，跟踪入库）
 │   ├── .gitkeep
 │   └── {YYYY-MM-DD}_{tag}/         # 单次实验目录
@@ -22,11 +24,10 @@ data/
 
 ## 数据生成管线
 
-> 当前 `train.parquet` / `val.parquet` 是 2026-06-30 状态契约修复前数据，
-> 不得用于正式训练。重新生成后必须运行 `python production_smoke_test.py --live`。
+> 重新生成后建议运行 `python scripts/validate_pipeline.py --live` 验证管线完整性。
 
 ```
-PROVE Teacher（LLM-in-the-loop，每轮决策）
+PROVE Teacher（LLM-in-the-loop，每轮决策；推荐 Gemini 通过 OpenAI 兼容 API 接入，最终由 `--model` 参数指定）
   ┌──────────────────────────────────────────────────┐
   │ 1. LLM 决策 (task_planner.py)                     │
   │   输入: domain schemas + live state + history      │
@@ -92,15 +93,15 @@ PROVE Teacher（LLM-in-the-loop，每轮决策）
 
 ```bash
 # 统一生成脚本（推荐，自动检测并行策略）
+bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 500
-bash scripts/generate_data.sh --model models/Qwen/Qwen3-32B --count 500 --val-count 100
 
-# vLLM 模式（32B 必须用此模式）
+# Gemini API 模式（推荐 Teacher）
 python scripts/generate_data.py \
   --count 500 --val-count 100 \
   --domain all \
-  --model Qwen3-32B \
-  --api-base http://localhost:8001/v1 \
+  --model gemini-2.5-flash \
+  --api-base https://your-gemini-proxy/v1 \
   --seed 42 \
   --output data/train.parquet \
   --val-output data/val.parquet
@@ -113,14 +114,14 @@ python scripts/generate_data.py \
   --seed 42
 
 # 单 domain 快速测试
-bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --domain calendar --count 200
+bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --domain calendar --count 200
 
 # 记录实验配置与结果（自动写入 data/experiments/）
 python scripts/generate_data.py \
   --experiment-tag prove_v1 \
   --count 500 --val-count 100 \
-  --model Qwen3-32B \
-  --api-base http://localhost:8001/v1
+  --model gemini-2.5-flash \
+  --api-base https://your-gemini-proxy/v1
 ```
 
 ---
@@ -137,8 +138,8 @@ python scripts/generate_data.py \
 ```json
 {
   "run_id": "2026-06-29_prove_v2",
-  "command": "python scripts/generate_data.py --count 500 --val-count 100 --model Qwen3-32B --api-base http://localhost:8001/v1 --experiment-tag prove_v2",
-  "model": "Qwen3-32B",
+  "command": "python scripts/generate_data.py --count 500 --val-count 100 --model gemini-2.5-flash --api-base https://your-proxy/v1 --experiment-tag prove_v2",
+  "model": "gemini-2.5-flash",
   "domain": "all",
   "count": 500,
   "val_count": 100,

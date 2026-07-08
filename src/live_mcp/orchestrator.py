@@ -574,19 +574,6 @@ class TaskOrchestrator:
                     chain_seed=chain_seed,
                     chain_context=chain_context,
                 )
-                if chain_seed:
-                    query_ok, query_reason = _query_aligns_with_chain(
-                        user_query=user_query,
-                        chain_seed=chain_seed,
-                        is_mutating_tool=_is_mutating_tool,
-                    )
-                    if not query_ok:
-                        logger.debug(
-                            f"Query-chain mismatch for {server_name}: {query_reason}; "
-                            f"retrying generate_one with next seed"
-                        )
-                        self.manager.close_session(session_id)
-                        continue
 
                 # Accumulators across conversation rounds (PROVE CONTINUATION)
                 # (re-assigned each retry; types declared before the loop)
@@ -837,6 +824,29 @@ class TaskOrchestrator:
                     terminal_action=_terminal,
                     seed=local_seed,
                 )
+
+                # ── Guard: teacher-generated readonly-only traces ──
+                # Teacher models occasionally produce oracle traces with only
+                # readonly tools (e.g. get_order + list_orders in food_delivery).
+                # These pass replay validation but yield empty success_criteria,
+                # producing training data with no verifiable state changes.
+                # Retry on early attempts, raise on the last so generate_many
+                # counts it as a failure and can try another domain/seed.
+                _mutating_scenarios = frozenset({"normal_safe_success", "tool_error_recovery"})
+                if scenario_type in _mutating_scenarios and not success_criteria:
+                    if retry_attempt < 2:
+                        logger.warning(
+                            f"Empty success_criteria for {scenario_type} task {task_id} "
+                            f"(oracle has {len(_real)} readonly-only tool calls). "
+                            f"Retrying (attempt {retry_attempt + 1}/3)..."
+                        )
+                        self.manager.close_session(session_id)
+                        continue
+                    raise RuntimeError(
+                        f"Empty success_criteria for {scenario_type} task {task_id} "
+                        f"after 3 retries: oracle {[c.tool_name for c in all_oracle_calls if c.action == 'tool_call']} "
+                        f"are all readonly in domain {server_name}"
+                    )
 
                 # ── Success ──
                 break
@@ -1406,7 +1416,8 @@ class TaskOrchestrator:
             cached_tool_names = payload.get("tool_names") if isinstance(payload, dict) else None
             if isinstance(graph, dict) and cached_tool_names == expected_tool_names:
                 graph = self._normalize_cached_graph(graph, expected_tool_names)
-                self._apply_prove_dependency_definition_filter(graph, server_tools, server_name)
+                # NOTE: Do NOT re-apply filter. See _save_cached_graph for rationale.
+                _break_graph_cycles(graph)
             if (
                 isinstance(payload, dict)
                 and payload.get("schema_hash") == schema_hash
@@ -1431,7 +1442,11 @@ class TaskOrchestrator:
         """Persist PROVE's per-environment graph cache keyed by tool schema."""
         expected_tool_names = sorted(t.get("name", "") for t in server_tools)
         graph = self._normalize_cached_graph(graph, expected_tool_names)
-        self._apply_prove_dependency_definition_filter(graph, server_tools, server_name)
+        # NOTE: Do NOT re-apply _apply_prove_dependency_definition_filter here.
+        # The LLM-classified edges were already filtered inside _classify_edges_llm,
+        # and the deterministic edges (merged in _probe_dependency_graph) are
+        # designed to bypass the entity filter. Re-filtering would strip the
+        # deterministic edges that the merge explicitly added.
         if not self._valid_cached_graph(graph, expected_tool_names):
             logger.warning(f"Skipping invalid dependency graph cache for {server_name}")
             return
@@ -1469,29 +1484,49 @@ class TaskOrchestrator:
 
         schema_hash = self._tool_schema_hash(server_tools)
         cached = self._maybe_load_cached_graph(server_name, schema_hash, server_tools)
-        if cached is not None:
-            self.manager.close_session(session.session_id)
-            return cached
 
-        try:
+        # ── P3c: Schema-based deterministic edges as a pre-pass ──
+        # Merge deterministic edges into the LLM-classified graph so
+        # critical read-before-write chains (get_lead→convert_lead,
+        # get_cart→checkout, etc.) are never lost, even if the LLM
+        # classifier misses them.
+        # NOTE: This merge runs on EVERY load — cached or freshly classified —
+        # because deterministic edges are defined in code and can evolve
+        # independently of tool schemas. Skipping this on cache hit would
+        # silently drop newly added edges (e.g. ls→cat when that edge was
+        # added after the cache was generated).
+        det = _deterministic_schema_edges(server_tools, server_name)
+
+        if cached is not None:
+            graph = cached
+        else:
             graph = self._classify_edges_llm(server_tools, server_name) or {}
 
-            # ── P3c: Schema-based deterministic edges as a pre-pass ──
-            # Merge deterministic edges into the LLM-classified graph so
-            # critical read-before-write chains (get_lead→convert_lead,
-            # get_cart→checkout, etc.) are never lost, even if the LLM
-            # classifier misses them.
-            det = _deterministic_schema_edges(server_tools, server_name)
-            for src, edge_info in det.items():
-                if src not in graph:
-                    graph[src] = edge_info
-                else:
-                    ex = set(graph[src].get("explicit", []))
-                    im = set(graph[src].get("implicit", []))
-                    graph[src] = {
-                        "explicit": sorted(ex | set(edge_info.get("explicit", []))),
-                        "implicit": sorted((im | set(edge_info.get("implicit", []))) - ex),
-                    }
+        for src, edge_info in det.items():
+            if src not in graph:
+                graph[src] = edge_info
+            else:
+                ex = set(graph[src].get("explicit", []))
+                im = set(graph[src].get("implicit", []))
+                graph[src] = {
+                    "explicit": sorted(ex | set(edge_info.get("explicit", []))),
+                    "implicit": sorted((im | set(edge_info.get("implicit", []))) - ex),
+                }
+
+        # ── Break cycles: LLM can introduce bidirectional edges ──
+        # (e.g., ls↔cd, mark_read↔mark_unread) that create 2-cycles.
+        # Pass deterministic edges so the cycle breaker prefers keeping
+        # them over LLM-classified edges when both directions exist.
+        _break_graph_cycles(graph, det)
+
+        if cached is not None:
+            # Deterministic edges may have changed since cache was saved;
+            # persist the merged result so the cache stays current.
+            self._save_cached_graph(server_name, schema_hash, server_tools, graph)
+            self.manager.close_session(session.session_id)
+            return graph
+
+        try:
 
             self._save_cached_graph(server_name, schema_hash, server_tools, graph)
         finally:
@@ -2139,32 +2174,6 @@ def _query_has_write_intent_for_tool(query: str, tool_name: str) -> bool:
     return bool(tool_tokens and all(token in q for token in tool_tokens))
 
 
-def _query_aligns_with_chain(
-    user_query: str,
-    chain_seed: list[str],
-    is_mutating_tool,
-) -> tuple[bool, str]:
-    """Check that a chain-seeded query asks for the final mutating action.
-
-    PROVE samples user queries from dependency-graph chains. If the natural
-    query only asks for an early read step while decide_action is later forced
-    by chain_guidance to execute a write, the oracle target no longer matches
-    the user request.  Read-only final steps are exempt because lookup chains
-    can be expressed by broad information requests.
-    """
-    if not user_query or not chain_seed:
-        return True, "no chain/query"
-    final_tool = chain_seed[-1]
-    if not is_mutating_tool(final_tool):
-        return True, "final tool is read-only"
-    if _query_has_write_intent_for_tool(user_query, final_tool):
-        return True, "ok"
-    return (
-        False,
-        f"query does not request final mutating chain tool {final_tool}: {user_query!r}",
-    )
-
-
 def _missing_function_candidate_is_semantically_required(
     task: LiveTask,
     hidden_tool: str,
@@ -2557,7 +2566,12 @@ _CREATED_ENTITY_BY_TOOL: dict[str, set[str]] = {
     "dispute_invoice": {"dispute"},
     "schedule_transfer": {"scheduled_transfer"},
     "create_webhook": {"webhook"},
-    "send_email": {"email"},
+    # NOTE: send_email intentionally omitted. It produces an outgoing message,
+    # not an inbox email that subsequent tools (get_email/reply/archive/mark_read/…)
+    # can operate on. Including it here caused the PROVE filter to accept
+    # send_email → {get_email, reply_email, forward_email, …} edges which are
+    # semantically reversed. Chains needing "send then observe" are not
+    # expressible in this domain's tool surface.
     "create_draft": {"draft"},
     "create_filter": {"filter"},
     "mkdir": {"file"},
@@ -2578,6 +2592,7 @@ _CREATED_ENTITY_BY_TOOL: dict[str, set[str]] = {
     "add_to_wishlist": {"wishlist"},
     "checkout": {"order"},
     "create_order": {"order"},
+    "return_order": {"return"},
     "create_channel": {"channel"},
     "send_message": {"message"},
     "create_thread": {"thread"},
@@ -2736,6 +2751,20 @@ _PROVE_STATE_DEPENDENCY_EDGES: set[tuple[str, str, str]] = {
     ("shopping", "add_to_wishlist", "remove_from_wishlist"),
     ("issue_tracker", "add_label", "remove_label"),
     ("issue_tracker", "add_watcher", "remove_watcher"),
+    # issue_tracker: sprint state ops on the same issue
+    ("issue_tracker", "add_to_sprint", "remove_from_sprint"),
+    # issue_tracker: time_track creates time_entry state; get_time_report reads
+    # it but has no required entity input so the filter would drop the edge.
+    ("issue_tracker", "time_track", "get_time_report"),
+    # email: draft is a state precondition for send_email; send_email's
+    # required inputs are to/subject/body (no draft_id), so this is implicit.
+    ("email", "create_draft", "send_email"),
+    # shopping: coupon → cart flow. get_coupons outputs `code` needed by
+    # apply_coupon; apply_coupon establishes cart discount state needed by
+    # checkout. Neither pair matches the entity table since apply_coupon
+    # doesn't create a cart_item and checkout requires cart_item.
+    ("shopping", "get_coupons", "apply_coupon"),
+    ("shopping", "apply_coupon", "checkout"),
     # filesystem: read→compute chains that the entity filter incorrectly prunes
     # because computational tools (grep/sed/awk) have file entity requirements
     # but the source_relevant computation doesn't propagate correctly in all paths
@@ -3299,13 +3328,140 @@ def _chain_is_feasible(
     return True, "ok"
 
 
+def _break_graph_cycles(
+    graph: dict[str, dict],
+    deterministic: dict[str, dict[str, list[str]]] | None = None,
+) -> None:
+    """Remove edges that create cycles, making the graph a DAG.
+
+    LLM pairwise classification can introduce bidirectional edges
+    (e.g. ls↔cd, mark_read↔mark_unread) that form 2-cycles, and
+    longer chains that loop back.  This function detects and breaks
+    all cycles by removing the weakest edge from each.
+
+    Strategy:
+      1. For bidirectional pairs (A↔B): when *deterministic* is provided,
+         prefer keeping deterministic edges over non-deterministic ones.
+         When neither or both directions are deterministic, fall back to
+         keeping the direction from the node with *fewer* total outgoing
+         edges (spoke→hub is more plausible than hub→spoke).
+      2. For longer cycles, iteratively run Kahn's topological sort
+         and remove one back edge at a time.
+    """
+    # ── Step 1: break bidirectional pairs ──
+    # Collect all edges
+    edges: set[tuple[str, str]] = set()
+    for src, node in graph.items():
+        for rel in ("explicit", "implicit"):
+            for tgt in node.get(rel, []):
+                if tgt in graph:
+                    edges.add((src, tgt))
+
+    # Build deterministic edge set for bidirectional preference
+    det_edges: set[tuple[str, str]] = set()
+    if deterministic:
+        for src, edge_info in deterministic.items():
+            for tgt in edge_info.get("explicit", []):
+                if src in graph and tgt in graph:
+                    det_edges.add((src, tgt))
+            for tgt in edge_info.get("implicit", []):
+                if src in graph and tgt in graph:
+                    det_edges.add((src, tgt))
+
+    # Find bidirectional pairs
+    bidir_pairs: set[tuple[str, str]] = set()  # (a, b) with a < b
+    for a, b in edges:
+        if (b, a) in edges:
+            bidir_pairs.add(tuple(sorted([a, b])))
+
+    for a, b in bidir_pairs:
+        # Preference order:
+        # 1. One direction is deterministic → keep that direction
+        # 2. Both or neither deterministic → keep direction with fewer outgoing edges
+        a_to_b_det: bool = (a, b) in det_edges
+        b_to_a_det: bool = (b, a) in det_edges
+        out_a = sum(
+            len(graph[a].get(rel, [])) for rel in ("explicit", "implicit")
+        )
+        out_b = sum(
+            len(graph[b].get(rel, [])) for rel in ("explicit", "implicit")
+        )
+
+        if a_to_b_det and not b_to_a_det:
+            # Keep a → b (deterministic), remove b → a
+            _remove_edge(graph, b, a)
+        elif b_to_a_det and not a_to_b_det:
+            # Keep b → a (deterministic), remove a → b
+            _remove_edge(graph, a, b)
+        elif out_a <= out_b:
+            # Neither or both deterministic: keep a → b, remove b → a
+            _remove_edge(graph, b, a)
+        else:
+            # Keep b → a, remove a → b
+            _remove_edge(graph, a, b)
+
+    # ── Step 2: break longer cycles via Kahn's algorithm ──
+    for _ in range(20):  # safety limit
+        in_degree: dict[str, int] = {n: 0 for n in graph}
+        adj: dict[str, list[str]] = {n: [] for n in graph}
+        for src, node in graph.items():
+            for rel in ("explicit", "implicit"):
+                for tgt in node.get(rel, []):
+                    if tgt in in_degree:
+                        in_degree[tgt] += 1
+                        adj[src].append(tgt)
+
+        # Kahn's topological sort
+        queue = [n for n, d in in_degree.items() if d == 0]
+        visited = 0
+        while queue:
+            n = queue.pop(0)
+            visited += 1
+            for nb in adj[n]:
+                in_degree[nb] -= 1
+                if in_degree[nb] == 0:
+                    queue.append(nb)
+
+        if visited >= len(graph):
+            break  # DAG achieved
+
+        # Find a back edge in the remaining cycle
+        remaining = [n for n in graph if in_degree.get(n, 0) > 0]
+        for n in remaining:
+            for rel in ("implicit", "explicit"):  # prefer removing implicit
+                targets = list(graph[n].get(rel, []))
+                for tgt in targets:
+                    if tgt in remaining:
+                        _remove_edge(graph, n, tgt)
+                        break
+                else:
+                    continue
+                break
+            else:
+                continue
+            break
+
+
+def _remove_edge(graph: dict[str, dict], src: str, tgt: str) -> None:
+    """Remove a directed edge from src to tgt."""
+    for rel in ("explicit", "implicit"):
+        if tgt in graph.get(src, {}).get(rel, []):
+            graph[src][rel] = [x for x in graph[src][rel] if x != tgt]
+            return
+
+
 def _chain_respects_state_preconditions(server_name: str, chain: list[str]) -> bool:
     if server_name == "shopping":
+        # cart_item state can be established by an explicit add_to_cart, or
+        # observed via readonly get_cart, or acted on by apply_coupon — any of
+        # these earlier in the chain means the cart is non-empty for
+        # subsequent cart-consuming ops.
+        cart_state_producers = {"add_to_cart", "get_cart", "apply_coupon"}
         cart_tools = {"checkout", "update_cart_quantity", "remove_from_cart", "clear_cart"}
         for cart_tool in cart_tools:
             if cart_tool in chain:
                 target_idx = chain.index(cart_tool)
-                if "add_to_cart" not in chain[:target_idx]:
+                if not any(p in chain[:target_idx] for p in cart_state_producers):
                     return False
 
     if server_name == "payments":
@@ -3314,12 +3470,21 @@ def _chain_respects_state_preconditions(server_name: str, chain: list[str]) -> b
             refund_idx = chain.index("refund_invoice")
             if create_idx < refund_idx and "pay_invoice" not in chain[create_idx + 1:refund_idx]:
                 return False
+        # cancel_payment is the reversal of an *initiated* payment, so it
+        # must appear *after* a pay_invoice (or list/get_invoice observing
+        # an already-paid invoice). It cannot appear before pay_invoice, nor
+        # right after create_invoice without any payment initiation.
         if "cancel_payment" in chain:
             cancel_idx = chain.index("cancel_payment")
-            if "create_invoice" in chain and chain.index("create_invoice") < cancel_idx:
-                return False
-            if "pay_invoice" in chain and chain.index("pay_invoice") < cancel_idx:
-                return False
+            pay_producers = {"pay_invoice"}
+            if not any(p in chain[:cancel_idx] for p in pay_producers):
+                # No pay_invoice earlier → the chain reads as observation-only
+                # for cancel_payment; require at least list_invoices or
+                # get_invoice earlier to plausibly reference an existing
+                # payment id.
+                observers = {"list_invoices", "get_invoice"}
+                if not any(o in chain[:cancel_idx] for o in observers):
+                    return False
 
     if server_name == "crm":
         if "complete_task" in chain:
@@ -3344,13 +3509,8 @@ def _chain_respects_state_preconditions(server_name: str, chain: list[str]) -> b
                 return False
         if "track_rider" in chain:
             track_idx = chain.index("track_rider")
-            if "update_order_status" not in chain[:track_idx]:
+            if "create_order" not in chain[:track_idx]:
                 return False
-        if "create_order" in chain:
-            create_idx = chain.index("create_order")
-            for status_tool in ("rate_order", "track_rider"):
-                if status_tool in chain and chain.index(status_tool) > create_idx:
-                    return False
         if "cancel_order" in chain:
             cancel_idx = chain.index("cancel_order")
             for status_tool in ("rate_order", "track_rider", "update_order_status"):
@@ -3554,38 +3714,369 @@ def _deterministic_schema_edges(
                     _add_explicit(tname, wt)
                 break
 
-    # Domain-specific compound edges
+    # Domain-specific compound edges.
+    #
+    # All edges here are derived from ground-truth input schemas (see
+    # /tmp/tools_schema.json). Each edge satisfies at least one of:
+    #   * explicit: source output contains an id that is a required input of target
+    #   * implicit: source establishes an entity/state that target requires
+    # Edges that would violate _apply_prove_dependency_definition_filter are
+    # not added here; state-only edges go into _PROVE_STATE_DEPENDENCY_EDGES.
     _EDGES: dict[str, list[tuple[str, str]]] = {
         "shopping": [
-            ("search_products", "get_product"), ("get_cart", "checkout"),
-            ("get_cart", "clear_cart"), ("get_cart", "remove_from_cart"),
+            ("search_products", "get_product"),
+            ("search_products", "get_reviews"),
+            ("search_products", "add_review"),
+            ("search_products", "compare_products"),
+            ("search_products", "add_to_cart"),
+            ("search_products", "add_to_wishlist"),
+            ("get_product", "get_reviews"),
+            ("get_product", "add_review"),
+            ("get_product", "compare_products"),
+            ("get_product", "add_to_cart"),
+            ("get_product", "add_to_wishlist"),
+            ("get_cart", "checkout"),
+            ("get_cart", "clear_cart"),
+            ("get_cart", "remove_from_cart"),
+            ("get_cart", "update_cart_quantity"),
+            ("add_to_cart", "update_cart_quantity"),
+            ("add_to_cart", "remove_from_cart"),
+            ("add_to_cart", "checkout"),
+            ("checkout", "get_order"),
+            ("checkout", "track_order"),
+            ("checkout", "return_order"),
+            ("list_orders", "get_order"),
+            ("list_orders", "track_order"),
+            ("list_orders", "return_order"),
+            ("get_order", "track_order"),
+            ("get_order", "return_order"),
+            ("return_order", "get_return_status"),
+            ("get_wishlist", "remove_from_wishlist"),
+            # State-dependency edges (whitelisted in _PROVE_STATE_DEPENDENCY_EDGES):
+            # coupon → cart flow. get_coupons outputs `code` consumed by
+            # apply_coupon; apply_coupon establishes cart discount state that
+            # checkout depends on.
+            ("get_coupons", "apply_coupon"),
+            ("apply_coupon", "checkout"),
         ],
-        "calendar": [("search_events", "get_event")],
-        "email": [("list_inbox", "get_email")],
+        "calendar": [
+            ("search_events", "get_event"),
+            ("search_events", "update_event"),
+            ("search_events", "delete_event"),
+            ("search_events", "add_attendee"),
+            ("search_events", "remove_attendee"),
+            ("search_events", "set_reminder"),
+            ("search_events", "respond_to_event"),
+            ("search_events", "get_recurring_info"),
+            ("list_events", "get_event"),
+            ("list_events", "get_recurring_info"),
+            ("get_event", "update_event"),
+            ("get_event", "delete_event"),
+            ("get_event", "add_attendee"),
+            ("get_event", "remove_attendee"),
+            ("get_event", "set_reminder"),
+            ("get_event", "respond_to_event"),
+            ("get_event", "get_recurring_info"),
+            ("create_event", "get_event"),
+            ("create_event", "update_event"),
+            ("create_event", "delete_event"),
+            ("create_event", "add_attendee"),
+            ("create_event", "set_reminder"),
+            ("create_event", "respond_to_event"),
+            ("create_recurring", "get_event"),
+            ("create_recurring", "get_recurring_info"),
+            ("create_recurring", "add_attendee"),
+            ("create_recurring", "set_reminder"),
+            ("create_recurring", "respond_to_event"),
+            ("create_recurring", "update_event"),
+            ("create_recurring", "delete_event"),
+            ("add_attendee", "remove_attendee"),
+        ],
+        "email": [
+            ("list_inbox", "get_email"),
+            ("list_inbox", "reply_email"),
+            ("list_inbox", "forward_email"),
+            ("list_inbox", "archive_email"),
+            ("list_inbox", "mark_read"),
+            ("list_inbox", "mark_unread"),
+            ("list_inbox", "add_label"),
+            ("list_inbox", "remove_label"),
+            ("list_inbox", "get_attachments"),
+            ("list_inbox", "move_to_thread"),
+            ("search_emails", "get_email"),
+            ("search_emails", "reply_email"),
+            ("search_emails", "forward_email"),
+            ("search_emails", "archive_email"),
+            ("search_emails", "mark_read"),
+            ("search_emails", "mark_unread"),
+            ("search_emails", "add_label"),
+            ("search_emails", "remove_label"),
+            ("search_emails", "get_attachments"),
+            ("search_emails", "get_thread"),
+            ("search_emails", "move_to_thread"),
+            ("get_email", "reply_email"),
+            ("get_email", "forward_email"),
+            ("get_email", "archive_email"),
+            ("get_email", "mark_read"),
+            ("get_email", "mark_unread"),
+            ("get_email", "add_label"),
+            ("get_email", "remove_label"),
+            ("get_email", "get_attachments"),
+            ("get_email", "move_to_thread"),
+            ("add_label", "remove_label"),
+            ("mark_unread", "mark_read"),
+            ("mark_read", "mark_unread"),
+            # State-dependency edge (whitelisted):
+            # draft is a precondition for send_email even though send_email's
+            # required schema args are to/subject/body (no draft_id).
+            ("create_draft", "send_email"),
+        ],
         "crm": [
-            ("list_leads", "update_lead"), ("list_leads", "convert_lead"),
-            ("list_leads", "delete_lead"), ("list_deals", "update_deal"),
-            ("list_deals", "get_deal"), ("list_tasks", "complete_task"),
+            ("list_leads", "update_lead"),
+            ("list_leads", "convert_lead"),
+            ("list_leads", "delete_lead"),
+            ("list_leads", "add_note"),
+            ("list_deals", "update_deal"),
+            ("list_deals", "get_deal"),
+            ("list_deals", "add_note"),
+            ("list_deals", "create_task"),
+            ("list_tasks", "complete_task"),
+            ("get_deal", "update_deal"),
+            ("get_deal", "add_note"),
+            ("get_deal", "create_task"),
+            ("create_lead", "convert_lead"),
+            ("create_lead", "update_lead"),
+            ("create_lead", "add_note"),
+            ("create_contact", "add_note"),
+            ("create_contact", "create_deal"),
+            ("create_contact", "update_contact"),
+            ("create_contact", "delete_contact"),
+            ("create_deal", "add_note"),
+            ("create_deal", "update_deal"),
+            ("create_deal", "create_task"),
+            ("create_task", "complete_task"),
+            ("convert_lead", "create_deal"),
+            ("convert_lead", "add_note"),
+            ("convert_lead", "update_contact"),
+            ("convert_lead", "delete_contact"),
         ],
-        "issue_tracker": [("search_issues", "get_issue")],
+        "issue_tracker": [
+            ("search_issues", "get_issue"),
+            ("search_issues", "update_issue"),
+            ("search_issues", "assign_issue"),
+            ("search_issues", "transition_issue"),
+            ("search_issues", "comment_issue"),
+            ("search_issues", "add_label"),
+            ("search_issues", "remove_label"),
+            ("search_issues", "add_watcher"),
+            ("search_issues", "remove_watcher"),
+            ("search_issues", "add_to_sprint"),
+            ("search_issues", "remove_from_sprint"),
+            ("search_issues", "create_subtask"),
+            ("search_issues", "list_subtasks"),
+            ("search_issues", "time_track"),
+            ("search_issues", "set_milestone"),
+            ("list_issues", "get_issue"),
+            ("list_issues", "update_issue"),
+            ("list_issues", "assign_issue"),
+            ("list_issues", "transition_issue"),
+            ("list_issues", "comment_issue"),
+            ("list_issues", "add_label"),
+            ("list_issues", "add_watcher"),
+            ("list_issues", "add_to_sprint"),
+            ("list_issues", "create_subtask"),
+            ("list_issues", "list_subtasks"),
+            ("list_issues", "time_track"),
+            ("list_issues", "set_milestone"),
+            ("get_issue", "update_issue"),
+            ("get_issue", "assign_issue"),
+            ("get_issue", "transition_issue"),
+            ("get_issue", "comment_issue"),
+            ("get_issue", "add_label"),
+            ("get_issue", "add_watcher"),
+            ("get_issue", "add_to_sprint"),
+            ("get_issue", "create_subtask"),
+            ("get_issue", "list_subtasks"),
+            ("get_issue", "time_track"),
+            ("get_issue", "set_milestone"),
+            ("create_issue", "get_issue"),
+            ("create_issue", "assign_issue"),
+            ("create_issue", "transition_issue"),
+            ("create_issue", "comment_issue"),
+            ("create_issue", "add_label"),
+            ("create_issue", "add_watcher"),
+            ("create_issue", "add_to_sprint"),
+            ("create_issue", "create_subtask"),
+            ("create_issue", "list_subtasks"),
+            ("create_issue", "time_track"),
+            ("create_issue", "set_milestone"),
+            ("create_issue", "update_issue"),
+            ("create_subtask", "list_subtasks"),
+            ("list_sprints", "add_to_sprint"),
+            ("create_sprint", "add_to_sprint"),
+            # State-dependency edges (whitelisted):
+            # sprint membership state, and time-tracking state feeding reports.
+            ("add_to_sprint", "remove_from_sprint"),
+            ("time_track", "get_time_report"),
+        ],
         "filesystem": [
-            ("find", "mv"), ("find", "rm"), ("find", "chmod"), ("find", "chown"),
-            ("find", "cp"), ("find", "cat"),
-            ("ls", "mv"), ("ls", "chmod"), ("ls", "rm"), ("ls", "cp"),
-            ("ls", "cd"), ("ls", "cat"),
-            ("cd", "ls"), ("cd", "pwd"),
-            ("cat", "rm"), ("cat", "grep"), ("cat", "sed"), ("cat", "awk"),
-            ("touch", "chmod"), ("touch", "cat"),
-            ("mkdir", "cd"), ("mkdir", "touch"),
-            ("mv", "ls"), ("cp", "ls"),
+            # ls / find / tree → any readonly analyzer that needs a path
+            ("ls", "cat"), ("ls", "head"), ("ls", "tail"), ("ls", "wc"),
+            ("ls", "stat"), ("ls", "file_info"), ("ls", "md5sum"),
+            ("ls", "sha256sum"), ("ls", "xxd"), ("ls", "sort"), ("ls", "uniq"),
+            ("ls", "cut"), ("ls", "sed"), ("ls", "awk"), ("ls", "split"),
+            ("ls", "readlink"), ("ls", "chmod"), ("ls", "chown"),
+            ("ls", "mv"), ("ls", "cp"), ("ls", "rm"), ("ls", "cd"),
+            ("ls", "truncate"), ("ls", "tar_create"), ("ls", "zip"),
+            ("find", "cat"), ("find", "head"), ("find", "tail"), ("find", "wc"),
+            ("find", "stat"), ("find", "file_info"), ("find", "md5sum"),
+            ("find", "sha256sum"), ("find", "xxd"), ("find", "sort"),
+            ("find", "uniq"), ("find", "cut"), ("find", "sed"), ("find", "awk"),
+            ("find", "split"), ("find", "readlink"), ("find", "chmod"),
+            ("find", "chown"), ("find", "mv"), ("find", "cp"), ("find", "rm"),
+            ("find", "truncate"), ("find", "tar_create"), ("find", "zip"),
+            ("ls", "symlink"), ("find", "symlink"),
+            ("ls", "join"), ("find", "join"),
+            ("tree", "cat"), ("tree", "cd"), ("tree", "ls"), ("tree", "rm"),
+            ("tree", "du"),
+            # cd / pwd navigation
+            ("cd", "ls"), ("cd", "pwd"), ("cd", "find"), ("cd", "tree"),
+            # cat / head / tail / stat as read-followed-by-write on the same file
+            ("cat", "rm"), ("cat", "chmod"), ("cat", "chown"), ("cat", "mv"),
+            ("cat", "cp"), ("cat", "grep"), ("cat", "sed"), ("cat", "awk"),
+            ("cat", "wc"),
+            ("stat", "chmod"), ("stat", "chown"), ("stat", "rm"), ("stat", "mv"),
+            ("head", "wc"), ("tail", "wc"),
+            # writer → observer on the created path
+            ("touch", "cat"), ("touch", "head"), ("touch", "tail"),
+            ("touch", "wc"), ("touch", "stat"), ("touch", "file_info"),
+            ("touch", "chmod"), ("touch", "chown"), ("touch", "rm"),
+            ("touch", "truncate"), ("touch", "md5sum"), ("touch", "sha256sum"),
+            ("mkdir", "ls"), ("mkdir", "cd"), ("mkdir", "touch"),
+            ("mkdir", "chmod"), ("mkdir", "chown"), ("mkdir", "rm"),
+            ("mkdir", "cp"), ("mkdir", "mv"),
+            ("cp", "ls"), ("cp", "cat"), ("cp", "stat"), ("cp", "rm"),
+            ("cp", "md5sum"), ("cp", "sha256sum"), ("cp", "diff"),
+            ("mv", "ls"), ("mv", "cat"), ("mv", "stat"), ("mv", "rm"),
+            ("mv", "chmod"), ("mv", "chown"),
+            # archive lifecycle
+            ("tar_create", "tar_extract"), ("tar_create", "md5sum"),
+            ("tar_create", "sha256sum"), ("tar_create", "rm"),
+            ("tar_create", "stat"),
+            ("zip", "unzip"), ("zip", "md5sum"), ("zip", "sha256sum"),
+            ("zip", "rm"), ("zip", "stat"),
+            # compute pipeline
+            ("sort", "uniq"), ("sort", "head"), ("sort", "tail"), ("sort", "wc"),
+            ("split", "ls"), ("split", "cat"), ("split", "wc"),
+            ("readlink", "cat"), ("readlink", "stat"), ("readlink", "ls"),
+            # misc
             ("du", "rm"),
         ],
-        "banking": [("search_transactions", "get_transaction")],
-        "payments": [("list_invoices", "get_invoice")],
-        "team_chat": [("search_messages", "get_message")],
+        "banking": [
+            ("list_accounts", "get_account_info"),
+            ("list_accounts", "get_balance"),
+            ("list_accounts", "get_history"),
+            ("list_accounts", "get_statement"),
+            ("list_accounts", "verify_account"),
+            ("list_accounts", "deposit"),
+            ("list_accounts", "withdraw"),
+            ("list_accounts", "transfer"),
+            ("list_accounts", "wire_transfer"),
+            ("list_accounts", "bill_pay"),
+            ("list_accounts", "schedule_transfer"),
+            ("list_accounts", "freeze_account"),
+            ("list_accounts", "apply_loan"),
+            ("get_account_info", "get_balance"),
+            ("get_account_info", "get_history"),
+            ("get_account_info", "get_statement"),
+            ("get_account_info", "verify_account"),
+            ("get_account_info", "deposit"),
+            ("get_account_info", "withdraw"),
+            ("get_account_info", "transfer"),
+            ("get_account_info", "bill_pay"),
+            ("get_account_info", "freeze_account"),
+            ("get_balance", "withdraw"),
+            ("get_balance", "transfer"),
+            ("get_balance", "bill_pay"),
+            ("verify_account", "wire_transfer"),
+            ("verify_account", "transfer"),
+            ("schedule_transfer", "cancel_transfer"),
+            ("freeze_account", "unfreeze_account"),
+        ],
+        "payments": [
+            ("list_invoices", "get_invoice"),
+            ("list_invoices", "pay_invoice"),
+            ("list_invoices", "refund_invoice"),
+            ("list_invoices", "dispute_invoice"),
+            ("get_invoice", "pay_invoice"),
+            ("get_invoice", "refund_invoice"),
+            ("get_invoice", "dispute_invoice"),
+            ("create_invoice", "get_invoice"),
+            ("create_invoice", "pay_invoice"),
+            ("create_invoice", "refund_invoice"),
+            ("create_invoice", "dispute_invoice"),
+            ("pay_invoice", "refund_invoice"),
+            ("pay_invoice", "cancel_payment"),
+            ("list_webhooks", "delete_webhook"),
+            ("create_webhook", "delete_webhook"),
+        ],
+        "team_chat": [
+            ("list_channels", "get_channel"),
+            ("list_channels", "archive_channel"),
+            ("list_channels", "send_message"),
+            ("list_channels", "search_messages"),
+            ("get_channel", "send_message"),
+            ("get_channel", "archive_channel"),
+            ("create_channel", "get_channel"),
+            ("create_channel", "send_message"),
+            ("create_channel", "archive_channel"),
+            ("search_messages", "react_message"),
+            ("search_messages", "create_thread"),
+            ("send_message", "react_message"),
+            ("send_message", "create_thread"),
+            ("create_thread", "get_thread"),
+        ],
         "food_delivery": [
             ("search_restaurants", "get_restaurant"),
-            ("get_cart", "create_order"), ("get_cart", "cancel_order"),
+            ("search_restaurants", "get_menu"),
+            ("search_restaurants", "filter_by_dietary"),
+            ("search_restaurants", "get_popular_items"),
+            ("search_restaurants", "create_order"),
+            ("list_restaurants", "get_restaurant"),
+            ("list_restaurants", "get_menu"),
+            ("list_restaurants", "create_order"),
+            ("get_restaurant", "get_menu"),
+            ("get_restaurant", "filter_by_dietary"),
+            ("get_restaurant", "get_popular_items"),
+            ("get_restaurant", "create_order"),
+            ("get_menu", "create_order"),
+            ("get_popular_items", "create_order"),
+            ("filter_by_dietary", "create_order"),
+            ("create_order", "get_order"),
+            ("create_order", "get_estimated_time"),
+            ("create_order", "track_rider"),
+            ("create_order", "cancel_order"),
+            ("create_order", "add_tip"),
+            ("create_order", "rate_order"),
+            ("create_order", "contact_support"),
+            ("create_order", "update_order_status"),
+            ("list_orders", "get_order"),
+            ("list_orders", "cancel_order"),
+            ("list_orders", "reorder"),
+            ("list_orders", "rate_order"),
+            ("list_orders", "contact_support"),
+            ("list_orders", "update_order_status"),
+            ("list_orders", "track_rider"),
+            ("list_orders", "get_estimated_time"),
+            ("list_orders", "add_tip"),
+            ("get_order", "cancel_order"),
+            ("get_order", "add_tip"),
+            ("get_order", "rate_order"),
+            ("get_order", "track_rider"),
+            ("get_order", "get_estimated_time"),
+            ("get_order", "reorder"),
+            ("get_order", "contact_support"),
+            ("get_order", "update_order_status"),
         ],
     }
     for src, dst in _EDGES.get(server_name, []):

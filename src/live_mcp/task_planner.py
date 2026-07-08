@@ -312,11 +312,11 @@ class ContinuationPolicy:
         # conversation, generate a follow-up, or ask a clarification, using a
         # turn-decay schedule bounded by min_turns=2 and max_turns=3."
         #
-        # chain_seed is a planning prior, NOT a hard script. Even when the chain
+        # chain_seed is a planning prior, not a hard script. Even when the chain
         # has remaining steps, the continuation decision is probabilistic — the
         # teacher may have already satisfied the user's intent via a different
         # valid trajectory. Forcing continuation when chain_progress < len(chain_seed)
-        # reintroduces the same hard-scripting problem we removed from decide_action.
+        # would script the conversation, undermining the teacher's autonomy.
         #
         # After min_rounds, always sample with turn-decay probability regardless
         # of chain progress. The chain guides query generation and provides hints,
@@ -650,37 +650,15 @@ Return only:
                 default_action = "tool_call"
                 blocked_first = ("final_answer", "report_error")
         else:
-            # After the first turn, the LLM should continue making tool
-            # calls if the dependency chain has remaining steps. We enforce
-            # this through blocked_first (block final_answer internally)
-            # rather than telling the LLM about the chain structure. The
-            # model must decide actions based on the user query and execution
-            # history alone.
-            chain_remaining = (
-                chain_seed and chain_progress < len(chain_seed)
-                and len(chain_seed) >= 2
-            )
-            # Count successful tool calls in execution history so far.
-            # We only block final_answer when the model has fewer than
-            # 2 successful calls AND the chain has remaining steps.
-            # Once ≥2 tools have been called, the oracle has enough
-            # multi-step content for valid training data, so we let the
-            # model terminate freely. This prevents the "blocked 3×
-            # final_answer → exhausted retries → only 1 oracle call"
-            # failure mode observed after removing chain_guide hints.
-            n_ok_calls = sum(
-                1 for e in execution_history
-                if e.get("success")
-                and e.get("tool_name", "") not in ("__prior_round__", "__reject__")
-            )
-            if chain_remaining and n_ok_calls < 2:
-                first_turn_hint = ""
-                default_action = "tool_call"
-                blocked_first = ("final_answer",)
-            else:
-                first_turn_hint = ""
-                default_action = "final_answer"
-                blocked_first = ()
+            # After the first turn, the LLM decides the next action based on
+            # the user query, execution history, and chain guidance in the
+            # prompt. PROVE §3.2: the teacher LLM is prompted with chain
+            # guidance and a format validator; no post-hoc action-type
+            # blocking is applied. If the teacher produces a short trajectory,
+            # that is a model quality issue, not a pipeline bug.
+            first_turn_hint = ""
+            default_action = "final_answer"
+            blocked_first: tuple[str, ...] = ()
 
         chain_guidance = ""
         if chain_seed and chain_progress < len(chain_seed):
@@ -788,11 +766,11 @@ Output one JSON object:
                     continue
                 action = data.get("action", default_action)
 
-                # Reject blocked action types. On the first turn, block
-                # final_answer and report_error to prevent answering without
-                # tools. On subsequent turns with chain remaining, block
-                # final_answer only — report_error and ask_clarification are
-                # legitimate when tools fail. After chain completion, no blocks.
+                # Reject blocked action types. PROVE §3.2: on the first turn,
+                # the teacher must call a tool — block final_answer and
+                # report_error. After the first turn, no action-type blocking
+                # is applied; the teacher decides based on chain guidance in
+                # the prompt.
                 if action in blocked_first:
                     logger.debug(
                         f"decide_action rejected '{action}' for {self.domain} "
@@ -1133,7 +1111,7 @@ _MUTATING_PREFIXES: tuple[str, ...] = (
 # are mutating the outside world.
 _SELF_CONTAINED_WRITE_TOOLS: frozenset[str] = frozenset({
     "send_email", "send_message", "send_dm", "reply_email",
-    "forward_email", "create_filter", "create_webhook",
+    "forward_email",
 })
 
 
@@ -1243,18 +1221,27 @@ def derive_success_criteria(
                             "value": fv,
                         })
 
+        # ── Top-level list changes (e.g. cart, wishlist in shopping) ──
+        # derive_success_criteria previously only handled dict-type state fields,
+        # missing list-type fields like shopping.cart and shopping.wishlist.
+        # For lists, a simple equality check covers the full diff.
+        elif isinstance(final_val, list):
+            init_is_list = isinstance(init_val, list)
+            if not init_is_list or init_val != final_val:
+                criteria.append({
+                    "type": "state_equals", "server": domain,
+                    "path": key,
+                    "path_parts": [key],
+                    "value": final_val,
+                })
+
     # Domain-specific semantic criteria
     tool_names = [c.tool_name for c in oracle_calls if c.action == "tool_call"]
     criteria.extend(_domain_criteria(tool_names, initial_state, final_state, domain))
 
-    # P3b FIX: Removed the empty-path fallback below.
-    # Previously: if not criteria: criteria.append({"type": "state_exists",
-    # "server": domain, "path": ""})
-    # This inserted a criterion that task_reward.py skips (if not path: continue),
-    # making it a no-op that consumed a criteria slot and silently lowered
-    # r_coverage.  When no criteria can be derived, keep the list empty —
-    # r_coverage denominator uses max(outcome_count + criteria_count, 1), so
-    # an empty criteria list degrades gracefully to outcome-only coverage.
+    # When no criteria can be derived, keep the list empty.
+    # r_coverage uses max(outcome_count + criteria_count, 1) as denominator,
+    # so an empty criteria list degrades gracefully to outcome-only coverage.
 
     return criteria
 

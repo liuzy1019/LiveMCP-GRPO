@@ -25,15 +25,21 @@
   ],
   "graph": {
     "add_label": {
-      "explicit": [],
+      "explicit": [
+        "remove_label"
+      ],
       "implicit": []
     },
     "add_to_sprint": {
-      "explicit": [],
+      "explicit": [
+        "remove_from_sprint"
+      ],
       "implicit": []
     },
     "add_watcher": {
-      "explicit": [],
+      "explicit": [
+        "remove_watcher"
+      ],
       "implicit": []
     },
     "assign_issue": {
@@ -46,17 +52,18 @@
     },
     "create_issue": {
       "explicit": [
-        "transition_issue",
-        "update_issue",
-        "assign_issue",
         "add_label",
+        "add_to_sprint",
+        "add_watcher",
+        "assign_issue",
         "comment_issue",
         "create_subtask",
-        "time_track",
+        "get_issue",
+        "list_subtasks",
         "set_milestone",
-        "add_watcher",
-        "add_to_sprint",
-        "get_issue"
+        "time_track",
+        "transition_issue",
+        "update_issue"
       ],
       "implicit": []
     },
@@ -67,23 +74,24 @@
       "implicit": []
     },
     "create_subtask": {
-      "explicit": [],
+      "explicit": [
+        "list_subtasks"
+      ],
       "implicit": []
     },
     "get_issue": {
       "explicit": [
-        "transition_issue",
-        "update_issue",
+        "add_label",
+        "add_to_sprint",
+        "add_watcher",
         "assign_issue",
         "comment_issue",
-        "add_label",
-        "remove_label",
-        "add_watcher",
-        "remove_watcher",
         "create_subtask",
-        "time_track",
+        "list_subtasks",
         "set_milestone",
-        "add_to_sprint"
+        "time_track",
+        "transition_issue",
+        "update_issue"
       ],
       "implicit": []
     },
@@ -93,11 +101,18 @@
     },
     "list_issues": {
       "explicit": [
-        "transition_issue",
-        "update_issue",
+        "add_label",
+        "add_to_sprint",
+        "add_watcher",
         "assign_issue",
+        "comment_issue",
+        "create_subtask",
         "get_issue",
-        "add_to_sprint"
+        "list_subtasks",
+        "set_milestone",
+        "time_track",
+        "transition_issue",
+        "update_issue"
       ],
       "implicit": []
     },
@@ -128,7 +143,9 @@
       "implicit": []
     },
     "time_track": {
-      "explicit": [],
+      "explicit": [
+        "get_time_report"
+      ],
       "implicit": []
     },
     "transition_issue": {

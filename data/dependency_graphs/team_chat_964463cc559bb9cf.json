@@ -22,10 +22,13 @@
     "create_channel": {
       "explicit": [
         "archive_channel",
-        "send_message",
-        "get_channel"
+        "get_channel",
+        "send_message"
       ],
-      "implicit": []
+      "implicit": [
+        "create_thread",
+        "react_message"
+      ]
     },
     "create_thread": {
       "explicit": [
@@ -36,12 +39,11 @@
     "get_channel": {
       "explicit": [
         "archive_channel",
+        "create_thread",
+        "react_message",
         "send_message"
       ],
-      "implicit": [
-        "create_thread",
-        "react_message"
-      ]
+      "implicit": []
     },
     "get_thread": {
       "explicit": [],
@@ -49,15 +51,14 @@
     },
     "get_user_status": {
       "explicit": [],
-      "implicit": [
-        "send_dm"
-      ]
+      "implicit": []
     },
     "list_channels": {
       "explicit": [
         "archive_channel",
-        "send_message",
-        "get_channel"
+        "get_channel",
+        "search_messages",
+        "send_message"
       ],
       "implicit": []
     },
@@ -67,13 +68,10 @@
     },
     "search_messages": {
       "explicit": [
-        "react_message",
-        "create_thread"
+        "create_thread",
+        "react_message"
       ],
-      "implicit": [
-        "get_channel",
-        "send_message"
-      ]
+      "implicit": []
     },
     "send_dm": {
       "explicit": [],
@@ -81,11 +79,10 @@
     },
     "send_message": {
       "explicit": [
-        "create_thread"
-      ],
-      "implicit": [
+        "create_thread",
         "react_message"
-      ]
+      ],
+      "implicit": []
     }
   }
 }

@@ -30,34 +30,37 @@
     },
     "convert_lead": {
       "explicit": [
+        "add_note",
         "create_deal",
-        "update_contact",
-        "delete_contact"
+        "delete_contact",
+        "update_contact"
       ],
       "implicit": []
     },
     "create_contact": {
       "explicit": [
-        "update_contact",
+        "add_note",
+        "create_deal",
         "delete_contact",
-        "create_deal"
+        "update_contact"
       ],
       "implicit": []
     },
     "create_deal": {
       "explicit": [
-        "update_deal",
-        "get_deal"
+        "add_note",
+        "create_task",
+        "get_deal",
+        "update_deal"
       ],
-      "implicit": [
-        "add_note"
-      ]
+      "implicit": []
     },
     "create_lead": {
       "explicit": [
+        "add_note",
         "convert_lead",
-        "update_lead",
-        "delete_lead"
+        "delete_lead",
+        "update_lead"
       ],
       "implicit": []
     },
@@ -77,24 +80,27 @@
     },
     "get_deal": {
       "explicit": [
+        "add_note",
+        "create_task",
         "update_deal"
       ],
-      "implicit": [
-        "add_note"
-      ]
+      "implicit": []
     },
     "list_deals": {
       "explicit": [
-        "update_deal",
-        "get_deal"
+        "add_note",
+        "create_task",
+        "get_deal",
+        "update_deal"
       ],
       "implicit": []
     },
     "list_leads": {
       "explicit": [
+        "add_note",
         "convert_lead",
-        "update_lead",
-        "delete_lead"
+        "delete_lead",
+        "update_lead"
       ],
       "implicit": []
     },

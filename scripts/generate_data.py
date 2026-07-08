@@ -401,6 +401,23 @@ def _validate_task_training_contract(task) -> None:
                     f"The oracle did not complete the user's intended mutation."
                 )
 
+    # ── P3d: tool_error_recovery with empty criteria is semantically broken ──
+    # tool_error_recovery indicates the oracle encountered execution failures
+    # and performed recovery steps.  If the oracle trace uses only readonly
+    # tools (e.g. get_order + list_orders in food_delivery), P3c won't catch
+    # it because none of the tools are mutating.  But a recovery scenario
+    # without any state change means the "recovery" was just reading data —
+    # the task teaches nothing useful about error handling.
+    if scenario_type == "tool_error_recovery":
+        criteria = _task_success_criteria(task)
+        if not criteria:
+            raise ValueError(
+                f"Task {task.task_id} scenario=tool_error_recovery has "
+                f"empty success_criteria — oracle tools {real_required_tools} "
+                f"are all readonly.  Recovery without state change is not "
+                f"meaningful for GRPO training."
+            )
+
 
 def _filter_training_eligible_tasks(tasks: list) -> list:
     eligible = []

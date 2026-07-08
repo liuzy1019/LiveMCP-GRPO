@@ -20,19 +20,19 @@
     },
     "create_invoice": {
       "explicit": [
+        "cancel_payment",
+        "dispute_invoice",
+        "get_invoice",
         "pay_invoice",
         "refund_invoice"
       ],
-      "implicit": [
-        "get_invoice",
-        "dispute_invoice"
-      ]
+      "implicit": []
     },
     "create_webhook": {
-      "explicit": [],
-      "implicit": [
+      "explicit": [
         "delete_webhook"
-      ]
+      ],
+      "implicit": []
     },
     "delete_webhook": {
       "explicit": [],
@@ -44,20 +44,20 @@
     },
     "get_invoice": {
       "explicit": [
-        "pay_invoice",
-        "refund_invoice",
         "cancel_payment",
-        "dispute_invoice"
+        "dispute_invoice",
+        "pay_invoice",
+        "refund_invoice"
       ],
       "implicit": []
     },
     "list_invoices": {
       "explicit": [
-        "pay_invoice",
-        "refund_invoice",
         "cancel_payment",
+        "dispute_invoice",
         "get_invoice",
-        "dispute_invoice"
+        "pay_invoice",
+        "refund_invoice"
       ],
       "implicit": []
     },
@@ -69,11 +69,10 @@
     },
     "pay_invoice": {
       "explicit": [
-        "cancel_payment"
-      ],
-      "implicit": [
+        "cancel_payment",
         "refund_invoice"
-      ]
+      ],
+      "implicit": []
     },
     "refund_invoice": {
       "explicit": [],

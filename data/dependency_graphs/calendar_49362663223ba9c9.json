@@ -22,7 +22,9 @@
   ],
   "graph": {
     "add_attendee": {
-      "explicit": [],
+      "explicit": [
+        "remove_attendee"
+      ],
       "implicit": []
     },
     "change_timezone": {
@@ -31,27 +33,30 @@
     },
     "check_conflicts": {
       "explicit": [],
-      "implicit": [
-        "update_event"
-      ]
+      "implicit": []
     },
     "create_event": {
       "explicit": [
-        "update_event",
-        "delete_event",
         "add_attendee",
-        "set_reminder"
+        "delete_event",
+        "get_event",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
     "create_recurring": {
       "explicit": [
-        "update_event",
-        "delete_event",
         "add_attendee",
+        "delete_event",
         "get_event",
         "get_recurring_info",
-        "set_reminder"
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
@@ -65,13 +70,13 @@
     },
     "get_event": {
       "explicit": [
-        "update_event",
-        "delete_event",
         "add_attendee",
+        "delete_event",
+        "get_recurring_info",
         "remove_attendee",
-        "set_reminder",
         "respond_to_event",
-        "get_recurring_info"
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
@@ -89,13 +94,10 @@
     },
     "list_events": {
       "explicit": [
-        "update_event",
         "delete_event",
         "get_event",
-        "add_attendee",
-        "remove_attendee",
-        "set_reminder",
-        "respond_to_event"
+        "get_recurring_info",
+        "update_event"
       ],
       "implicit": []
     },
@@ -109,13 +111,14 @@
     },
     "search_events": {
       "explicit": [
-        "update_event",
+        "add_attendee",
         "delete_event",
         "get_event",
-        "add_attendee",
+        "get_recurring_info",
         "remove_attendee",
+        "respond_to_event",
         "set_reminder",
-        "respond_to_event"
+        "update_event"
       ],
       "implicit": []
     },

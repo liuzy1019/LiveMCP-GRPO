@@ -22,7 +22,9 @@
   ],
   "graph": {
     "add_label": {
-      "explicit": [],
+      "explicit": [
+        "remove_label"
+      ],
       "implicit": []
     },
     "archive_email": {
@@ -30,7 +32,9 @@
       "implicit": []
     },
     "create_draft": {
-      "explicit": [],
+      "explicit": [
+        "send_email"
+      ],
       "implicit": []
     },
     "create_filter": {
@@ -47,16 +51,15 @@
     },
     "get_email": {
       "explicit": [
-        "reply_email",
-        "forward_email",
-        "archive_email",
         "add_label",
-        "remove_label",
-        "move_to_thread",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
         "mark_read",
         "mark_unread",
-        "get_attachments",
-        "get_thread"
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
       ],
       "implicit": []
     },
@@ -70,15 +73,24 @@
     },
     "list_inbox": {
       "explicit": [
-        "get_email"
-      ],
-      "implicit": [
         "add_label",
-        "archive_email"
-      ]
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
     },
     "mark_read": {
-      "explicit": [],
+      "explicit": [
+        "mark_unread"
+      ],
       "implicit": []
     },
     "mark_unread": {
@@ -99,26 +111,23 @@
     },
     "search_emails": {
       "explicit": [
-        "reply_email",
-        "forward_email",
+        "add_label",
         "archive_email",
-        "get_email"
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
       ],
       "implicit": []
     },
     "send_email": {
       "explicit": [],
-      "implicit": [
-        "get_thread",
-        "add_label",
-        "archive_email",
-        "get_email",
-        "mark_read",
-        "mark_unread",
-        "reply_email",
-        "forward_email",
-        "get_attachments"
-      ]
+      "implicit": []
     }
   }
 }

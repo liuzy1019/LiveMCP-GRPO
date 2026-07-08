@@ -23,16 +23,16 @@ Hydra 配置文件位于 `verl/verl/trainer/config/ppo_trainer.yaml`（verl 内�
 
 ## 正式训练核心参数
 
-配置文件由 `src/training/trainer_config.py` 管理，支持 GPU tier 自适应默认值：
+配置文件由 `src/training/trainer_config.py` 管理，当前使用 L20 默认值。多 GPU tier 自适应默认值规划中：
 
-| Tier | prompt_length | response_length | max_num_seqs | micro_batch | train_batch | rollout_n |
-|------|--------------|-----------------|-------------|------------|-------------|-----------|
-| L20 | 12384 | 16384 | 64 | 2 | 32 | 16 |
-| A100/Hopper | 16384 | 16384 | 128 | 4 | 64 | 16 |
-| A10 | 10240 | 4096 | 8 | 1 | 8 | 8 |
-| 其他 | 10240 | 2048 | 8 | 1 | 8 | 4 |
+| Tier | prompt_length | response_length | max_num_seqs | micro_batch | train_batch | rollout_n | 状态 |
+|------|--------------|-----------------|-------------|------------|-------------|-----------|------|
+| L20 | 12384 | 16384 | 64 | 2 | 32 | 16 | ✅ 当前 |
+| A100/Hopper | 16384 | 16384 | 128 | 4 | 64 | 16 | ⏳ 规划中 |
+| A10 | 10240 | 4096 | 8 | 1 | 8 | 8 | ⏳ 规划中 |
+| 其他 | 10240 | 2048 | 8 | 1 | 8 | 4 | ⏳ 规划中 |
 
-可通过 CLI 参数覆盖：`--model`、`--gpus`、`--total-steps`、`--batch-size`、`--rollout-n`、`--lr`、`--strategy`、`--wandb`。
+可通过 CLI 参数或环境变量覆盖默认值：`--model`、`--gpus`、`--total-steps`、`--batch-size`、`--rollout-n`、`--lr`、`--strategy`、`--wandb`。
 
 ## 环境变量覆盖
 

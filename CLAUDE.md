@@ -15,12 +15,16 @@ nvidia-smi                  # 确认 GPU 可用（L20 ×8, Driver 570.195.03）
 
 | 组件 | 当前版本 | pyproject.toml 目标 |
 |------|---------|-------------------|
-| PyTorch | 2.7.0+cu126 | 2.8.0 |
-| vLLM | 0.9.2 | 0.11.0 |
-| flashinfer-python | 0.6.4 | 0.6.4 |
-| flashinfer-cubin | 0.6.4 | 0.6.4 |
-| flash-attn | 2.7.3 | 2.7.3 |
+| PyTorch | 2.10.0+cu128 | 2.8.0 |
+| vLLM | 0.19.1 | 0.11.0 |
+| transformers | 5.13.0 | — |
+| flashinfer-python | 0.6.12 | 0.6.4 |
+| flash-attn | 未安装 | 2.7.3 |
 | nvcc (conda) | 12.9.86 | — |
+
+> **vLLM 0.11.0 → 0.19.1**: 持续跟随上游。PROVE 论文未指定具体 vLLM 版本（仅写 "VERL + vLLM"），0.19.1 完全兼容。
+> **PyTorch 2.7.0 → 2.10.0**: 匹配最新 CUDA 工具链。
+> **flash-attn**: 当前未安装。vLLM V1 引擎默认使用 flashinfer attention backend，不依赖 flash_attn。
 
 ### FlashInfer JIT 编译配置（必须）
 
@@ -44,10 +48,9 @@ export PATH=$CUDA_HOME/bin:$PATH
 
 ```bash
 export VLLM_USE_FLASHINFER_SAMPLER=0
-export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 ```
 
-此方案回退到 PyTorch 原生采样，性能略降但保证可用。flash-attn 2.7.3 在当前 PyTorch 2.7 下有 ABI 兼容问题（`undefined symbol: _ZN3c104cuda9SetDeviceEab`），但 vLLM V1 引擎默认使用 flashinfer attention backend，实际不依赖 flash_attn。
+此方案回退到 PyTorch 原生采样，性能略降但保证可用。当前环境未安装 flash-attn（vLLM V1 默认 flashinfer attention backend，无需 flash_attn）。
 
 ### 环境安装步骤（从头构建）
 
@@ -87,14 +90,14 @@ CUDA_HOME=$CONDA_PREFIX python -c "import flashinfer; print(flashinfer.__version
 | OVAL Agent Loop | ✅ | Single-call protocol + initial-state hash + final-state evidence |
 | OVAL Reward | ✅ | Ordered coverage + task-aware safety |
 | GRPO Estimator | ✅ | Saturation skip + 2D stratified advantage |
-| GPU Auto-Adaptation | ✅ | Multi-tier (L20/A100/A10/Hopper/T4) |
+| GPU Auto-Adaptation | ⏳ | Multi-tier defaults planned (L20/A100/A10/Hopper/T4); currently L20 only |
 | Full Training Run | ⏳ | Pending data generation |
 
 ### Verified Pipeline
 
 ```
 live MCP servers (10 domains)
-→ PROVE Teacher (LLM-in-the-loop, Qwen3-32B)
+→ PROVE Teacher (LLM-in-the-loop, user-specified; preferred: Gemini via OpenAI-compatible API)
 → Real MCP execution → oracle trace
 → Jaccard dedup (0.70, position-aware)
 → Parquet serialization (success_criteria as JSON string)
@@ -113,7 +116,7 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 
 ### Current Hardware
 
-- Teacher model: Qwen3-32B (vLLM TP=4, GPU 4–7, 4×L20 44GB)
+- Teacher model: user-specified via `--model` (preferred: Gemini via `--api-base`)
 - Policy model: Qwen3-4B (`models/Qwen/Qwen3-4B`)
 - Default environment: 8×L20 44GB
 
@@ -135,6 +138,7 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 | Illegal tool JSON → no AuditEvent | Model output format errors only produce error observation, no audit event. Fix requires cross-module type extension. |
 | Reward uses last observation as final state | Exact value verification may miss during consecutive tool_calls (low probability, has seen_ids fallback). |
 | Perturbation only in teacher phase | PROVE design: perturbation for teacher robustness testing, clean training environment. |
+| Teacher chain-progress blocking removed | PROVE §3.2: only format validation (well-formed JSON). No post-hoc action-type blocking. Replaced silent retry with stronger chain_guidance in prompt. See `task_planner.py:decide_action`. |
 
 ## Common Commands
 
@@ -147,8 +151,9 @@ python -m vllm.entrypoints.openai.api_server \
     --tensor-parallel-size 2 --max-model-len 8192 \
     --gpu-memory-utilization 0.85 --trust-remote-code
 
-# Data generation
-bash scripts/generate_data.sh --model models/Qwen/Qwen3-32B --count 500 --val-count 100
+# Data generation (Teacher: Gemini via OpenAI-compatible API)
+bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
+# Data generation (Teacher: local model)
 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --domain calendar --count 200
 
 # GRPO training
@@ -157,9 +162,20 @@ bash scripts/train_grpo.sh --gpus 0,1,2,3 --total-steps 300
 bash scripts/train_grpo.sh --wandb --wandb-project oval-mcp-grpo
 
 # Validation
+python scripts/validate_pipeline.py --live        # 端到端管线验证
+python scripts/test_domain_integrity.py            # Domain 拓扑/逻辑完整性
+python scripts/test_runner.py                      # 测试编排（拓扑+逻辑+数据生成）
 python -m pytest tests/
 python -m compileall src scripts tests
 git diff --check
+
+# Maintenance
+python scripts/precompute_dependency_graphs.py     # 预计算工具依赖图
+python scripts/rebuild_dependency_graph_cache.py   # 重建依赖图缓存
+python scripts/check_data.py -f data/train.parquet # 检查 parquet 数据
+python scripts/inspect_prompts.py -f data/train.parquet  # 检查 prompt 内容
+python scripts/verify_entities.py                  # 实体验证
+python scripts/merge_rollout_shards.py             # 合并 rollout 分片
 ```
 
 ## Logging

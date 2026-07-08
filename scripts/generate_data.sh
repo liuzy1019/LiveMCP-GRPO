@@ -7,8 +7,8 @@
 #   - Large model (needs TP) → vLLM API server(s), 1 process per instance
 #
 # Usage:
+#   bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-gemini-proxy/v1 --count 500 --val-count 100
 #   bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 500
-#   bash scripts/generate_data.sh --model models/Qwen/Qwen3-32B --count 500 --val-count 100
 #   bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --domain calendar --count 200
 #   GPU_COUNT=4 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 200
 #
@@ -359,9 +359,8 @@ print(tp)
         VLLM_PORTS+=("${PORT}")
         LOG="${OUTPUT_DIR}/vllm_instance${inst}_$(date +%H%M).log"
 
-        # Derive served model name from directory name:
-        #   Qwen3-32B    → Qwen3-32B-Instruct
-        #   Gemma-4-31B-it → Gemma-4-31B-it (keep as-is)
+        # Derive served model name from directory name (for local vLLM).
+        # When using Gemini or other cloud APIs, the model name is passed directly.
         SERVED_MODEL="$(basename "${MODEL}")"
         if [[ "$SERVED_MODEL" == Qwen* && "$SERVED_MODEL" != *Instruct* ]]; then
             SERVED_MODEL="${SERVED_MODEL}-Instruct"
