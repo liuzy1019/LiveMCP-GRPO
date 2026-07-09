@@ -22,13 +22,14 @@ _LEAK_MARKERS = (
     "hidden_tools",
 )
 _EXPECTED_TERMINALS = {
-    "normal_safe_success": {"final_answer"},
-    "missing_function": {"report_error"},
+    "normal_safe_success": {"final_answer", "ask_clarification"},
+    "missing_function": {"ask_clarification"},
     "no_tool_or_abstention": {"report_error"},
     "irrelevant": {"report_error"},
     "clarification_required": {"ask_clarification"},
     "tool_error_recovery": {"final_answer", "report_error"},
     "missing_dependency": {"final_answer", "ask_clarification", "report_error"},
+    "unsafe_temptation": {"final_answer"},
 }
 
 
@@ -147,6 +148,9 @@ def merge_split(tmpdir: Path, pattern: str, outpath: Path, target: int) -> tuple
         return False, pd.DataFrame()
 
     merged = pd.concat(dfs, ignore_index=True)
+    if len(merged) == 0 or len(merged.columns) == 0:
+        print(f"  {outpath}: 0 rows (empty parquet files)")
+        return True, pd.DataFrame()
     merged["_quality_issue"] = merged.apply(_quality_issue, axis=1)
     bad_mask = merged["_quality_issue"].astype(bool)
     dropped_quality = int(bad_mask.sum())
@@ -192,14 +196,23 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     ok_train, train_df = merge_split(tmpdir, "shard_*_train.parquet", output_dir / "train.parquet", args.count)
     ok_val, val_df = merge_split(tmpdir, "shard_*_val.parquet", output_dir / "val.parquet", args.val_count)
-    if not (ok_train and ok_val):
+    if not ok_train:
+        return 1
+    # val with 0 count is expected to be empty; skip overlap checks
+    if args.val_count <= 0 and len(val_df) == 0:
+        ok_val = True
+
+    if not ok_val:
         return 1
 
     train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
 
     # 从 val 中删掉与 train 语义重叠的行，而不是直接报错
-    overlap_mask = val_df.apply(lambda row: _row_fingerprint(row) in train_fps, axis=1)
-    n_removed = int(overlap_mask.sum())
+    if len(val_df) > 0:
+        overlap_mask = val_df.apply(lambda row: _row_fingerprint(row) in train_fps, axis=1)
+        n_removed = int(overlap_mask.sum())
+    else:
+        n_removed = 0
     if n_removed:
         print(f"  WARNING: removed {n_removed} val rows overlapping with train, rewriting val.parquet")
         val_df = val_df[~overlap_mask].reset_index(drop=True)
@@ -210,10 +223,13 @@ def main() -> int:
             return 1
 
     train_ids = {_as_extra(row["extra_info"]).get("task_id", "") for _, row in train_df.iterrows()}
-    tid_overlap_mask = val_df.apply(
-        lambda row: _as_extra(row["extra_info"]).get("task_id", "") in train_ids, axis=1
-    )
-    n_tid_removed = int(tid_overlap_mask.sum())
+    if len(val_df) > 0:
+        tid_overlap_mask = val_df.apply(
+            lambda row: _as_extra(row["extra_info"]).get("task_id", "") in train_ids, axis=1
+        )
+        n_tid_removed = int(tid_overlap_mask.sum())
+    else:
+        n_tid_removed = 0
     if n_tid_removed:
         print(f"  WARNING: removed {n_tid_removed} val rows with task_id overlap, rewriting val.parquet")
         val_df = val_df[~tid_overlap_mask].reset_index(drop=True)

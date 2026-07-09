@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start a vLLM OpenAI-compatible API server for local model serving.
-# Used for RL rollout/training (not teacher generation — teacher uses Gemini via cloud API).
+# Used for RL rollout/training（teacher generation 由 generate_data.sh 统一管理）。
 #
 # Usage:
 #   bash scripts/start_vllm.sh <model_path> [port] [tp_size] [gpu_ids]

@@ -51,20 +51,22 @@
     },
     "get_email": {
       "explicit": [
-        "reply_email",
-        "forward_email",
+        "add_label",
         "archive_email",
+        "forward_email",
+        "get_attachments",
         "mark_read",
         "mark_unread",
-        "add_label",
+        "move_to_thread",
         "remove_label",
-        "get_attachments",
-        "move_to_thread"
+        "reply_email"
       ],
       "implicit": []
     },
     "get_thread": {
-      "explicit": [],
+      "explicit": [
+        "get_attachments"
+      ],
       "implicit": []
     },
     "list_filters": {
@@ -73,16 +75,16 @@
     },
     "list_inbox": {
       "explicit": [
-        "get_email",
-        "reply_email",
-        "forward_email",
+        "add_label",
         "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
         "mark_read",
         "mark_unread",
-        "add_label",
+        "move_to_thread",
         "remove_label",
-        "get_attachments",
-        "move_to_thread"
+        "reply_email"
       ],
       "implicit": []
     },
@@ -110,17 +112,17 @@
     },
     "search_emails": {
       "explicit": [
-        "reply_email",
-        "forward_email",
+        "add_label",
         "archive_email",
+        "forward_email",
+        "get_attachments",
         "get_email",
+        "get_thread",
         "mark_read",
         "mark_unread",
-        "add_label",
+        "move_to_thread",
         "remove_label",
-        "get_attachments",
-        "get_thread",
-        "move_to_thread"
+        "reply_email"
       ],
       "implicit": []
     },

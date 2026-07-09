@@ -24,14 +24,14 @@
 │   ├── generate_data.py       # Data generation (Python entry)
 │   ├── train_grpo.sh          # GRPO training (shell entry)
 │   ├── train_grpo.py          # GRPO training (Hydra entry)
-│   ├── validate_pipeline.py   # End-to-end pipeline validation
-│   ├── test_domain_integrity.py    # Domain topology & logic integrity
-│   ├── test_livemcp_logic_regressions.py  # Logic regression tests
-│   ├── test_runner.py         # Test orchestration
+│   ├── validate_pipeline.py     # End-to-end pipeline validation
 │   ├── verify_entities.py     # Entity verification
-│   ├── check_data.py          # Parquet data inspection
-│   └── inspect_prompts.py     # Prompt inspection
-├── tests/
+│   ├── dependency_graph.py    # Dependency graph precompute/rebuild
+│   ├── merge_rollout_shards.py # Rollout shard merge with quality gates
+│   ├── inspect_prompts.py     # Prompt inspection
+│   ├── convert_external_datasets.py  # External dataset conversion
+│   └── bench_vllm_throughput.py # vLLM throughput benchmark
+├── tests/                     # pytest 测试（待补充）
 ├── configs/
 ├── data/
 ├── verl/                   # verl 0.6.1 (vendored)
@@ -47,13 +47,15 @@
 
 ```bash
 pip install -e ./verl
-pip install -e .
 pip install -e ".[train,rl]"
 ```
 
 ### Generate Training Data
 
 ```bash
+# 默认使用本地 Gemma-4-31B-it
+bash scripts/generate_data.sh --count 500 --val-count 100
+# 也可指定外部 API
 bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
 ```
 
@@ -67,18 +69,18 @@ bash scripts/train_grpo.sh --gpus 0,1,2,3 --total-steps 300
 ### Validate
 
 ```bash
-python tests/test_all_domains.py
-python -m pytest tests/
+python scripts/validate_pipeline.py
+python -m compileall src scripts tests
 ```
 
-> **Hardware**: 8×L20 44GB. Teacher: Gemini via cloud API. Policy: Qwen3-4B (vLLM local).
+> **Hardware（当前环境）**: 8×A10 22GB（也支持 4×A10，`generate_data.sh` 自动检测）。Teacher: 本地 Gemma-4-31B-it（也可通过 `--api-base` 接入外部 API）。Policy: Qwen3-4B (vLLM local)。脚本自动检测 GPU，不绑定特定硬件。
 
 ---
 
 ## 🛠️ Tech Stack
 
 - [veRL](https://github.com/volcengine/verl) 0.6.1 · vLLM 0.19.1 · FlashInfer
-- Teacher: user-specified (recommended: Gemini via OpenAI-compatible API) · Policy: Qwen3-4B
+- Teacher: local Gemma-4-31B-it (primary) or external API · Policy: Qwen3-4B
 
 ---
 

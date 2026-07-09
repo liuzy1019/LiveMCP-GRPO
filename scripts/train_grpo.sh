@@ -62,8 +62,8 @@ export RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0
 export RAY_DEDUP_LOGS=1
 export LOGURU_LEVEL=INFO
 unset PYTORCH_CUDA_ALLOC_CONF 2>/dev/null || true
-export TMPDIR="${TMPDIR:-/tmp/ssgrpo_tmp}"
-export RAY_TMPDIR="${RAY_TMPDIR:-/tmp/ssgrpo_ray}"
+export TMPDIR="${TMPDIR:-/tmp/oval_tmp}"
+export RAY_TMPDIR="${RAY_TMPDIR:-/tmp/oval_ray}"
 export LIVEMCP_RAY_TMPDIR="${LIVEMCP_RAY_TMPDIR:-${RAY_TMPDIR}}"
 mkdir -p "${TMPDIR}" "${RAY_TMPDIR}"
 

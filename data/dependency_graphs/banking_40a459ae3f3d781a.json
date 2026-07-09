@@ -45,23 +45,23 @@
     },
     "get_account_info": {
       "explicit": [
+        "bill_pay",
+        "deposit",
+        "freeze_account",
         "get_balance",
         "get_history",
         "get_statement",
-        "verify_account",
-        "deposit",
-        "withdraw",
         "transfer",
-        "bill_pay",
-        "freeze_account"
+        "verify_account",
+        "withdraw"
       ],
       "implicit": []
     },
     "get_balance": {
       "explicit": [
-        "withdraw",
+        "bill_pay",
         "transfer",
-        "bill_pay"
+        "withdraw"
       ],
       "implicit": []
     },
@@ -79,19 +79,19 @@
     },
     "list_accounts": {
       "explicit": [
-        "transfer",
-        "wire_transfer",
+        "apply_loan",
         "bill_pay",
-        "withdraw",
+        "deposit",
+        "freeze_account",
         "get_account_info",
         "get_balance",
         "get_history",
         "get_statement",
-        "verify_account",
-        "deposit",
         "schedule_transfer",
-        "freeze_account",
-        "apply_loan"
+        "transfer",
+        "verify_account",
+        "wire_transfer",
+        "withdraw"
       ],
       "implicit": []
     },
@@ -111,8 +111,8 @@
     },
     "verify_account": {
       "explicit": [
-        "wire_transfer",
-        "transfer"
+        "transfer",
+        "wire_transfer"
       ],
       "implicit": []
     },

@@ -8,7 +8,7 @@ Design doc: `docs/OVAL-MCP.md`. Read it before making changes.
 
 ```bash
 conda activate arl          # Python 3.11.15, PyTorch 2.10.0+cu128
-nvidia-smi                  # 确认 GPU 可用（L20 ×8, Driver 570.195.03）
+nvidia-smi                  # 确认 GPU 可用（A10 ×8, 22GB/卡, Driver 570.195.03）
 ```
 
 关键版本：
@@ -45,6 +45,14 @@ nvidia-smi                  # 确认 GPU 可用（L20 ×8, Driver 570.195.03）
 | `models/Qwen/Qwen3-4B` | 4B | 策略模型（默认） |
 | `models/Qwen/Qwen3.5-4B` | 4B | 策略模型（多模态） |
 | `models/Qwen/Qwen2.5-7B-Instruct` | 7B | 基线对比 |
+
+### Gemma-4-31B-it vLLM 启动（`generate_data.sh` 自动管理）
+
+Gemma-4-31B-it 模型权重 ~15.89 GiB/卡（TP=4 时），A10 22GB 显存极其紧张。
+**所有参数由 `generate_data.sh` 动态计算**，无需手动调参：
+
+- **4×A10**：TP=4×1实例，KV预算紧凑（<1.8 GiB），`max_model_len=7168, max_num_seqs=8, clients=2`
+- **8×A10**：TP=4×2实例（GPU 0-3/4-7），交错启动避开 torch.compile 峰值内存，`max_model_len=8192, max_num_seqs=32, clients=4`
 
 ### FlashInfer JIT 编译配置（必须）
 
@@ -110,7 +118,7 @@ python -c "import flashinfer; print(flashinfer.__version__)"
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Data Generation | ✅ | PROVE state-machine, complete 2–5 step oracle + stratified split |
+| Data Generation | ✅ | PROVE state-machine, 2–5 step oracle, stratified split, 50% oversample + recovery, Jaccard 0.70 dedup |
 | OVAL Agent Loop | ✅ | Single-call protocol + initial-state hash + final-state evidence |
 | OVAL Reward | ✅ | Ordered coverage + task-aware safety |
 | GRPO Estimator | ✅ | Saturation skip + 2D stratified advantage |
@@ -122,7 +130,7 @@ python -c "import flashinfer; print(flashinfer.__version__)"
 ```
 live MCP servers (10 domains: banking, calendar, crm, email, filesystem,
   food_delivery, issue_tracker, payments, shopping, team_chat)
-→ PROVE Teacher (LLM-in-the-loop; preferred: Gemini via OpenAI-compatible API)
+→ PROVE Teacher (LLM-in-the-loop; local Gemma-4-31B-it)
 → Real MCP execution → oracle trace
 → Jaccard dedup (0.70, position-aware)
 → Parquet serialization (success_criteria as JSON string)
@@ -141,9 +149,9 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 
 ### Current Hardware / Defaults
 
-- Teacher model: 优先 Gemini（通过 `--api-base` 指定代理），本地备选 Gemma-4-31B-it
+- Teacher model: 本地 Gemma-4-31B-it (`models/Google/Gemma-4-31B-it`)
 - Policy model (训练 rollout): Qwen3-4B (`models/Qwen/Qwen3-4B`)
-- GPU: 8×L20 44GB
+- GPU: 8×A10 22GB
 
 ## Constraints
 
@@ -151,7 +159,7 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 - All project paths use **repo-root-relative** paths — no absolute machine paths.
 - Training hyperparams injectable via CLI args, environment variables (`OVAL_*` prefix), or Hydra override.
 - `data.max_prompt_length` ≥ 10240.
-- Ray temp dir: short path (`/tmp/ssgrpo_ray`) to avoid AF_UNIX socket path > 107 bytes.
+- Ray temp dir: short path (`/tmp/oval_ray`) to avoid AF_UNIX socket path > 107 bytes.
 - SFT cold-start code has been removed. Only GRPO route exists.
 - `success_criteria` value field is mixed-type (str/float/int), serialized as JSON string in parquet.
 - `OracleCall(action="clarification")` must be preserved in parquet; reward side sets `allowed_terminal=["ask_clarification"]`.
@@ -162,32 +170,24 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 |-------|-------------|
 | Illegal tool JSON → no AuditEvent | Model output format errors only produce error observation, no audit event. Fix requires cross-module type extension. |
 | Reward uses last observation as final state | Exact value verification may miss during consecutive tool_calls (low probability, has seen_ids fallback). |
-| Perturbation only in teacher phase | PROVE design: perturbation for teacher robustness testing, clean training environment. |
-| Teacher chain-progress blocking removed | PROVE §3.2: only format validation (well-formed JSON). No post-hoc action-type blocking. Replaced silent retry with stronger chain_guidance in prompt. See `task_planner.py:decide_action`. |
+| Perturbation only in teacher phase | PROVE 设计：扰动用于 teacher 鲁棒性测试，训练环境干净无扰动。 |
+| Teacher chain-progress blocking removed | PROVE §3.2：仅格式验证（well-formed JSON），不做 post-hoc action-type blocking。用更强 prompt chain_guidance 替代静默重试。见 `task_planner.py:decide_action`。 |
+| Oversample + recovery loop | LLM 生成存在 drop rate，当前 50% oversample + 最多 3 轮 recovery（不同 seed 偏移），保证最终产出满足目标数量。 |
 
 ## Common Commands
 
 ```bash
-# ============ vLLM 推理服务 ============
-export CUDA_HOME=/mnt/data2/liuzhanyi/envs/arl
-export PATH=$CUDA_HOME/bin:$PATH
-
-# vLLM 0.19.1 使用 vllm serve 命令
-vllm serve models/Qwen/Qwen3-8B \
-    --tensor-parallel-size 2 --max-model-len 8192 \
-    --gpu-memory-utilization 0.85 --port 8001 --trust-remote-code
-
-# 或使用封装脚本
-bash scripts/start_vllm.sh models/Qwen/Qwen3-8B 8001 2 "0,1"
-
 # ============ 数据生成 ============
 # 输出到 data/runs/{MMDD_HHMM}/，自动更新 data/train.parquet 符号链接
-# Teacher: Gemini via OpenAI-compatible API（推荐）
-bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
-# Teacher: 本地模型
-bash scripts/generate_data.sh --model models/Google/Gemma-4-31B-it --count 500 --val-count 100
+# vLLM 由 generate_data.sh 自动启动和管理，无需手动操作
+# 默认 Teacher: 本地 Gemma-4-31B-it，自动计算 TP + 动态 vLLM 参数
+bash scripts/generate_data.sh --count 500 --val-count 100
+# 限制 GPU 数
+GPU_COUNT=4 bash scripts/generate_data.sh --count 500 --val-count 100
+# 指定 run-id
+bash scripts/generate_data.sh --count 500 --run-id 0709_1500
 # 单域测试
-bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --domain calendar --count 200
+bash scripts/generate_data.sh --domain calendar --count 200
 
 # ============ GRPO 训练 ============
 bash scripts/train_grpo.sh
@@ -201,14 +201,13 @@ python -m compileall src scripts tests
 git diff --check
 
 # ============ 维护 ============
-python scripts/precompute_dependency_graphs.py     # 预计算工具依赖图
-python scripts/rebuild_dependency_graph_cache.py   # 重建依赖图缓存
-python scripts/check_data.py -f data/train.parquet # 检查 parquet 数据
-python scripts/inspect_prompts.py -f data/train.parquet  # 检查 prompt 内容
-python scripts/verify_entities.py                  # 实体验证
-python scripts/merge_rollout_shards.py             # 合并 rollout 分片
-python scripts/convert_external_datasets.py        # 转换外部数据集（when2call/xlam）
-python scripts/bench_vllm_throughput.py            # vLLM 吞吐量基准测试
+python scripts/dependency_graph.py live --model ...       # 预计算/重建工具依赖图（live 模式）
+python scripts/dependency_graph.py rebuild --source ...  # 重建依赖图缓存（offline 模式）
+python scripts/inspect_prompts.py --train data/train.parquet  # 检查 prompt 内容
+python scripts/verify_entities.py                       # 实体验证
+python scripts/merge_rollout_shards.py                  # 合并 rollout 分片
+python scripts/convert_external_datasets.py             # 转换外部数据集（when2call/xlam）
+python scripts/bench_vllm_throughput.py                 # vLLM 吞吐量基准测试
 ```
 
 ## Logging

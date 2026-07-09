@@ -7,9 +7,9 @@
 #   - Large model (needs TP) → vLLM API server(s), 1 process per instance
 #
 # Usage:
+#   bash scripts/generate_data.sh --count 500 --val-count 100
 #   bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-gemini-proxy/v1 --count 500 --val-count 100
-#   bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 500
-#   bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --domain calendar --count 200
+#   bash scripts/generate_data.sh --domain calendar --count 200
 #   GPU_COUNT=4 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 200
 #
 # Env override:
@@ -22,14 +22,10 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 if [ -z "${PYTHON_BIN:-}" ]; then
-    if [ -x "/mnt/data2/liuzhanyi/envs/arl/bin/python" ]; then
-        PYTHON_BIN="/mnt/data2/liuzhanyi/envs/arl/bin/python"
-    elif [ -x "/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python" ]; then
-        PYTHON_BIN="/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl/bin/python"
-    elif [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/python" ]; then
+    if [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/python" ]; then
         PYTHON_BIN="${CONDA_PREFIX}/bin/python"
     else
-        PYTHON_BIN="python"
+        PYTHON_BIN="$(which python3 2>/dev/null || which python 2>/dev/null || echo python)"
     fi
 fi
 export PYTHON_BIN
@@ -74,14 +70,14 @@ if [ "${#CUDA_LIBRARY_DIRS[@]}" -gt 0 ]; then
 fi
 
 # ── Parse args ─────────────────────────────────────────────────────
-MODEL=""
+MODEL="models/Google/Gemma-4-31B-it"
 COUNT=5000
 VAL_COUNT=500
 DOMAIN="all"
 SUITE="configs/live_mcp/suite_mvp.yaml"
 SEED=42
 OUTPUT_DIR="${OUTPUT_DIR:-data}"
-GEN_OVERSAMPLE_PCT="${GEN_OVERSAMPLE_PCT:-20}"
+GEN_OVERSAMPLE_PCT="${GEN_OVERSAMPLE_PCT:-10}"  # 10% oversample; set GEN_OVERSAMPLE_PCT env var to override
 RUN_ID="${RUN_ID:-$(date +%m%d_%H%M)}"
 
 while [[ $# -gt 0 ]]; do
@@ -105,11 +101,6 @@ while [[ $# -gt 0 ]]; do
         *) echo "ERROR: unknown arg: $1" >&2; exit 1 ;;
     esac
 done
-
-if [ -z "$MODEL" ]; then
-    echo "ERROR: --model is required" >&2
-    exit 1
-fi
 
 # ── Output dirs ────────────────────────────────────────────────────
 RUN_DIR="${OUTPUT_DIR}/runs/${RUN_ID}"
@@ -247,8 +238,8 @@ trap _cleanup EXIT INT TERM
 
 # ── Environment ────────────────────────────────────────────────────
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
-export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-1}"
-export FLASHINFER_WORKSPACE_BASE="${FLASHINFER_WORKSPACE_BASE:-/mnt/data2/liuzhanyi}"
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+export FLASHINFER_WORKSPACE_BASE="${FLASHINFER_WORKSPACE_BASE:-$HOME}"
 export NVCC_APPEND_FLAGS=-allow-unsupported-compiler
 
 # ═══════════════════════════════════════════════════════════════════
@@ -316,7 +307,7 @@ VLLM_VERSION=$("${PYTHON_BIN}" -c "import vllm; print(vllm.__version__)" 2>/dev/
     fi
     # Auto-detect current vLLM version. Only warn if major version differs from last-known-good.
     # The environment dictates the version; we don't force a specific one.
-    RECOMMENDED_VLLM_MAJOR_MINOR="0.11"
+    RECOMMENDED_VLLM_MAJOR_MINOR="0.19"
     VLLM_MAJOR_MINOR=$(echo "${VLLM_VERSION}" | cut -d. -f1,2)
     if [ -n "${EXPECTED_VLLM_VERSION:-}" ]; then
         # Explicit override: user knows what they're doing, bypass check.
@@ -328,13 +319,14 @@ VLLM_VERSION=$("${PYTHON_BIN}" -c "import vllm; print(vllm.__version__)" 2>/dev/
 
     # Calculate optimal TP and number of vLLM instances.
     # vLLM requires TP to divide num_attention_heads evenly
-    VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.88}"
+    # (VLLM_GPU_MEMORY_UTILIZATION is set below by dynamic scaling; TP only needs a rough estimate)
+    VLLM_TP_UTIL="${VLLM_GPU_MEMORY_UTILIZATION:-0.88}"
     TP_SIZE=$("${PYTHON_BIN}" -c "
 import math
 mem_need = ${MODEL_BF16_GB}
 mem_gpu = ${GPU_MEM_GB}
 num_heads = ${MODEL_NUM_HEADS}
-util = ${VLLM_GPU_MEMORY_UTILIZATION}
+util = ${VLLM_TP_UTIL}
 tp = max(1, math.ceil(mem_need / (mem_gpu * util)))
 # Ensure TP divides num_heads (vLLM requirement)
 if num_heads > 0:
@@ -367,15 +359,47 @@ print(tp)
     fi
 
     PORT_START="${VLLM_PORT_START:-8001}"
-    VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-8192}"
-    VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-32}"
+
+    # ── vLLM generation defaults (dynamically scaled by GPU memory) ──
+    # vLLM overhead (encoder cache, NCCL buffers) consumes ~1.5 GiB beyond raw weights.
+    # On tight GPUs (A10), auto-reduce max_model_len to leave enough KV cache.
+    # enforce_eager is always 0: CUDAGraph adds ~500 MiB but A10(sm_86) supports it;
+    # the perf win is worth it for generation, and Gemma-4 already forces TRITON_ATTN.
     VLLM_MAX_NUM_BATCHED_TOKENS="${VLLM_MAX_NUM_BATCHED_TOKENS:-16384}"
-    VLLM_CLIENTS_PER_INSTANCE="${VLLM_CLIENTS_PER_INSTANCE:-8}"
+    VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.88}"
+
+    VLLM_TIGHT_PARAMS=$("${PYTHON_BIN}" -c "
+model_per_gpu = ${MODEL_BF16_GB} / ${TP_SIZE}
+overhead = 1.5  # encoder + NCCL + misc (GiB)
+kv_budget = ${GPU_MEM_GB} * ${VLLM_GPU_MEMORY_UTILIZATION} - model_per_gpu - overhead
+# Gemma-4-31B KV cache: ~0.4 MiB per token per GPU (TP=4, 8 KV heads, 256-dim)
+# 8192 tokens need ~3.3 GiB per GPU. With 8576 observed allocation on A10:
+#   - max_num_seqs=32 → 268 tokens/seq → constant eviction, unusable
+#   - max_num_seqs=8  → 1072 tokens/seq → workable for generation workloads
+# Threshold at 4.0 GiB: below this, seqs=8/max_len=7168 to avoid thrashing
+tight = 1 if kv_budget < 4.0 else 0
+seqs = 8 if tight else 32
+max_len = 7168 if tight else 8192
+clients = 2 if tight else 4
+print(f'{tight} {seqs} {max_len} {clients} {kv_budget:.2f}')
+")
+
+    VLLM_TIGHT=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $1}')
+    if [ -z "${VLLM_MAX_NUM_SEQS:-}" ]; then
+        VLLM_MAX_NUM_SEQS=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $2}')
+    fi
+    if [ -z "${VLLM_MAX_MODEL_LEN:-}" ]; then
+        VLLM_MAX_MODEL_LEN=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $3}')
+    fi
+    if [ -z "${VLLM_CLIENTS_PER_INSTANCE:-}" ]; then
+        VLLM_CLIENTS_PER_INSTANCE=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $4}')
+    fi
+    KV_BUDGET=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $5}')
     VLLM_ENFORCE_EAGER="${VLLM_ENFORCE_EAGER:-0}"
 
     echo ""
     echo "Strategy: vLLM API — TP=${TP_SIZE}, ${NUM_INSTANCES} instance(s)"
-    echo "vLLM: version=${VLLM_VERSION}, gpu_memory_utilization=${VLLM_GPU_MEMORY_UTILIZATION}, max_model_len=${VLLM_MAX_MODEL_LEN}, max_num_seqs=${VLLM_MAX_NUM_SEQS}, max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS}"
+    echo "vLLM: version=${VLLM_VERSION}, gpu_memory_utilization=${VLLM_GPU_MEMORY_UTILIZATION}, max_model_len=${VLLM_MAX_MODEL_LEN}, max_num_seqs=${VLLM_MAX_NUM_SEQS}, max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS}, enforce_eager=${VLLM_ENFORCE_EAGER}"
     echo "Clients: ${VLLM_CLIENTS_PER_INSTANCE} generation process(es) per vLLM instance"
 
     TOTAL_GEN_CLIENTS=$(( NUM_INSTANCES * VLLM_CLIENTS_PER_INSTANCE ))
@@ -415,10 +439,14 @@ print(tp)
             --max-model-len "${VLLM_MAX_MODEL_LEN}" \
             --max-num-seqs "${VLLM_MAX_NUM_SEQS}" \
             --max-num-batched-tokens "${VLLM_MAX_NUM_BATCHED_TOKENS}" \
-            --generation-config vllm \
             --port "${PORT}" \
             --trust-remote-code
         )
+        # Gemma-4 is a multimodal model; vLLM allocates extra encoder cache for vision.
+        # We only use text generation — disable vision encoder to reclaim memory on A10.
+        if [[ "${MODEL}" == *"Gemma-4"* ]]; then
+            VLLM_ARGS+=(--limit-mm-per-prompt '{"image": 0}')
+        fi
         if [ "${VLLM_ENFORCE_EAGER}" = "1" ]; then
             VLLM_ARGS+=(--enforce-eager)
         fi
@@ -522,6 +550,77 @@ ln -sfn "runs/${RUN_ID}/train.parquet" "${OUTPUT_DIR}/train.parquet"
 ln -sfn "runs/${RUN_ID}/val.parquet"   "${OUTPUT_DIR}/val.parquet"
 echo "Symlinks:      ${OUTPUT_DIR}/train.parquet → runs/${RUN_ID}/train.parquet"
 echo "               ${OUTPUT_DIR}/val.parquet   → runs/${RUN_ID}/val.parquet"
+
+# ── Parquet integrity validation ────────────────────────────────────
+echo ""
+echo "=== Parquet Integrity Check ==="
+"${PYTHON_BIN}" -c "
+import json, sys
+import pandas as pd
+
+issues = 0
+for label, path in [('train', '${RUN_DIR}/train.parquet'), ('val', '${RUN_DIR}/val.parquet')]:
+    try:
+        df = pd.read_parquet(path)
+    except Exception as e:
+        print(f'  FAIL {label}: cannot read parquet — {e}')
+        issues += 1
+        continue
+
+    print(f'  {label}: {len(df)} rows')
+
+    for col in ('prompt', 'reward_model', 'extra_info', 'scenario_type'):
+        if col not in df.columns:
+            print(f'    FAIL: missing column {col}')
+            issues += 1
+
+    if issues > 0:
+        continue
+
+    empty_gt = 0
+    bad_prompt = 0
+    for i, row in df.iterrows():
+        gt = row['reward_model'].get('ground_truth', {})
+        oc = gt.get('oracle_calls', '')
+        sc = gt.get('success_criteria', '')
+        if not oc or (isinstance(oc, str) and oc in ('[]', '')):
+            empty_gt += 1
+        if not sc or (isinstance(sc, str) and sc in ('[]', '')):
+            empty_gt += 1
+        try:
+            json.loads(row['prompt'])
+        except (json.JSONDecodeError, TypeError):
+            bad_prompt += 1
+
+    if empty_gt:
+        print(f'    WARN: {empty_gt} rows have empty ground_truth (oracle_calls/success_criteria)')
+    if bad_prompt:
+        print(f'    FAIL: {bad_prompt} rows have invalid prompt JSON')
+        issues += 1
+
+    # Spot-check: first row _build_task_dict
+    try:
+        from src.reward.oval_reward_fn import _build_task_dict
+        extra = row.extra_info if hasattr(row, 'extra_info') else df.iloc[0]['extra_info']
+        td = _build_task_dict(extra)
+        if not isinstance(td, dict) or 'oracle_calls' not in td:
+            print(f'    FAIL: _build_task_dict spot-check returned invalid dict')
+            issues += 1
+    except Exception as e:
+        print(f'    FAIL: _build_task_dict spot-check crashed — {e}')
+        issues += 1
+
+if issues:
+    print(f'\n  Parquet validation FAILED ({issues} issue(s))')
+    sys.exit(1)
+else:
+    print(f'  Parquet validation PASSED')
+"
+
+if [ $? -ne 0 ]; then
+    echo "ERROR: Parquet integrity check failed. See above for details." >&2
+    exit 1
+fi
 
 echo ""
 echo "Done. [$(date '+%Y-%m-%d %H:%M:%S')]"

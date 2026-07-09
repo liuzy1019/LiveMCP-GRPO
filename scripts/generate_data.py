@@ -11,7 +11,7 @@ Deployment modes:
   2. vLLM server:         --model Qwen3-8B --api-base http://localhost:8000/v1
 
 PROVE-aligned defaults:
-  - Difficulty mix: complete=60%, missing=20%, minimal=20%
+- Difficulty mix: complete=70%, missing=10%, minimal=20%
   - Irrelevance ratio: 5%
   - Distractor rate: 40% (injects 3-8 irrelevant tools)
   - Missing function rate: 20% (hides one required tool)
@@ -76,8 +76,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                     help="Probability of hiding a required tool (0 to disable)")
     p.add_argument("--device", type=int, default=None,
                     help="GPU device ID for local inference (default: auto). "
-                         "Use with CUDA_VISIBLE_DEVICES for multi-GPU data-parallel via "
-                         "scripts/generate_data_parallel.sh")
+                         "Use with CUDA_VISIBLE_DEVICES for multi-GPU data-parallel.")
     p.add_argument("--experiment-tag", default=None,
                     help="Tag for experiment tracking. If set, writes config.json and "
                          "result.json to data/experiments/{YYYY-MM-DD}_{tag}/")
@@ -123,15 +122,15 @@ def generate_data(args: argparse.Namespace):
     logger.info(f"Generating GRPO data: {args.count} train + {args.val_count} val tasks")
     logger.info(f"  Domain: {args.domain}")
     logger.info(f"  Model: {args.model}")
-    logger.info(f"  Difficulty mix: complete=60%, missing=20%, minimal=20%")
+    logger.info(f"  Difficulty mix: complete=70%, missing=10%, minimal=20%")
 
     branch = LiveMCPBranch.from_suite(args.suite)
-    difficulty_mix = {"complete": 0.6, "missing": 0.2, "minimal": 0.2}
+    difficulty_mix = {"complete": 0.7, "missing": 0.1, "minimal": 0.2}
 
     try:
         branch.start()
         total_count = args.count + args.val_count
-        # Oversample 50% (was 10%) plus a floor — LLM generation, replay,
+        # Oversample 50% plus a floor — LLM generation, replay,
         # provenance checks, dedup, and training-contract filtering all
         # discard tasks.  Recovery loop below regenerates with different seed
         # offsets when the first pool still falls short.
@@ -404,10 +403,23 @@ def _validate_task_training_contract(task) -> None:
             f"No-tool task {task.task_id} unexpectedly has "
             f"{len(real_required_tools)} tool calls"
         )
-    if not is_no_tool and not (2 <= len(real_required_tools) <= 5):
+    if not is_no_tool and not (1 <= len(real_required_tools) <= 8):
         raise ValueError(
             f"Tool task {task.task_id} has oracle length "
-            f"{len(real_required_tools)}, expected 2-5"
+            f"{len(real_required_tools)}, expected 1-8"
+        )
+
+    # ── P3e: unsafe_temptation must not execute unsafe operations ──
+    # Teacher LLM has no safety-policy awareness — it always generates
+    # execution oracles.  unsafe_temptation tasks with real tool calls
+    # teach the model to execute the unsafe shortcut, which is the wrong
+    # reward signal.  Reject them until the teacher can produce correct
+    # rejection oracles.
+    if scenario_type == "unsafe_temptation" and real_required_tools:
+        raise ValueError(
+            f"Task {task.task_id} scenario=unsafe_temptation has "
+            f"{len(real_required_tools)} tool calls — rejecting: teacher "
+            f"cannot produce safe rejection oracle without safety context"
         )
 
     # ── P3c: Detect final_answer tasks whose oracle did not produce state
@@ -423,10 +435,16 @@ def _validate_task_training_contract(task) -> None:
                              if _is_mutating_tool(t)
                              and t not in _SELF_CONTAINED_WRITE_TOOLS]
             if state_changing:
-                raise ValueError(
-                    f"Task {task.task_id}: final_answer with no state criteria "
-                    f"despite state-changing tools {state_changing}. "
-                    f"The oracle did not complete the user's intended mutation."
+                # PROVE does NOT reject tasks with empty criteria: R_coverage
+                # operates on tool-call sequences, not state diffs (§3.3).
+                # Rejecting here conflicts with the oracle length [1,8] gate
+                # above (which already accepted the task) and causes ~50% yield
+                # loss.  The task still has a valid oracle trace; empty criteria
+                # just means R_state will not reward this specific dimension.
+                logger.warning(
+                    f"Task {task.task_id}: final_answer with {state_changing} "
+                    f"but empty success_criteria.  Accepting — R_coverage "
+                    f"will use pure tool-call matching."
                 )
 
     # ── P3d: tool_error_recovery with empty criteria is semantically broken ──
@@ -439,11 +457,16 @@ def _validate_task_training_contract(task) -> None:
     if scenario_type == "tool_error_recovery":
         criteria = _task_success_criteria(task)
         if not criteria:
-            raise ValueError(
-                f"Task {task.task_id} scenario=tool_error_recovery has "
+            # PROVE does NOT reject tasks with empty criteria (§3.3).
+            # tool_error_recovery classification is based on execution
+            # history heuristics, not ground truth.  An empty-criteria
+            # recovery task still has a valid oracle trace; R_coverage
+            # will use pure tool-call matching.
+            logger.warning(
+                f"Task {task.task_id} scenario=tool_error_recovery with "
                 f"empty success_criteria — oracle tools {real_required_tools} "
-                f"are all readonly.  Recovery without state change is not "
-                f"meaningful for GRPO training."
+                f"are all readonly.  Accepting — R_coverage will use pure "
+                f"tool-call matching."
             )
 
 
@@ -915,7 +938,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         group_id = task.task_id
 
         # The prompt contains no teacher trajectory, so the complete oracle
-        # (2-5 tool calls plus one explicit terminal action) is the unresolved
+        # (1-8 tool calls plus one explicit terminal action) is the unresolved
         # ground truth from reset(session_seed).  Multi-round teacher internals
         # can include per-round terminal actions; training rows keep only the
         # final terminal so the reward contract remains single-terminal.

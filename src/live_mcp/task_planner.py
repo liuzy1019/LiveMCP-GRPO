@@ -864,8 +864,10 @@ Return only:
         # First-turn guidance: prevent LLM from answering without tools.
         # Exception: 'missing' difficulty tasks omit a parameter on purpose,
         # so ask_clarification is the correct first action.
-        # For complete/minimal difficulty, the prompt guides the model to
-        # use tools first, but ask_clarification is allowed if genuinely needed.
+        # 'minimal' tasks are deliberately terse — allow ask_clarification as a
+        # valid first action; forcing a tool call on vague queries causes spurious
+        # execution errors. 'complete' tasks have specific entity IDs and should
+        # start with a real tool call.
         if not execution_history:
             if difficulty == "missing":
                 first_turn_hint = (
@@ -874,15 +876,25 @@ Return only:
                 )
                 default_action = "ask_clarification"
                 blocked_first = ("final_answer", "report_error")
-            else:
+            elif difficulty == "minimal":
                 first_turn_hint = (
-                    "\n⚠️  This is your FIRST turn. You MUST call a tool to "
-                    "make progress — do NOT produce final_answer or ask "
-                    "questions until you have used at least one tool. "
-                    "If you need information, use a read/list/search tool.\n"
+                    "\nThis is your FIRST turn. The user's request is terse. "
+                    "If you can identify a concrete action, call a tool. "
+                    "If the request is genuinely ambiguous, ask_clarification "
+                    "is acceptable. Do NOT produce final_answer.\n"
                 )
                 default_action = "tool_call"
                 blocked_first = ("final_answer", "report_error")
+            else:
+                first_turn_hint = (
+                    "\n⚠️  This is your FIRST turn. You MUST call a tool to "
+                    "make progress — do NOT produce final_answer. "
+                    "Use a read/list/search tool if you need information "
+                    "before acting. Do NOT ask the user questions — the "
+                    "request has enough detail to start.\n"
+                )
+                default_action = "tool_call"
+                blocked_first = ("final_answer", "report_error", "ask_clarification")
         else:
             # After the first turn, the LLM decides the next action based on
             # the user query, execution history, and chain guidance in the
@@ -901,11 +913,12 @@ Return only:
             chain_guidance = (
                 "\n## Oracle Synthesis Target\n"
                 "You are generating the teacher oracle trace for training data, not the final policy prompt.\n"
-                "The user request was generated from a dependency chain, so keep using tools until the task is executed.\n"
-                f"- Completed chain tools: {completed if completed else '[]'}\n"
-                f"- Remaining chain tools in order: {remaining}\n"
-                "- Prefer the next remaining chain tool when it is applicable. If a prerequisite ID is missing, call a read/list/search tool first.\n"
-                "- Do not produce final_answer until the required tool work is complete or a real execution failure makes recovery impossible.\n"
+                "The user request was generated from a dependency chain. Follow through to completion.\n"
+                f"- Completed: {completed if completed else '[]'}\n"
+                f"- Remaining (in order): {remaining}\n"
+                "- Prefer the next remaining chain tool. If a prerequisite entity ID is missing, call a read/list/search tool to discover it — do NOT skip.\n"
+                "- Do NOT final_answer until ALL remaining chain tools have been called or an unrecoverable failure makes progress impossible.\n"
+                "- A single execution error (e.g. precondition_failed) is recoverable — retry with corrected parameters, don't give up.\n"
             )
 
         date_guide = (

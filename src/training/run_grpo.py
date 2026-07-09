@@ -53,7 +53,7 @@ def main() -> None:
     logger.info("LiveMCP 超参配置:\n" + hp.summary())
     # 将配置保存到 LambdaState 路径相邻位置，供 wandb 等外部工具读取
     config_dump_path = os.path.join(
-        os.path.dirname("/tmp/ovalmcp_lambda_state.json"),
+        os.path.dirname(DEFAULT_STATE_PATH),
         "livemcp_config.json",
     )
     try:
@@ -103,7 +103,7 @@ def main() -> None:
         import tempfile
         ray_tmp_dir = hp.ray_tmpdir
         os.makedirs(ray_tmp_dir, exist_ok=True)
-        os.environ.setdefault("TMPDIR", "/tmp/ssgrpo_tmp")
+        os.environ.setdefault("TMPDIR", "/tmp/oval_tmp")
         os.environ.setdefault("RAY_TMPDIR", ray_tmp_dir)
         os.makedirs(os.environ["TMPDIR"], exist_ok=True)
         tempfile.tempdir = os.environ["TMPDIR"]

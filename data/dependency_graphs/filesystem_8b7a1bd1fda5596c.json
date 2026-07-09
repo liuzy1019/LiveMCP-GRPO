@@ -49,22 +49,14 @@
       "implicit": []
     },
     "cat": {
-      "explicit": [
-        "rm",
-        "chmod",
-        "chown",
-        "grep",
-        "sed",
-        "awk",
-        "wc"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "cd": {
       "explicit": [
+        "find",
         "ls",
         "pwd",
-        "find",
         "tree"
       ],
       "implicit": []
@@ -79,13 +71,13 @@
     },
     "cp": {
       "explicit": [
-        "ls",
         "cat",
-        "stat",
-        "rm",
+        "diff",
+        "ls",
         "md5sum",
+        "rm",
         "sha256sum",
-        "diff"
+        "stat"
       ],
       "implicit": []
     },
@@ -113,32 +105,32 @@
     },
     "find": {
       "explicit": [
-        "cat",
-        "head",
-        "tail",
-        "wc",
-        "stat",
-        "file_info",
-        "md5sum",
-        "sha256sum",
-        "xxd",
-        "sort",
-        "uniq",
-        "cut",
-        "sed",
         "awk",
-        "split",
-        "readlink",
+        "cat",
         "chmod",
         "chown",
-        "mv",
         "cp",
+        "cut",
+        "file_info",
+        "head",
+        "join",
+        "md5sum",
+        "mv",
+        "readlink",
         "rm",
-        "truncate",
-        "tar_create",
-        "zip",
+        "sed",
+        "sha256sum",
+        "sort",
+        "split",
+        "stat",
         "symlink",
-        "join"
+        "tail",
+        "tar_create",
+        "truncate",
+        "uniq",
+        "wc",
+        "xxd",
+        "zip"
       ],
       "implicit": []
     },
@@ -147,9 +139,7 @@
       "implicit": []
     },
     "head": {
-      "explicit": [
-        "wc"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "join": {
@@ -158,21 +148,16 @@
     },
     "ls": {
       "explicit": [
-        "wc",
-        "file_info",
-        "md5sum",
-        "sha256sum",
-        "xxd",
-        "uniq",
-        "cut",
-        "sed",
-        "awk",
-        "chmod",
-        "chown",
-        "rm",
-        "truncate",
+        "sort",
+        "stat",
         "symlink",
-        "join"
+        "tail",
+        "tar_create",
+        "truncate",
+        "uniq",
+        "wc",
+        "xxd",
+        "zip"
       ],
       "implicit": []
     },
@@ -182,24 +167,24 @@
     },
     "mkdir": {
       "explicit": [
-        "ls",
         "cd",
-        "touch",
         "chmod",
         "chown",
-        "rm",
         "cp",
-        "mv"
+        "ls",
+        "mv",
+        "rm",
+        "touch"
       ],
       "implicit": []
     },
     "mv": {
       "explicit": [
-        "ls",
         "cat",
-        "rm",
         "chmod",
-        "chown"
+        "chown",
+        "ls",
+        "rm"
       ],
       "implicit": []
     },
@@ -210,8 +195,8 @@
     "readlink": {
       "explicit": [
         "cat",
-        "stat",
-        "ls"
+        "ls",
+        "stat"
       ],
       "implicit": []
     },
@@ -229,17 +214,17 @@
     },
     "sort": {
       "explicit": [
-        "uniq",
         "head",
         "tail",
+        "uniq",
         "wc"
       ],
       "implicit": []
     },
     "split": {
       "explicit": [
-        "ls",
         "cat",
+        "ls",
         "wc"
       ],
       "implicit": []
@@ -248,8 +233,8 @@
       "explicit": [
         "chmod",
         "chown",
-        "rm",
-        "mv"
+        "mv",
+        "rm"
       ],
       "implicit": []
     },
@@ -265,11 +250,11 @@
     },
     "tar_create": {
       "explicit": [
-        "tar_extract",
         "md5sum",
-        "sha256sum",
         "rm",
-        "stat"
+        "sha256sum",
+        "stat",
+        "tar_extract"
       ],
       "implicit": []
     },
@@ -280,26 +265,26 @@
     "touch": {
       "explicit": [
         "cat",
-        "head",
-        "tail",
-        "wc",
-        "stat",
-        "file_info",
         "chmod",
         "chown",
-        "rm",
-        "truncate",
+        "file_info",
+        "head",
         "md5sum",
-        "sha256sum"
+        "rm",
+        "sha256sum",
+        "stat",
+        "tail",
+        "truncate",
+        "wc"
       ],
       "implicit": []
     },
     "tree": {
       "explicit": [
         "cat",
+        "du",
         "ls",
-        "rm",
-        "du"
+        "rm"
       ],
       "implicit": []
     },
@@ -329,11 +314,11 @@
     },
     "zip": {
       "explicit": [
-        "unzip",
         "md5sum",
-        "sha256sum",
         "rm",
-        "stat"
+        "sha256sum",
+        "stat",
+        "unzip"
       ],
       "implicit": []
     }

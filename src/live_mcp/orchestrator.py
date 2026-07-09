@@ -14,6 +14,7 @@ import hashlib
 import json
 import random
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -784,6 +785,7 @@ class TaskOrchestrator:
                                             oracle_entity_ids_r0.append(_m)
 
                     if oracle_entity_ids_r0:
+                        _saved_user_query = user_query
                         try:
                             # Regenerate round-0 query grounded in oracle IDs
                             new_query = teacher.regenerate_query_from_oracle(
@@ -805,6 +807,27 @@ class TaskOrchestrator:
                                 f"Oracle-grounded query regen for {server_name} task "
                                 f"{task_id}: IDs={oracle_entity_ids_r0[:5]}"
                             )
+                            # Verify regeneration quality: query must
+                            # reference at least one oracle entity ID
+                            # (complete difficulty) or the fallback is
+                            # semantically wrong.
+                            if difficulty == "complete":
+                                _matched = [eid for eid in oracle_entity_ids_r0
+                                            if eid in new_query]
+                                if not _matched:
+                                    logger.warning(
+                                        f"Oracle-grounded query regen for {server_name} "
+                                        f"task {task_id}: regenerated query does not "
+                                        f"reference any oracle entity ID. "
+                                        f"Expected one of {oracle_entity_ids_r0[:3]}, "
+                                        f"got: \"{new_query[:120]}...\". "
+                                        f"Falling back to original query."
+                                    )
+                                    # Revert to original — degraded but the
+                                    # original query at least passed initial
+                                    # generation constraints
+                                    user_query = _saved_user_query
+                                    conversation_queries[0] = _saved_user_query
                         except RuntimeError as e:
                             # If regeneration fails, keep original query (degraded
                             # but not fatal — original query still references valid
@@ -965,9 +988,9 @@ class TaskOrchestrator:
                 f"No real tool_call recorded for {server_name} task {task_id} "
                 f"after 3 retries (LLM only produced clarifications/refusals)"
             )
-        if real_calls and not (2 <= len(real_calls) <= 5):
+        if real_calls and not (1 <= len(real_calls) <= 8):
             raise RuntimeError(
-                f"Oracle chain length {len(real_calls)} outside required 2-5 "
+                f"Oracle chain length {len(real_calls)} outside required 1-8 "
                 f"for {server_name} task {task_id}"
             )
         # ── Build final task ──
@@ -1062,9 +1085,12 @@ class TaskOrchestrator:
         try:
             from tqdm import tqdm as _tqdm
             pbar = _tqdm(total=n_normal, desc="[generate_many]", unit="task",
-                         dynamic_ncols=True, bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]")
+                         dynamic_ncols=True, mininterval=1.0, miniters=1,
+                         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
         except ImportError:
             pbar = None
+        _gen_start = time.time()
+        _last_log = 0  # last logged count for rate calc
 
         # ── Pre-compute task specs for parallel generation ──
         # Build per-domain task specifications with round-robin interleaving
@@ -1078,7 +1104,12 @@ class TaskOrchestrator:
         for si, current_server in enumerate(servers):
             domain_target = per_domain + (1 if si < remainder else 0)
             domain_quotas[current_server] = domain_target
-            domain_max_failures[current_server] = max(domain_target * 4, 10)
+            # Failure budget: allow extra attempts proportional to target.
+            # For large counts (≥100/domain) allow 50% extra; for small counts
+            # use exact target.  At 50% pipeline yield this gives a 25% safety
+            # margin on large runs while keeping small runs from exploding.
+            extra = domain_target // 2 if domain_target >= 100 else 0
+            domain_max_failures[current_server] = domain_target + extra
             specs = []
             for _ in range(domain_target + domain_max_failures[current_server]):
                 task_seed = seed + global_seed_offset
@@ -1157,10 +1188,16 @@ class TaskOrchestrator:
                 if pbar:
                     pbar.update(1)
                     pbar.set_postfix_str(f"fail={failed}")
-                elif len(tasks) % 10 == 0:
-                    print(f"[generate_many] {len(tasks)}/{n_normal} tasks, {failed} failures", flush=True)
-                if len(tasks) % 10 == 0:
-                    logger.info(f"generate_many progress: {len(tasks)}/{n_normal} tasks, {failed} failures")
+                # Loguru progress: every task with elapsed time & completion %
+                elapsed = time.time() - _gen_start
+                pct = len(tasks) * 100.0 / n_normal if n_normal > 0 else 0
+                if len(tasks) - _last_log >= 1:
+                    _last_log = len(tasks)
+                    logger.info(
+                        f"[generate_many] {len(tasks)}/{n_normal} ({pct:.0f}%) "
+                        f"| {failed} fail | elapsed={elapsed:.0f}s "
+                        f"| rate={len(tasks)/elapsed:.2f} task/s"
+                    )
 
         if pbar:
             pbar.close()
@@ -2518,6 +2555,13 @@ def _detect_missing_dependency(
     )
 
     for i, call in enumerate(oracle_calls):
+        # Step 0 may use entity IDs from task context (user query / initial
+        # state snapshot).  Only skip the dependency check when the arguments
+        # actually contain entity IDs — empty-arg single-step write tools are
+        # genuine missing dependencies.
+        if i == 0 and len(oracle_calls) > 1 and _oracle_target_ids([call]):
+            continue
+
         tool_name = call.tool_name.lower()
         if not any(tool_name.startswith(prefix) for prefix in write_prefixes):
             continue

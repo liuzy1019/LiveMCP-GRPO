@@ -8,7 +8,7 @@
 
 ```bash
 conda activate arl          # Python 3.11, PyTorch 2.10.0+cu128
-nvidia-smi                  # 确认 GPU 可用（L20 ×8）
+nvidia-smi                  # 确认 GPU 可用（A10 ×8, 22GB/卡）
 ```
 
 FlashInfer JIT 编译配置见 `CLAUDE.md`。降级方案：
@@ -48,7 +48,7 @@ verl 0.6.1 从 `./verl` editable 安装。关键版本：
 - 项目代码和脚本中的项目文件路径必须以项目根目录为锚点使用相对路径；不要写死机器绝对路径
 - 训练超参必须支持通过脚本命令行参数、环境变量或 Hydra override 注入
 - `data.max_prompt_length` 不得低于 `10240`
-- Ray 临时目录必须使用短路径（默认 `/tmp/ssgrpo_ray`），避免 AF_UNIX socket path 超过 107 bytes
+- Ray 临时目录必须使用短路径（默认 `/tmp/oval_ray`），避免 AF_UNIX socket path 超过 107 bytes
 - `replace_in_file` 时 `old_string` 必须包含文件中的实际字符（制表符不要额外转义），不要基于记忆中可能被摘要的内容编辑
 - 大改动前先更新方案文档，再改实现
 - 不确定的事实先核验或停下来对齐，不把假设写进实现
@@ -99,9 +99,11 @@ Conventional Commits：`<type>: <subject>`
 
 ## 当前环境事实
 
-- Teacher 模型：用户通过 `--model` 和 `--api-base` 指定（推荐 Gemini via OpenAI-compatible API）
+- Teacher 模型：本地 Gemma-4-31B-it（`models/Google/Gemma-4-31B-it`），也可通过 `--api-base` 使用外部 API
 - Policy 模型：Qwen3-4B（`models/Qwen/Qwen3-4B`），RL rollout 时通过 vLLM 本地 serving
 - OVAL GRPO 是唯一训练路线（`bash scripts/train_grpo.sh`）
 - 数据生成 P0/P1 bug 全部修复，参数已对齐 PROVE 论文 §3.2–§4.1
 - SFT cold-start 相关代码已清除
-- 训练默认环境为 8×L20 44GB
+- 当前开发环境为 8×A10 22GB，脚本自动检测 GPU 数（`GPU_COUNT=4` 可限制），不绑定特定硬件
+- Teacher 生成参数：difficulty_mix = `complete:70%, missing:10%, minimal:20%`，distractor 40%，missing_function 20%，irrelevance 5%
+- Oversample 50% + 最多 3 轮 recovery 保证产出数量

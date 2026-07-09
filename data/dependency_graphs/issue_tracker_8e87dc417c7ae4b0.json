@@ -25,9 +25,7 @@
   ],
   "graph": {
     "add_label": {
-      "explicit": [
-        "remove_label"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "add_to_sprint": {
@@ -37,9 +35,7 @@
       "implicit": []
     },
     "add_watcher": {
-      "explicit": [
-        "remove_watcher"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "assign_issue": {

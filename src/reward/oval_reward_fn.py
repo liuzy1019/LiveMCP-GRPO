@@ -27,7 +27,7 @@ try:
     from src.oval_mcp.training.lambda_state import LambdaState, DEFAULT_STATE_PATH
 except ImportError:
     LambdaState = None  # type: ignore
-    DEFAULT_STATE_PATH = "/tmp/ssgrpo_lambda_state.json"
+    DEFAULT_STATE_PATH = "/tmp/ovalmcp_lambda_state.json"
 
 try:
     from src.training.livemcp_hyperparams import get_config

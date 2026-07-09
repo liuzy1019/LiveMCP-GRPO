@@ -39,7 +39,7 @@ data/
 > 重新生成后建议运行 `python scripts/validate_pipeline.py --live` 验证管线完整性。
 
 ```
-PROVE Teacher（LLM-in-the-loop，每轮决策；推荐 Gemini 通过 OpenAI 兼容 API 接入，最终由 `--model` 参数指定）
+PROVE Teacher（LLM-in-the-loop，每轮决策；本地 Gemma-4-31B-it）
   ┌──────────────────────────────────────────────────┐
   │ 1. LLM 决策 (task_planner.py)                     │
   │   输入: domain schemas + live state + history      │
@@ -50,7 +50,8 @@ PROVE Teacher（LLM-in-the-loop，每轮决策；推荐 Gemini 通过 OpenAI 兼
   │ 2. 执行记录                                       │
   │   真实 MCP session 执行 → 记录 oracle trace        │
   │   derive_success_criteria: 从 state delta 派生     │
-  │   PROVE 扰动: intermittent/paginated/partial_batch │
+  │   PROVE 扰动: intermittent/paginated/             │
+  │     incomplete_intermediate/partial_batch_failure │
   └──────────────────────────────────────────────────┘
                         ↓ replay validate
   ┌──────────────────────────────────────────────────┐
@@ -69,12 +70,14 @@ PROVE Teacher（LLM-in-the-loop，每轮决策；推荐 Gemini 通过 OpenAI 兼
   └──────────────────────────────────────────────────┘
 ```
 
+**生成策略**：目标数量 N，实际生成 N + max(10, N/2) 条（50% oversample），经 replay 验证、Jaccard 去重、训练合约过滤后取前 N 条。不足时自动 recovery（最多 3 轮），用不同 seed 偏移补充。
+
 ### 难度分布
 
 | 类型 | 比例 | 说明 |
 |------|------|------|
-| **complete** | 60% | user query 包含全部所需信息 |
-| **missing** | 20% | user query 省略一个关键参数 |
+| **complete** | 70% | user query 包含全部所需信息 |
+| **missing** | 10% | user query 省略一个关键参数 |
 | **minimal** | 20% | user query 极其简略，需模型自行推断 |
 
 ---
@@ -103,17 +106,37 @@ PROVE Teacher（LLM-in-the-loop，每轮决策；推荐 Gemini 通过 OpenAI 兼
 
 ## 数据生成命令
 
+### vLLM 参数自适应
+
+`generate_data.sh` 根据 GPU 显存自动缩放 vLLM 参数，无需手动调参：
+
+| GPU 等级 | KV Cache 余量 | max_model_len | max_num_seqs | clients | enforce_eager | gpu_memory_utilization |
+|----------|--------------|--------------|-------------|---------|---------------|------------------------|
+| 紧 (< 1.8 GiB) | A10 + Gemma-4-31B TP=4 典型 | 7168 | 8 | 2 | 0 | 0.88 |
+| 充裕 (≥ 1.8 GiB) | 大显存卡或小模型 | 8192 | 32 | 4 | 0 | 0.88 |
+
+判断公式：`kv_budget = GPU_MEM × 0.88 − model/TP − 1.5(overhead)`，< 1.8 GiB 即为"紧"。
+`enforce_eager` 始终为 0（CUDA Graph 开），A10 sm_86 支持且性能更优。
+
+所有参数均可通过环境变量覆盖：
 ```bash
-# 统一生成脚本（推荐，自动检测并行策略）
+VLLM_MAX_NUM_SEQS=16 VLLM_CLIENTS_PER_INSTANCE=4 \
+  bash scripts/generate_data.sh --count 500
+```
+
+### 运行命令
+
+```bash
+# 统一生成脚本（推荐，自动检测并行策略，自动管理 vLLM）
+# 默认 Teacher: 本地 Gemma-4-31B-it
 # 输出到 data/runs/{MMDD_HHMM}/，并自动更新 data/train.parquet 符号链接
-bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
-bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 500
+bash scripts/generate_data.sh --count 500 --val-count 100
 
 # 指定 run-id（默认自动取当前时间 MMDD_HHMM）
-bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --run-id 0709_1500
+bash scripts/generate_data.sh --count 500 --run-id 0709_1500
 
 # 单 domain 快速测试
-bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --domain calendar --count 200
+bash scripts/generate_data.sh --domain calendar --count 200
 ```
 
 生成完成后：
@@ -136,8 +159,8 @@ bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-p
 ```json
 {
   "run_id": "2026-06-29_prove_v2",
-  "command": "python scripts/generate_data.py --count 500 --val-count 100 --model gemini-2.5-flash --api-base https://your-proxy/v1 --experiment-tag prove_v2",
-  "model": "gemini-2.5-flash",
+  "command": "python scripts/generate_data.py --count 500 --val-count 100 --experiment-tag prove_v2",
+  "model": "models/Google/Gemma-4-31B-it",
   "domain": "all",
   "count": 500,
   "val_count": 100,
@@ -145,7 +168,7 @@ bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-p
   "distractor_rate": 0.40,
   "missing_function_rate": 0.20,
   "irrelevance_ratio": 0.05,
-  "difficulty_mix": {"complete": 0.6, "missing": 0.2, "minimal": 0.2},
+  "difficulty_mix": {"complete": 0.7, "missing": 0.1, "minimal": 0.2},
   "git_commit": "abc1234",
   "gpu_model": "L20",
   "timestamp": "2026-06-29T10:38:48+08:00"

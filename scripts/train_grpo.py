@@ -65,11 +65,11 @@ def _ensure_short_ray_temp_dir(config) -> str:
     """Set a short Ray temp dir to avoid AF_UNIX socket path length failures."""
     ray_init = config.ray_kwargs.get("ray_init", {})
     configured = ray_init.get("_temp_dir")
-    ray_tmp_dir = configured or os.environ.get("LIVEMCP_RAY_TMPDIR") or "/tmp/ssgrpo_ray"
+    ray_tmp_dir = configured or os.environ.get("LIVEMCP_RAY_TMPDIR") or "/tmp/oval_ray"
     os.makedirs(ray_tmp_dir, exist_ok=True)
 
     # Ray also consults tempfile in some paths; keep it short for subprocesses.
-    os.environ.setdefault("TMPDIR", "/tmp/ssgrpo_tmp")
+    os.environ.setdefault("TMPDIR", "/tmp/oval_tmp")
     os.environ.setdefault("RAY_TMPDIR", ray_tmp_dir)
     os.makedirs(os.environ["TMPDIR"], exist_ok=True)
     tempfile.tempdir = os.environ["TMPDIR"]
