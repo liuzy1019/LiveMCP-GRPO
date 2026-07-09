@@ -94,9 +94,13 @@
     },
     "list_events": {
       "explicit": [
+        "add_attendee",
         "delete_event",
         "get_event",
         "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
         "update_event"
       ],
       "implicit": []

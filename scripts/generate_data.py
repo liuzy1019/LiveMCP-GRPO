@@ -227,8 +227,13 @@ def _task_scenario(task) -> str:
     explicit = task.metadata.get("scenario_type") if task.metadata else None
     if explicit:
         return str(explicit)
+    # PROVE Step-3 missing-function variant produces clarification trajectories
+    # (paper §3.2 Training Data: "1,500 clarification trajectories generated
+    # by the missing-function variant of Step 3"). Abstention (report_error)
+    # is reserved for the internal `irrelevant` scenario and the externally
+    # sourced When2Call + xLAM-Irrelevance slice (G = ∅).
     if task.task_type == "missing_function":
-        return "no_tool_or_abstention"
+        return "clarification_required"
     if task.task_type == "irrelevant":
         return "no_tool_or_abstention"
     return "normal_safe_success"
@@ -275,21 +280,34 @@ def _task_fingerprint(task) -> str:
 def _serialize_training_oracle(task) -> list[dict]:
     """Return tool calls plus exactly one terminal action for training.
 
-    For missing_function / abstention tasks that have no serialized oracle
-    calls, produce a synthetic report_error terminal so the training contract
-    validator and row exporter can process the task instead of dropping it.
+    All task types that reach this function must have a non-empty oracle
+    program.  The orchestrator always pre-fills oracle calls for
+    missing_function (``_apply_missing_function``) and irrelevant
+    (``_generate_irrelevant_tasks``) tasks.  External abstention rows
+    (When2Call, xLAM-Irrelevance) are written directly to Parquet and do
+    NOT flow through this path.
     """
-    # ── missing_function / abstention: synthetic report_error terminal ──
-    if task.task_type == "missing_function" or (
-        task.metadata.get("scenario_type") in ("missing_function", "no_tool_or_abstention")
-        and not (task.oracle_program and task.oracle_program.calls)
-    ):
-        hidden_tool = task.metadata.get("unavailable_required_tool", "required tool")
-        return [{
-            "tool_name": "",
-            "arguments": {"text": f"Required tool {hidden_tool} is not available."},
-            "action": "report_error",
-        }]
+    scenario_type = task.metadata.get("scenario_type") if task.metadata else None
+
+    # ── Assert invariants ──────────────────────────────────────────
+    # missing_function / clarification_required tasks MUST have a
+    # pre-filled oracle.  If this fires, the orchestrator was changed
+    # to skip oracle population — fix the caller, not this function.
+    if task.task_type == "missing_function" or scenario_type == "clarification_required":
+        if not (task.oracle_program and task.oracle_program.calls):
+            raise ValueError(
+                f"Task {task.task_id}: missing_function/clarification_required "
+                f"task has no oracle calls — orchestrator should have pre-filled "
+                f"ask_clarification terminal"
+            )
+
+    # irrelevance / abstention tasks MUST also have a pre-filled oracle.
+    if scenario_type in ("no_tool_or_abstention", "irrelevant"):
+        if not (task.oracle_program and task.oracle_program.calls):
+            raise ValueError(
+                f"Task {task.task_id}: {scenario_type} task has no oracle "
+                f"calls — orchestrator should have pre-filled report_error"
+            )
 
     raw_calls = []
     if task.oracle_program and task.oracle_program.calls:
@@ -351,14 +369,24 @@ def _validate_task_training_contract(task) -> None:
         if call.get("action", "tool_call") == "tool_call"
     ]
     scenario_type = _task_scenario(task)
+    # PROVE alignment:
+    #   missing_function variant (Step 3)   → ask_clarification (1,500 traj.)
+    #   irrelevance queries + external      → report_error (1,122 abstention)
+    #   normal / recovery / dependency      → final_answer (main slice)
+    #
+    # NOTE: normal_safe_success also permits ask_clarification as a natural
+    # terminal (a task that ran 2-5 real tool_calls and then asked the user
+    # for follow-up clarification, e.g. "which of these events should I
+    # cancel?") — see test_tasks_to_rows_accepts_tool_task_ending_with_clarification.
     expected_terminal_by_scenario = {
-        "normal_safe_success": {"final_answer"},
-        "missing_function": {"report_error"},
+        "normal_safe_success": {"final_answer", "ask_clarification"},
+        "missing_function": {"ask_clarification"},
         "no_tool_or_abstention": {"report_error"},
         "irrelevant": {"report_error"},
         "clarification_required": {"ask_clarification"},
         "tool_error_recovery": {"final_answer", "report_error"},
         "missing_dependency": {"final_answer", "ask_clarification", "report_error"},
+        "unsafe_temptation": {"final_answer"},
     }
     expected_terminals = expected_terminal_by_scenario.get(scenario_type)
     if expected_terminals and terminal_action not in expected_terminals:
@@ -966,12 +994,9 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "reward_model": {
                 "style": "rule",
                 "ground_truth": {
-                    "task_id": task.task_id,
-                    # Same JSON serialization as extra_info.oracle_calls
                     "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
                     "success_criteria": success_criteria_json,
                     "required_tools": real_required_tools,
-                    "allowed_terminal_actions": allowed_terminal_actions,
                 },
             },
             "extra_info": extra_info,

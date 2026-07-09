@@ -50,7 +50,6 @@
       "explicit": [
         "add_note",
         "create_task",
-        "get_deal",
         "update_deal"
       ],
       "implicit": []

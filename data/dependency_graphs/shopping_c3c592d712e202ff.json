@@ -37,14 +37,10 @@
         "remove_from_cart",
         "update_cart_quantity"
       ],
-      "implicit": [
-        "clear_cart"
-      ]
+      "implicit": []
     },
     "add_to_wishlist": {
-      "explicit": [
-        "remove_from_wishlist"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "apply_coupon": {
@@ -157,9 +153,7 @@
       "implicit": []
     },
     "track_order": {
-      "explicit": [
-        "return_order"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "update_cart_quantity": {

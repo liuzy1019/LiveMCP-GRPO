@@ -1,8 +1,12 @@
-"""Task Reward: R_task per OVAL-MCP §7.1.
+"""Task Reward: R_task per PROVE §3.3.
 
-Trajectory-level R_task composed of:
-  R_positive = w_val * R_validity + w_cov * R_coverage + w_name * R_name + w_arg * R_arg
-  R_task = clip(R_positive / Z_pos + w_eff * R_efficiency, -0.2, 1.0)
+Trajectory-level R_task composed of (PROVE eq. 5):
+  R_task = w_val*R_validity + w_cov*R_coverage + w_eff*R_efficiency
+           + w_name*R_name + w_arg*R_arg
+
+Weights: w_val=0.5, w_cov=0.5, w_eff=0.15, w_name=0.2, w_arg=0.1
+Max R_task ≈ 1.3 (when R_eff=0); GRPO uses relative advantage so
+absolute scale does not matter.
 
 If required_tool_calls = []: binary R_task (no-tool tasks).
 """
@@ -22,6 +26,7 @@ DEFAULT_WEIGHTS = {
     "w_eff": 0.15,
     "w_name": 0.2,
     "w_arg": 0.1,
+    # w_struct / w_exec 已废弃，保留仅为向后兼容，不再使用
     "w_struct": 0.6,
     "w_exec": 0.4,
     "alpha_eff": 0.5,
@@ -35,12 +40,17 @@ class TaskRewardResult:
 
     r_task: float = 0.0
     r_validity: float = 0.0
+    # 三级分项（各占 1/3，对齐论文 §4.2）
+    r_name_exists: float = 0.0    # level-1: function name 在 schema 中存在
+    r_args_present: float = 0.0   # level-2: 必需参数存在且类型兼容
+    r_execution: float = 0.0      # level-3: live 执行成功
+    # 向后兼容别名（等于 r_name_exists + r_args_present 的均值）
     r_structural: float = 0.0
-    r_execution: float = 0.0
     r_coverage: float = 0.0
     r_name: float = 0.0
     r_arg: float = 0.0
     r_efficiency: float = 0.0
+    # r_positive / z_pos 已废弃（PROVE eq.5 直接加权求和，无归一化）
     r_positive: float = 0.0
     z_pos: float = 1.0
 
@@ -56,6 +66,8 @@ class TaskRewardResult:
         return {
             "r_task": self.r_task,
             "r_validity": self.r_validity,
+            "r_name_exists": self.r_name_exists,
+            "r_args_present": self.r_args_present,
             "r_structural": self.r_structural,
             "r_execution": self.r_execution,
             "r_coverage": self.r_coverage,
@@ -128,12 +140,19 @@ class TaskReward:
         n_calls = len(tool_events)
         result.n_model_calls = n_calls
 
-        # 1. R_validity = w_struct * R_structural + w_exec * R_execution
-        r_structural = self._compute_structural_validity(tool_events, task)
+        # 1. R_validity: 三级等权平均（对齐论文 §4.2）
+        #    level-1 (1/3): function name 在 candidate schema 中存在
+        #    level-2 (1/3): 所有必需参数存在且 JSON 类型兼容
+        #    level-3 (1/3): live 执行成功无错
+        #    部分分：名字对参数错 ≈ 0.33；结构正确执行失败 ≈ 0.66
+        r_name_exists, r_args_present = self._compute_structural_validity_3level(tool_events, task)
         r_execution = self._compute_execution_validity(tool_events)
-        result.r_structural = r_structural
+        result.r_name_exists = r_name_exists
+        result.r_args_present = r_args_present
         result.r_execution = r_execution
-        result.r_validity = self.w["w_struct"] * r_structural + self.w["w_exec"] * r_execution
+        # 向后兼容：r_structural = 前两级均值
+        result.r_structural = (r_name_exists + r_args_present) / 2.0
+        result.r_validity = (r_name_exists + r_args_present + r_execution) / 3.0
 
         # Terminal-action whitelist enforcement.
         # Tasks may declare allowed_terminal_actions (e.g. ["ask_clarification"]
@@ -144,23 +163,18 @@ class TaskReward:
         if not self._check_terminal_predicate(event_log, task):
             result.r_validity *= 0.5
 
-        # 2. R_coverage: ordered required calls + terminal + state criteria.
-        # Generic predicate names cannot represent multiplicity (three query
-        # calls collapse to one "resolved_required_entity" set member), so
-        # coverage is aligned directly to the serialized oracle in dependency
-        # order, matching PROVE's definition.
-        criteria_list = task.get("success_criteria", []) or []
-        criteria_count = len(criteria_list)
+        # 2. R_coverage: PROVE eq.(1) — dependency-ordered GT step coverage.
+        #    R_cov = (1/|G|) * Σ m(g)*o(g)
+        #    |G| = len(required_tool_calls)，即 GT steps 数量，对齐论文公式(1)。
+        #    m(g) = 1 if GT step g is matched in model output
+        #    o(g) = 1 if all dependency predecessors of g are matched earlier
+        #    _match_required_calls_in_order 实现了 greedy dependency-order 匹配。
         aligned_calls = self._match_required_calls_in_order(tool_events, required_tool_calls)
-        terminal_completed = 1 if self._check_terminal_predicate(event_log, task) else 0
-        total_preds = max(len(required_tool_calls) + 1 + criteria_count, 1)
-        completed_state = self._count_completed_state_criteria(
-            event_log, criteria_list, final_state=task.get("final_state")
-        )
-        completed = len(aligned_calls) + terminal_completed + completed_state
+        total_preds = max(len(required_tool_calls), 1)
+        completed = len(aligned_calls)
         result.completed_predicates = completed
         result.total_predicates = total_preds
-        result.r_coverage = min(1.0, completed / total_preds) if total_preds > 0 else 0.0
+        result.r_coverage = completed / total_preds
 
         # Check identity violation → R_coverage = 0
         if self._has_identity_violation(event_log, task):
@@ -186,7 +200,11 @@ class TaskReward:
         result.n_required_calls = n_required
         result.r_efficiency = self._compute_efficiency(n_calls, n_required)
 
-        # R_positive and R_task
+        # R_task: PROVE eq.(5) — direct weighted sum, no normalisation.
+        #   R_task = w_val*R_val + w_cov*R_cov + w_eff*R_eff + w_name*R_name + w_arg*R_arg
+        # Max ≈ 1.3 (R_eff=0) or 1.45 (R_eff=1, impossible in practice).
+        # GRPO uses group-relative advantage so absolute scale is irrelevant.
+        # r_positive / z_pos kept for backward-compat logging only.
         result.r_positive = (
             self.w["w_val"] * result.r_validity
             + self.w["w_cov"] * result.r_coverage
@@ -196,23 +214,57 @@ class TaskReward:
         result.z_pos = (
             self.w["w_val"] + self.w["w_cov"] + self.w["w_name"] + self.w["w_arg"]
         )
-        result.r_task = max(
-            -0.2,
-            min(1.0, result.r_positive / result.z_pos + self.w["w_eff"] * result.r_efficiency),
+        result.r_task = (
+            self.w["w_val"] * result.r_validity
+            + self.w["w_cov"] * result.r_coverage
+            + self.w["w_eff"] * result.r_efficiency
+            + self.w["w_name"] * result.r_name
+            + self.w["w_arg"] * result.r_arg
         )
 
         return result
+
+    def _compute_structural_validity_3level(
+        self,
+        tool_events: list,
+        task: dict[str, Any],
+    ) -> tuple[float, float]:
+        """三级 validity 的前两级，返回 (r_name_exists, r_args_present)。
+
+        level-1 r_name_exists: tool_name 在 candidate schema 中存在
+            → event.tool_name_known（由 executor 在 schema lookup 时设置）
+              若字段不存在则回退到 schema_valid（保持向后兼容）
+        level-2 r_args_present: 所有必需参数存在且 JSON 类型兼容
+            → event.schema_valid（executor 做完整 schema 校验后设置）
+              仅当 level-1 通过时才有意义，否则记 0
+        """
+        if not tool_events:
+            return 0.0, 0.0
+        n = len(tool_events)
+        name_ok = 0
+        args_ok = 0
+        for e in tool_events:
+            # level-1: name 存在性
+            # tool_name_known 由 executor 在 canonical_name 查找后设置；
+            # 若旧版 event 没有该字段，回退到 schema_valid（两级合一）
+            l1 = getattr(e, "tool_name_known", None)
+            if l1 is None:
+                # 向后兼容：旧 event 只有 schema_valid，用它同时代表 l1+l2
+                l1 = e.schema_valid
+            name_ok += int(bool(l1))
+            # level-2: 参数校验（仅 name 存在时才有意义）
+            l2 = e.schema_valid if l1 else False
+            args_ok += int(bool(l2))
+        return name_ok / n, args_ok / n
 
     def _compute_structural_validity(
         self,
         tool_events: list,
         task: dict[str, Any],
     ) -> float:
-        """R_structural: fraction of tool calls with schema-valid args."""
-        if not tool_events:
-            return 0.0
-        valid = sum(1 for e in tool_events if e.schema_valid)
-        return valid / len(tool_events)
+        """向后兼容接口：返回前两级均值（已被 _compute_structural_validity_3level 取代）。"""
+        r1, r2 = self._compute_structural_validity_3level(tool_events, task)
+        return (r1 + r2) / 2.0
 
     def _compute_execution_validity(
         self,

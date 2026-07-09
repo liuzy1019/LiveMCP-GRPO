@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from collections import defaultdict
+from collections.abc import Hashable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -115,15 +115,20 @@ def _quality_issue(row: pd.Series) -> str:
 def _stratified_head(df: pd.DataFrame, target: int) -> pd.DataFrame:
     if target <= 0 or len(df) <= target:
         return df.reset_index(drop=True)
-    buckets: dict[tuple[str, str], list[int]] = defaultdict(list)
+    buckets: dict[tuple[str, str], list[Hashable]] = {}
     for idx, row in df.iterrows():
         extra = _as_extra(row["extra_info"])
         domain = str(extra.get("domain", ""))
         scenario = str(row.get("scenario_type") or extra.get("scenario_type") or "")
-        buckets[(domain, scenario)].append(idx)
+        key = (domain, scenario)
+        lst = buckets.get(key)
+        if lst is None:
+            lst = []
+            buckets[key] = lst
+        lst.append(idx)
 
     ordered_keys = sorted(buckets)
-    selected: list[int] = []
+    selected: list[Hashable] = []
     while len(selected) < target and ordered_keys:
         next_keys: list[tuple[str, str]] = []
         for key in ordered_keys:
@@ -158,7 +163,7 @@ def merge_split(tmpdir: Path, pattern: str, outpath: Path, target: int) -> tuple
         if fingerprint in seen:
             continue
         seen.add(fingerprint)
-        keep_rows.append(row.to_dict())
+        keep_rows.append(cast(dict[str, Any], row.to_dict()))
     merged = pd.DataFrame(keep_rows)
     dropped_dedup = before_dedup - len(merged)
     if dropped_dedup:
@@ -191,22 +196,36 @@ def main() -> int:
         return 1
 
     train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
-    val_fps = {_row_fingerprint(row) for _, row in val_df.iterrows()}
-    fp_overlap = train_fps & val_fps
-    if fp_overlap:
-        print(f"  FATAL: {len(fp_overlap)} semantic fingerprint overlaps between train and val")
-        return 1
+
+    # 从 val 中删掉与 train 语义重叠的行，而不是直接报错
+    overlap_mask = val_df.apply(lambda row: _row_fingerprint(row) in train_fps, axis=1)
+    n_removed = int(overlap_mask.sum())
+    if n_removed:
+        print(f"  WARNING: removed {n_removed} val rows overlapping with train, rewriting val.parquet")
+        val_df = val_df[~overlap_mask].reset_index(drop=True)
+        val_df.to_parquet(output_dir / "val.parquet", index=False)
+        print(f"  val.parquet: {len(val_df)} rows after overlap removal")
+        if len(val_df) < args.val_count:
+            print(f"  FATAL: val has {len(val_df)} rows after dedup, below target {args.val_count}")
+            return 1
 
     train_ids = {_as_extra(row["extra_info"]).get("task_id", "") for _, row in train_df.iterrows()}
-    val_ids = {_as_extra(row["extra_info"]).get("task_id", "") for _, row in val_df.iterrows()}
-    tid_overlap = train_ids & val_ids
-    if tid_overlap:
-        print(f"  FATAL: {len(tid_overlap)} train/val task_id overlaps")
-        return 1
+    tid_overlap_mask = val_df.apply(
+        lambda row: _as_extra(row["extra_info"]).get("task_id", "") in train_ids, axis=1
+    )
+    n_tid_removed = int(tid_overlap_mask.sum())
+    if n_tid_removed:
+        print(f"  WARNING: removed {n_tid_removed} val rows with task_id overlap, rewriting val.parquet")
+        val_df = val_df[~tid_overlap_mask].reset_index(drop=True)
+        val_df.to_parquet(output_dir / "val.parquet", index=False)
+        print(f"  val.parquet: {len(val_df)} rows after task_id dedup")
+        if len(val_df) < args.val_count:
+            print(f"  FATAL: val has {len(val_df)} rows after task_id dedup, below target {args.val_count}")
+            return 1
 
     print(
         f"  merge ok: {len(train_df)} train + {len(val_df)} val, "
-        f"fp_overlap=0, tid_overlap=0"
+        f"fp_removed={n_removed}, tid_removed={n_tid_removed}"
     )
     return 0
 

@@ -87,32 +87,6 @@ class LiveTask:
     execution_history_per_round: list[list] = field(default_factory=list)  # per-round execution results
 
 
-@dataclass
-class TraceTurn:
-    turn_idx: int
-    prompt_hash: str
-    model_output: str
-    parsed_action_type: str
-    tool_calls: list[ToolCall]
-    execution_results: list[ToolExecutionResult]
-    observation_text: str
-    done: bool
-
-
-@dataclass
-class RolloutTrace:
-    trace_id: str
-    task_id: str
-    session_id: str
-    model_name: str
-    started_at: str
-    ended_at: str | None
-    turns: list[TraceTurn]
-    final_status: str
-    reward: dict[str, float]
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
 def to_plain(value: Any) -> Any:
     """Convert nested dataclasses into JSON-serializable primitives."""
     if hasattr(value, "__dataclass_fields__"):

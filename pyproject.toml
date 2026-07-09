@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "State-Machine Data Synthesis + Constrained GRPO for Multi-Step MCP Tool Use"
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "torch==2.8.0",
+    "torch==2.10.0",
     "numpy==1.26.4",
     "pyyaml==6.0.3",
     "pydantic==2.12.5",
@@ -32,27 +32,26 @@ dev = [
     "matplotlib>=3.9.2",
 ]
 train = [
-    "transformers==4.57.6",
+    "transformers==5.13.0",
     "tokenizers==0.22.2",
     "datasets==4.8.4",
     "trl==0.29.1",
     "peft==0.18.1",
-    "accelerate==1.13.0",
+    "accelerate==1.14.0",
     "tensorboard==2.20.0",
     "wandb==0.26.0",
 ]
 rl = [
     # verl 从项目内 ./verl 源码 editable 安装: pip install -e ./verl
-    "vllm==0.11.0",
+    "vllm>=0.11.0",
     "ray==2.54.1",
     "tensordict==0.10.0",
-    "flashinfer-python==0.6.4",
     "xformers==0.0.32.post1",
     "deepspeed==0.19.2",
     "lm-format-enforcer==0.11.3",
-    "compressed-tensors==0.11.0",
-    "xgrammar==0.1.25",
-    "flash-attn==2.7.3",
+    # 以下依赖由 vLLM 自行解析，不 pin 具体版本：
+    # flashinfer-python, flashinfer-cubin, compressed-tensors, xgrammar
+    # 如需手动升级，单独 pip install 即可
 ]
 bfcl = [
     "bfcl-eval>=2025.10",

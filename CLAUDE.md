@@ -7,31 +7,51 @@ Design doc: `docs/OVAL-MCP.md`. Read it before making changes.
 ### 当前可用环境
 
 ```bash
-conda activate arl          # Python 3.11, PyTorch 2.7.0+cu126
+conda activate arl          # Python 3.11.15, PyTorch 2.10.0+cu128
 nvidia-smi                  # 确认 GPU 可用（L20 ×8, Driver 570.195.03）
 ```
 
 关键版本：
 
-| 组件 | 当前版本 | pyproject.toml 目标 |
-|------|---------|-------------------|
-| PyTorch | 2.10.0+cu128 | 2.8.0 |
-| vLLM | 0.19.1 | 0.11.0 |
+| 组件 | 版本 | 备注 |
+|------|------|------|
+| Python | 3.11.15 | — |
+| PyTorch | 2.10.0+cu128 | — |
+| CUDA (nvcc) | 12.8.93 | conda 安装 |
+| vLLM | 0.19.1 | >=0.11.0 均兼容 |
 | transformers | 5.13.0 | — |
-| flashinfer-python | 0.6.12 | 0.6.4 |
-| flash-attn | 未安装 | 2.7.3 |
-| nvcc (conda) | 12.9.86 | — |
+| flashinfer-python | 0.6.12 | >=0.6.4 均兼容 |
+| flash-attn | 未安装 | vLLM V1 默认 flashinfer attention backend |
+| ray | 2.54.1 | — |
+| datasets | 4.8.4 | — |
+| deepspeed | 0.19.2 | — |
+| peft | 0.18.1 | — |
+| accelerate | 1.14.0 | — |
+| trl | 0.29.1 | — |
+| tensordict | 0.10.0 | — |
+| xformers | 0.0.32.post1 | — |
 
-> **vLLM 0.11.0 → 0.19.1**: 持续跟随上游。PROVE 论文未指定具体 vLLM 版本（仅写 "VERL + vLLM"），0.19.1 完全兼容。
-> **PyTorch 2.7.0 → 2.10.0**: 匹配最新 CUDA 工具链。
-> **flash-attn**: 当前未安装。vLLM V1 引擎默认使用 flashinfer attention backend，不依赖 flash_attn。
+> **vLLM 0.11.0 → 0.19.1**: 持续跟随上游。PROVE 论文未指定具体 vLLM 版本（仅写 "VERL + vLLM"），0.19.1 完全兼容。版本自动检测，脚本不强制 strict matching（见 `scripts/generate_data.sh` 中 `RECOMMENDED_VLLM_MAJOR_MINOR`）。
+> **PyTorch 2.7.0 → 2.10.0**: 匹配最新 CUDA 工具链 (cu128)。
+> **flash-attn**: vLLM V1 引擎默认使用 flashinfer attention backend，不依赖 flash_attn。
+
+### 可用模型
+
+| 模型 | 大小 | 用途 |
+|------|------|------|
+| `models/Google/Gemma-4-31B-it` | 31B | Teacher 生成（本地） |
+| `models/Qwen/Qwen3-32B` | 32B | 大容量教师/策略模型 |
+| `models/Qwen/Qwen3-8B` | 8B | 策略模型/教师 |
+| `models/Qwen/Qwen3-4B` | 4B | 策略模型（默认） |
+| `models/Qwen/Qwen3.5-4B` | 4B | 策略模型（多模态） |
+| `models/Qwen/Qwen2.5-7B-Instruct` | 7B | 基线对比 |
 
 ### FlashInfer JIT 编译配置（必须）
 
-系统 nvcc 11.8 不兼容，已通过 conda 安装 nvcc 12.9。flashinfer 0.6.4 需要 JIT 编译 sampling kernel，必须设置 `CUDA_HOME` 并补齐头文件/库：
+系统 nvcc 过旧或不兼容，必须使用 conda 安装的 nvcc 12.8。flashinfer 需要 JIT 编译 sampling kernel，必须设置 `CUDA_HOME` 并补齐头文件/库：
 
 ```bash
-export CUDA_HOME=/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl
+export CUDA_HOME=/mnt/data2/liuzhanyi/envs/arl
 export PATH=$CUDA_HOME/bin:$PATH
 ```
 
@@ -50,7 +70,7 @@ export PATH=$CUDA_HOME/bin:$PATH
 export VLLM_USE_FLASHINFER_SAMPLER=0
 ```
 
-此方案回退到 PyTorch 原生采样，性能略降但保证可用。当前环境未安装 flash-attn（vLLM V1 默认 flashinfer attention backend，无需 flash_attn）。
+此方案回退到 PyTorch 原生采样，性能略降但保证可用。
 
 ### 环境安装步骤（从头构建）
 
@@ -59,27 +79,31 @@ export VLLM_USE_FLASHINFER_SAMPLER=0
 conda create -n arl python=3.11 -y
 conda activate arl
 
-# 2. 安装 PyTorch
-pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu126
+# 2. 安装 PyTorch (cu128)
+pip install torch==2.10.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
-# 3. 安装项目依赖
-pip install -r requirements.txt
+# 3. 安装 vLLM（必须先于 requirements.txt，让 vLLM 自行解析 flashinfer/compressed-tensors/xgrammar 等依赖）
+pip install vllm==0.19.1
 
-# 4. 安装 verl（源码 editable）
+# 4. 安装项目其他依赖
+pip install -r requirements.txt --no-build-isolation
+
+# 5. 安装 verl（源码 editable）
 pip install -e ./verl
 
-# 5. 安装 nvcc 12.9（flashinfer JIT 编译需要）
-conda install -c nvidia/label/cuda-12.6.3 cuda-nvcc -y
+# 6. 安装 nvcc（flashinfer JIT 编译需要）
+conda install -c nvidia/label/cuda-12.8.0 cuda-nvcc -y
 
-# 6. 补齐 CUDA 头文件和库符号链接（见上表）
+# 7. 补齐 CUDA 头文件和库符号链接（见上表）
 
-# 7. 清理 flashinfer JIT 缓存（如果之前编译失败过）
+# 8. 清理 flashinfer JIT 缓存（如果之前编译失败过）
 rm -rf ~/.cache/flashinfer
 
-# 8. 验证
+# 9. 验证
+export CUDA_HOME=$CONDA_PREFIX
 python -c "import torch; print(torch.__version__)"
 python -c "import vllm; print(vllm.__version__)"
-CUDA_HOME=$CONDA_PREFIX python -c "import flashinfer; print(flashinfer.__version__)"
+python -c "import flashinfer; print(flashinfer.__version__)"
 ```
 
 ## Pipeline Status
@@ -90,14 +114,15 @@ CUDA_HOME=$CONDA_PREFIX python -c "import flashinfer; print(flashinfer.__version
 | OVAL Agent Loop | ✅ | Single-call protocol + initial-state hash + final-state evidence |
 | OVAL Reward | ✅ | Ordered coverage + task-aware safety |
 | GRPO Estimator | ✅ | Saturation skip + 2D stratified advantage |
-| GPU Auto-Adaptation | ⏳ | Multi-tier defaults planned (L20/A100/A10/Hopper/T4); currently L20 only |
-| Full Training Run | ⏳ | Pending data generation |
+| GPU Auto-Adaptation | ✅ | `scripts/gpu_config.sh` — auto-detect GPU count/memory; TP/instance calculation in `generate_data.sh` |
+| Full Training Run | 🔄 | 数据生成管线已跑通，训练待启动 |
 
 ### Verified Pipeline
 
 ```
-live MCP servers (10 domains)
-→ PROVE Teacher (LLM-in-the-loop, user-specified; preferred: Gemini via OpenAI-compatible API)
+live MCP servers (10 domains: banking, calendar, crm, email, filesystem,
+  food_delivery, issue_tracker, payments, shopping, team_chat)
+→ PROVE Teacher (LLM-in-the-loop; preferred: Gemini via OpenAI-compatible API)
 → Real MCP execution → oracle trace
 → Jaccard dedup (0.70, position-aware)
 → Parquet serialization (success_criteria as JSON string)
@@ -114,11 +139,11 @@ live MCP servers (10 domains)
 `scripts/train_grpo.py` is the Hydra entry point; `src/training/run_grpo.py` is the official training entry.
 Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), with GPU tier defaults and `OVAL_*` env var overrides.
 
-### Current Hardware
+### Current Hardware / Defaults
 
-- Teacher model: user-specified via `--model` (preferred: Gemini via `--api-base`)
-- Policy model: Qwen3-4B (`models/Qwen/Qwen3-4B`)
-- Default environment: 8×L20 44GB
+- Teacher model: 优先 Gemini（通过 `--api-base` 指定代理），本地备选 Gemma-4-31B-it
+- Policy model (训练 rollout): Qwen3-4B (`models/Qwen/Qwen3-4B`)
+- GPU: 8×L20 44GB
 
 ## Constraints
 
@@ -143,39 +168,47 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 ## Common Commands
 
 ```bash
-# vLLM inference server（先设置 CUDA_HOME）
-export CUDA_HOME=/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl
+# ============ vLLM 推理服务 ============
+export CUDA_HOME=/mnt/data2/liuzhanyi/envs/arl
 export PATH=$CUDA_HOME/bin:$PATH
-python -m vllm.entrypoints.openai.api_server \
-    --model models/Qwen/Qwen3-8B --port 8001 \
+
+# vLLM 0.19.1 使用 vllm serve 命令
+vllm serve models/Qwen/Qwen3-8B \
     --tensor-parallel-size 2 --max-model-len 8192 \
-    --gpu-memory-utilization 0.85 --trust-remote-code
+    --gpu-memory-utilization 0.85 --port 8001 --trust-remote-code
 
-# Data generation (Teacher: Gemini via OpenAI-compatible API)
+# 或使用封装脚本
+bash scripts/start_vllm.sh models/Qwen/Qwen3-8B 8001 2 "0,1"
+
+# ============ 数据生成 ============
+# 输出到 data/runs/{MMDD_HHMM}/，自动更新 data/train.parquet 符号链接
+# Teacher: Gemini via OpenAI-compatible API（推荐）
 bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
-# Data generation (Teacher: local model)
-bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --domain calendar --count 200
+# Teacher: 本地模型
+bash scripts/generate_data.sh --model models/Google/Gemma-4-31B-it --count 500 --val-count 100
+# 单域测试
+bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --domain calendar --count 200
 
-# GRPO training
+# ============ GRPO 训练 ============
 bash scripts/train_grpo.sh
 bash scripts/train_grpo.sh --gpus 0,1,2,3 --total-steps 300
 bash scripts/train_grpo.sh --wandb --wandb-project oval-mcp-grpo
 
-# Validation
+# ============ 验证 ============
 python scripts/validate_pipeline.py --live        # 端到端管线验证
-python scripts/test_domain_integrity.py            # Domain 拓扑/逻辑完整性
-python scripts/test_runner.py                      # 测试编排（拓扑+逻辑+数据生成）
 python -m pytest tests/
 python -m compileall src scripts tests
 git diff --check
 
-# Maintenance
+# ============ 维护 ============
 python scripts/precompute_dependency_graphs.py     # 预计算工具依赖图
 python scripts/rebuild_dependency_graph_cache.py   # 重建依赖图缓存
 python scripts/check_data.py -f data/train.parquet # 检查 parquet 数据
 python scripts/inspect_prompts.py -f data/train.parquet  # 检查 prompt 内容
 python scripts/verify_entities.py                  # 实体验证
 python scripts/merge_rollout_shards.py             # 合并 rollout 分片
+python scripts/convert_external_datasets.py        # 转换外部数据集（when2call/xlam）
+python scripts/bench_vllm_throughput.py            # vLLM 吞吐量基准测试
 ```
 
 ## Logging
@@ -183,14 +216,15 @@ python scripts/merge_rollout_shards.py             # 合并 rollout 分片
 运行日志统一写入 `logs/`，命名格式：`MMDD_HHMM_{任务描述}.log`
 
 ```
-logs/0706_1430_gen_500.log          # 7月6日 14:30 生成500条数据
-logs/0706_1430_gen_500_console.log  # 同任务的 console 输出
+logs/0706_1430_gen_500.log          # 7月6日 14:30 生成500条数据（主日志，tee 输出）
+logs/0706_1430_vllm_instance0.log   # 同任务 vLLM 实例日志（失败时保留，成功后自动删除）
 logs/0706_1500_train_grpo.log       # 7月6日 15:00 GRPO 训练
 ```
 
 - 时间戳只写月日（`MMDD_HHMM`），不写年
+- vLLM 日志生成成功后自动删除；失败时保留用于排查
 - 测试运行日志不允许在 `logs/` 中长期堆积，实验结束后及时清理
-- `.gitignore` 已忽略 `logs/*`，但保留 `.gitkeep````
+- `.gitignore` 已忽略 `logs/*`，但保留 `.gitkeep`
 
 ## Git
 

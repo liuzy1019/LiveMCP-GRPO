@@ -84,6 +84,13 @@ class TrainerConfig:
     top_p: float = 0.95
     log_prob_micro_batch: int = 1
 
+    # ── Multi-turn Rollout (PROVE §4) ──
+    # PROVE explicitly bounds rollouts at 5 user turns and 10 assistant turns.
+    # verl multi-turn config drives both the sglang tool loop AND our custom
+    # LiveMCPOvalLoop (see src/agent_loop/livemcp_oval_loop.py:__init__).
+    max_assistant_turns: int = 10
+    max_user_turns: int = 5
+
     # ── 优化器 ──
     lr: float = 1e-6
     lr_warmup_ratio: float = 0.1
@@ -232,6 +239,9 @@ class TrainerConfig:
             f"actor_rollout_ref.rollout.agent.default_agent_loop={self.agent_loop}",
             "actor_rollout_ref.rollout.agent.agent_loop_config_path=configs/agent_loop.yaml",
             f"actor_rollout_ref.rollout.agent.num_workers={self.devices}",
+            # Multi-turn caps (PROVE §4: 5 user turns, 10 assistant turns)
+            f"actor_rollout_ref.rollout.multi_turn.max_assistant_turns={self.max_assistant_turns}",
+            f"actor_rollout_ref.rollout.multi_turn.max_user_turns={self.max_user_turns}",
             # Algorithm
             f"algorithm.adv_estimator={self.adv_estimator}",
             "algorithm.use_kl_in_reward=True",
@@ -290,6 +300,8 @@ class TrainerConfig:
             "fsdp_param_offload": "OVAL_ACTOR_PARAM_OFFLOAD",
             "rollout_tp": "OVAL_ROLLOUT_TP",
             "log_prob_micro_batch": "OVAL_LOG_PROB_MICRO_BATCH",
+            "max_assistant_turns": "OVAL_MAX_ASSISTANT_TURNS",
+            "max_user_turns": "OVAL_MAX_USER_TURNS",
             "use_wandb": "OVAL_USE_WANDB",
             "wandb_project": "OVAL_WANDB_PROJECT",
             "wandb_entity": "OVAL_WANDB_ENTITY",

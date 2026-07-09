@@ -51,15 +51,15 @@
     },
     "get_email": {
       "explicit": [
-        "add_label",
-        "archive_email",
+        "reply_email",
         "forward_email",
-        "get_attachments",
+        "archive_email",
         "mark_read",
         "mark_unread",
-        "move_to_thread",
+        "add_label",
         "remove_label",
-        "reply_email"
+        "get_attachments",
+        "move_to_thread"
       ],
       "implicit": []
     },
@@ -73,17 +73,16 @@
     },
     "list_inbox": {
       "explicit": [
-        "add_label",
-        "archive_email",
-        "forward_email",
-        "get_attachments",
         "get_email",
-        "get_thread",
+        "reply_email",
+        "forward_email",
+        "archive_email",
         "mark_read",
         "mark_unread",
-        "move_to_thread",
+        "add_label",
         "remove_label",
-        "reply_email"
+        "get_attachments",
+        "move_to_thread"
       ],
       "implicit": []
     },
@@ -111,17 +110,17 @@
     },
     "search_emails": {
       "explicit": [
-        "add_label",
-        "archive_email",
+        "reply_email",
         "forward_email",
-        "get_attachments",
+        "archive_email",
         "get_email",
-        "get_thread",
         "mark_read",
         "mark_unread",
-        "move_to_thread",
+        "add_label",
         "remove_label",
-        "reply_email"
+        "get_attachments",
+        "get_thread",
+        "move_to_thread"
       ],
       "implicit": []
     },

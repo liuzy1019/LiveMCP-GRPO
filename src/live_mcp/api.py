@@ -7,18 +7,14 @@ Use it from explicit live-MCP scripts or tests only.
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from src.live_mcp.agent_loop import AgentLoopConfig, MCPToolsAgentLoop, OracleGenerationBackend
 from src.live_mcp.config import SuiteConfig, load_suite_config
 from src.live_mcp.executor import LiveMCPExecutor
 from src.live_mcp.manager import LiveMCPManager
-from src.live_mcp.trace import TraceRecorder
-from src.live_mcp.types import LiveTask, RolloutTrace, live_task_from_dict, to_plain
-from src.reward.action_parser import ActionParser
+from src.live_mcp.types import LiveTask, live_task_from_dict, to_plain
 
 
 @dataclass
@@ -42,26 +38,6 @@ class TaskGenerationSummary:
             "has_missing_function_tasks": self.has_missing_function_tasks,
             "has_distractor_tasks": self.has_distractor_tasks,
             "output": self.output,
-        }
-
-
-@dataclass
-class LiveSmokeSummary:
-    sessions_created: int
-    rollouts_finished: int
-    trace_files_written: int
-    subprocess_stdio_used: bool
-    reward_score_mean: float
-    reward_score_mean_is_finite: bool
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "sessions_created": self.sessions_created,
-            "rollouts_finished": self.rollouts_finished,
-            "trace_files_written": self.trace_files_written,
-            "subprocess_stdio_used": self.subprocess_stdio_used,
-            "reward_score_mean": self.reward_score_mean,
-            "reward_score_mean_is_finite": self.reward_score_mean_is_finite,
         }
 
 
@@ -144,53 +120,6 @@ class LiveMCPBranch:
             irrelevance_ratio=irrelevance_ratio,
         )
 
-    def run_oracle_smoke(
-        self,
-        *,
-        tasks: Iterable[LiveTask],
-        server_name: str,
-        num_tasks: int,
-        seed: int,
-        trace_dir: str | Path | None = None,
-    ) -> tuple[list[RolloutTrace], LiveSmokeSummary]:
-        self._require_started()
-        assert self.executor is not None
-        selected = [
-            task
-            for task in tasks
-            if server_name == "all" or server_name in task.target_servers
-        ][:num_tasks]
-        recorder = TraceRecorder(
-            trace_dir
-            or self.suite_config.live.get("trace_dir")
-            or self.suite_config.trace.get("output_dir", "data/live_mcp/traces")
-        )
-        loop = MCPToolsAgentLoop(
-            manager=self.manager,
-            executor=self.executor,
-            parser=ActionParser(strict=False),
-            trace_recorder=recorder,
-            config=AgentLoopConfig(max_turns=int(self.suite_config.rollout.get("max_turns", 8))),
-        )
-        traces: list[RolloutTrace] = []
-        for idx, task in enumerate(selected):
-            session = self.manager.create_session(seed=seed + idx)
-            self.manager.discover_tools(session.session_id)
-            task.session_id = session.session_id
-            task.session_seed = seed + idx
-            task.visible_tools = _visible_existing_tools(
-                task.visible_tools,
-                self.manager.registry.all_tools(),
-            )
-            try:
-                traces.append(loop.rollout(task, OracleGenerationBackend(task)))
-            finally:
-                self.manager.close_session(session.session_id)
-        return traces, summarize_smoke_traces(
-            traces,
-            subprocess_stdio_used=self.manager.subprocess_stdio_used,
-        )
-
     def _require_started(self) -> None:
         if not self._started:
             raise RuntimeError("LiveMCPBranch.start() must be called before use")
@@ -229,30 +158,3 @@ def summarize_generated_tasks(
         has_distractor_tasks=any(task.metadata.get("has_distractors") for task in tasks),
         output=str(output_path),
     )
-
-
-def summarize_smoke_traces(
-    traces: list[RolloutTrace],
-    subprocess_stdio_used: bool = False,
-) -> LiveSmokeSummary:
-    scores = [trace.reward.get("score", 0.0) for trace in traces]
-    return LiveSmokeSummary(
-        sessions_created=len(traces),
-        rollouts_finished=len(traces),
-        trace_files_written=len(traces),
-        subprocess_stdio_used=subprocess_stdio_used,
-        reward_score_mean=sum(scores) / len(scores) if scores else 0.0,
-        reward_score_mean_is_finite=all(math.isfinite(score) for score in scores),
-    )
-
-
-def _visible_existing_tools(
-    task_tools: list[dict[str, object]],
-    all_tools: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    all_by_name = {tool["name"]: tool for tool in all_tools if "name" in tool}
-    return [
-        all_by_name[tool["name"]]
-        for tool in task_tools
-        if tool.get("name") in all_by_name
-    ]

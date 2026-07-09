@@ -13,6 +13,8 @@ import copy
 import hashlib
 import json
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -450,8 +452,13 @@ class TaskOrchestrator:
 
         1. Sample dependency chain seed (PROVE §6 step 2)
         2. LLM generates user_query with persona + reference_date (PROVE §4)
-        3. Turn-decay loop (min_turns≈chain_len, max_turns≈chain_len+2)
-           LLM decides next action → execute → apply perturbation → recovery → record
+        3. State-machine loop: LLM decides next action → execute → apply
+           perturbation → recovery → record.  The inner step budget is
+           ``max_turns`` (default 8, argument to this function) — this is a
+           safety bound on the state-machine's step count inside a single
+           conversation round, not the PROVE §3.2 Step 3.5 min/max_turns=2/3
+           which applies to CONVERSATION ROUNDS and is enforced by
+           ContinuationPolicy.MIN/MAX_CONVERSATION_ROUNDS.
         4. Derive success criteria from state delta
         5. Replay validate against fresh session
 
@@ -476,7 +483,9 @@ class TaskOrchestrator:
         # available so we can filter out chains whose first step has no entity.
 
         # ── Conversation-level continuation (PROVE §3.2 Step 3.5) ──
-        # PROVE uses a continuation decision module bounded by max_turns=3.
+        # PROVE §3.2 Step 3.5 bounds CONVERSATION ROUNDS (user turns) to 2..3.
+        # This is unrelated to _run_turn_loop's max_turns (state-machine step
+        # budget inside a single round) which stays at 8.
         # The training rollout consumes conversation_queries[1:] as live
         # follow-up messages.
         enable_continuation = getattr(self, 'enable_continuation', True)
@@ -751,6 +760,99 @@ class TaskOrchestrator:
                     self.manager.close_session(session_id)
                     continue  # retry loop
 
+                # ── PROVE §3.2 Step 4: Oracle-grounded query regeneration ──
+                # After the oracle trace is complete, extract the actual entity
+                # IDs used in tool_call arguments and regenerate the user query
+                # to reference ONLY those IDs. This eliminates the query-oracle
+                # entity mismatch caused by independent LLM sampling.
+                import re as _re
+                _id_pattern = _re.compile(r'[a-z]+_[a-f0-9]+_\d+')
+
+                if _real_now and difficulty != "missing":
+                    # Extract entity IDs from oracle tool_call arguments
+                    oracle_entity_ids_r0: list[str] = []
+                    oracle_tool_names_r0: list[str] = []
+                    _seen_ids: set[str] = set()
+                    for _oc in all_oracle_calls:
+                        if getattr(_oc, "action", "tool_call") == "tool_call":
+                            oracle_tool_names_r0.append(_oc.tool_name)
+                            for _v in (_oc.arguments or {}).values():
+                                if isinstance(_v, str):
+                                    for _m in _id_pattern.findall(_v):
+                                        if _m not in _seen_ids:
+                                            _seen_ids.add(_m)
+                                            oracle_entity_ids_r0.append(_m)
+
+                    if oracle_entity_ids_r0:
+                        try:
+                            # Regenerate round-0 query grounded in oracle IDs
+                            new_query = teacher.regenerate_query_from_oracle(
+                                tool_schemas=server_tools,
+                                grounded_state=teacher_grounding_state,
+                                difficulty=difficulty,
+                                rng=local_rng,
+                                oracle_entity_ids=oracle_entity_ids_r0,
+                                oracle_tool_names=oracle_tool_names_r0,
+                                dep_hints=dep_hints,
+                                persona=persona,
+                                reference_date=reference_date,
+                                chain_seed=chain_seed,
+                            )
+                            # Replace the original query
+                            user_query = new_query
+                            conversation_queries[0] = new_query
+                            logger.debug(
+                                f"Oracle-grounded query regen for {server_name} task "
+                                f"{task_id}: IDs={oracle_entity_ids_r0[:5]}"
+                            )
+                        except RuntimeError as e:
+                            # If regeneration fails, keep original query (degraded
+                            # but not fatal — original query still references valid
+                            # IDs from chain_context, just possibly different ones)
+                            logger.warning(
+                                f"Oracle-grounded query regen failed for {server_name} "
+                                f"task {task_id}: {e}. Keeping original query."
+                            )
+
+                    # Regenerate follow-up queries for rounds > 0
+                    if len(conversation_queries) > 1:
+                        for _rnd_idx in range(1, len(conversation_queries)):
+                            # Extract IDs from this round's oracle calls
+                            round_ocs = oracle_calls_per_round[_rnd_idx] if _rnd_idx < len(oracle_calls_per_round) else []
+                            round_entity_ids: list[str] = []
+                            round_tool_names: list[str] = []
+                            _seen_rnd: set[str] = set()
+                            for _oc in round_ocs:
+                                if getattr(_oc, "action", "tool_call") == "tool_call":
+                                    round_tool_names.append(_oc.tool_name)
+                                    for _v in (_oc.arguments or {}).values():
+                                        if isinstance(_v, str):
+                                            for _m in _id_pattern.findall(_v):
+                                                if _m not in _seen_rnd:
+                                                    _seen_rnd.add(_m)
+                                                    round_entity_ids.append(_m)
+
+                            if round_entity_ids:
+                                try:
+                                    new_followup = teacher.regenerate_followup_from_oracle(
+                                        tool_schemas=server_tools,
+                                        grounded_state=teacher_grounding_state,
+                                        previous_query=conversation_queries[_rnd_idx - 1],
+                                        difficulty=difficulty,
+                                        rng=local_rng,
+                                        oracle_entity_ids=round_entity_ids,
+                                        oracle_tool_names=round_tool_names,
+                                        persona=persona,
+                                        reference_date=reference_date,
+                                    )
+                                    conversation_queries[_rnd_idx] = new_followup
+                                    logger.debug(
+                                        f"Oracle-grounded followup regen round {_rnd_idx} "
+                                        f"for {server_name} task {task_id}: IDs={round_entity_ids[:5]}"
+                                    )
+                                except RuntimeError:
+                                    pass  # Keep original follow-up
+
                 # ── Derive success criteria from state delta ──
                 final_state_full = self.manager.get_state(session_id)
                 final_state = final_state_full.get(server_name, {})
@@ -828,24 +930,20 @@ class TaskOrchestrator:
                 # ── Guard: teacher-generated readonly-only traces ──
                 # Teacher models occasionally produce oracle traces with only
                 # readonly tools (e.g. get_order + list_orders in food_delivery).
-                # These pass replay validation but yield empty success_criteria,
-                # producing training data with no verifiable state changes.
-                # Retry on early attempts, raise on the last so generate_many
-                # counts it as a failure and can try another domain/seed.
-                _mutating_scenarios = frozenset({"normal_safe_success", "tool_error_recovery"})
-                if scenario_type in _mutating_scenarios and not success_criteria:
-                    if retry_attempt < 2:
-                        logger.warning(
-                            f"Empty success_criteria for {scenario_type} task {task_id} "
-                            f"(oracle has {len(_real)} readonly-only tool calls). "
-                            f"Retrying (attempt {retry_attempt + 1}/3)..."
-                        )
-                        self.manager.close_session(session_id)
-                        continue
-                    raise RuntimeError(
+                # These pass replay validation but yield empty success_criteria
+                # because no state changed.
+                #
+                # PROVE does NOT reject these: R_coverage is based on matching
+                # oracle tool-call sequences, not on state-diff criteria (§3.3).
+                # Empty success_criteria means the coverage reward operates in
+                # pure tool-call-match mode, which is correct for readonly chains.
+                # We log a warning to help diagnose pipeline health but allow
+                # the task through.
+                if scenario_type in frozenset({"normal_safe_success", "tool_error_recovery"}) and not success_criteria:
+                    logger.warning(
                         f"Empty success_criteria for {scenario_type} task {task_id} "
-                        f"after 3 retries: oracle {[c.tool_name for c in all_oracle_calls if c.action == 'tool_call']} "
-                        f"are all readonly in domain {server_name}"
+                        f"(oracle has {len(_real)} readonly-only tool calls). "
+                        f"Accepting — R_coverage will use pure tool-call matching."
                     )
 
                 # ── Success ──
@@ -968,79 +1066,114 @@ class TaskOrchestrator:
         except ImportError:
             pbar = None
 
-        # ── normal task generation: per-domain budget ──
+        # ── Pre-compute task specs for parallel generation ──
+        # Build per-domain task specifications with round-robin interleaving
+        # so that every domain gets workers immediately, avoiding starvation
+        # of later domains by a burst of same-domain tasks.
+        # Each spec: (server_name, seed, difficulty).
+        per_domain_specs: dict[str, list[tuple[str, int, str]]] = {}
+        domain_quotas: dict[str, int] = {}
+        domain_max_failures: dict[str, int] = {}
+        max_specs_per_domain = 0
         for si, current_server in enumerate(servers):
             domain_target = per_domain + (1 if si < remainder else 0)
-            domain_ok = 0
-            domain_failed = 0
-            # Strict 2-5 chain and replay gates intentionally reject fluent but
-            # unverifiable teacher traces; allow enough attempts to replenish
-            # the requested domain quota instead of silently under-yielding.
-            max_domain_failures = max(domain_target * 4, 10)
-
-            for _attempt in range(domain_target + max_domain_failures):
-                if domain_ok >= domain_target:
-                    break
-                if domain_failed >= max_domain_failures:
-                    logger.warning(
-                        f"{current_server}: gave up after {domain_failed} failures, "
-                        f"got {domain_ok}/{domain_target}"
-                    )
-                    break
-
+            domain_quotas[current_server] = domain_target
+            domain_max_failures[current_server] = max(domain_target * 4, 10)
+            specs = []
+            for _ in range(domain_target + domain_max_failures[current_server]):
                 task_seed = seed + global_seed_offset
                 global_seed_offset += 1
                 difficulty = self._pick_difficulty(task_seed, effective_mix)
-                try:
-                    task = self.generate_one(
-                        current_server, seed=task_seed, difficulty=difficulty,
-                    )
-                    q_key = (task.user_prompt or "").strip().lower()
-                    if q_key and q_key in seen_queries:
-                        dropped_dup_query += 1
-                        logger.debug(
-                            f"{current_server}: dropping duplicate query "
-                            f"(seen #{dropped_dup_query}): {q_key[:80]}"
-                        )
-                        continue  # don't count as ok or failed; let attempt budget cover it
-                    if q_key:
-                        seen_queries.add(q_key)
+                specs.append((current_server, task_seed, difficulty))
+            per_domain_specs[current_server] = specs
+            max_specs_per_domain = max(max_specs_per_domain, len(specs))
 
-                    rng_knob = random.Random(task_seed)
-                    if rng_knob.random() < distractor_rate:
-                        self._apply_distractors(task)
-                    if rng_knob.random() < missing_function_rate:
-                        # Try to apply missing_function perturbation. If the
-                        # semantic filter rejects this candidate (the hidden tool
-                        # isn't required by the user query), keep the task as-is
-                        # rather than discarding valid generated work.
-                        _applied = self._apply_missing_function(task)
-                        if not _applied:
-                            logger.debug(
-                                f"{task.task_id}: missing_function semantic "
-                                f"filter rejected; keeping task without perturbation"
-                            )
-                    tasks.append(task)
-                    domain_ok += 1
-                    if pbar:
-                        pbar.update(1)
-                        pbar.set_postfix_str(f"fail={failed}")
-                    elif len(tasks) % 10 == 0:
-                        print(f"[generate_many] {len(tasks)}/{n_normal} tasks, {failed} failures", flush=True)
-                    if len(tasks) % 10 == 0:
-                        logger.info(f"generate_many progress: {len(tasks)}/{n_normal} tasks, {failed} failures")
+        # Round-robin interleave so workers pick up tasks from different domains
+        task_specs: list[tuple[str, int, str]] = []
+        for i in range(max_specs_per_domain):
+            for s in servers:
+                if i < len(per_domain_specs[s]):
+                    task_specs.append(per_domain_specs[s][i])
+
+        # ── Parallel generation with ThreadPoolExecutor ──
+        max_workers = min(8, max(1, len(servers)))
+        domain_ok: dict[str, int] = {s: 0 for s in servers}
+        domain_failed_count: dict[str, int] = {s: 0 for s in servers}
+        seen_lock = threading.Lock()
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures: dict[Any, tuple[str, int]] = {}
+            for server_name, task_seed, difficulty in task_specs:
+                fut = executor.submit(
+                    self._generate_task_with_postprocess,
+                    server_name, task_seed, difficulty,
+                    distractor_rate, missing_function_rate,
+                )
+                futures[fut] = (server_name, task_seed)
+
+            for fut in as_completed(futures):
+                server_name, task_seed = futures[fut]
+
+                # Skip domains that already hit quota or max failures
+                if domain_ok[server_name] >= domain_quotas[server_name]:
+                    continue
+                if domain_failed_count[server_name] >= domain_max_failures[server_name]:
+                    continue
+
+                try:
+                    task = fut.result()
                 except Exception as e:
                     failed += 1
-                    domain_failed += 1
+                    domain_failed_count[server_name] += 1
                     if pbar:
                         pbar.set_postfix_str(f"fail={failed}")
                     logger.warning(
-                        f"generate failed for {current_server} "
-                        f"({domain_failed}x): {e}"
+                        f"generate failed for {server_name} "
+                        f"(seed={task_seed}, {domain_failed_count[server_name]}x): {e}"
                     )
+                    continue
+
+                if task is None:
+                    failed += 1
+                    domain_failed_count[server_name] += 1
+                    if pbar:
+                        pbar.set_postfix_str(f"fail={failed}")
+                    continue
+
+                q_key = (task.user_prompt or "").strip().lower()
+                with seen_lock:
+                    if q_key and q_key in seen_queries:
+                        dropped_dup_query += 1
+                        logger.debug(
+                            f"{server_name}: dropping duplicate query "
+                            f"(seen #{dropped_dup_query}): {q_key[:80]}"
+                        )
+                        continue
+                    if q_key:
+                        seen_queries.add(q_key)
+
+                tasks.append(task)
+                domain_ok[server_name] += 1
+                if pbar:
+                    pbar.update(1)
+                    pbar.set_postfix_str(f"fail={failed}")
+                elif len(tasks) % 10 == 0:
+                    print(f"[generate_many] {len(tasks)}/{n_normal} tasks, {failed} failures", flush=True)
+                if len(tasks) % 10 == 0:
+                    logger.info(f"generate_many progress: {len(tasks)}/{n_normal} tasks, {failed} failures")
 
         if pbar:
             pbar.close()
+
+        # ── Warn about domains that fell short ──
+        for s in servers:
+            shortfall = domain_quotas[s] - domain_ok[s]
+            if shortfall > 0:
+                logger.warning(
+                    f"{s}: fell short by {shortfall} tasks "
+                    f"(got {domain_ok[s]}/{domain_quotas[s]}, "
+                    f"{domain_failed_count[s]} failures)"
+                )
 
         # ── irrelevance tasks (5%) ──
         irr = self._generate_irrelevant_tasks(n_irrelevant, seed + 9999, servers)
@@ -1075,6 +1208,29 @@ class TaskOrchestrator:
             f"{removed} dedup removed, {dropped_dup_query} dup-query dropped)"
         )
         return tasks
+
+    def _generate_task_with_postprocess(
+        self, server_name: str, seed: int, difficulty: str,
+        distractor_rate: float, missing_function_rate: float,
+    ) -> LiveTask | None:
+        """Thread-safe single-task generation with post-processing.
+
+        Returns None if generate_one raises, so the caller can count failures
+        and retry with a new seed.  This is a pure wrapper — all state mutation
+        (seen_queries, tasks list, counters) stays in generate_many.
+        """
+        task = self.generate_one(server_name, seed=seed, difficulty=difficulty)
+        rng_knob = random.Random(seed)
+        if rng_knob.random() < distractor_rate:
+            self._apply_distractors(task)
+        if rng_knob.random() < missing_function_rate:
+            _applied = self._apply_missing_function(task)
+            if not _applied:
+                logger.debug(
+                    f"{task.task_id}: missing_function semantic "
+                    f"filter rejected; keeping task without perturbation"
+                )
+        return task
 
     def _to_live_task(self, server_name: str, query: str, session_id: str, seed: int,
                       all_tools: list[dict], oracle_program, required_tools: list[str],
@@ -1156,44 +1312,58 @@ class TaskOrchestrator:
             )
             return False
         missing = {"type": "missing_function", "server": task.target_servers[0], "tool": hidden}
+
+        # Guard (before any state mutation): PROVE missing-function hides a
+        # subset of tools from an existing chain.  If visible_tools becomes
+        # empty after removal, the perturbation is meaningless — the task
+        # degenerates to an irrelevance query, not a missing-function
+        # clarification.  Reject cleanly so the task stays in its original
+        # normal_safe_success state.
+        visible_after_hiding = [t for t in task.visible_tools if t["name"] != hidden]
+        if not visible_after_hiding:
+            logger.debug(
+                f"{task.task_id}: skip missing_function perturbation because "
+                f"hiding '{hidden}' leaves no visible tools"
+            )
+            return False
+
         task.metadata["original_required_tools"] = list(task.required_tools)
         task.metadata["original_success_criteria"] = list(task.success_criteria)
         task.metadata["original_oracle_program"] = to_plain(task.oracle_program)
         task.hidden_tools.append(hidden)
-        task.visible_tools = [t for t in task.visible_tools if t["name"] != hidden]
-
-        # Guard: ensure visible_tools never empty — otherwise _tasks_to_rows
-        # silently drops the task. Add cross-domain distractor tools as fallback.
-        if not task.visible_tools:
-            import hashlib
-            known = set(task.hidden_tools) | {hidden}
-            candidates = [t for t in self.manager.registry.all_tools()
-                          if t["name"] not in known]
-            seed_bytes = hashlib.md5(task.task_id.encode()).digest()
-            rng = random.Random(int.from_bytes(seed_bytes[:8], "big"))
-            if candidates:
-                selected = rng.sample(candidates, min(len(candidates), rng.randint(3, 8)))
-                task.visible_tools = selected
-                task.metadata["has_distractors"] = True
-                task.metadata["distractor_count"] = len(selected)
+        task.visible_tools = visible_after_hiding
 
         task.required_tools = []
         task.success_criteria = [missing]
         task.expected_outcome = {"success_criteria": [missing], "abstain": True}
+        # PROVE §3.2 (Training Data): "1,500 clarification trajectories generated
+        # by the missing-function variant of Step 3". The correct terminal is
+        # ask_clarification (ask the user for an alternative path / missing
+        # information), NOT report_error. report_error is reserved for the
+        # externally-sourced abstention slice (When2Call + xLAM-Irrelevance,
+        # G = ∅) and the internal `irrelevant` scenario where no tool at all
+        # can satisfy the query.
         task.oracle_program.calls = [OracleCall(
-            tool_name="report_error",
-            arguments={"text": f"Required tool '{hidden}' is unavailable."},
-            action="report_error",
+            tool_name="ask_clarification",
+            arguments={
+                "question": (
+                    f"I don't seem to have a tool that can complete this "
+                    f"action. Could you provide more details or an "
+                    f"alternative way to proceed?"
+                )
+            },
+            action="ask_clarification",
         )]
         task.oracle_program.success_criteria = [missing]
         task.task_type = "missing_function"
         task.metadata["has_missing_function"] = True
         task.metadata["unavailable_required_tool"] = hidden
-        task.metadata["scenario_type"] = "missing_function"
+        # PROVE Step-3 missing-function variant emits clarification trajectories.
+        task.metadata["scenario_type"] = "clarification_required"
+        task.metadata["abstention_variant"] = "missing_function_clarification"
 
-        # missing_function semantics demand report_error without invoking
-        # tools. Collapse the task to single-turn abstain shape so prompt,
-        # oracle, and reward target remain the same MDP.
+        # Missing-function clarification is single-turn: no tool invocations,
+        # policy must terminate by asking the user for clarification.
         task.oracle_calls_per_round = []
         task.execution_history_per_round = []
         if task.conversation_queries:
@@ -3372,7 +3542,7 @@ def _break_graph_cycles(
     bidir_pairs: set[tuple[str, str]] = set()  # (a, b) with a < b
     for a, b in edges:
         if (b, a) in edges:
-            bidir_pairs.add(tuple(sorted([a, b])))
+            bidir_pairs.add((min(a, b), max(a, b)))
 
     for a, b in bidir_pairs:
         # Preference order:

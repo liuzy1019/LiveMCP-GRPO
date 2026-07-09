@@ -314,7 +314,7 @@ def _build_task_dict(extra_info: dict) -> dict:
     scenario_type = extra_info.get("scenario_type", "")
     has_missing_func = bool(extra_info.get("has_missing_function"))
     is_abstain_task = has_missing_func or scenario_type in (
-        "missing_function", "irrelevant", "no_tool_or_abstention"
+        "missing_function", "irrelevant", "no_tool_or_abstention", "clarification_required"
     )
 
     if is_abstain_task:
@@ -385,7 +385,13 @@ def _build_task_dict(extra_info: dict) -> dict:
         allowed_terminal = explicit_allowed
     elif terminal_action:
         allowed_terminal = [terminal_action]
+    elif scenario_type == "clarification_required":
+        # PROVE §3.2: missing-function variant produces clarification trajectories.
+        # Must allow ask_clarification even when explicit_allowed is absent
+        # (e.g. legacy parquet rows or edge cases).
+        allowed_terminal = ["ask_clarification"]
     elif is_abstain_task:
+        # irrelevance / no_tool_or_abstention / missing_function fallback.
         allowed_terminal = ["report_error"]
     elif last_oracle_is_clarification:
         allowed_terminal = ["ask_clarification"]

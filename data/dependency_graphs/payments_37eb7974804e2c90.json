@@ -20,11 +20,11 @@
     },
     "create_invoice": {
       "explicit": [
-        "cancel_payment",
-        "dispute_invoice",
-        "get_invoice",
         "pay_invoice",
-        "refund_invoice"
+        "refund_invoice",
+        "cancel_payment",
+        "get_invoice",
+        "dispute_invoice"
       ],
       "implicit": []
     },
@@ -44,20 +44,20 @@
     },
     "get_invoice": {
       "explicit": [
-        "cancel_payment",
-        "dispute_invoice",
         "pay_invoice",
-        "refund_invoice"
+        "refund_invoice",
+        "cancel_payment",
+        "dispute_invoice"
       ],
       "implicit": []
     },
     "list_invoices": {
       "explicit": [
-        "cancel_payment",
-        "dispute_invoice",
-        "get_invoice",
         "pay_invoice",
-        "refund_invoice"
+        "refund_invoice",
+        "cancel_payment",
+        "get_invoice",
+        "dispute_invoice"
       ],
       "implicit": []
     },
@@ -69,8 +69,8 @@
     },
     "pay_invoice": {
       "explicit": [
-        "cancel_payment",
-        "refund_invoice"
+        "refund_invoice",
+        "cancel_payment"
       ],
       "implicit": []
     },

@@ -1,4 +1,3 @@
-# reward 模块
-from .action_parser import parse_action
+# reward 模块 — oval_reward_fn 仍被 trainer_config / tests 引用
 
-__all__ = ["parse_action"]
+__all__ = []

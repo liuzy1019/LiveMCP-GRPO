@@ -15,10 +15,22 @@ data/
 │   └── {YYYY-MM-DD}_{tag}/         # 单次实验目录
 │       ├── config.json             # 完整运行参数
 │       └── result.json             # 产出统计
-├── train.parquet                   # GRPO 训练数据（gitignored）
-├── val.parquet                     # GRPO 验证数据（gitignored）
+├── external/                       # 外部数据集（when2call / xlam，gitignored）
+├── runs/                           # 每次生成的带版本子目录（gitignored）
+│   └── {MMDD_HHMM}/                # 单次生成目录，命名与日志一致
+│       ├── train.parquet
+│       └── val.parquet
+├── train.parquet -> runs/{MMDD_HHMM}/train.parquet   # 符号链接，指向最新 run
+├── val.parquet   -> runs/{MMDD_HHMM}/val.parquet     # 符号链接，指向最新 run
 └── README.md
 ```
+
+### 命名约定
+
+- `runs/{MMDD_HHMM}/` — 与 `logs/{MMDD_HHMM}_gen_{N}.log` 时间戳对应，方便追溯
+- `data/train.parquet` 和 `data/val.parquet` 始终是符号链接，指向最新 run
+- 旧 run 目录保留，手动清理时删除对应 `runs/{MMDD_HHMM}/` 即可
+- vLLM 运行日志写到 `logs/`，生成成功后自动删除；失败时保留用于排查
 
 ---
 
@@ -43,7 +55,7 @@ PROVE Teacher（LLM-in-the-loop，每轮决策；推荐 Gemini 通过 OpenAI 兼
                         ↓ replay validate
   ┌──────────────────────────────────────────────────┐
   │ 3. 鲁棒性注入 (orchestrator.py)                    │
-  │   distractor tools:  30% (默认)                   │
+│   distractor tools:  40% (默认，PROVE §3.2)         │
   │   missing function:  20%                          │
   │   irrelevance query:  5%                          │
   └──────────────────────────────────────────────────┘
@@ -93,36 +105,22 @@ PROVE Teacher（LLM-in-the-loop，每轮决策；推荐 Gemini 通过 OpenAI 兼
 
 ```bash
 # 统一生成脚本（推荐，自动检测并行策略）
+# 输出到 data/runs/{MMDD_HHMM}/，并自动更新 data/train.parquet 符号链接
 bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 500
 
-# Gemini API 模式（推荐 Teacher）
-python scripts/generate_data.py \
-  --count 500 --val-count 100 \
-  --domain all \
-  --model gemini-2.5-flash \
-  --api-base https://your-gemini-proxy/v1 \
-  --seed 42 \
-  --output data/train.parquet \
-  --val-output data/val.parquet
-
-# Local transformers 模式（8B 可用）
-python scripts/generate_data.py \
-  --count 500 --val-count 100 \
-  --domain all \
-  --model models/Qwen/Qwen3-8B \
-  --seed 42
+# 指定 run-id（默认自动取当前时间 MMDD_HHMM）
+bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --run-id 0709_1500
 
 # 单 domain 快速测试
 bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --domain calendar --count 200
-
-# 记录实验配置与结果（自动写入 data/experiments/）
-python scripts/generate_data.py \
-  --experiment-tag prove_v1 \
-  --count 500 --val-count 100 \
-  --model gemini-2.5-flash \
-  --api-base https://your-gemini-proxy/v1
 ```
+
+生成完成后：
+- 数据写入 `data/runs/{MMDD_HHMM}/train.parquet` 和 `val.parquet`
+- `data/train.parquet` / `data/val.parquet` 符号链接自动更新
+- 主日志写入 `logs/{MMDD_HHMM}_gen_{N}.log`
+- vLLM 日志（如有）成功后自动删除，失败时保留在 `logs/`
 
 ---
 
@@ -144,7 +142,7 @@ python scripts/generate_data.py \
   "count": 500,
   "val_count": 100,
   "seed": 42,
-  "distractor_rate": 0.30,
+  "distractor_rate": 0.40,
   "missing_function_rate": 0.20,
   "irrelevance_ratio": 0.05,
   "difficulty_mix": {"complete": 0.6, "missing": 0.2, "minimal": 0.2},

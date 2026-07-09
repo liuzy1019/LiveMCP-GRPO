@@ -224,7 +224,19 @@ _REFERENCE_DATES: list[str] = [
 ]
 
 # ═══════════════════════════════════════════════════════════════════════
-# Turn-decay schedule (PROVE §6: min_turns=2, max_turns=3 per chain)
+# Turn-decay schedule (PROVE §3.2 Step 3.5:
+#   min_turns=2, max_turns=3 for CONVERSATION ROUNDS — i.e. user turns)
+#
+# NOTE ON TERMINOLOGY (avoids confusion with _run_turn_loop's max_turns=8):
+#   * MIN/MAX_CONVERSATION_ROUNDS (this file)  = # of user turns per task
+#     PROVE-aligned bounds: 2..3.
+#   * max_turns argument in orchestrator._run_turn_loop / generate_one
+#     = # of teacher decision STEPS inside a single conversation round
+#       (tool_call attempts + retries + terminal), unrelated to PROVE §3.2
+#       Step 3.5.  It only bounds the state-machine's inner loop so it
+#       terminates on stuck LLMs; the PROVE §6 rollout config "5 user
+#       turns / 10 assistant turns" bounds an entirely different loop
+#       (the RL rollout, not data generation).
 # ═══════════════════════════════════════════════════════════════════════
 
 class ContinuationPolicy:
@@ -246,10 +258,15 @@ class ContinuationPolicy:
 
     @staticmethod
     def target_turns(chain_length: int, rng: random.Random) -> int:
-        """Return target turn count for a given chain length.
+        """Return the target number of state-machine STEPS inside one round.
 
-        PROVE §6: min_turns=2, max_turns=3 per chain round.
-        Conservative: exact = chain_length + 1 (query + N tools + terminal),
+        This is NOT the PROVE §3.2 Step 3.5 min/max_turns=2/3 bound —
+        that bound lives in MIN/MAX_CONVERSATION_ROUNDS above and applies
+        to user turns per task.  This function bounds the inner
+        _run_turn_loop's step count so it can execute (chain_length)
+        tool_calls plus one terminal action.
+
+        Conservative: exact = chain_length + 1 (N tools + terminal),
         no jitter.  Perturbations (intermittent errors) may cause additional
         retry turns beyond this budget, handled by recovery.
         """
@@ -268,13 +285,17 @@ class ContinuationPolicy:
 
     @staticmethod
     def conversation_rounds(rng: random.Random) -> int:
-        """PROVE §3.2 Step 3.5: turn-decay schedule.
+        """PROVE §3.2 Step 3.5: turn-decay schedule for USER TURNS per task.
 
-        PROVE keeps generated conversations between 2 and 3 user turns,
-        sampled per task for diversity.  The training rollout injects
-        follow-up user turns after intermediate terminal actions, so the
-        oracle remains a single live conversation instead of hidden teacher
-        history in the initial prompt.
+        Samples the number of conversation rounds (user turns) between 2 and 3,
+        biased 70/30 so most tasks are 2-turn but a meaningful minority are
+        3-turn for diversity.  The training rollout injects follow-up user
+        turns after intermediate terminal actions, so the oracle remains a
+        single live conversation instead of hidden teacher history in the
+        initial prompt.
+
+        Do not confuse with _run_turn_loop's max_turns (step budget inside a
+        single round).
         """
         return rng.choices([2, 3], weights=[0.7, 0.3], k=1)[0]
 
@@ -293,12 +314,15 @@ class ContinuationPolicy:
         conversation, generate a follow-up, or ask a clarification, using a
         turn-decay schedule bounded by min_turns=2 and max_turns=3."
 
-        The key word is "samples" — this is a probabilistic decision, not a
-        deterministic one.  After min_rounds are done and the chain is complete,
-        there is still a CONTINUE_AFTER_MIN_PROB chance of generating one more
-        follow-up turn (up to max_rounds).  This matches PROVE's turn-decay
-        schedule and prevents all conversations from being exactly 2 turns when
-        chains are short.
+        The turn-decay randomness is already captured in conversation_rounds()
+        which samples max_rounds ∈ {2, 3} with weights [0.7, 0.3]. Once
+        max_rounds is determined, this function deterministically continues
+        until max_rounds is reached — the probabilistic decision was already
+        made at sampling time.
+
+        Previously this function applied a SECOND random gate (30% prob) after
+        min_rounds, causing double-randomization: only 30% × 30% = 9% of tasks
+        reached round 3 instead of the intended 30%.
         """
         min_rounds = (
             ContinuationPolicy.MIN_CONVERSATION_ROUNDS
@@ -308,20 +332,11 @@ class ContinuationPolicy:
             return False
         if rounds_done < min_rounds:
             return True
-        # PROVE §3.2 Step 3.5: "A decision module *samples* whether to end the
-        # conversation, generate a follow-up, or ask a clarification, using a
-        # turn-decay schedule bounded by min_turns=2 and max_turns=3."
-        #
-        # chain_seed is a planning prior, not a hard script. Even when the chain
-        # has remaining steps, the continuation decision is probabilistic — the
-        # teacher may have already satisfied the user's intent via a different
-        # valid trajectory. Forcing continuation when chain_progress < len(chain_seed)
-        # would script the conversation, undermining the teacher's autonomy.
-        #
-        # After min_rounds, always sample with turn-decay probability regardless
-        # of chain progress. The chain guides query generation and provides hints,
-        # but does not determine conversation length.
-        return rng.random() < ContinuationPolicy.CONTINUE_AFTER_MIN_PROB
+        # max_rounds was already sampled by conversation_rounds() with the
+        # PROVE turn-decay schedule. Continue deterministically until we
+        # reach max_rounds. Early termination is handled by the caller
+        # (ask_clarification break, chain completion, etc.).
+        return True
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -580,6 +595,225 @@ Return only:
                     f"{self.domain}: {type(e).__name__}: {e}"
                 )
         raise RuntimeError(f"Failed to generate followup for {self.domain}")
+
+    # ── Step 1c: regenerate query grounded in oracle-used entity IDs ──
+
+    def regenerate_query_from_oracle(
+        self,
+        tool_schemas: list[dict[str, Any]],
+        grounded_state: dict[str, Any],
+        difficulty: str,
+        rng: random.Random,
+        oracle_entity_ids: list[str],
+        oracle_tool_names: list[str],
+        dep_hints: str = "",
+        persona: str = "",
+        reference_date: str = "",
+        chain_seed: list[str] | None = None,
+    ) -> str:
+        """PROVE §3.2 Step 4: regenerate user query grounded in oracle-used IDs.
+
+        After the oracle trace is executed, we know exactly which entity IDs
+        were used in tool_call arguments. This method regenerates the user
+        query so it references ONLY those IDs, eliminating the query-oracle
+        entity mismatch caused by independent LLM sampling.
+
+        This implements the PROVE "oracle-first, query-second" paradigm:
+        the oracle trace defines the ground truth, and the query is derived
+        from it — not the other way around.
+        """
+        difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(
+            difficulty, DIFFICULTY_DESCRIPTIONS["complete"]
+        )
+        state_text = _format_state_compact(grounded_state, max_entities=20)
+
+        date_block = ""
+        if reference_date:
+            date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
+
+        # Build the oracle entity constraint block
+        entity_block = ""
+        if oracle_entity_ids:
+            ids_text = ", ".join(oracle_entity_ids[:10])
+            entity_block = (
+                f"\n## Oracle Entity IDs (MUST reference these)\n"
+                f"The following entity IDs were used in the actual operation: {ids_text}\n"
+                f"⚠️ CRITICAL: Your message MUST reference these exact IDs (for 'complete' difficulty) "
+                f"or describe the entities they refer to (for 'minimal' difficulty). "
+                f"Do NOT use any other IDs from Current State.\n"
+            )
+
+        # Natural-language goal from oracle tools
+        chain_goal_block = ""
+        if oracle_tool_names:
+            goal_phrase = _chain_goal_phrase(oracle_tool_names[-1])
+            if goal_phrase:
+                chain_goal_block = (
+                    f"\n## Intended Outcome\n"
+                    f"The user's message should naturally ask to {goal_phrase}. "
+                    f"Do not mention tool names or list steps; express only the goal.\n"
+                )
+
+        system = (
+            "You are role-playing as a real person messaging their AI assistant. "
+            "Write ONE short message — the way a real human would actually type it. "
+            "Real people state what they WANT, not HOW to do it. "
+            "They don't list steps, don't mention tool names, don't describe workflows. "
+            "They just say their goal in 1-2 sentences max.\n\n"
+            "BAD (AI-like): 'I need to search for events, then create a new one, then add attendees.'\n"
+            "GOOD (human-like): 'set up a meeting with Sarah next Tuesday at 2pm'\n\n"
+            "BAD: 'First verify the account, then check the balance, then transfer funds.'\n"
+            "GOOD: 'move $200 from savings to checking'"
+        )
+
+        if difficulty == "minimal":
+            grounding_line = (
+                "Do NOT include entity IDs — just express your intent naturally."
+            )
+        elif difficulty == "complete":
+            grounding_line = (
+                "Reference the exact entity IDs from the Oracle Entity IDs section — "
+                "weave them in naturally. These are the ONLY IDs you may use."
+            )
+        else:
+            grounding_line = (
+                "You forgot one key detail. Use IDs from Oracle Entity IDs where you "
+                "remember them, but leave out the missing piece naturally."
+            )
+
+        priority_note = (
+            "\nIMPORTANT: If your persona style conflicts with the difficulty level, "
+            "follow the difficulty for WHAT to include, but keep the persona's VOICE and TONE."
+        )
+
+        user = f"""## Persona
+{persona if persona else 'A normal user messaging their AI assistant.'}
+{date_block}
+## What this assistant can help with
+{self.domain_desc}
+{dep_hints}
+## Current State (real IDs and values)
+{state_text}
+{chain_goal_block}
+{entity_block}
+## Your task
+Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
+
+{grounding_line}{priority_note}
+Remember: state your GOAL, not the steps. One message, 1-2 sentences max.
+
+Return only:
+{{"user_query": "<the message>"}}
+"""
+        for attempt in range(3):
+            try:
+                raw = self.client.generate_chat(
+                    [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+                    temperature=0.4 + 0.1 * attempt,
+                )
+                data = _extract_json(raw)
+                if not isinstance(data, dict):
+                    continue
+                query = data.get("user_query", "")
+                if query:
+                    return query
+            except Exception as e:
+                logger.debug(
+                    f"regenerate_query_from_oracle attempt {attempt + 1}/3 failed for "
+                    f"{self.domain}: {type(e).__name__}: {e}"
+                )
+        raise RuntimeError(f"Failed to regenerate query for {self.domain}")
+
+    # ── Step 1d: regenerate follow-up query grounded in oracle-used IDs ──
+
+    def regenerate_followup_from_oracle(
+        self,
+        tool_schemas: list[dict[str, Any]],
+        grounded_state: dict[str, Any],
+        previous_query: str,
+        difficulty: str,
+        rng: random.Random,
+        oracle_entity_ids: list[str],
+        oracle_tool_names: list[str],
+        persona: str = "",
+        reference_date: str = "",
+    ) -> str:
+        """Regenerate follow-up query grounded in oracle-used entity IDs.
+
+        Same principle as regenerate_query_from_oracle but for continuation
+        rounds: the follow-up must reference the IDs that the oracle actually
+        operated on in this round.
+        """
+        state_text = _format_state_compact(grounded_state, max_entities=20)
+
+        date_block = ""
+        if reference_date:
+            date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
+
+        entity_block = ""
+        if oracle_entity_ids:
+            ids_text = ", ".join(oracle_entity_ids[:10])
+            entity_block = (
+                f"\n## Oracle Entity IDs (MUST reference these)\n"
+                f"The following entity IDs were operated on: {ids_text}\n"
+                f"⚠️ Your follow-up MUST reference these exact IDs or describe "
+                f"the entities they refer to. Do NOT use other IDs.\n"
+            )
+
+        goal_phrase = ""
+        if oracle_tool_names:
+            goal_phrase = _chain_goal_phrase(oracle_tool_names[-1])
+
+        system = (
+            "You are role-playing as a real user who sent a request to an AI assistant "
+            "and is now sending a follow-up message.\n\n"
+            "IMPORTANT: You do NOT know what tools the assistant used internally. "
+            "You only know what you originally asked for. "
+            "Write the follow-up purely from your own perspective — what you want next.\n\n"
+            "DO NOT write confirmation phrases like 'Got it', 'Great', 'Thanks'. "
+            "Just state your next request directly.\n"
+            "DO NOT mention tool names or internal steps.\n"
+            "Keep it to 1-2 sentences. Be natural and direct.\n"
+            "Do not introduce an unrelated new goal; continue the same task."
+        )
+
+        user = f"""## Persona
+{persona if persona else 'A normal user messaging their AI assistant.'}
+{date_block}
+## Your original request
+"{previous_query}"
+
+## Current State (real IDs and values you can reference)
+{state_text}
+{entity_block}
+## Your task
+Write ONE short follow-up message as the user. Difficulty: {difficulty}.
+{f'Ask about or continue the operation to {goal_phrase}.' if goal_phrase else 'Ask for the next thing you need.'}
+Do NOT acknowledge or confirm what the assistant did.
+
+Return only:
+{{"user_query": "<the follow-up message>"}}
+"""
+        for attempt in range(3):
+            try:
+                raw = self.client.generate_chat(
+                    [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+                    temperature=0.4 + 0.1 * attempt,
+                )
+                data = _extract_json(raw)
+                if not isinstance(data, dict):
+                    continue
+                query = data.get("user_query", "")
+                if query:
+                    return query
+            except Exception as e:
+                logger.debug(
+                    f"regenerate_followup_from_oracle attempt {attempt + 1}/3 failed for "
+                    f"{self.domain}: {type(e).__name__}: {e}"
+                )
+        raise RuntimeError(f"Failed to regenerate followup for {self.domain}")
 
     # ── Step 2-N: decide next action (LLM-in-the-loop) ──
 
@@ -1655,16 +1889,21 @@ def replay_validate(
             threshold = int(len(success_criteria) * 0.25)
             num_errors += criteria_errors if criteria_errors > threshold else 0
         else:
-            # P3c / Defect 5 fix: empty success_criteria with mutating tool
-            # calls is a HARD reject — the teacher did not execute the user's
-            # intended state changes (e.g., query said "pay invoice" but oracle
-            # only did get_invoice).  Previously this was weighted by num_calls
-            # and diluted by max_error_rate=0.30, letting traces with 4+ calls
-            # pass despite producing no criteria.
+            # Project-specific quality gate (NOT part of PROVE / OVAL-MCP §5.0):
+            # empty success_criteria combined with mutating tool calls is a
+            # HARD reject.  Rationale: mutating tools that produced no state
+            # delta usually mean the teacher did not actually execute the
+            # user's intended state change (e.g. query said "pay invoice" but
+            # oracle only did get_invoice).  Without this gate such traces
+            # would be diluted by max_error_rate=0.30 and slip through with
+            # 4+ calls despite producing no criteria.
             #
-            # Read-only traces (list_/get_/search_ only) legitimately have no
-            # state criteria and are NOT rejected — this preserves training
-            # data for lookup-only scenarios.
+            # OVAL-MCP §5.0 explicitly allows empty success_criteria as a
+            # data-quality diagnostic rather than a filter, so we keep this
+            # gate narrow: it fires only when at least one MUTATING call is
+            # present.  Pure read-only traces (list_/get_/search_ only)
+            # legitimately have no state criteria and are NOT rejected —
+            # this preserves training data for lookup-only scenarios.
             tool_call_count = sum(1 for c in oracle_calls if c.action == "tool_call")
             if tool_call_count > 0:
                 has_mutating = any(

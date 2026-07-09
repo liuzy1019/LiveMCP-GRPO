@@ -82,6 +82,7 @@ SUITE="configs/live_mcp/suite_mvp.yaml"
 SEED=42
 OUTPUT_DIR="${OUTPUT_DIR:-data}"
 GEN_OVERSAMPLE_PCT="${GEN_OVERSAMPLE_PCT:-20}"
+RUN_ID="${RUN_ID:-$(date +%m%d_%H%M)}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -99,6 +100,8 @@ while [[ $# -gt 0 ]]; do
         --output-dir=*)   OUTPUT_DIR="${1#*=}"; shift ;;
         --seed)           SEED="$2";           shift 2 ;;
         --seed=*)         SEED="${1#*=}";      shift ;;
+        --run-id)         RUN_ID="$2";          shift 2 ;;
+        --run-id=*)       RUN_ID="${1#*=}";    shift ;;
         *) echo "ERROR: unknown arg: $1" >&2; exit 1 ;;
     esac
 done
@@ -108,7 +111,14 @@ if [ -z "$MODEL" ]; then
     exit 1
 fi
 
-mkdir -p "${OUTPUT_DIR}"
+# ── Output dirs ────────────────────────────────────────────────────
+RUN_DIR="${OUTPUT_DIR}/runs/${RUN_ID}"
+mkdir -p "${RUN_DIR}"
+mkdir -p logs
+
+# 主日志：tee 到 logs/
+MAIN_LOG="logs/${RUN_ID}_gen_${COUNT}.log"
+exec > >(tee -a "${MAIN_LOG}") 2>&1
 
 # ── GPU detection (via shared gpu_config.sh) ────────────────────────
 source scripts/gpu_config.sh
@@ -122,7 +132,9 @@ echo "GPUs:     ${GPU_COUNT}x ${GPU_MODEL} (${GPU_MEM_GB}GB)"
 echo "Target:   ${COUNT} train + ${VAL_COUNT} val"
 echo "Oversample candidates: +${GEN_OVERSAMPLE_PCT}% before quality merge"
 echo "Domain:   ${DOMAIN}"
-echo "Output:   ${OUTPUT_DIR}/"
+echo "Run ID:   ${RUN_ID}"
+echo "Output:   ${RUN_DIR}/"
+echo "Log:      ${MAIN_LOG}"
 echo "============================================"
 
 # ── Detect model size & decide strategy ────────────────────────────
@@ -139,11 +151,13 @@ try:
     cfg_path = '${MODEL_PATH}/config.json'
     with open(cfg_path) as f:
         c = json.load(f)
-    n = c.get('num_hidden_layers', 0)
-    d = c.get('hidden_size', 0)
-    di = c.get('intermediate_size', 0)
-    v = c.get('vocab_size', 0)
-    nh = c.get('num_attention_heads', 0)
+    # Some models (e.g. Gemma-4) nest text params under 'text_config'
+    tc = c.get('text_config', {})
+    n  = tc.get('num_hidden_layers') or c.get('num_hidden_layers', 0)
+    d  = tc.get('hidden_size')        or c.get('hidden_size', 0)
+    di = tc.get('intermediate_size')  or c.get('intermediate_size', 0)
+    v  = tc.get('vocab_size')         or c.get('vocab_size', 0)
+    nh = tc.get('num_attention_heads') or c.get('num_attention_heads', 0)
     # Rough param count (attention + FFN + embedding)
     params = n * (4*d*d + 3*d*di) + v*d
     bf16_gb = params * 2 / 1e9
@@ -173,6 +187,8 @@ print('1' if fits else '0')
 # ── Cleanup trap ────────────────────────────────────────────────────
 VLLM_PIDS=()
 VLLM_PORTS=()
+VLLM_LOGS=()
+GEN_SUCCESS=0
 _pids_listening_on_port() {
     local port="$1"
     ss -ltnp "sport = :${port}" 2>/dev/null \
@@ -182,7 +198,8 @@ _pids_listening_on_port() {
 
 _cleanup() {
     local exit_code=$?
-    echo "[cleanup] stopping..." >&2
+    echo "[cleanup] stopping vLLM processes and releasing ports..." >&2
+    # SIGTERM first
     for pid in "${VLLM_PIDS[@]}"; do
         if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
             kill -TERM "$pid" 2>/dev/null || true
@@ -191,12 +208,13 @@ _cleanup() {
     for port in "${VLLM_PORTS[@]}"; do
         for pid in $(_pids_listening_on_port "${port}"); do
             if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
-                echo "[cleanup] stopping listener on port ${port}: pid=${pid}" >&2
+                echo "[cleanup] SIGTERM port ${port} pid=${pid}" >&2
                 kill -TERM "$pid" 2>/dev/null || true
             fi
         done
     done
     sleep 2
+    # SIGKILL stragglers
     for pid in "${VLLM_PIDS[@]}"; do
         if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
             kill -KILL "$pid" 2>/dev/null || true
@@ -205,11 +223,24 @@ _cleanup() {
     for port in "${VLLM_PORTS[@]}"; do
         for pid in $(_pids_listening_on_port "${port}"); do
             if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
-                echo "[cleanup] force-stopping listener on port ${port}: pid=${pid}" >&2
+                echo "[cleanup] SIGKILL port ${port} pid=${pid}" >&2
                 kill -KILL "$pid" 2>/dev/null || true
             fi
         done
     done
+    # 成功时删除 vLLM 日志；失败时保留用于排查
+    if [ "${GEN_SUCCESS}" = "1" ]; then
+        for log in "${VLLM_LOGS[@]}"; do
+            [ -f "${log}" ] && rm -f "${log}" && echo "[cleanup] removed vLLM log: ${log}" >&2
+        done
+    else
+        if [ ${#VLLM_LOGS[@]} -gt 0 ]; then
+            echo "[cleanup] generation failed — vLLM logs preserved for debugging:" >&2
+            for log in "${VLLM_LOGS[@]}"; do
+                [ -f "${log}" ] && echo "  ${log}" >&2
+            done
+        fi
+    fi
     exit $exit_code
 }
 trap _cleanup EXIT INT TERM
@@ -269,7 +300,7 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
 
     "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
         --tmpdir "${TMPDIR_SHARD}" \
-        --output-dir "${OUTPUT_DIR}" \
+        --output-dir "${RUN_DIR}" \
         --count "${COUNT}" \
         --val-count "${VAL_COUNT}"
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
@@ -278,26 +309,33 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
 # MODE 2: vLLM API — TP across multiple GPUs
 # ═════════════════════════════════════════════════════════════════
 else
-    EXPECTED_VLLM_VERSION="${EXPECTED_VLLM_VERSION:-0.11.0}"
-    VLLM_VERSION=$("${PYTHON_BIN}" -c "import vllm; print(vllm.__version__)" 2>/dev/null || true)
+VLLM_VERSION=$("${PYTHON_BIN}" -c "import vllm; print(vllm.__version__)" 2>/dev/null || true)
     if [ -z "${VLLM_VERSION}" ]; then
         echo "ERROR: vLLM is not importable from ${PYTHON_BIN}" >&2
         exit 1
     fi
-    if [ "${VLLM_VERSION}" != "${EXPECTED_VLLM_VERSION}" ]; then
-        echo "ERROR: vLLM version mismatch: expected ${EXPECTED_VLLM_VERSION}, got ${VLLM_VERSION} from ${PYTHON_BIN}" >&2
-        echo "       Fix the environment first, or set EXPECTED_VLLM_VERSION=${VLLM_VERSION} only for a deliberate compatibility run." >&2
-        exit 1
+    # Auto-detect current vLLM version. Only warn if major version differs from last-known-good.
+    # The environment dictates the version; we don't force a specific one.
+    RECOMMENDED_VLLM_MAJOR_MINOR="0.11"
+    VLLM_MAJOR_MINOR=$(echo "${VLLM_VERSION}" | cut -d. -f1,2)
+    if [ -n "${EXPECTED_VLLM_VERSION:-}" ]; then
+        # Explicit override: user knows what they're doing, bypass check.
+        :
+    elif [ "${VLLM_MAJOR_MINOR}" != "${RECOMMENDED_VLLM_MAJOR_MINOR}" ]; then
+        echo "WARNING: vLLM ${VLLM_VERSION} differs from last-known-good ${RECOMMENDED_VLLM_MAJOR_MINOR}.x" >&2
+        echo "         Data generation should still work. If you see errors, set EXPECTED_VLLM_VERSION to suppress this." >&2
     fi
 
     # Calculate optimal TP and number of vLLM instances.
     # vLLM requires TP to divide num_attention_heads evenly
+    VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.88}"
     TP_SIZE=$("${PYTHON_BIN}" -c "
 import math
 mem_need = ${MODEL_BF16_GB}
 mem_gpu = ${GPU_MEM_GB}
 num_heads = ${MODEL_NUM_HEADS}
-tp = max(1, math.ceil(mem_need / (mem_gpu * 0.82)))
+util = ${VLLM_GPU_MEMORY_UTILIZATION}
+tp = max(1, math.ceil(mem_need / (mem_gpu * util)))
 # Ensure TP divides num_heads (vLLM requirement)
 if num_heads > 0:
     while tp > 1 and num_heads % tp != 0:
@@ -329,7 +367,6 @@ print(tp)
     fi
 
     PORT_START="${VLLM_PORT_START:-8001}"
-    VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.82}"
     VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-8192}"
     VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-32}"
     VLLM_MAX_NUM_BATCHED_TOKENS="${VLLM_MAX_NUM_BATCHED_TOKENS:-16384}"
@@ -357,7 +394,8 @@ print(tp)
         GPU_LIST=$(IFS=','; echo "${GPU_SLICE[*]}")
         PORT=$(( PORT_START + inst ))
         VLLM_PORTS+=("${PORT}")
-        LOG="${OUTPUT_DIR}/vllm_instance${inst}_$(date +%H%M).log"
+        LOG="logs/${RUN_ID}_vllm_instance${inst}.log"
+        VLLM_LOGS+=("${LOG}")
 
         # Derive served model name from directory name (for local vLLM).
         # When using Gemini or other cloud APIs, the model name is passed directly.
@@ -465,17 +503,25 @@ print(tp)
 
     "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
         --tmpdir "${TMPDIR_SHARD}" \
-        --output-dir "${OUTPUT_DIR}" \
+        --output-dir "${RUN_DIR}" \
         --count "${COUNT}" \
         --val-count "${VAL_COUNT}"
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 fi
 
-# ── Print stats ────────────────────────────────────────────────────
+# ── Update symlinks & print stats ──────────────────────────────────
+GEN_SUCCESS=1
 echo ""
 echo "=== Generation Complete ==="
-echo "Train parquet: ${OUTPUT_DIR}/train.parquet"
-echo "Val parquet:   ${OUTPUT_DIR}/val.parquet"
+echo "Run dir:       ${RUN_DIR}/"
+echo "Train parquet: ${RUN_DIR}/train.parquet"
+echo "Val parquet:   ${RUN_DIR}/val.parquet"
+
+# 更新 data/train.parquet 和 data/val.parquet 符号链接指向最新 run
+ln -sfn "runs/${RUN_ID}/train.parquet" "${OUTPUT_DIR}/train.parquet"
+ln -sfn "runs/${RUN_ID}/val.parquet"   "${OUTPUT_DIR}/val.parquet"
+echo "Symlinks:      ${OUTPUT_DIR}/train.parquet → runs/${RUN_ID}/train.parquet"
+echo "               ${OUTPUT_DIR}/val.parquet   → runs/${RUN_ID}/val.parquet"
 
 echo ""
 echo "Done. [$(date '+%Y-%m-%d %H:%M:%S')]"
