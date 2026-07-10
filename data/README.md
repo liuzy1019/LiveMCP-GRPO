@@ -37,37 +37,81 @@ data/
 ## 数据生成管线
 
 > 重新生成后建议运行 `python scripts/validate_pipeline.py --live` 验证管线完整性。
+> 完整设计参考 PROVE 论文 §3.2。
+
+### Step 1 — 自动发现依赖图（Auto-Discovered Dependency Graph）
 
 ```
-PROVE Teacher（LLM-in-the-loop，每轮决策；本地 Gemma-4-31B-it）
-  ┌──────────────────────────────────────────────────┐
-  │ 1. LLM 决策 (task_planner.py)                     │
-  │   输入: domain schemas + live state + history      │
-  │   输出: 下一步 action (tool_call / terminal)       │
-  └──────────────────────────────────────────────────┘
-                        ↓ 真实 MCP 执行
-  ┌──────────────────────────────────────────────────┐
-  │ 2. 执行记录                                       │
-  │   真实 MCP session 执行 → 记录 oracle trace        │
-  │   derive_success_criteria: 从 state delta 派生     │
-  │   PROVE 扰动: intermittent/paginated/             │
-  │     incomplete_intermediate/partial_batch_failure │
-  └──────────────────────────────────────────────────┘
-                        ↓ replay validate
-  ┌──────────────────────────────────────────────────┐
-  │ 3. 鲁棒性注入 (orchestrator.py)                    │
-│   distractor tools:  40% (默认，PROVE §3.2)         │
-  │   missing function:  20%                          │
-  │   irrelevance query:  5%                          │
-  └──────────────────────────────────────────────────┘
-                        ↓ Jaccard dedup (位置感知, 0.70)
-  ┌──────────────────────────────────────────────────┐
-  │ 4. 导出 parquet (generate_data.py)                 │
-  │   verl 格式: prompt (JSON string) + reward_model   │
-  │     + extra_info + scenario_type                   │
-  │   success_criteria: JSON 字符串 (类型安全)          │
-  │   oracle_calls: 保留 action 字段 (澄清任务)         │
-  └──────────────────────────────────────────────────┘
+对每个 domain，对所有 n² 个工具对调用 LLM 分类器，判断关系：
+  explicit（工具 A 的输出是工具 B 的必需输入）
+  implicit（A 必须先执行以建立状态）
+  none
+→ 缓存为有向依赖图（按 tool schema hash 索引）
+→ 提取 length-2 到 length-5 的工具链，作为多步 query 的种子
+```
+
+每个 domain 的依赖图缓存在 `data/dependency_graphs/{domain}_{hash}.json`。
+
+### Step 2 — 实时状态采样（Live-State Sampling / Grounded Query Generation）
+
+```
+在 query 生成前, 对每个 domain 调用只读探测工具（search / list / get_unique_values）
+→ 枚举真实存在的实体（账户、联系人、事件、商品等）
+→ 过滤到有足够支撑数据的子集（如至少有 20 个商家的城市、有非零余额的账户）
+→ 缓存 compact "sampling context"（每 k 个对话刷新一次）
+→ 注入 query 生成 prompt，约束 LLM 只能使用 context 中存在的实体
+```
+
+这一步解决了 naive 生成器产生不存在的实体 ID / 名称的问题，保证生成的 tool chain 端到端可执行。
+
+### Step 3 — 状态机编排器（State-Machine Orchestrator）
+
+```
+每个对话由 5 组状态驱动（论文 §3.2 Step 3）：
+  1. QUERY GENERATION — 从依赖图链中采样，用实时状态 grounding，
+     按信息完整度分层（complete 70% / missing 10% / minimal 20%），
+     叠加 persona + reference date 条件
+  2. LLM PROCESSING — Teacher LLM 被 prompt 提供 query + tool schemas，
+     输出 tool call / 澄清 / 终止；validator 检查 well-formed JSON
+  3. TOOL EXECUTION — tool call 分派到 live MCP server，
+     结果分类为 SUCCESS / PARTIAL_SUCCESS / FAILURE
+  4. RECOVERY — 失败时状态机在 retry-with-corrected-params /
+     retry-with-alternative-tool / give-up 中选择
+  5. CONTINUATION — 采样是否结束对话/追问/澄清，turn-decay 调度，
+     min_turns=2, max_turns=3
+```
+
+每一步 LLM 决策都看到完整 domain context（tools, live state, execution history），形成 teacher 轨迹。每条轨迹记录为 oracle trace，包含全部 tool call 参数和 server 响应。
+
+### Step 4 — 鲁棒性注入（Robustness Knobs）
+
+```
+生成过程中以概率注入扰动，扩展训练分布（论文 §3.2 Step 4）：
+  - Distractor injection（40%）：混入 3-8 个来自其他 domain 的无关工具
+  - Enum stripping（30%）：从参数 schema 中移除枚举值列表，迫使模型从描述推理约束
+  - Irrelevance queries（5%）：生成没有可用工具能处理的 query，训练拒绝能力
+  - Missing function（20%）：在链选择后隐藏一个必需工具，产生 abstention/clarification 样本
+```
+
+### Step 5 — 重放验证与去重（Replay Validation and Deduplication）
+
+```
+每条完成的对话在 freshly reset 的 MCP 环境中重放：
+  - 只计入 schema 级和执行级错误（不含空结果响应）
+  - 错误率 > 30% 的对话丢弃
+  - Provenance check：敏感参数（passwords, tokens）只能出现在可追溯到前序 user
+    turn 或 tool output 的位置
+  - Jaccard 去重：基于 tool-call 序列，阈值 0.70（位置感知）
+```
+
+### 训练数据构成
+
+```
+训练集由三部分来源组成（对齐 PROVE 论文）：
+  1. Multi-turn MCP conversations — 20 个 domain 的状态机生成轨迹
+  2. Clarification trajectories — missing-function 变体产生的 ask_clarification 样本
+  3. External abstention — When2Call（806 条，G=∅ 场景）
+                       + xLAM-Irrelevance（316 条，不相关 query）
 ```
 
 **生成策略**：目标数量 N，实际生成 N + max(10, N/2) 条（50% oversample），经 replay 验证、Jaccard 去重、训练合约过滤后取前 N 条。不足时自动 recovery（最多 3 轮），用不同 seed 偏移补充。

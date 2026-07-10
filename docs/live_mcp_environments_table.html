@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live MCP Environments Table</title>
+  <style>
+    :root {
+      --ink: #000;
+      --rule: #111;
+    }
+
+    body {
+      margin: 0;
+      background: #fff;
+      color: var(--ink);
+      font-family: "Times New Roman", Times, serif;
+      font-size: 18px;
+      line-height: 1.18;
+    }
+
+    .page {
+      width: 1180px;
+      margin: 28px auto;
+      padding: 0 8px;
+    }
+
+    .caption {
+      font-size: 24px;
+      line-height: 1.24;
+      margin: 0 0 24px;
+      font-weight: 700;
+    }
+
+    .caption .label {
+      font-weight: 700;
+    }
+
+    .caption em {
+      font-style: italic;
+      font-weight: 700;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border-top: 2.2px solid var(--rule);
+      border-bottom: 2.2px solid var(--rule);
+      table-layout: fixed;
+    }
+
+    thead th {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: left;
+      padding: 8px 16px 8px 16px;
+      border-bottom: 1.7px solid var(--rule);
+    }
+
+    tbody td {
+      padding: 4px 16px;
+      vertical-align: top;
+    }
+
+    tbody tr.group-start td {
+      border-top: 1.4px solid var(--rule);
+      padding-top: 8px;
+    }
+
+    tbody tr:first-child td {
+      border-top: none;
+    }
+
+    .category {
+      width: 220px;
+      font-weight: 700;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .env {
+      width: 190px;
+      font-weight: 700;
+      font-family: "Times New Roman", Times, serif;
+    }
+
+    .tools {
+      width: 80px;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .behavior {
+      width: auto;
+    }
+
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .page {
+        width: auto;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <p class="caption">
+      <span class="label">Table 2:</span>
+      The 10 Live MCP environments used for RL rollouts.
+      All servers are stateful with session-scoped isolation;
+      <em>Tools</em> counts the user-visible tool surface exposed to the agent
+      (helper/debug tools are hidden).
+    </p>
+
+    <table aria-label="Live MCP environments used for RL rollouts">
+      <thead>
+        <tr>
+          <th class="category">Category</th>
+          <th class="env">Environment</th>
+          <th class="tools">Tools</th>
+          <th class="behavior">State / characteristic behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="category" rowspan="2">Finance</td>
+          <td class="env">banking</td>
+          <td class="tools">17</td>
+          <td class="behavior">Accounts, balances, transfers, bills, cards; sensitive-param provenance</td>
+        </tr>
+        <tr>
+          <td class="env">payments</td>
+          <td class="tools">10</td>
+          <td class="behavior">Invoices, payments, refunds, disputes, webhooks; transactional state</td>
+        </tr>
+
+        <tr class="group-start">
+          <td class="category" rowspan="3">Productivity</td>
+          <td class="env">calendar</td>
+          <td class="tools">17</td>
+          <td class="behavior">Events, attendees, recurring rules; time-dependent scheduling queries</td>
+        </tr>
+        <tr>
+          <td class="env">email</td>
+          <td class="tools">17</td>
+          <td class="behavior">Inbox, search, threads, labels, attachments; append-only send/reply effects</td>
+        </tr>
+        <tr>
+          <td class="env">filesystem</td>
+          <td class="tools">40</td>
+          <td class="behavior">Files, directories, permissions, archives; deepest state and path chains</td>
+        </tr>
+
+        <tr class="group-start">
+          <td class="category">Commerce</td>
+          <td class="env">shopping</td>
+          <td class="tools">23</td>
+          <td class="behavior">Catalog, cart, wishlist, checkout, orders, returns; stateful cart/order state</td>
+        </tr>
+
+        <tr class="group-start">
+          <td class="category" rowspan="2">Knowledge / CRM</td>
+          <td class="env">crm</td>
+          <td class="tools">16</td>
+          <td class="behavior">Leads, contacts, deals, tasks, notes; relational sales-pipeline state</td>
+        </tr>
+        <tr>
+          <td class="env">issue_tracker</td>
+          <td class="tools">20</td>
+          <td class="behavior">Issues, labels, assignees, watchers, sprints; workflow transitions</td>
+        </tr>
+
+        <tr class="group-start">
+          <td class="category">Social / Comm.</td>
+          <td class="env">team_chat</td>
+          <td class="tools">11</td>
+          <td class="behavior">Channels, messages, threads, reactions, search; append-only conversation state</td>
+        </tr>
+
+        <tr class="group-start">
+          <td class="category">Lifestyle</td>
+          <td class="env">food_delivery</td>
+          <td class="tools">17</td>
+          <td class="behavior">Restaurants, menus, orders, rider tracking, tips; order lifecycle state</td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>

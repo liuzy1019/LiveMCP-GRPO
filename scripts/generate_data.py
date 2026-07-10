@@ -42,6 +42,7 @@ from src.live_mcp.task_planner import (
     _is_mutating_tool, _SELF_CONTAINED_WRITE_TOOLS,
     DOMAIN_DESCRIPTIONS, _format_tools,
 )
+from src.live_mcp.dedup import dedup_tasks
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -504,15 +505,15 @@ def _stratified_task_split(
     import random
     from collections import defaultdict
 
-    unique = []
-    seen = set()
-    for task in tasks:
+    # Jaccard 0.70 dedup on tool-call sequences (PROVE corpus dedup §3.3).
+    # Position-aware: {(index, tool_name)} — order and repeat count matter,
+    # arguments are ignored (dedup.py/jaccard_similarity).
+    # Cross-domain: only tasks in the same domain are compared.
+    unique = dedup_tasks(tasks, threshold=0.70)
+    # Assign fingerprints after dedup for downstream cross-shard exact dedup.
+    for task in unique:
         fp = _task_fingerprint(task)
-        if fp in seen:
-            continue
-        seen.add(fp)
         task.metadata["semantic_fingerprint"] = fp
-        unique.append(task)
 
     required = train_count + val_count
     if len(unique) < required:
@@ -836,7 +837,24 @@ def _assert_split_integrity(df_train, df_val, args) -> None:
     val_fp.discard("")
     overlap = train_fp & val_fp
     if overlap:
-        raise RuntimeError(f"Train/val semantic leakage: {len(overlap)} fingerprints")
+        logger.warning(
+            "Train/val fingerprint collision within shard — deduplicating val (%d rows). "
+            "This is expected at shard level; final merge handles cross-shard dedup.",
+            len(overlap)
+        )
+        drop_indices = []
+        for idx, row in df_val.iterrows():
+            fp = _row_fingerprint(row)
+            if fp and fp in overlap:
+                drop_indices.append(idx)
+        df_val.drop(drop_indices, inplace=True)
+        df_val.reset_index(drop=True, inplace=True)
+        val_fp = {_row_fingerprint(row) for _, row in df_val.iterrows()}
+        val_fp.discard("")
+        logger.warning(
+            "After dedup: train=%d val=%d (removed %d colliding val rows)",
+            len(df_train), len(df_val), len(drop_indices)
+        )
     if args.val_count:
         train_domains = {row["extra_info"].get("domain") for _, row in df_train.iterrows()}
         val_domains = {row["extra_info"].get("domain") for _, row in df_val.iterrows()}
@@ -889,9 +907,10 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         domain = task.target_servers[0] if task.target_servers else "unknown"
 
         domain_desc = DOMAIN_DESCRIPTIONS.get(domain, "")
-        strip_enums = task.metadata.get("strip_enums", False)
         reference_date = task.metadata.get("reference_date", "")
-        tools_text = _format_tools(visible_tools, strip_enums=strip_enums)
+        # Perturbations (enum stripping, distractors) are already applied to
+        # task.visible_tools by Perturber; format as-is.
+        tools_text = _format_tools(visible_tools)
         date_line = f"\nToday's date: {reference_date}." if reference_date else ""
 
         system_prompt = (
@@ -1004,6 +1023,16 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "hidden_tools": list(task.hidden_tools) if task.hidden_tools else [],
             "visible_tool_names": visible_tool_names,
             "conversation_rounds": n_conversation_rounds,
+            # Rollout perturbation support: clean tools (pre-perturbation) +
+            # domain context so the agent loop can rebuild system_prompt with
+            # fresh perturbations via Perturber.
+            "clean_visible_tools": json.dumps(
+                task.metadata.get("clean_visible_tools", visible_tools),
+                ensure_ascii=False,
+                default=str,
+            ),
+            "domain_desc": domain_desc,
+            "reference_date": task.metadata.get("reference_date", ""),
             # JSON string avoids pyarrow nested-list surprises and lets the
             # live rollout inject follow-up user turns deterministically.
             "conversation_queries": json.dumps(

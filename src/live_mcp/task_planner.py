@@ -364,7 +364,6 @@ class TaskPlanner:
         self.client = client
         self.domain = domain
         self.domain_desc = DOMAIN_DESCRIPTIONS.get(domain, "")
-        self._strip_enums = random.Random(seed).random() < 0.30  # per-task seed, aligns with PROVE
 
     # ── Step 1: generate user query ──
 
@@ -844,7 +843,7 @@ Return only:
 
         chain_context: live-probed entities used to ground ID arguments.
         """
-        tools_text = _format_tools(tool_schemas, strip_enums=self._strip_enums)
+        tools_text = _format_tools(tool_schemas)
         history_text = _format_history(execution_history)
         tool_names_set = {t["name"] for t in tool_schemas}  # for action auto-correction
 
@@ -1093,7 +1092,7 @@ Output one JSON object:
           - {"action": "retry", "arguments": {...}}            — plain retry (intermittent)
           - {"action": "give_up", "reason": "..."}             — unrecoverable
         """
-        tools_text = _format_tools(tool_schemas, strip_enums=self._strip_enums)
+        tools_text = _format_tools(tool_schemas)
         history_text = _format_history(execution_history[-4:])  # last 4 steps
 
         # Intermittent errors → plain retry, don't ask LLM
@@ -1903,20 +1902,11 @@ def replay_validate(
             num_errors += criteria_errors if criteria_errors > threshold else 0
         else:
             # Project-specific quality gate (NOT part of PROVE / OVAL-MCP §5.0):
-            # empty success_criteria combined with mutating tool calls is a
-            # HARD reject.  Rationale: mutating tools that produced no state
-            # delta usually mean the teacher did not actually execute the
-            # user's intended state change (e.g. query said "pay invoice" but
-            # oracle only did get_invoice).  Without this gate such traces
-            # would be diluted by max_error_rate=0.30 and slip through with
-            # 4+ calls despite producing no criteria.
-            #
-            # OVAL-MCP §5.0 explicitly allows empty success_criteria as a
-            # data-quality diagnostic rather than a filter, so we keep this
-            # gate narrow: it fires only when at least one MUTATING call is
-            # present.  Pure read-only traces (list_/get_/search_ only)
-            # legitimately have no state criteria and are NOT rejected —
-            # this preserves training data for lookup-only scenarios.
+            # Mutating tool calls with empty success_criteria are suspicious
+            # (e.g. teacher called update_* but state was already at target).
+            # PROVE does NOT reject these — R_coverage falls back to pure
+            # tool-call matching.  We log a diagnostic warning but accept
+            # the task so the teacher retry budget isn't wasted.
             tool_call_count = sum(1 for c in oracle_calls if c.action == "tool_call")
             if tool_call_count > 0:
                 has_mutating = any(
@@ -1924,8 +1914,12 @@ def replay_validate(
                     for c in oracle_calls if c.action == "tool_call"
                 )
                 if has_mutating:
-                    return False, 1.0, 1, max(num_calls, 1)
-                # Pure read-only trace with no criteria: acceptable, no penalty
+                    logger.warning(
+                        "Empty success_criteria for trace with {} tool call(s) "
+                        "including mutating tool(s). Accepting — R_coverage "
+                        "will use pure tool-call matching.",
+                        tool_call_count,
+                    )
 
         error_rate = num_errors / num_calls if num_calls > 0 else float(num_errors > 0)
         passed = error_rate <= max_error_rate
@@ -1961,7 +1955,7 @@ _SECURITY_RELEVANT_PARAMS: tuple[str, ...] = (
 def provenance_check(
     oracle_calls: list[OracleCall],
     user_query: str,
-    execution_history: list[dict[str, Any]],
+    aligned_observations: list[dict[str, Any]],
 ) -> tuple[bool, list[dict[str, Any]]]:
     """PROVE §3.2 Step 5: check that sensitive parameters are traceable.
 
@@ -1969,6 +1963,10 @@ def provenance_check(
     when traceable to prior user turns or tool outputs. Parameters that appear
     "from nowhere" indicate the teacher LLM hallucinated them, which is a
     security risk in training data.
+
+    aligned_observations is 1:1 aligned with oracle_calls by index:
+    aligned_observations[i] is the observation produced by oracle_calls[i]
+    (empty dict for terminal actions like final_answer/ask_clarification).
 
     Returns:
         (passed, violations)
@@ -2034,8 +2032,11 @@ def provenance_check(
 
         # AFTER checking call idx, fold its observation into traceable_values
         # so that subsequent calls (idx+1, idx+2, …) can reference it.
-        if idx < len(execution_history):
-            step_obs = execution_history[idx].get("observation")
+        # aligned_observations is 1:1 with oracle_calls — no index mismatch.
+        # aligned_observations[idx] is the raw observation (dict from tool result)
+        # or {} for terminal actions (falsy → skip).
+        if idx < len(aligned_observations):
+            step_obs = aligned_observations[idx] if aligned_observations[idx] else None
             if isinstance(step_obs, dict):
                 import json as _json
                 traceable_values.append(_json.dumps(step_obs, ensure_ascii=False, default=str))

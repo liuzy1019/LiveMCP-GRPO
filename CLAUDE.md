@@ -120,7 +120,7 @@ python -c "import flashinfer; print(flashinfer.__version__)"
 |-----------|--------|-------|
 | Data Generation | ✅ | PROVE state-machine, 2–5 step oracle, stratified split, 50% oversample + recovery, Jaccard 0.70 dedup |
 | OVAL Agent Loop | ✅ | Single-call protocol + initial-state hash + final-state evidence |
-| OVAL Reward | ✅ | Ordered coverage + task-aware safety |
+| OVAL Reward | ✅ | Multi-component programmatic: R_val + R_cov + R_eff + R_name + R_arg（论文 §3.3） |
 | GRPO Estimator | ✅ | Saturation skip + 2D stratified advantage |
 | GPU Auto-Adaptation | ✅ | `scripts/gpu_config.sh` — auto-detect GPU count/memory; TP/instance calculation in `generate_data.sh` |
 | Full Training Run | 🔄 | 数据生成管线已跑通，训练待启动 |
@@ -128,14 +128,24 @@ python -c "import flashinfer; print(flashinfer.__version__)"
 ### Verified Pipeline
 
 ```
-live MCP servers (10 domains: banking, calendar, crm, email, filesystem,
-  food_delivery, issue_tracker, payments, shopping, team_chat)
-→ PROVE Teacher (LLM-in-the-loop; local Gemma-4-31B-it)
-→ Real MCP execution → oracle trace
-→ Jaccard dedup (0.70, position-aware)
-→ Parquet serialization (success_criteria as JSON string)
-→ oval_reward_fn.py (R_task + C_safety, optional F_gamma/P_process)
-→ verl GRPO training
+Step 1 — Auto-Discovered Dependency Graph
+  n² pairwise LLM classification → directed graph → chains (len 2–5)
+Step 2 — Live-State Sampling (Grounded Query Generation)
+  Probe live MCP servers for real entities → inject sampling context into prompt
+Step 3 — State-Machine Orchestrator
+  Teacher LLM (Gemma-4-31B-it) drives 5-state loop:
+  query → LLM processing → tool execution → recovery → continuation
+Step 4 — Robustness Knobs
+  Distractor injection (40%) + enum stripping (30%) + irrelevance (5%) + missing func (20%)
+Step 5 — Replay Validation & Deduplication
+  Fresh reset replay (error rate < 30%) → provenance check → Jaccard 0.70 dedup
+       ↓
+Parquet serialization (success_criteria as JSON string)
+       ↓
+Multi-Component Programmatic Reward (oval_reward_fn.py)
+  R_validity + R_coverage + R_efficiency + R_name + R_arg  (论文 §3.3, 公式 1–5)
+       ↓
+verl GRPO training (350 steps, single stage)
 ```
 
 ## Training Route
@@ -166,11 +176,31 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 
 ## Known Design Limitations
 
+### PROVE §3.2 对齐说明
+
+| 步骤 | 对齐状态 | 说明 |
+|------|----------|------|
+| Step 1 — 依赖图构建 | ✅ | n² pairwise LLM 分类 → chains len 2–5，缓存到 `_domain_graphs` / `_domain_chains` |
+| Step 2 — Live-State Sampling | ✅ | `StateSeeder` 探针真实实体 → 每 10 个对话刷新 → chain-aligned context 注入 prompt |
+| Step 3 — 状态机 | ✅ | 五态循环：query → LLM 决策 → 执行 → recovery → continuation |
+| Step 4 — Robustness Knobs | ✅ 但有差异 | distractor 40% 在 **post-generation** 注入，而非 teacher 生成阶段（见下方说明） |
+| Step 5 — Replay + Dedup | ✅ | 30% error 阈值 + provenance check + Jaccard 0.70 |
+
+### Distractor 注入时机：post-generation vs. teacher 阶段
+
+本实现采用 **post-generation 注入**——teacher 用干净工具集生成 oracle，生成完成后才混入 3–8 个无关工具到 `visible_tools`。
+
+**理由**：
+1. Teacher 用干净 schema 生成的 oracle 质量更高，不受工具集膨胀影响
+2. Distractor 的目标是考验模型在噪音中选正确工具的能力，这发生在 RL rollout 阶段，不需要影响 ground truth
+3. Oracle 稳定性：相同任务不同扰动 seed 下 oracle 一致，reward 信号干净
+
+### 其他已知限制
+
 | Issue | Explanation |
 |-------|-------------|
 | Illegal tool JSON → no AuditEvent | Model output format errors only produce error observation, no audit event. Fix requires cross-module type extension. |
 | Reward uses last observation as final state | Exact value verification may miss during consecutive tool_calls (low probability, has seen_ids fallback). |
-| Perturbation only in teacher phase | PROVE 设计：扰动用于 teacher 鲁棒性测试，训练环境干净无扰动。 |
 | Teacher chain-progress blocking removed | PROVE §3.2：仅格式验证（well-formed JSON），不做 post-hoc action-type blocking。用更强 prompt chain_guidance 替代静默重试。见 `task_planner.py:decide_action`。 |
 | Oversample + recovery loop | LLM 生成存在 drop rate，当前 50% oversample + 最多 3 轮 recovery（不同 seed 偏移），保证最终产出满足目标数量。 |
 

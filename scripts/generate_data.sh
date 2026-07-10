@@ -577,23 +577,33 @@ for label, path in [('train', '${RUN_DIR}/train.parquet'), ('val', '${RUN_DIR}/v
     if issues > 0:
         continue
 
-    empty_gt = 0
+    # Abstain scenarios (clarification_required, missing_function,
+    # no_tool_or_abstention, irrelevant) are expected to have empty
+    # success_criteria — don't flag them.
+    ABSTAIN_SCENARIOS = {'clarification_required', 'missing_function', 'no_tool_or_abstention', 'irrelevant'}
+
+    empty_oc = 0
+    empty_sc = 0
     bad_prompt = 0
     for i, row in df.iterrows():
         gt = row['reward_model'].get('ground_truth', {})
         oc = gt.get('oracle_calls', '')
         sc = gt.get('success_criteria', '')
         if not oc or (isinstance(oc, str) and oc in ('[]', '')):
-            empty_gt += 1
-        if not sc or (isinstance(sc, str) and sc in ('[]', '')):
-            empty_gt += 1
+            empty_oc += 1
+        st = row.get('scenario_type', '')
+        if st not in ABSTAIN_SCENARIOS:
+            if not sc or (isinstance(sc, str) and sc in ('[]', '')):
+                empty_sc += 1
         try:
             json.loads(row['prompt'])
         except (json.JSONDecodeError, TypeError):
             bad_prompt += 1
 
-    if empty_gt:
-        print(f'    WARN: {empty_gt} rows have empty ground_truth (oracle_calls/success_criteria)')
+    if empty_oc:
+        print(f'    WARN: {empty_oc} rows have empty oracle_calls')
+    if empty_sc:
+        print(f'    WARN: {empty_sc} rows have empty success_criteria (non-abstain scenarios)')
     if bad_prompt:
         print(f'    FAIL: {bad_prompt} rows have invalid prompt JSON')
         issues += 1
@@ -601,9 +611,9 @@ for label, path in [('train', '${RUN_DIR}/train.parquet'), ('val', '${RUN_DIR}/v
     # Spot-check: first row _build_task_dict
     try:
         from src.reward.oval_reward_fn import _build_task_dict
-        extra = row.extra_info if hasattr(row, 'extra_info') else df.iloc[0]['extra_info']
-        td = _build_task_dict(extra)
-        if not isinstance(td, dict) or 'oracle_calls' not in td:
+        first_extra = df.iloc[0]['extra_info']
+        td = _build_task_dict(first_extra)
+        if not isinstance(td, dict) or 'required_tool_calls' not in td:
             print(f'    FAIL: _build_task_dict spot-check returned invalid dict')
             issues += 1
     except Exception as e:

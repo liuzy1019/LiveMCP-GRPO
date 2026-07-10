@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">State-machine-driven data synthesis</title>
+  <desc id="desc">Three-stage workflow for LiveMCP-GRPO data synthesis: dependency graph discovery, per-conversation state machine, and validation/filtering into RL training data.</desc>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .title { font: 700 30px Arial, Helvetica, sans-serif; fill: #143866; }
+      .step { font: 700 17px Arial, Helvetica, sans-serif; fill: #15477d; }
+      .box-title { font: 700 17px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .box-sub { font: 500 14px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .small { font: 600 12px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .label { font: italic 13px Arial, Helvetica, sans-serif; fill: #111827; }
+      .module { stroke: #2f3a46; stroke-width: 1.8; rx: 12; ry: 12; }
+      .blue { fill: #d7e8fa; }
+      .yellow { fill: #fff1bd; }
+      .green { fill: #d9efd5; }
+      .red { fill: #f6cccc; }
+      .orange { fill: #f8cfa6; }
+      .gray { fill: #f3f4f6; }
+      .line { stroke: #1f2937; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #1f2937; stroke-width: 1.8; fill: none; stroke-dasharray: 7 6; marker-end: url(#arrow); }
+      .thin-dash { stroke: #4b5563; stroke-width: 1.5; fill: none; stroke-dasharray: 6 6; marker-end: url(#arrow); }
+      .shadow { filter: url(#softShadow); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f2937"/>
+    </marker>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="1.4" flood-color="#000000" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="900"/>
+  <text class="title" x="800" y="48" text-anchor="middle">State-machine-driven data synthesis</text>
+
+  <!-- Step 1 -->
+  <text class="step" x="64" y="104">Step 1 — Auto-Discovered Dependency Graph</text>
+
+  <rect class="module yellow shadow" x="64" y="126" width="245" height="78"/>
+  <text class="box-title" x="186.5" y="159" text-anchor="middle">Tool Schemas</text>
+  <text class="box-sub" x="186.5" y="181" text-anchor="middle">(per MCP domain)</text>
+
+  <rect class="module blue shadow" x="390" y="126" width="270" height="78"/>
+  <text class="box-title" x="525" y="159" text-anchor="middle">LLM Pairwise</text>
+  <text class="box-sub" x="525" y="181" text-anchor="middle">Classifier</text>
+
+  <rect class="module gray shadow" x="742" y="126" width="340" height="78"/>
+  <text class="box-title" x="912" y="159" text-anchor="middle">explicit | implicit | none</text>
+  <text class="box-sub" x="912" y="181" text-anchor="middle">(directed edges)</text>
+
+  <rect class="module yellow shadow" x="1170" y="126" width="335" height="78"/>
+  <text class="box-title" x="1337.5" y="159" text-anchor="middle">Dependency Graph</text>
+  <text class="box-sub" x="1337.5" y="181" text-anchor="middle">+ Chains [len 2-5]</text>
+
+  <path class="line" d="M 309 165 L 390 165"/>
+  <path class="line" d="M 660 165 L 742 165"/>
+  <path class="line" d="M 1082 165 L 1170 165"/>
+
+  <!-- Step 2 -->
+  <text class="step" x="64" y="336">Step 2 — State Machine (per conversation)</text>
+
+  <rect class="module blue shadow" x="64" y="364" width="275" height="102"/>
+  <text class="box-title" x="201.5" y="407" text-anchor="middle">Query</text>
+  <text class="box-title" x="201.5" y="431" text-anchor="middle">Generation</text>
+
+  <rect class="module blue shadow" x="402" y="364" width="275" height="102"/>
+  <text class="box-title" x="539.5" y="407" text-anchor="middle">LLM</text>
+  <text class="box-title" x="539.5" y="431" text-anchor="middle">Processing</text>
+
+  <rect class="module blue shadow" x="740" y="364" width="275" height="102"/>
+  <text class="box-title" x="877.5" y="407" text-anchor="middle">Tool</text>
+  <text class="box-title" x="877.5" y="431" text-anchor="middle">Execution</text>
+
+  <rect class="module blue shadow" x="1078" y="364" width="275" height="102"/>
+  <text class="box-title" x="1215.5" y="407" text-anchor="middle">Response +</text>
+  <text class="box-title" x="1215.5" y="431" text-anchor="middle">Continuation</text>
+
+  <path class="line" d="M 339 415 L 402 415"/>
+  <path class="line" d="M 677 415 L 740 415"/>
+  <path class="line" d="M 1015 415 L 1078 415"/>
+
+  <rect class="module blue shadow" x="64" y="532" width="275" height="52"/>
+  <text class="box-title" x="201.5" y="563" text-anchor="middle">Live-State Sampler</text>
+  <path class="line" d="M 201.5 532 L 201.5 467"/>
+
+  <rect class="module green shadow" x="740" y="516" width="275" height="78"/>
+  <text class="box-title" x="877.5" y="548" text-anchor="middle">Live MCP Server</text>
+  <text class="box-sub" x="877.5" y="570" text-anchor="middle">(stateful, reset per conv.)</text>
+  <path class="line" d="M 877.5 516 L 877.5 467"/>
+  <text class="label" x="894" y="493">call</text>
+
+  <rect class="module red shadow" x="740" y="248" width="275" height="78"/>
+  <text class="box-title" x="877.5" y="280" text-anchor="middle">Recovery</text>
+  <text class="box-sub" x="877.5" y="302" text-anchor="middle">(retry / alt-tool / give-up)</text>
+  <path class="dash" d="M 877.5 326 L 877.5 364"/>
+  <text class="label" x="893" y="350">fail</text>
+  <path class="dash" d="M 740 287 C 625 287 539.5 292 539.5 364"/>
+  <text class="label" x="627" y="275">retry</text>
+
+  <path class="dash" d="M 1215.5 466 L 1215.5 506 C 1215.5 630 539.5 630 539.5 467"/>
+  <text class="label" x="1020" y="614">next turn</text>
+  <path class="thin-dash" d="M 740 555 C 605 555 539.5 540 539.5 467"/>
+  <text class="label" x="585" y="541">observation + state</text>
+
+  <path class="dash" d="M 1337.5 205 L 1337.5 230 C 1337.5 260 539.5 230 539.5 364"/>
+  <text class="label" x="1048" y="236">chain hints</text>
+
+  <rect class="module yellow shadow" x="1400" y="420" width="145" height="168"/>
+  <text class="box-title" x="1472.5" y="455" text-anchor="middle">Robustness</text>
+  <text class="box-title" x="1472.5" y="477" text-anchor="middle">knobs</text>
+  <text class="small" x="1424" y="510">• distractors</text>
+  <text class="small" x="1424" y="532">• strip enums</text>
+  <text class="small" x="1424" y="554">• irrelevance</text>
+  <text class="small" x="1424" y="576">• missing-func</text>
+  <path class="thin-dash" d="M 1400 504 C 1300 504 1160 504 1015 450"/>
+
+  <!-- Completed conversation path -->
+  <path class="line" d="M 1215.5 466 L 1215.5 664 C 1215.5 692 339 692 339 730"/>
+  <text class="label" x="1060" y="682">completed conv.</text>
+
+  <!-- Step 3 -->
+  <text class="step" x="64" y="710">Step 3 — Validate &amp; Filter</text>
+
+  <rect class="module blue shadow" x="64" y="730" width="250" height="86"/>
+  <text class="box-title" x="189" y="765" text-anchor="middle">Replay</text>
+  <text class="box-title" x="189" y="789" text-anchor="middle">Validate</text>
+
+  <rect class="module blue shadow" x="386" y="730" width="250" height="86"/>
+  <text class="box-title" x="511" y="765" text-anchor="middle">Provenance</text>
+  <text class="box-title" x="511" y="789" text-anchor="middle">Check</text>
+
+  <rect class="module blue shadow" x="708" y="730" width="250" height="86"/>
+  <text class="box-title" x="833" y="765" text-anchor="middle">Contract</text>
+  <text class="box-title" x="833" y="789" text-anchor="middle">Validation</text>
+
+  <rect class="module blue shadow" x="1030" y="730" width="250" height="86"/>
+  <text class="box-title" x="1155" y="765" text-anchor="middle">Deduplicate</text>
+  <text class="box-sub" x="1155" y="789" text-anchor="middle">Jaccard 0.70</text>
+
+  <rect class="module orange shadow" x="1352" y="730" width="193" height="86"/>
+  <text class="box-title" x="1448.5" y="765" text-anchor="middle">RL Training Data</text>
+  <text class="box-sub" x="1448.5" y="789" text-anchor="middle">train / val Parquet</text>
+
+  <path class="line" d="M 314 773 L 386 773"/>
+  <path class="line" d="M 636 773 L 708 773"/>
+  <path class="line" d="M 958 773 L 1030 773"/>
+  <path class="line" d="M 1280 773 L 1352 773"/>
+</svg>

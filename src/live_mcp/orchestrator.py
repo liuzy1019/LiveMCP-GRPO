@@ -22,9 +22,9 @@ from typing import Any
 from loguru import logger
 
 from src.live_mcp.config import SuiteConfig
-from src.live_mcp.dedup import dedup_tasks
 from src.live_mcp.executor import LiveMCPExecutor
 from src.live_mcp.manager import LiveMCPManager
+from src.live_mcp.perturb import Perturber
 from src.live_mcp.types import LiveTask, OracleCall, OracleProgram, to_plain
 from src.utils import extract_json as _extract_json
 
@@ -94,7 +94,7 @@ class TaskOrchestrator:
         chain_progress_start: int = 0,
         max_calls_this_round: int = 0,
         chain_context: dict[str, Any] | None = None,
-    ) -> tuple[list, list[dict], set[str]]:
+    ) -> tuple[list, list[dict], list[Any], set[str]]:
         """Run one conversation round of teacher-driven tool execution.
 
         chain_progress_start: cumulative chain_seed steps satisfied in previous
@@ -107,12 +107,16 @@ class TaskOrchestrator:
         chain_context: live-probed entity values for hallucination prevention
         in decide_action. Extracted from _extract_chain_context in generate_one.
 
-        Returns (oracle_calls, execution_history, required_tools).
+        Returns (oracle_calls, execution_history, oracle_observations, required_tools).
+        oracle_observations is 1:1 aligned with oracle_calls — each entry is the
+        raw tool observation dict for the corresponding oracle call, or {} for
+        terminal actions (ask_clarification, final_answer, report_error).
         """
-        from src.live_mcp.task_planner import ContinuationPolicy, apply_perturbation
+        from src.live_mcp.task_planner import ContinuationPolicy
         from src.live_mcp.types import ToolCall
 
         oracle_calls: list = []
+        oracle_observations: list[Any] = []
         execution_history: list[dict[str, Any]] = []
         required_tools: set[str] = set()
 
@@ -247,6 +251,7 @@ class TaskOrchestrator:
                     arguments={"question": action.text},
                     action="ask_clarification",
                 ))
+                oracle_observations.append({})
                 break
 
             if action.action in ("final_answer", "report_error"):
@@ -255,6 +260,7 @@ class TaskOrchestrator:
                     arguments={"text": action.text},
                     action=action.action,
                 ))
+                oracle_observations.append({})
                 break
 
             if action.action != "tool_call" or not action.tool_name:
@@ -284,29 +290,6 @@ class TaskOrchestrator:
                 domain=server_name,
             )
 
-            # Perturbations that modify the observation payload (pagination,
-            # incomplete_intermediate, partial_batch_failure) are safe on both
-            # read and write calls — they alter the returned data shape but not
-            # the underlying state.  Only the "retry" perturbation (intermittent
-            # error) is blocked on writes because it would trigger a re-execution
-            # after state already changed.
-            perturbed_obs = apply_perturbation(result.observation, server_name, local_rng)
-            if result.success and isinstance(perturbed_obs, dict) and perturbed_obs.get("retry") and result.state_changed:
-                perturbed_obs = None
-
-            if isinstance(perturbed_obs, dict) and perturbed_obs.get("retry"):
-                execution_history.append({
-                    "tool_name": tool_name,
-                    "arguments": dict(action.arguments),
-                    "observation": perturbed_obs,
-                    "success": False,
-                })
-                # Retry triggered: don't add failed call to oracle.
-                # If the next turn succeeds, the success path will add it once.
-                _turn += 1
-                attempt += 1
-                continue
-
             if not result.success:
                 logger.debug(
                     f"_run_turn_loop: tool '{tool_name}' execution failed for "
@@ -316,7 +299,7 @@ class TaskOrchestrator:
                 execution_history.append({
                     "tool_name": tool_name,
                     "arguments": dict(action.arguments),
-                    "observation": perturbed_obs if perturbed_obs is not None else result.observation,
+                    "observation": result.observation,
                     "success": False,
                     "execution_status": result.execution_status,
                 })
@@ -336,7 +319,7 @@ class TaskOrchestrator:
                 recovery = teacher.decide_recovery(
                     last_tool_name=tool_name,
                     last_arguments=dict(action.arguments),
-                    error_observation=perturbed_obs if perturbed_obs is not None else {"error": str(result.observation)},
+                    error_observation={"error": str(result.observation)},
                     tool_schemas=server_tools,
                     execution_history=execution_history,
                 )
@@ -359,10 +342,13 @@ class TaskOrchestrator:
                             "success": True,
                             "execution_status": retry_result.execution_status,
                         })
-                        _add_oracle(OracleCall(
+                        if _add_oracle(OracleCall(
                             tool_name=tool_name,
                             arguments=corrected,
-                        ))
+                        )):
+                            oracle_observations.append(
+                                retry_result.observation if retry_result.observation is not None else {}
+                            )
                 elif rec_action == "retry_alt":
                     alt_tool = recovery.get("tool_name", "")
                     if alt_tool and alt_tool in {t["name"] for t in server_tools}:
@@ -380,10 +366,13 @@ class TaskOrchestrator:
                                 "success": True,
                                 "execution_status": alt_result.execution_status,
                             })
-                            _add_oracle(OracleCall(
+                            if _add_oracle(OracleCall(
                                 tool_name=alt_tool,
                                 arguments=recovery.get("arguments", {}),
-                            ))
+                            )):
+                                oracle_observations.append(
+                                    alt_result.observation if alt_result.observation is not None else {}
+                                )
                 _turn += 1
                 attempt += 1
                 # PROVE §3.2 multi-round schedule: after recovery added an
@@ -396,19 +385,21 @@ class TaskOrchestrator:
                         break
                 continue
 
-            obs_to_record = perturbed_obs if perturbed_obs is not None else result.observation
             execution_history.append({
                 "tool_name": tool_name,
                 "arguments": dict(action.arguments),
-                "observation": obs_to_record if obs_to_record is not None else {},
+                "observation": result.observation if result.observation is not None else {},
                 "success": True,
                 "execution_status": result.execution_status,
             })
 
-            _add_oracle(OracleCall(
+            if _add_oracle(OracleCall(
                 tool_name=tool_name,
                 arguments=dict(action.arguments),
-            ))
+            )):
+                oracle_observations.append(
+                    result.observation if result.observation is not None else {}
+                )
 
             _turn += 1
             attempt += 1
@@ -439,8 +430,9 @@ class TaskOrchestrator:
                 arguments={"text": "Task completed."},
                 action="final_answer",
             ))
+            oracle_observations.append({})
 
-        return oracle_calls, execution_history, required_tools
+        return oracle_calls, execution_history, oracle_observations, required_tools
 
     def generate_one(
         self,
@@ -467,7 +459,7 @@ class TaskOrchestrator:
         """
         from src.live_mcp.task_planner import (
             TaskPlanner, derive_success_criteria, derive_progress_predicates,
-            replay_validate, apply_perturbation,
+            replay_validate,
             _PERSONA_TEMPLATES, _REFERENCE_DATES, ContinuationPolicy,
             provenance_check, _is_mutating_tool,
         )
@@ -519,6 +511,7 @@ class TaskOrchestrator:
         progress_predicates: list = []
         teacher = None
         scenario_type = ""
+        identity_policy = ""
 
         # ── Retry with different seed if LLM refuses to call tools ──
         for retry_attempt in range(3):
@@ -589,6 +582,7 @@ class TaskOrchestrator:
                 # (re-assigned each retry; types declared before the loop)
                 all_oracle_calls = []
                 all_execution_history = []
+                all_aligned_observations: list[Any] = []
                 all_required_tools = set()
                 conversation_queries = [user_query]  # track all user messages
                 oracle_calls_per_round = []  # per-round for prompt construction
@@ -647,7 +641,7 @@ class TaskOrchestrator:
                     else:
                         max_calls_r = 0
 
-                    round_ocs, round_hist, round_reqs = self._run_turn_loop(
+                    round_ocs, round_hist, round_obs, round_reqs = self._run_turn_loop(
                         teacher=teacher,
                         current_query=current_query,
                         server_tools=server_tools,
@@ -701,10 +695,12 @@ class TaskOrchestrator:
                     is_last_round = (round_idx == max_conversation_rounds - 1)
                     real_so_far = sum(1 for oc in all_oracle_calls if getattr(oc, "action", "tool_call") == "tool_call")
                     filtered_round_ocs = []
-                    for oc in round_ocs:
+                    filtered_round_obs = []
+                    for i, oc in enumerate(round_ocs):
                         action = getattr(oc, "action", "tool_call")
                         if action != "tool_call":
                             filtered_round_ocs.append(oc)
+                            filtered_round_obs.append(round_obs[i])
                             continue
                         if not is_last_round and real_so_far >= 5:
                             break
@@ -725,9 +721,11 @@ class TaskOrchestrator:
                             continue
                         global_seen_keys.add(key)
                         filtered_round_ocs.append(oc)
+                        filtered_round_obs.append(round_obs[i])
                         real_so_far += 1
 
                     all_oracle_calls.extend(filtered_round_ocs)
+                    all_aligned_observations.extend(filtered_round_obs)
                     all_execution_history.extend(round_hist)
                     all_required_tools |= round_reqs
                     oracle_calls_per_round.append(list(filtered_round_ocs))
@@ -917,7 +915,7 @@ class TaskOrchestrator:
                 prov_ok, prov_violations = provenance_check(
                     oracle_calls=all_oracle_calls,
                     user_query="\n".join(conversation_queries),
-                    execution_history=all_execution_history,
+                    aligned_observations=all_aligned_observations,
                 )
                 if not prov_ok:
                     if retry_attempt < 2:
@@ -950,22 +948,22 @@ class TaskOrchestrator:
                     seed=local_seed,
                 )
 
-                # ── Guard: teacher-generated readonly-only traces ──
-                # Teacher models occasionally produce oracle traces with only
-                # readonly tools (e.g. get_order + list_orders in food_delivery).
-                # These pass replay validation but yield empty success_criteria
-                # because no state changed.
+                # ── Guard: teacher-generated traces with empty success_criteria ──
+                # Teacher models occasionally produce oracle traces that yield
+                # empty success_criteria — either because the oracle used only
+                # readonly tools, or because a mutating call didn't change
+                # tracked state (e.g. cancel already-cancelled order).
                 #
                 # PROVE does NOT reject these: R_coverage is based on matching
                 # oracle tool-call sequences, not on state-diff criteria (§3.3).
                 # Empty success_criteria means the coverage reward operates in
-                # pure tool-call-match mode, which is correct for readonly chains.
+                # pure tool-call-match mode, which is correct.
                 # We log a warning to help diagnose pipeline health but allow
                 # the task through.
                 if scenario_type in frozenset({"normal_safe_success", "tool_error_recovery"}) and not success_criteria:
                     logger.warning(
                         f"Empty success_criteria for {scenario_type} task {task_id} "
-                        f"(oracle has {len(_real)} readonly-only tool calls). "
+                        f"(oracle has {len(_real)} tool call(s)). "
                         f"Accepting — R_coverage will use pure tool-call matching."
                     )
 
@@ -1040,7 +1038,6 @@ class TaskOrchestrator:
             "protected_fields_by_resource": protected_fields_by_resource,
             "scenario_type": scenario_type,
             "terminal_action": terminal_action,
-            "strip_enums": bool(getattr(teacher, "_strip_enums", False)),
             "reference_date": reference_date,
         })
         return live_task
@@ -1216,10 +1213,11 @@ class TaskOrchestrator:
         irr = self._generate_irrelevant_tasks(n_irrelevant, seed + 9999, servers)
         tasks.extend(irr)
 
-        # ── dedup across all generated tasks ──
+        # ── Dedup is deferred to _stratified_task_split (generate_data.py) ──
+        # which applies Jaccard 0.70 after _filter_training_eligible_tasks.
+        # Calling it here is redundant and wasteful O(n²).
+        removed = 0
         before = len(tasks)
-        tasks = dedup_tasks(tasks, threshold=0.70)
-        removed = before - len(tasks)
 
         # Surface low yield to the caller. With irrelevance_ratio<1, the
         # contractual target is `count` rows; falling far short usually means
@@ -1253,13 +1251,23 @@ class TaskOrchestrator:
         """Thread-safe single-task generation with post-processing.
 
         Returns None if generate_one raises, so the caller can count failures
-        and retry with a new seed.  This is a pure wrapper — all state mutation
-        (seen_queries, tasks list, counters) stays in generate_many.
+        and retry with a new seed.
         """
         task = self.generate_one(server_name, seed=seed, difficulty=difficulty)
+        # Post-generation robustness knobs: teacher generates oracle with
+        # clean schema; perturbations affect only the RL rollout prompt.
+        perturber = Perturber(
+            all_tools_pool=self.manager.registry.all_tools(),
+            distractor_rate=distractor_rate,
+            strip_enums_rate=0.30,
+        )
+        perturbed_tools, perturb_meta = perturber.apply(
+            task.visible_tools, seed=seed,
+        )
+        task.metadata["clean_visible_tools"] = task.visible_tools
+        task.visible_tools = perturbed_tools
+        task.metadata.update(perturb_meta)
         rng_knob = random.Random(seed)
-        if rng_knob.random() < distractor_rate:
-            self._apply_distractors(task)
         if rng_knob.random() < missing_function_rate:
             _applied = self._apply_missing_function(task)
             if not _applied:
@@ -1302,18 +1310,6 @@ class TaskOrchestrator:
             oracle_calls_per_round=oracle_calls_per_round or [],
             execution_history_per_round=execution_history_per_round or [],
         )
-
-    def _apply_distractors(self, task: LiveTask) -> None:
-        known = {t["name"] for t in task.visible_tools}
-        candidates = [t for t in self.manager.registry.all_tools() if t["name"] not in known]
-        # Use deterministic seed via hashlib (Python hash() is randomized by PYTHONHASHSEED)
-        import hashlib
-        seed_bytes = hashlib.md5(task.task_id.encode()).digest()
-        rng = random.Random(int.from_bytes(seed_bytes[:8], "big"))
-        selected = rng.sample(candidates, min(len(candidates), rng.randint(3, 8)))
-        task.visible_tools.extend(selected)
-        task.metadata["has_distractors"] = True
-        task.metadata["distractor_count"] = len(selected)
 
     def _apply_missing_function(self, task: LiveTask) -> bool:
         """Apply missing_function perturbation. Returns True if applied, False if

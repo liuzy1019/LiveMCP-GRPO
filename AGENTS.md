@@ -55,10 +55,19 @@ verl 0.6.1 从 `./verl` editable 安装。关键版本：
 
 ## 数据生成管线约束
 
+> 管线细节见 `data/README.md`，对齐 PROVE 论文 §3.2 的五步流程。核心约束如下：
+
+- **PROVE §3.2 五步全部对齐**：依赖图构建 → Live-State 采样 → 状态机编排 → Robustness Knobs → Replay 验证 + 去重
+- **Distractor 注入时机**：post-generation。Teacher 用干净工具集生成 oracle，完成后才混入无关工具。原理见 `CLAUDE.md` Known Design Limitations
+- **其他扰动在 teacher 阶段**：enum stripping（30%，`TaskPlanner.__init__`）、missing function（20%，post-generation 修改 oracle）、irrelevance（5%，独立生成）
 - `success_criteria` 的 `value` 字段类型混合（str/float/int），必须序列化为 JSON 字符串存入 Parquet，不能裸存 list[dict]
 - `OracleCall(action="clarification")` 的 `action` 字段必须保留到 parquet，reward 端据此设 `allowed_terminal=["ask_clarification"]`
 - 每轮数据生成改动后必须验证 `generate_data.py` → `to_parquet` → `read_parquet` → `_build_task_dict` 全链路
 - 生成失败率需关注日志中的 `generate_many progress` 行和 WARNING 计数
+- Replay validation 错误率阈值 30%（仅计 schema + execution 错误，不含空结果）
+- Jaccard 去重阈值 0.70，基于 tool-call 序列（位置感知）
+- 探测到的实时实体缓存每 k 个对话刷新一次（见 `state_seeder.py`）
+- Abstain 场景（clarification_required / missing_function / no_tool_or_abstention / irrelevant）的 success_criteria 为空属于预期行为，不视为数据质量问题
 
 ## 验证
 
@@ -99,11 +108,13 @@ Conventional Commits：`<type>: <subject>`
 
 ## 当前环境事实
 
-- Teacher 模型：本地 Gemma-4-31B-it（`models/Google/Gemma-4-31B-it`），也可通过 `--api-base` 使用外部 API
-- Policy 模型：Qwen3-4B（`models/Qwen/Qwen3-4B`），RL rollout 时通过 vLLM 本地 serving
+- 基于 PROVE 框架实现，对齐论文 §3.1–§3.3（Live MCP Environments / Data Synthesis / Multi-Component Reward）
+- Teacher 模型：Gemma-4-31B-it（对齐论文 Teacher），也支持外部 API
+- Policy 模型：Qwen3-4B，RL rollout 时通过 vLLM 本地 serving
+- Reward：五组件可编程奖励（R_val + R_cov + R_eff + R_name + R_arg），无外部 judge 模型（论文 §3.3）
 - OVAL GRPO 是唯一训练路线（`bash scripts/train_grpo.sh`）
-- 数据生成 P0/P1 bug 全部修复，参数已对齐 PROVE 论文 §3.2–§4.1
 - SFT cold-start 相关代码已清除
-- 当前开发环境为 8×A10 22GB，脚本自动检测 GPU 数（`GPU_COUNT=4` 可限制），不绑定特定硬件
-- Teacher 生成参数：difficulty_mix = `complete:70%, missing:10%, minimal:20%`，distractor 40%，missing_function 20%，irrelevance 5%
+- 环境：8×A10 22GB，脚本自动检测 GPU 数（`GPU_COUNT=4` 可限制）
+- Teacher 生成参数：difficulty_mix = `complete:70%, missing:10%, minimal:20%`，missing_function 20%，irrelevance 5%，enum stripping 30%
+- Distractor 40%——**post-generation 注入**。Teacher 用干净工具集生成 oracle，生成完成后才混入 3–8 个无关工具到 visible_tools。不影响 ground truth 正确性，考验 RL rollout 阶段的工具选择能力
 - Oversample 50% + 最多 3 轮 recovery 保证产出数量
