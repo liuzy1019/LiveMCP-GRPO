@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "payments",
   "schema_hash": "37eb7974804e2c90",
   "tool_names": [
@@ -20,11 +21,10 @@
     },
     "create_invoice": {
       "explicit": [
-        "cancel_payment",
-        "dispute_invoice",
         "get_invoice",
         "pay_invoice",
-        "refund_invoice"
+        "refund_invoice",
+        "dispute_invoice"
       ],
       "implicit": []
     },
@@ -43,40 +43,34 @@
       "implicit": []
     },
     "get_invoice": {
-      "explicit": [
-        "cancel_payment",
-        "dispute_invoice",
-        "pay_invoice",
-        "refund_invoice"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "list_invoices": {
       "explicit": [
-        "cancel_payment",
-        "dispute_invoice",
-        "get_invoice",
-        "pay_invoice",
-        "refund_invoice"
+        "get_invoice"
       ],
       "implicit": []
     },
     "list_webhooks": {
-      "explicit": [
-        "delete_webhook"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "pay_invoice": {
-      "explicit": [
-        "cancel_payment",
-        "refund_invoice"
-      ],
-      "implicit": []
+      "explicit": [],
+      "implicit": [
+        "refund_invoice",
+        "cancel_payment"
+      ]
     },
     "refund_invoice": {
       "explicit": [],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 10,
+  "expected_pair_count": 45,
+  "classified_pair_count": 45,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

@@ -120,6 +120,7 @@ def _dict_to_audit_event(d: dict) -> AuditEvent:
         error_type=d.get("error_type"),
         error_message=d.get("error_message", ""),
         schema_valid=d.get("schema_valid", False),
+        tool_name_known=d.get("tool_name_known", False),
         state_changed=d.get("state_changed", False),
         latency_ms=d.get("latency_ms", 0),
     )
@@ -424,7 +425,65 @@ def _build_task_dict(extra_info: dict) -> dict:
         "user_query": str(extra_info.get("user_query", "")),
         "scenario_type": scenario_type,
         "final_state": extra_info.get("final_state", {}),
+        # P0-2: round contracts for per-round terminal validation
+        "round_contracts": _parse_round_contracts(extra_info),
+        # P0-3: dependency edges for partial-order coverage.
+        # Deserialised from JSON string (Parquet-safe) or parsed from
+        # ground_truth.dependency_edges.  Used by TaskReward._match_required_calls
+        # to accept non-dependent tool reorderings.
+        "dependency_edges": _parse_dependency_edges(extra_info),
     }
+
+
+def _parse_dependency_edges(extra_info: dict) -> list[tuple[int, int]]:
+    """P0-3: parse dependency_edges into a list of (src_idx, dst_idx) tuples.
+
+    Data-side _compute_dependency_edges produces [[src_idx, dst_idx], ...]
+    where indices refer to positions in the flattened oracle_calls (tool_call
+    actions only).  We keep the index-based format so that _build_task_dict
+    and TaskReward can directly construct preds_by_idx without tool-name
+    lookup (which fails on repeated tool names and non-name keys).
+
+    Accepts JSON string (Parquet round-trip), list of tuple/list, or empty.
+    Returns empty list if absent or unparseable.
+    """
+    import json as _json
+    raw = extra_info.get("dependency_edges")
+    if raw is None:
+        raw = extra_info.get("ground_truth", {}).get("dependency_edges")
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = _json.loads(raw)
+        except (_json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(raw, list):
+        return []
+    edges: list[tuple[int, int]] = []
+    for edge in raw:
+        if isinstance(edge, (list, tuple)) and len(edge) == 2:
+            try:
+                src, dst = int(edge[0]), int(edge[1])
+                edges.append((src, dst))
+            except (ValueError, TypeError):
+                pass
+    return edges
+
+
+def _parse_round_contracts(extra_info: dict) -> list[dict]:
+    """P0-2: parse round_contracts from extra_info (may be JSON string or list)."""
+    import json as _json
+    raw = extra_info.get("round_contracts", [])
+    if isinstance(raw, str):
+        try:
+            parsed = _json.loads(raw)
+            return parsed if isinstance(parsed, list) else []
+        except (_json.JSONDecodeError, TypeError):
+            return []
+    if isinstance(raw, list):
+        return raw
+    return []
 
 
 def _compute_f_gamma(event_log: EventLog, task_dict: dict, domain_adapter=None) -> dict:
@@ -521,6 +580,17 @@ def compute_score(
     except Exception:
         r_task = 0.0; r_validity = 0.0; r_coverage = 0.0; r_efficiency = 0.0
 
+    # P0-2: validate per-round terminals against round_contracts.
+    r_round_ok, r_round_details = _validate_round_contracts(audit_events, task_dict)
+    if not r_round_ok:
+        # Wrong terminal somewhere in the trajectory: apply a multiplicative
+        # penalty to R_task (models that learn illegal terminal-advancing
+        # should not receive full credit even if the final terminal is correct).
+        r_task *= 0.1
+        r_validity *= 0.1
+        r_coverage *= 0.1
+        r_efficiency *= 0.1
+
     # ── C_safety ──
     try:
         safety_result = _safety_verifier.verify(event_log, task_dict)
@@ -574,6 +644,8 @@ def compute_score(
         "n_events": float(n_events),
         "n_model_tool_calls": n_model_calls,
         "n_exec_success": n_exec_ok,
+        "r_round_ok": 1.0 if r_round_ok else 0.0,
+        "r_round_details": r_round_details,
         "error": "",
     }
 
@@ -586,3 +658,62 @@ def compute_score(
             result[k] = float(v)
 
     return result
+
+
+def _validate_round_contracts(audit_events: list, task_dict: dict) -> tuple[bool, str]:
+    """P0-2: validate per-round terminals against round_contracts.
+
+    Extracts terminal events from audit_events and checks that each round's
+    terminal matches the contract's allowed_terminal_actions.
+
+    Returns (ok, details_str).
+    """
+    contracts = task_dict.get("round_contracts", [])
+    if not contracts or len(contracts) <= 1:
+        # Single-round tasks: terminal validation is handled by
+        # allowed_terminal_actions in the existing reward components.
+        return True, "single_round"
+
+    # Extract terminal events and their approximate round indices.
+    # Round boundaries are detected by counting terminal actions.
+    terminal_events: list[tuple[int, str]] = []  # (round_guess, action_type)
+    round_idx = 0
+    for ev in audit_events:
+        action = ""
+        if hasattr(ev, "action_type"):
+            action = ev.action_type
+        elif isinstance(ev, dict):
+            action = ev.get("action_type", "")
+        if action in ("final_answer", "ask_clarification", "report_error"):
+            terminal_events.append((round_idx, action))
+            round_idx += 1
+        elif action == "contract_violation":
+            return False, f"contract_violation at round {round_idx}"
+        elif action == "round_tool_violation":
+            return False, f"round_tool_violation at round {round_idx}"
+
+    if not terminal_events:
+        # No valid terminals at all — let R_task deal with it
+        return False, "no_terminals"
+
+    # Check that each round's terminal matches its contract
+    for i, (ri, term) in enumerate(terminal_events):
+        if i >= len(contracts):
+            break
+        allowed = contracts[i].get("allowed_terminal_actions", [])
+        if allowed and term not in allowed:
+            return False, (
+                f"round {i}: terminal '{term}' not in "
+                f"allowed {allowed}"
+            )
+
+    n_expected = len(contracts)
+    n_actual = len(terminal_events)
+    if n_actual != n_expected:
+        direction = "fewer" if n_actual < n_expected else "more"
+        return False, (
+            f"terminal count mismatch: got {n_actual} terminals, "
+            f"expected {n_expected} ({direction})"
+        )
+
+    return True, f"rounds_ok={n_actual}/{n_expected}"

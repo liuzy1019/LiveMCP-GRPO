@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "shopping",
   "schema_hash": "c3c592d712e202ff",
   "tool_names": [
@@ -32,28 +33,31 @@
       "implicit": []
     },
     "add_to_cart": {
-      "explicit": [
-        "checkout",
+      "explicit": [],
+      "implicit": [
+        "update_cart_quantity",
         "remove_from_cart",
-        "update_cart_quantity"
-      ],
-      "implicit": []
+        "clear_cart",
+        "checkout"
+      ]
     },
     "add_to_wishlist": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "remove_from_wishlist"
+      ]
     },
     "apply_coupon": {
-      "explicit": [
+      "explicit": [],
+      "implicit": [
         "checkout"
-      ],
-      "implicit": []
+      ]
     },
     "checkout": {
       "explicit": [
         "get_order",
-        "return_order",
-        "track_order"
+        "track_order",
+        "return_order"
       ],
       "implicit": []
     },
@@ -66,34 +70,20 @@
       "implicit": []
     },
     "get_cart": {
-      "explicit": [
-        "checkout",
-        "clear_cart",
-        "remove_from_cart",
-        "update_cart_quantity"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_coupons": {
-      "explicit": [
-        "apply_coupon"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_order": {
-      "explicit": [
-        "return_order",
-        "track_order"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_product": {
       "explicit": [
-        "add_review",
-        "add_to_cart",
-        "add_to_wishlist",
-        "compare_products",
-        "get_reviews"
+        "add_to_cart"
       ],
       "implicit": []
     },
@@ -121,9 +111,8 @@
     },
     "list_orders": {
       "explicit": [
-        "get_order",
-        "return_order",
-        "track_order"
+        "track_order",
+        "return_order"
       ],
       "implicit": []
     },
@@ -143,12 +132,12 @@
     },
     "search_products": {
       "explicit": [
-        "add_review",
-        "add_to_cart",
-        "add_to_wishlist",
-        "compare_products",
         "get_product",
-        "get_reviews"
+        "compare_products",
+        "add_to_cart",
+        "add_review",
+        "get_reviews",
+        "add_to_wishlist"
       ],
       "implicit": []
     },
@@ -160,5 +149,10 @@
       "explicit": [],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 23,
+  "expected_pair_count": 253,
+  "classified_pair_count": 253,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

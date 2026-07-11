@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "crm",
   "schema_hash": "3eab3e72e102a369",
   "tool_names": [
@@ -30,36 +31,31 @@
     },
     "convert_lead": {
       "explicit": [
-        "add_note",
-        "create_deal",
-        "delete_contact",
-        "update_contact"
+        "update_contact",
+        "delete_contact"
       ],
       "implicit": []
     },
     "create_contact": {
       "explicit": [
-        "add_note",
-        "create_deal",
-        "delete_contact",
-        "update_contact"
+        "update_contact",
+        "delete_contact"
       ],
       "implicit": []
     },
     "create_deal": {
       "explicit": [
-        "add_note",
-        "create_task",
-        "update_deal"
+        "update_deal",
+        "get_deal",
+        "add_note"
       ],
       "implicit": []
     },
     "create_lead": {
       "explicit": [
-        "add_note",
+        "update_lead",
         "convert_lead",
-        "delete_lead",
-        "update_lead"
+        "delete_lead"
       ],
       "implicit": []
     },
@@ -79,28 +75,19 @@
     },
     "get_deal": {
       "explicit": [
-        "add_note",
-        "create_task",
-        "update_deal"
+        "add_note"
       ],
       "implicit": []
     },
     "list_deals": {
       "explicit": [
-        "add_note",
-        "create_task",
         "get_deal",
-        "update_deal"
+        "add_note"
       ],
       "implicit": []
     },
     "list_leads": {
-      "explicit": [
-        "add_note",
-        "convert_lead",
-        "delete_lead",
-        "update_lead"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "list_tasks": {
@@ -121,5 +108,10 @@
       "explicit": [],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 16,
+  "expected_pair_count": 120,
+  "classified_pair_count": 120,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

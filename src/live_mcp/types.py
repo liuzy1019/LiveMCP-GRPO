@@ -52,6 +52,8 @@ class OracleCall:
     arguments: dict[str, Any]
     save_as: str = ""
     action: str = "tool_call"  # tool_call | ask_clarification | final_answer | report_error
+    server_name: str = ""
+    expected_success: bool | None = None
 
 
 @dataclass

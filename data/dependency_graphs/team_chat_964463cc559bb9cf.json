@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "team_chat",
   "schema_hash": "964463cc559bb9cf",
   "tool_names": [
@@ -23,12 +24,11 @@
       "explicit": [
         "archive_channel",
         "get_channel",
-        "send_message"
-      ],
-      "implicit": [
+        "send_message",
         "create_thread",
         "react_message"
-      ]
+      ],
+      "implicit": []
     },
     "create_thread": {
       "explicit": [
@@ -38,10 +38,8 @@
     },
     "get_channel": {
       "explicit": [
-        "archive_channel",
         "create_thread",
-        "react_message",
-        "send_message"
+        "react_message"
       ],
       "implicit": []
     },
@@ -57,8 +55,9 @@
       "explicit": [
         "archive_channel",
         "get_channel",
-        "search_messages",
-        "send_message"
+        "send_message",
+        "create_thread",
+        "react_message"
       ],
       "implicit": []
     },
@@ -67,10 +66,7 @@
       "implicit": []
     },
     "search_messages": {
-      "explicit": [
-        "create_thread",
-        "react_message"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "send_dm": {
@@ -84,5 +80,10 @@
       ],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 11,
+  "expected_pair_count": 55,
+  "classified_pair_count": 55,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

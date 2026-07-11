@@ -231,6 +231,47 @@ class LiveMCPOvalLoop(AgentLoopBase):
             conversation_queries = []
         conversation_queries = [str(q) for q in conversation_queries if str(q).strip()]
 
+        # P0-2: parse round contracts for rollout enforcement.
+        # Each contract specifies required_tools and allowed_terminal_actions
+        # for one conversation round.  The rollout loop MUST validate the
+        # model's terminal against the contract before injecting follow-up.
+        round_contracts_raw = normalize_json_field(
+            extra_info.get("round_contracts", []),
+            default=[],
+        )
+        if isinstance(round_contracts_raw, list):
+            round_contracts = round_contracts_raw
+        else:
+            round_contracts = []
+
+        # P0-2 Fix: multi-round data MUST have matching round_contracts.
+        # Missing OR mismatched contracts on multi-round data is a data
+        # integrity error.  Only single-round legacy rows can proceed without
+        # contracts.
+        n_conversation_rounds = len(conversation_queries)
+        if n_conversation_rounds > 1:
+            if not round_contracts:
+                raise RuntimeError(
+                    f"Multi-round task {task_id} has {n_conversation_rounds} "
+                    f"conversation queries but no round_contracts. "
+                    f"Re-generate data with updated generate_data.py."
+                )
+            if len(round_contracts) != n_conversation_rounds:
+                raise RuntimeError(
+                    f"Multi-round task {task_id}: "
+                    f"{len(round_contracts)} round_contracts vs "
+                    f"{n_conversation_rounds} conversation queries. "
+                    f"Counts must match."
+                )
+            # Verify round_idx matches position
+            for i, c in enumerate(round_contracts):
+                actual_idx = c.get("round_idx", -1)
+                if actual_idx != i:
+                    raise RuntimeError(
+                        f"Multi-round task {task_id}: round_contracts[{i}] "
+                        f"has round_idx={actual_idx}, expected {i}."
+                    )
+
         # ── 获取 OvalMCPWorkerContext ──
         if self._ctx is None:
             self._ctx = _get_oval_ctx(
@@ -275,6 +316,11 @@ class LiveMCPOvalLoop(AgentLoopBase):
         visible_tool_names = extra_info.get("visible_tool_names", [])
         if isinstance(visible_tool_names, str):
             visible_tool_names = [t.strip() for t in visible_tool_names.split(",")]
+        tool_owner_domains = normalize_json_field(
+            extra_info.get("tool_owner_domains", {}), default={},
+        )
+        if not isinstance(tool_owner_domains, dict):
+            tool_owner_domains = {}
         if blocked_tools and visible_tool_names:
             still_visible = blocked_tools & set(visible_tool_names)
             if still_visible:
@@ -315,12 +361,17 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 f"visible in model prompt: {leaked_markers}"
             )
         if blocked_tools:
-            leaked_hidden = [tool for tool in blocked_tools if tool and tool in prompt_text]
-            if leaked_hidden:
+            # P0: Check schema-level leakage only — verify hidden tools are NOT
+            # in visible_tool_names (the candidate schema the model sees).
+            # Do NOT do a raw string search over the full prompt_text because
+            # the user query may legitimately contain the tool name as natural
+            # language (e.g. "checkout" in a shopping query).
+            still_visible = blocked_tools & set(visible_tool_names)
+            if still_visible:
                 ctx.close_session(session_id)
                 raise RuntimeError(
                     f"prompt leakage for task={task_id}: hidden tool(s) "
-                    f"visible in model prompt: {leaked_hidden}"
+                    f"{still_visible} still present in visible_tool_names schema"
                 )
 
         # 编码初始 prompt
@@ -352,6 +403,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
         effective_max_turns = min(self.max_turns, max(1, budget_int))
         turn_idx = -1  # so turn_idx+1 == 0 if loop never enters
         conversation_round_idx = 0
+        round_successful_tool_names: list[str] = []  # P0-2: tools called in current round (preserves multiplicity)
 
         for turn_idx in range(effective_max_turns):
             # 1. 模型生成
@@ -403,9 +455,98 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     audit_events.append(event.to_dict())
                 except Exception as e:
                     logger.warning(f"[oval {rid_short}] audit terminal 失败: {e}")
+
+                # P0-2: validate terminal against round contract.
+                # Only advance to the next conversation round if the terminal
+                # matches the current round's allowed_terminal_actions AND is
+                # a valid progression type (final_answer or paired ask_clarification).
+                current_contract = (
+                    round_contracts[conversation_round_idx]
+                    if round_contracts and conversation_round_idx < len(round_contracts)
+                    else None
+                )
+                contract_allowed = (
+                    current_contract.get("allowed_terminal_actions", [])
+                    if current_contract else None
+                )
+
+                if contract_allowed is not None and terminal_type not in contract_allowed:
+                    logger.warning(
+                        f"[oval {rid_short}] turn={turn_idx} round={conversation_round_idx} "
+                        f"terminal {terminal_type} not in contract {contract_allowed} — "
+                        f"recording contract violation and stopping"
+                    )
+                    audit_events.append({
+                        "event_id": f"contract_violation_{uuid4().hex[:8]}",
+                        "session_id": session_id,
+                        "step": turn_idx,
+                        "action_type": "contract_violation",
+                        "round_idx": conversation_round_idx,
+                        "terminal_type": terminal_type,
+                        "allowed": contract_allowed,
+                    })
+                    break
+
+                # report_error always terminates the episode (P0-2 rule 3).
+                if terminal_type == "report_error":
+                    logger.debug(
+                        f"[oval {rid_short}] turn={turn_idx} report_error — "
+                        f"episode terminated"
+                    )
+                    break
+
+                # ask_clarification only continues with a paired clarification reply.
                 next_round_idx = conversation_round_idx + 1
+                if terminal_type == "ask_clarification":
+                    if next_round_idx < len(conversation_queries):
+                        logger.debug(
+                            f"[oval {rid_short}] turn={turn_idx} "
+                            f"ask_clarification with paired reply → advancing"
+                        )
+                    else:
+                        logger.debug(
+                            f"[oval {rid_short}] turn={turn_idx} "
+                            f"ask_clarification without paired reply → stopping"
+                        )
+                        break
+
+                # P0-2: enforce per-round required_tools contract.
+                # Every tool in contract_required must have been called
+                # successfully this round.  A single distractor call is not
+                # enough; missing tools are explicitly listed and recorded.
+                contract_required = (
+                    current_contract.get("required_tools", [])
+                    if current_contract else []
+                )
+                if contract_required:
+                    from collections import Counter
+                    required_counts = Counter(contract_required)
+                    called_counts = Counter(round_successful_tool_names)
+                    missing_counts = required_counts - called_counts
+                    if missing_counts:
+                        missing_names = list(missing_counts.elements())
+                        logger.warning(
+                            f"[oval {rid_short}] turn={turn_idx} round={conversation_round_idx} "
+                            f"terminal {terminal_type} missing required tools: "
+                            f"{sorted(missing_counts)} "
+                            f"(called: {sorted(round_successful_tool_names)}, "
+                            f"required: {contract_required})"
+                        )
+                        audit_events.append({
+                            "event_id": f"round_tool_violation_{uuid4().hex[:8]}",
+                            "session_id": session_id,
+                            "step": turn_idx,
+                            "action_type": "round_tool_violation",
+                            "round_idx": conversation_round_idx,
+                            "required_tools": contract_required,
+                            "called_tools": sorted(round_successful_tool_names),
+                            "missing_tools": sorted(missing_names),
+                        })
+                        break
+
+                # Only final_answer (or paired ask_clarification) advances.
                 if (
-                    terminal_type in ("final_answer", "report_error", "ask_clarification")
+                    terminal_type in ("final_answer", "ask_clarification")
                     and next_round_idx < len(conversation_queries)
                 ):
                     followup = conversation_queries[next_round_idx]
@@ -420,6 +561,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     all_response_ids.extend(user_tokens)
                     all_response_mask.extend([0] * len(user_tokens))
                     conversation_round_idx = next_round_idx
+                    round_successful_tool_names = []  # reset for next round
                     logger.debug(
                         f"[oval {rid_short}] injected follow-up round "
                         f"{conversation_round_idx + 1}/{len(conversation_queries)}"
@@ -454,6 +596,20 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     f"[oval {rid_short}] turn={turn_idx} expected one tool call, "
                     f"got {len(all_parsed_calls)}"
                 )
+                audit_events.append({
+                    "event_id": f"invalid_tool_call_{uuid4().hex[:8]}",
+                    "session_id": session_id,
+                    "step": turn_idx,
+                    "action_type": "tool_call",
+                    "tool_name": "",
+                    "tool_arguments": {},
+                    "tool_name_known": False,
+                    "schema_valid": False,
+                    "execution_success": False,
+                    "error_type": "invalid_tool_call",
+                    "error_message": observation,
+                    "state_changed": False,
+                })
             else:
                 # 取第一个 tool_call 执行（串行模式）
                 parsed_call = all_parsed_calls[0]
@@ -465,17 +621,24 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 )
 
                 try:
+                    execution_domain = str(
+                        tool_owner_domains.get(tool_call.name) or task_domain
+                    )
                     event, exec_result = ctx.execute_with_audit(
                         session_id=session_id,
-                        domain=task_domain,
+                        domain=execution_domain,
                         tool_call=tool_call,
                         model_output=response_text,
                         blocked_tools=blocked_tools,
                     )
+                    event.tool_name_known = tool_call.name in set(visible_tool_names)
+                    if execution_domain != task_domain:
+                        event.forbidden_transition = "cross_domain_distractor_call"
                     audit_events.append(event.to_dict())
 
                     if exec_result.success:
                         n_exec_success += 1
+                        round_successful_tool_names.append(tool_call.name)
                         observation = (
                             json.dumps(exec_result.observation, ensure_ascii=False)
                             if isinstance(exec_result.observation, (dict, list))

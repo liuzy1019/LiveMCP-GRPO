@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "calendar",
   "schema_hash": "49362663223ba9c9",
   "tool_names": [
@@ -22,10 +23,10 @@
   ],
   "graph": {
     "add_attendee": {
-      "explicit": [
+      "explicit": [],
+      "implicit": [
         "remove_attendee"
-      ],
-      "implicit": []
+      ]
     },
     "change_timezone": {
       "explicit": [],
@@ -37,24 +38,24 @@
     },
     "create_event": {
       "explicit": [
-        "add_attendee",
+        "update_event",
         "delete_event",
-        "get_event",
-        "respond_to_event",
+        "add_attendee",
+        "remove_attendee",
         "set_reminder",
-        "update_event"
+        "respond_to_event"
       ],
       "implicit": []
     },
     "create_recurring": {
       "explicit": [
-        "add_attendee",
+        "update_event",
         "delete_event",
-        "get_event",
-        "get_recurring_info",
-        "respond_to_event",
+        "add_attendee",
+        "remove_attendee",
         "set_reminder",
-        "update_event"
+        "respond_to_event",
+        "get_recurring_info"
       ],
       "implicit": []
     },
@@ -67,15 +68,7 @@
       "implicit": []
     },
     "get_event": {
-      "explicit": [
-        "add_attendee",
-        "delete_event",
-        "get_recurring_info",
-        "remove_attendee",
-        "respond_to_event",
-        "set_reminder",
-        "update_event"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_free_busy": {
@@ -92,10 +85,14 @@
     },
     "list_events": {
       "explicit": [
-        "delete_event",
         "get_event",
-        "get_recurring_info",
-        "update_event"
+        "update_event",
+        "delete_event",
+        "add_attendee",
+        "remove_attendee",
+        "set_reminder",
+        "respond_to_event",
+        "get_recurring_info"
       ],
       "implicit": []
     },
@@ -109,14 +106,14 @@
     },
     "search_events": {
       "explicit": [
-        "add_attendee",
-        "delete_event",
         "get_event",
-        "get_recurring_info",
+        "update_event",
+        "delete_event",
+        "add_attendee",
         "remove_attendee",
-        "respond_to_event",
         "set_reminder",
-        "update_event"
+        "respond_to_event",
+        "get_recurring_info"
       ],
       "implicit": []
     },
@@ -128,5 +125,10 @@
       "explicit": [],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

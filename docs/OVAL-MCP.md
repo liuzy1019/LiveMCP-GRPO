@@ -151,6 +151,36 @@ OVAL-MCP 在此基础上新增：
    防止长回复或多轮工具调用稀释局部信号。
 ```
 
+### 1.1.2 当前 Teacher 生成机制状态（2026-07-10）
+
+本节只约束 PROVE Teacher 数据生成机制，不把 domain/tool 数量和 external mixture 纳入判断：
+
+```text
+默认 Teacher:           Gemma-4-31B-it
+difficulty mix:         complete 60% / missing 20% / minimal 20%
+robustness:             distractor 40% / enum stripping 30% /
+                        missing function 20% / irrelevance 5%
+replay gate:            schema + execution error rate <= 30%
+dedup:                  tool-call sequence Jaccard threshold 0.70
+```
+
+生成链路的事实门禁：
+
+1. normal tool-use task 必须来自 live-state feasible dependency chain，不允许 unseeded fallback 进入 baseline；
+2. dependency-graph cache 必须证明所有预期 pair 已分类，不能只凭 schema hash 声称完整；同一 domain/schema 的冷缓存构建必须跨进程互斥，加锁后再次检查缓存，并以原子替换发布完整 JSON；
+3. robustness plan 在 Teacher 处理前采样并固定，Teacher、Replay、Parquet、rollout 使用同一 candidate contract；
+4. 每条 task 必须经过 fresh-session Replay 和 sensitive-parameter provenance；
+5. 只有从当前 checkout 生成并通过 Parquet/reward 读回及人工语义检查的数据，才可声明为可训练。
+
+多轮 Teacher 语义约束：初始 user query 由完整 dependency chain 生成，必须明确授权 chain 末端的用户可观察结果；前置节点是完成该结果的内部工作流，不机械拆成后续 user turn。后续 user turn 是在真实 execution history 上的 continuation。Replay 通过只证明轨迹可执行，不替代 query-oracle 语义检查。
+初始 query 必须表达 chain 末端 capability；对 mutating capability，query 必须包含明确动作和目标实体。chain guidance 不构成用户授权，Teacher 不得执行 query 未请求的副作用。
+Teacher 对话结束时必须完整覆盖 `chain_seed`；不完整 chain 在 task 返回前重试/拒绝，不允许进入 split 或 Parquet 阶段。
+三次 retry 均未完成 chain 时 fail-closed，不构造 `LiveTask`。`complete` 层级中，目标 capability 若要求 `*_id`，对应 user turn 必须引用当前 live context 的真实 ID。
+
+实现约束（2026-07-11 数据审查后修订）：dependency chain 是支撑用户目标的工具工作流，不等价于“每个 user turn 只能对应一个工具节点”。词法 capability 检查不得因 Unix 风格工具名或自然语言同义表达而单独 fail-closed；它只能作为诊断，最终以 grounded entity、live execution 和 replay 为准。每个 user turn 在进入 continuation 前必须由成功工具调用完成其计划 capability，或以 clarification / abstention 合法终止；失败尝试后只执行辅助 read 工具不能视为当前 round 已完成。Missing-function baseline 在 chain 选择后隐藏必要工具，不使用“共享 entity type”作为可替代能力判据。
+
+当前验证事实：2026-07-10 使用 Gemma-4-31B-it 完成 normal multi-turn、missing-function、distractor+enum stripping、irrelevance 四条真实 smoke；均完成 fresh Replay 和 Parquet round-trip，error rate 为 0%。该结论仅覆盖 Teacher 机制闭环，不外推批量 yield 或所有 seed 的语义质量。
+
 ### 1.2 COVERT
 
 COVERT 论文展示了以下事实：
@@ -677,6 +707,20 @@ normal / distractor / recovery / unsafe-temptation:
 clarification / no-tool / missing-function:
   real_oracle_tool_calls = 0
   terminal action 必须显式保存且与 allowed_terminal_actions 一致
+  missing-function terminal 允许 ask_clarification 或 report_error（对应论文 clarification / abstention）
+  missing-function 必须保留两条链：query_chain 使用隐藏前的完整 dependency chain，
+  teacher_chain 不得包含 hidden tool；query 必须在隐藏前生成并通过 capability-required gate
+  hidden tool 同时从 Teacher schema、dependency hints、执行器和 rollout candidate set 移除
+
+Replay / provenance:
+  teacher_attempt_trace 记录 Teacher 实际产生的全部工具尝试，包括失败、blocked、retry 和 alternative
+  Replay error-rate 与 sensitive-parameter provenance 基于完整 attempt trace
+  reward ground-truth oracle 只保留最终有效步骤，不把失败 attempt 变成 required_tool_calls
+
+distractor:
+  candidate schema 必须携带 owner domain，调用时路由到真实 owner server
+  R_validity level-1 依据最终 candidate tool-name set，而不是目标 domain schema lookup
+  Teacher 若成功执行 distractor，该样本不得把 distractor 写入 ground-truth oracle
 
 all rows:
   prompt 不含 ground-truth oracle 泄漏
@@ -2305,7 +2349,127 @@ Domain mixing 约束：
 15. 不用训练 surrogate J 代替真实任务指标。
 ```
 
-## 14. 参考文献
+## 15. P0 Baseline Integrity Contracts
+
+本节记录 baseline 的静态代码链路门禁，不涉及消融组件。
+
+### 15.1 Entity Quality Filtering（Live-State Supporting Data）
+
+数据生成时对 live probe 结果进行两阶段实体质量过滤，防止不可支撑工具链的实体进入 sampling context（如 balance=0 的 account、无库存的 product、空菜单的 restaurant）。
+
+- **首轮 probe**：枚举所有实体（list_/search_ 只读工具）
+- **阶段 enrichment**：仅 food_delivery，对 restaurant 实体逐次调用 `get_menu` 合并菜单数据
+- **质量过滤**：| 域 | 实体类型 | 条件 |
+  |----|---------|------|
+  | banking | account | balance > 0 |
+  | shopping | product | stock/available 非零 |
+  | food_delivery | restaurant | menu 非空 |
+  | 其他域 | 全部 | 保守全通过 |
+- `_extract_chain_context` 按字段存在性判断（非 truthiness），空 qualified 不回退到原始实体
+- predicate 异常时 fail-closed（记录 warning + "quality_predicate_error"）
+
+### 15.2 Round Contracts（多轮 Terminal/Follow-up 契约）
+
+数据生成时从 `oracle_calls_per_round` 生成每轮合同：
+
+```json
+{
+  "round_contracts": [
+    {"round_idx": 0, "required_tools": ["get_account"], "allowed_terminal_actions": ["final_answer"]},
+    {"round_idx": 1, "required_tools": ["transfer"], "allowed_terminal_actions": ["final_answer"]}
+  ]
+}
+```
+
+**Rollout 规则**（fail-closed）：
+- `len(round_contracts) == len(conversation_queries)`，不一致则 RuntimeError
+- 每轮 `round_idx` 必须等于数组位置索引
+- 只有 `terminal_type in allowed_terminal_actions` 且 `missing_tools为空` 才允许推进
+- `report_error` 始终终止 episode
+- `ask_clarification` 仅在有配对 user reply 时推进
+- 非法 terminal 记录 `contract_violation` 事件并停止
+- 缺 required tool 记录 `round_tool_violation`（含 `required_tools/called_tools/missing_tools/round_idx`）
+
+**Reward 规则**（fail-closed）：
+- `_validate_round_contracts`：terminal 数必须 `== len(contracts)`
+- `contract_violation` 或 `round_tool_violation` 事件 → 立即失败
+- 违规时 R_task × 0.1
+
+### 15.3 Dependency Edges（Partial-Order Coverage）
+
+数据端 `_compute_dependency_edges` 采用**全链对齐**（full-chain alignment）算法：
+
+1. 收集 `oracle_calls` 中所有 `tool_call` 的位置，按工具名分组
+2. 从左到右遍历 `chain_seed`，每次选择当前 cursor 之后的下一个 occurrence
+3. 中间节点可同时作为前一条边的 dst 和下一条边的 src（不被消费）
+4. 所有边必须满足 `src_idx < dst_idx`（无反向边、无自环）
+5. 任何链步无法对齐（无 occurrence 在 cursor 之后）→ 返回空列表
+
+```text
+# 三步链
+oracle = [A, B, C]     chain = [A, B, C]     → [[0,1], [1,2]]
+# 中间有非链工具
+oracle = [A, X, B, Y, C] chain = [A, B, C]  → [[0,2], [2,4]]
+# 同名工具重复
+oracle = [A, B, A]     chain = [A, B, A]     → [[0,1], [1,2]]
+# oracle 顺序错误 → 返回 []
+oracle = [B, A]        chain = [A, B]        → []
+```
+
+**Fail-closed 门禁**：`_validate_task_training_contract` 在校验阶段强制要求：
+- `chain_seed` 非空时，`len(edges) == len(chain_seed) - 1`
+- 每条边满足 `0 ≤ src < dst < len(real_required_tools)`
+
+不合格任务在 train/val split 和 Parquet 导出前被 `_filter_training_eligible_tasks` 剔除。
+
+`dependency_graph_complete` 是诊断字段（仅用于数据集统计），不替代导出前门禁。
+
+Reward 端 `_match_required_calls_partial_order`：
+- 直接从索引边构建 `preds_by_idx`
+- 强制 temporal ordering：`candidate_event_idx > max(predecessor_event_indices)`
+- 非依赖工具允许任意顺序
+- 依赖工具必须保持 oracle 先后顺序
+
+### 15.4 Replay 质量字段
+
+| 字段 | 说明 |
+|------|------|
+| `paper_replay_valid` | schema/execution error rate ≤ 30%（PROVE §3.2） |
+| `project_outcome_valid` | 所有 success_criteria 在 fresh session 满足 |
+| `criteria_failed_count` | 实际失败 criteria 数量（来自 replay_validate 真实统计） |
+| `replay_error_rate` | replay 错误率 |
+
+### 15.5 Parquet 字段全链路
+
+```
+generate_one (orchestrator)
+  → LiveTask.metadata (paper_replay_valid, project_outcome_valid, criteria_failed, ...)
+
+_generate_task_with_postprocess (orchestrator)
+  → metadata 传递给 task
+
+generate_many (orchestrator)
+  → 统计并输出 data quality warning
+
+_tasks_to_rows (generate_data.py)
+  → _build_round_contracts → round_contracts JSON
+  → _compute_dependency_edges → dependency_edges JSON
+  → metadata fields → extra_info
+  → Parquet 写入
+
+rollout (livemcp_oval_loop.py)
+  → 解析 conversation_queries, round_contracts
+  → 逐轮校验 terminal + required_tools
+  → audit_events 记录 contract_violation / round_tool_violation
+
+reward (oval_reward_fn.py → task_reward.py)
+  → _parse_dependency_edges → list[tuple[int,int]]
+  → _parse_round_contracts → list[dict]
+  → _validate_round_contracts → round-level terminal check
+  → _match_required_calls_partial_order → dependency partial-order coverage
+```
+
+## 16. 参考文献
 
 1. `Synthesize and Reward -- Reinforcement Learning for Multi-Step Tool Use in Live Environments`, arXiv:2606.03892.
 2. `Controllable and Verifiable Tool-Use Data Synthesis for Agentic Reinforcement Learning`, arXiv:2604.09813.

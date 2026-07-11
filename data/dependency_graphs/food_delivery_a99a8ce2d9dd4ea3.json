@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "food_delivery",
   "schema_hash": "a99a8ce2d9dd4ea3",
   "tool_names": [
@@ -35,22 +36,20 @@
     },
     "create_order": {
       "explicit": [
-        "add_tip",
-        "cancel_order",
-        "contact_support",
-        "get_estimated_time",
         "get_order",
-        "rate_order",
-        "reorder",
+        "update_order_status",
+        "cancel_order",
+        "get_estimated_time",
         "track_rider",
-        "update_order_status"
+        "rate_order",
+        "add_tip",
+        "reorder",
+        "contact_support"
       ],
       "implicit": []
     },
     "filter_by_dietary": {
-      "explicit": [
-        "create_order"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_estimated_time": {
@@ -58,60 +57,41 @@
       "implicit": []
     },
     "get_menu": {
-      "explicit": [
-        "create_order"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_order": {
-      "explicit": [
-        "add_tip",
-        "cancel_order",
-        "contact_support",
-        "get_estimated_time",
-        "rate_order",
-        "reorder",
-        "track_rider",
-        "update_order_status"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_popular_items": {
-      "explicit": [
-        "create_order"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_restaurant": {
-      "explicit": [
-        "create_order",
-        "filter_by_dietary",
-        "get_menu",
-        "get_popular_items"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "list_orders": {
       "explicit": [
-        "add_tip",
+        "update_order_status",
         "cancel_order",
-        "contact_support",
         "get_estimated_time",
-        "get_order",
-        "rate_order",
-        "reorder",
         "track_rider",
-        "update_order_status"
+        "rate_order",
+        "add_tip",
+        "reorder",
+        "contact_support"
       ],
       "implicit": []
     },
     "list_restaurants": {
       "explicit": [
-        "create_order",
-        "filter_by_dietary",
+        "get_restaurant",
         "get_menu",
+        "filter_by_dietary",
         "get_popular_items",
-        "get_restaurant"
+        "create_order"
       ],
       "implicit": []
     },
@@ -125,11 +105,11 @@
     },
     "search_restaurants": {
       "explicit": [
-        "create_order",
-        "filter_by_dietary",
+        "get_restaurant",
         "get_menu",
+        "filter_by_dietary",
         "get_popular_items",
-        "get_restaurant"
+        "create_order"
       ],
       "implicit": []
     },
@@ -141,5 +121,10 @@
       "explicit": [],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

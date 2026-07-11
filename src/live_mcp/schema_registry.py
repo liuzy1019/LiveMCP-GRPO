@@ -95,6 +95,13 @@ class SchemaRegistry:
     def all_tools(self) -> list[dict[str, Any]]:
         return list(self._schemas.values())
 
+    def all_tools_with_servers(self) -> list[dict[str, Any]]:
+        """Return schema copies annotated with their executable owner server."""
+        return [
+            {**schema, "_server_name": self._server_from_key(key)}
+            for key, schema in self._schemas.items()
+        ]
+
     def server_tools(self, server_name: str) -> list[dict[str, Any]]:
         prefix = f"{server_name}{self._PREFIX_SEP}"
         return [s for k, s in self._schemas.items() if k.startswith(prefix)]

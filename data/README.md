@@ -39,6 +39,19 @@ data/
 > 重新生成后建议运行 `python scripts/validate_pipeline.py --live` 验证管线完整性。
 > 完整设计参考 PROVE 论文 §3.2。
 
+### 当前 Teacher smoke 状态（2026-07-10）
+
+当前 checkout 已用本地 Gemma-4-31B-it 完成四条真实生成与 Parquet 读回：
+
+| 场景 | 结果 |
+|------|------|
+| normal multi-turn | `list_events → set_reminder`，两轮 query/oracle/round-contract 对齐，Replay error 0% |
+| missing-function | `update_event` 从 Teacher schema 隐藏，零工具 `report_error`，Replay error 0% |
+| distractor + enum stripping | 4 个跨域 distractor；oracle 未调用 distractor，Replay error 0% |
+| irrelevance | 无工具可满足 query，零工具 `report_error`，Replay error 0% |
+
+smoke artifacts 位于 `data/runs/0710_teacher_smoke/`。这些结果只证明 Teacher 机制路径闭环；批量 yield、difficulty/robustness 分布和更大样本的语义质量仍需单独统计。
+
 ### Step 1 — 自动发现依赖图（Auto-Discovered Dependency Graph）
 
 ```
@@ -51,6 +64,9 @@ data/
 ```
 
 每个 domain 的依赖图缓存在 `data/dependency_graphs/{domain}_{hash}.json`。
+严格 cache 必须同时记录 `expected_pair_count`、`classified_pair_count` 和 `classification_complete=true`；旧 cache 缺少这些字段时只能视为 legacy artifact，不能作为“全 pair 已由 LLM 分类”的证据。
+pairwise classifier 默认每批 12 个 pair；若返回缺项，只重问未分类 pair。任一 batch 重试耗尽仍不完整时，整张 graph fail-closed，不缓存部分结果。
+并行生成时，同一 `{domain}_{hash}` 的冷缓存只允许一个进程执行 LLM 分类；等待进程获得文件锁后必须再次读取缓存。缓存通过同目录临时文件和 `os.replace` 原子发布，生成 shard 启动前默认由单进程完成所选 domain 的预热。
 
 ### Step 2 — 实时状态采样（Live-State Sampling / Grounded Query Generation）
 
@@ -69,7 +85,7 @@ data/
 ```
 每个对话由 5 组状态驱动（论文 §3.2 Step 3）：
   1. QUERY GENERATION — 从依赖图链中采样，用实时状态 grounding，
-     按信息完整度分层（complete 70% / missing 10% / minimal 20%），
+     按信息完整度分层（complete 60% / missing 20% / minimal 20%），
      叠加 persona + reference date 条件
   2. LLM PROCESSING — Teacher LLM 被 prompt 提供 query + tool schemas，
      输出 tool call / 澄清 / 终止；validator 检查 well-formed JSON
@@ -81,6 +97,13 @@ data/
      min_turns=2, max_turns=3
 ```
 
+初始 query 由完整 dependency chain 生成，必须明确请求 chain 末端的用户可观察结果；前置节点作为内部工作流在同一 task 中执行，不拆成后续 user turn。follow-up 是基于此前真实 execution history 的 continuation。Replay 可执行不等于语义正确，正式 smoke 还必须核对 query、oracle 和 terminal。
+mutating 末端 capability 必须在 query 中有明确动作和目标实体，不能仅凭 chain guidance 擅自制造用户未请求的副作用。
+Teacher 对话结束后必须在返回 `LiveTask` 前完成整个 `chain_seed`；不完整 chain 在 `generate_one` 内换 seed 重试，不能延迟到 Parquet 导出时才发现。
+三次 task retry 均失败时必须抛出 `RuntimeError`，不得把最后一次失败轨迹包装成 task。`complete` query 对需要 `*_id` 的目标工具必须引用 live context 中的真实 ID。
+
+`chain_seed` 表示支撑用户目标的工具工作流，不要求把每个工具节点机械拆成一个独立 user turn。词法 capability 检查只作为诊断，不得因 Unix 命令名或自然语言同义表达单独拒绝任务。每个 round 进入 continuation 前必须成功完成该 round 生成时绑定的 capability；若执行失败，只能在同一 round 内 retry / alternative-tool / give-up，不能跳过未完成意图。Missing-function 在 chain 选择后直接隐藏必要工具；共享 entity type 不构成能力等价证据。
+
 每一步 LLM 决策都看到完整 domain context（tools, live state, execution history），形成 teacher 轨迹。每条轨迹记录为 oracle trace，包含全部 tool call 参数和 server 响应。
 
 ### Step 4 — 鲁棒性注入（Robustness Knobs）
@@ -91,6 +114,23 @@ data/
   - Enum stripping（30%）：从参数 schema 中移除枚举值列表，迫使模型从描述推理约束
   - Irrelevance queries（5%）：生成没有可用工具能处理的 query，训练拒绝能力
   - Missing function（20%）：在链选择后隐藏一个必需工具，产生 abstention/clarification 样本
+```
+
+强制执行契约：
+
+```text
+missing-function:
+  完整 query_chain 先生成确实需要 hidden tool 的 query
+  Teacher 只接收移除 hidden tool 后的 schema/hints，最终 oracle 为零工具 clarification/abstention
+  hidden_tools 在生成、Parquet、rollout executor 和 reward 中保持一致
+
+Replay / provenance:
+  验证完整 teacher_attempt_trace（失败、blocked、retry、alternative 均保留）
+  ground-truth oracle 仅保留最终有效步骤
+
+distractor:
+  schema 携带 owner domain 并路由到真实 MCP server
+  candidate name existence 与 schema-valid/execution-success 分层计分
 ```
 
 ### Step 5 — 重放验证与去重（Replay Validation and Deduplication）
@@ -108,7 +148,7 @@ data/
 
 ```
 训练集由三部分来源组成（对齐 PROVE 论文）：
-  1. Multi-turn MCP conversations — 20 个 domain 的状态机生成轨迹
+  1. Multi-turn MCP conversations — 状态机生成轨迹
   2. Clarification trajectories — missing-function 变体产生的 ask_clarification 样本
   3. External abstention — When2Call（806 条，G=∅ 场景）
                        + xLAM-Irrelevance（316 条，不相关 query）
@@ -138,6 +178,54 @@ data/
 | `group_id` | str | 等于 task_id（每个 task 独立一组） |
 | `perturbation_level` | str | `complete` / `missing` / `minimal` |
 | `scenario_type` | str | `task_planner` / `distractor` / `missing_function` / `irrelevant` |
+
+### P0 Baseline Integrity Fields（extra_info）
+
+以下字段在 `extra_info` 中以 JSON string 存储（Parquet round-trip 保障）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `round_contracts` | JSON `[{"round_idx":int, "required_tools":[str], "allowed_terminal_actions":[str]}]` | 每轮对话的预期工具和合法终止动作。多轮数据必须存在且数量与 `conversation_queries` 一致。rollout 和 reward 均强制校验 |
+| `dependency_edges` | JSON `[[src_idx, dst_idx], ...]` | 索引边列表，通过全链对齐（full-chain alignment）生成。src_idx/dst_idx 是 `oracle_calls` 中 tool_call 的位置（0-based）。所有边必须满足 `src_idx < dst_idx`。中间节点可同时作为前边 dst 和后边 src。chain_seeded 任务必须恰好 `len(chain_seed)-1` 条边，不完整者在 split 前被拒绝 |
+| `dependency_graph_complete` | bool | **诊断字段**，不替代导出前门禁。chain_seeded 任务由 `_validate_task_training_contract` 强制校验边完整性
+| `conversation_queries` | JSON `[str, ...]` | 多轮对话的每轮 user query。长度即轮数 |
+| `paper_replay_valid` | bool | schema/execution error rate ≤ 30%（PROVE §3.2 Step 5） |
+| `project_outcome_valid` | bool | 所有 success_criteria 在 fresh session 上满足 |
+| `criteria_failed_count` | int | 实际失败 success_criteria 数量（来自 replay 统计） |
+| `replay_error_rate` | float | replay 错误率 |
+| `chain_seed` | JSON `[str]` | 任务使用的工具链种子 |
+| `generation_mode` | str | `chain_seeded` 或 `unseeded_fallback` |
+
+### Terminal Progression 规则（P0-2）
+
+多轮 rollout 遵循以下 fail-closed 规则：
+
+| Terminal | 行为 |
+|----------|------|
+| `final_answer` | 仅在本轮 `required_tools` **全部成功执行**且 `allowed_terminal_actions` 包含时才推进下一轮 |
+| `report_error` | **始终终止** episode，不推进 |
+| `ask_clarification` | 仅在有配对 user reply 时推进，否则终止 |
+| 非法 terminal | 记录 `contract_violation` 审计事件并停止 |
+| 多余 terminal | reward 拒绝（`n_actual != n_expected`） |
+
+Rollout 缺 contract 或 contract 数量与对话轮数不一致 → `RuntimeError`（fail-closed）。
+
+### Entity Quality Filtering（P0-1）
+
+数据生成时对 live probe 结果进行两阶段实体质量过滤：
+
+1. **首轮 probe**：枚举所有实体（list_/search_ 只读工具）
+2. **阶段 enrichment**（仅 food_delivery）：对 restaurant 实体逐次调用 `get_menu`，合并菜单数据到 record
+3. **质量过滤**：按域 predicates 判定合格实体
+
+| 域 | 实体类型 | 条件 |
+|----|---------|------|
+| banking | account | balance > 0 |
+| shopping | product | stock/available/in_stock 非零 |
+| food_delivery | restaurant | menu 非空（经 enrichment） |
+| 其他域 | 全部类型 | 保守全通过（无 predicate） |
+
+`_extract_chain_context` 按字段**存在性**判断是否使用 qualified list，空 qualified 不会回退到原始实体。predicate 抛异常时 **fail-closed**（判定为不合格）。
 
 ### 关键约束
 
@@ -212,7 +300,7 @@ bash scripts/generate_data.sh --domain calendar --count 200
   "distractor_rate": 0.40,
   "missing_function_rate": 0.20,
   "irrelevance_ratio": 0.05,
-  "difficulty_mix": {"complete": 0.7, "missing": 0.1, "minimal": 0.2},
+  "difficulty_mix": {"complete": 0.6, "missing": 0.2, "minimal": 0.2},
   "git_commit": "abc1234",
   "gpu_model": "L20",
   "timestamp": "2026-06-29T10:38:48+08:00"

@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "banking",
   "schema_hash": "40a459ae3f3d781a",
   "tool_names": [
@@ -38,31 +39,17 @@
       "implicit": []
     },
     "freeze_account": {
-      "explicit": [
+      "explicit": [],
+      "implicit": [
         "unfreeze_account"
-      ],
-      "implicit": []
+      ]
     },
     "get_account_info": {
-      "explicit": [
-        "bill_pay",
-        "deposit",
-        "freeze_account",
-        "get_balance",
-        "get_history",
-        "get_statement",
-        "transfer",
-        "verify_account",
-        "withdraw"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_balance": {
-      "explicit": [
-        "bill_pay",
-        "transfer",
-        "withdraw"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_exchange_rate": {
@@ -79,27 +66,28 @@
     },
     "list_accounts": {
       "explicit": [
-        "apply_loan",
-        "bill_pay",
-        "deposit",
-        "freeze_account",
         "get_account_info",
         "get_balance",
         "get_history",
         "get_statement",
-        "schedule_transfer",
         "transfer",
-        "verify_account",
         "wire_transfer",
-        "withdraw"
+        "deposit",
+        "withdraw",
+        "bill_pay",
+        "schedule_transfer",
+        "freeze_account",
+        "unfreeze_account",
+        "verify_account",
+        "apply_loan"
       ],
       "implicit": []
     },
     "schedule_transfer": {
-      "explicit": [
+      "explicit": [],
+      "implicit": [
         "cancel_transfer"
-      ],
-      "implicit": []
+      ]
     },
     "transfer": {
       "explicit": [],
@@ -110,11 +98,10 @@
       "implicit": []
     },
     "verify_account": {
-      "explicit": [
-        "transfer",
-        "wire_transfer"
-      ],
-      "implicit": []
+      "explicit": [],
+      "implicit": [
+        "apply_loan"
+      ]
     },
     "wire_transfer": {
       "explicit": [],
@@ -124,5 +111,10 @@
       "explicit": [],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

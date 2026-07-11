@@ -1,6 +1,7 @@
 # CLAUDE.md — LiveMCP-GRPO
 
 Design doc: `docs/OVAL-MCP.md`. Read it before making changes.
+Behavioral/data-contract changes are recorded in `docs/CHANGELOG.md`.
 
 ## Environment
 
@@ -48,11 +49,21 @@ nvidia-smi                  # 确认 GPU 可用（A10 ×8, 22GB/卡, Driver 570.
 
 ### Gemma-4-31B-it vLLM 启动（`generate_data.sh` 自动管理）
 
-Gemma-4-31B-it 模型权重 ~15.89 GiB/卡（TP=4 时），A10 22GB 显存极其紧张。
-**所有参数由 `generate_data.sh` 动态计算**，无需手动调参：
+Gemma-4-31B-it 模型权重 ~15.89 GiB/卡（TP=4 时），A10 22GB 显存紧凑。
+**所有参数由 `generate_data.sh` 设置固定默认值**，环境变量可覆盖。
 
-- **4×A10**：TP=4×1实例，KV预算紧凑（<1.8 GiB），`max_model_len=7168, max_num_seqs=8, clients=2`
-- **8×A10**：TP=4×2实例（GPU 0-3/4-7），交错启动避开 torch.compile 峰值内存，`max_model_len=8192, max_num_seqs=32, clients=4`
+```
+# ⚠️ 以下为 4×A10 验证过的最佳配置，请勿修改
+VLLM_MAX_MODEL_LEN=8192        # ${VLLM_MAX_MODEL_LEN:-8192}
+VLLM_MAX_NUM_SEQS=8            # ${VLLM_MAX_NUM_SEQS:-8}
+VLLM_CLIENTS_PER_INSTANCE=8    # ${VLLM_CLIENTS_PER_INSTANCE:-8}
+VLLM_GPU_MEMORY_UTILIZATION=0.88
+VLLM_MAX_NUM_BATCHED_TOKENS=16384
+```
+
+TP 和实例数根据 `GPU_COUNT` 自动计算：
+- **4×A10**：TP=4×1实例
+- **8×A10**：TP=4×2实例（GPU 0-3/4-7），交错启动避开 torch.compile 峰值内存
 
 ### FlashInfer JIT 编译配置（必须）
 
@@ -118,12 +129,12 @@ python -c "import flashinfer; print(flashinfer.__version__)"
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Data Generation | ✅ | PROVE state-machine, 2–5 step oracle, stratified split, 50% oversample + recovery, Jaccard 0.70 dedup |
+| Data Generation | ✅ Mechanism smoke | PROVE §3.2 Teacher mechanism verified on normal, missing-function, distractor+enum, and irrelevance paths; bulk yield remains unverified |
 | OVAL Agent Loop | ✅ | Single-call protocol + initial-state hash + final-state evidence |
 | OVAL Reward | ✅ | Multi-component programmatic: R_val + R_cov + R_eff + R_name + R_arg（论文 §3.3） |
 | GRPO Estimator | ✅ | Saturation skip + 2D stratified advantage |
 | GPU Auto-Adaptation | ✅ | `scripts/gpu_config.sh` — auto-detect GPU count/memory; TP/instance calculation in `generate_data.sh` |
-| Full Training Run | 🔄 | 数据生成管线已跑通，训练待启动 |
+| Full Training Run | 🔄 | Teacher mechanism smoke 已跑通；正式批量数据与训练尚未启动 |
 
 ### Verified Pipeline
 
@@ -178,22 +189,21 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 
 ### PROVE §3.2 对齐说明
 
+本节只判断 Teacher 数据生成机制。只有从当前 checkout 实际生成、Replay、Parquet round-trip 并完成样本语义检查后，才能把该版本标记为可训练。
+
+2026-07-10 当前 checkout 已完成四条 Gemma-4-31B-it 真实 smoke：normal multi-turn、missing-function、distractor+enum stripping、irrelevance。四条均完成 Parquet round-trip，Replay error rate 为 0%；这证明机制路径可运行，不代表批量 yield、分布或所有 seed 的数据质量已经成立。
+
 | 步骤 | 对齐状态 | 说明 |
 |------|----------|------|
-| Step 1 — 依赖图构建 | ✅ | n² pairwise LLM 分类 → chains len 2–5，缓存到 `_domain_graphs` / `_domain_chains` |
-| Step 2 — Live-State Sampling | ✅ | `StateSeeder` 探针真实实体 → 每 10 个对话刷新 → chain-aligned context 注入 prompt |
-| Step 3 — 状态机 | ✅ | 五态循环：query → LLM 决策 → 执行 → recovery → continuation |
-| Step 4 — Robustness Knobs | ✅ 但有差异 | distractor 40% 在 **post-generation** 注入，而非 teacher 生成阶段（见下方说明） |
-| Step 5 — Replay + Dedup | ✅ | 30% error 阈值 + provenance check + Jaccard 0.70 |
+| Step 1 — 依赖图构建 | 机制对齐 | 全量无序 pair 的 LLM 分类（含方向）→ chains len 2–5；严格 cache 必须记录并校验 pair 分类完整性 |
+| Step 2 — Live-State Sampling | 机制对齐 | 通过 readonly discovery tools 探针真实实体；context 绑定 session，chain-aligned context 注入 prompt |
+| Step 3 — 状态机 | 机制 smoke 已验证 | query → LLM 决策 → 执行 → recovery → continuation；真实 normal 两轮 chain 已完成 |
+| Step 4 — Robustness Knobs | 机制对齐 | distractor / enum stripping / missing function 在 Teacher 处理前固定，之后使用同一配置 Replay |
+| Step 5 — Replay + Dedup | 机制对齐 | fresh session、30% error 阈值、provenance check、Jaccard 0.70 |
 
-### Distractor 注入时机：post-generation vs. teacher 阶段
+### Robustness 注入时机
 
-本实现采用 **post-generation 注入**——teacher 用干净工具集生成 oracle，生成完成后才混入 3–8 个无关工具到 `visible_tools`。
-
-**理由**：
-1. Teacher 用干净 schema 生成的 oracle 质量更高，不受工具集膨胀影响
-2. Distractor 的目标是考验模型在噪音中选正确工具的能力，这发生在 RL rollout 阶段，不需要影响 ground truth
-3. Oracle 稳定性：相同任务不同扰动 seed 下 oracle 一致，reward 信号干净
+本实现按任务 seed 在 Teacher 处理前采样一次 robustness plan：distractor 加入 candidate set，enum 从 Teacher-visible schema 移除，missing function 在完整 chain/query 生成后从 Teacher schema、dependency hints 和执行层隐藏。同一 plan 贯穿 Teacher、Replay、Parquet 和 rollout，不在中途重新随机化。
 
 ### 其他已知限制
 
@@ -201,7 +211,9 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 |-------|-------------|
 | Illegal tool JSON → no AuditEvent | Model output format errors only produce error observation, no audit event. Fix requires cross-module type extension. |
 | Reward uses last observation as final state | Exact value verification may miss during consecutive tool_calls (low probability, has seen_ids fallback). |
-| Teacher chain-progress blocking removed | PROVE §3.2：仅格式验证（well-formed JSON），不做 post-hoc action-type blocking。用更强 prompt chain_guidance 替代静默重试。见 `task_planner.py:decide_action`。 |
+| Teacher validator is stricter than paper text | 除 well-formed JSON 外，首轮 terminal、unknown tool、non-dict arguments、missing-function tool call 也会触发 regeneration；这是本地数据契约，实验记录中必须与论文公开事实分开。 |
+| Dependency graph cache provenance | legacy cache 只有 schema hash 和 graph，不能证明全 pair 分类完整；严格 baseline 只接受带完整性元数据的新 cache。 |
+| Dependency pair batch size | 当前默认每次分类 12 个 pair；这是根据 Gemma-4-31B 实跑完整率设置的推理参数，不是论文公开超参，不改变全 pair 分类语义。 |
 | Oversample + recovery loop | LLM 生成存在 drop rate，当前 50% oversample + 最多 3 轮 recovery（不同 seed 偏移），保证最终产出满足目标数量。 |
 
 ## Common Commands

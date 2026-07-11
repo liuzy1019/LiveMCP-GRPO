@@ -70,6 +70,7 @@ class AuditEvent:
     error_type: str | None = None
     error_message: str = ""
     schema_valid: bool = False
+    tool_name_known: bool = False
     state_changed: bool = False
     latency_ms: int = 0
 
@@ -97,6 +98,7 @@ class AuditEvent:
             # 序列化关键执行字段——丢失这些字段会导致 R_validity/F_gamma/P_process 全为零
             "execution_success": self.execution_success,
             "schema_valid": self.schema_valid,
+            "tool_name_known": self.tool_name_known,
             "state_changed": self.state_changed,
             "error_message": self.error_message,
             "tool_arguments": self.tool_arguments,

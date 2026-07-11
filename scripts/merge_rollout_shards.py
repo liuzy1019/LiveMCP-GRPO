@@ -23,7 +23,7 @@ _LEAK_MARKERS = (
 )
 _EXPECTED_TERMINALS = {
     "normal_safe_success": {"final_answer", "ask_clarification"},
-    "missing_function": {"ask_clarification"},
+    "missing_function": {"ask_clarification", "report_error"},
     "no_tool_or_abstention": {"report_error"},
     "irrelevant": {"report_error"},
     "clarification_required": {"ask_clarification"},
@@ -79,6 +79,12 @@ def _row_fingerprint(row: pd.Series) -> str:
 
 def _quality_issue(row: pd.Series) -> str:
     extra = _as_extra(row["extra_info"])
+    paper_replay_valid = extra.get("paper_replay_valid")
+    if paper_replay_valid is not None and not bool(paper_replay_valid):
+        return "paper_replay_invalid"
+    project_outcome_valid = extra.get("project_outcome_valid")
+    if project_outcome_valid is not None and not bool(project_outcome_valid):
+        return "project_outcome_invalid"
     scenario = str(row.get("scenario_type") or extra.get("scenario_type") or "")
     calls = _oracle_calls(extra)
     terminal = _terminal_action(calls)
@@ -141,7 +147,14 @@ def _stratified_head(df: pd.DataFrame, target: int) -> pd.DataFrame:
     return df.loc[selected].reset_index(drop=True)
 
 
-def merge_split(tmpdir: Path, pattern: str, outpath: Path, target: int) -> tuple[bool, pd.DataFrame]:
+def merge_split(
+    tmpdir: Path,
+    pattern: str,
+    outpath: Path,
+    target: int,
+    *,
+    write_output: bool = True,
+) -> tuple[bool, pd.DataFrame]:
     dfs = [pd.read_parquet(path) for path in sorted(tmpdir.glob(pattern))]
     if not dfs:
         print(f"WARNING: no {pattern} data")
@@ -178,10 +191,97 @@ def merge_split(tmpdir: Path, pattern: str, outpath: Path, target: int) -> tuple
     if target > 0 and len(merged) < target:
         print(f"  FATAL: {outpath} has {len(merged)} rows, below target {target}")
         return False, merged
-    outpath.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_parquet(outpath, index=False)
-    print(f"  {outpath}: {len(merged)} rows (target={target})")
+    if write_output:
+        outpath.parent.mkdir(parents=True, exist_ok=True)
+        merged.to_parquet(outpath, index=False)
+        print(f"  {outpath}: {len(merged)} rows (target={target})")
     return True, merged
+
+
+def _dedup_task_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    seen: set[str] = set()
+    keep: list[Hashable] = []
+    removed = 0
+    for idx, row in df.iterrows():
+        task_id = str(_as_extra(row["extra_info"]).get("task_id", ""))
+        if task_id and task_id in seen:
+            removed += 1
+            continue
+        if task_id:
+            seen.add(task_id)
+        keep.append(idx)
+    return df.loc[keep].reset_index(drop=True), removed
+
+
+def merge_shards(tmpdir: Path, output_dir: Path, count: int, val_count: int) -> int:
+    """Globally deduplicate candidates before final train/val truncation."""
+    train_path = output_dir / "train.parquet"
+    val_path = output_dir / "val.parquet"
+    ok_train, train_candidates = merge_split(
+        tmpdir, "shard_*_train.parquet", train_path, 0, write_output=False,
+    )
+    ok_val, val_candidates = merge_split(
+        tmpdir, "shard_*_val.parquet", val_path, 0, write_output=False,
+    )
+    if not ok_train or (val_count > 0 and not ok_val):
+        return 1
+
+    train_candidates, train_tid_removed = _dedup_task_ids(train_candidates)
+    val_candidates, val_tid_internal_removed = _dedup_task_ids(val_candidates)
+    if train_tid_removed or val_tid_internal_removed:
+        print(
+            "  task_id dedup: removed "
+            f"train={train_tid_removed}, val={val_tid_internal_removed}"
+        )
+
+    if len(train_candidates) < count:
+        print(f"  FATAL: train candidates={len(train_candidates)}, need {count}")
+        return 1
+    train_df = _stratified_head(train_candidates, count)
+    train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
+    train_ids = {
+        str(_as_extra(row["extra_info"]).get("task_id", ""))
+        for _, row in train_df.iterrows()
+    }
+    train_ids.discard("")
+
+    fp_overlap_mask = val_candidates.apply(
+        lambda row: _row_fingerprint(row) in train_fps, axis=1,
+    ) if len(val_candidates) else pd.Series(dtype=bool)
+    fp_removed = int(fp_overlap_mask.sum()) if len(val_candidates) else 0
+    if fp_removed:
+        val_candidates = val_candidates.loc[~fp_overlap_mask].reset_index(drop=True)
+
+    tid_overlap_mask = val_candidates.apply(
+        lambda row: str(_as_extra(row["extra_info"]).get("task_id", "")) in train_ids,
+        axis=1,
+    ) if len(val_candidates) else pd.Series(dtype=bool)
+    tid_removed = int(tid_overlap_mask.sum()) if len(val_candidates) else 0
+    if tid_removed:
+        val_candidates = val_candidates.loc[~tid_overlap_mask].reset_index(drop=True)
+
+    if len(val_candidates) < val_count:
+        print(
+            f"  FATAL: val candidates={len(val_candidates)} after cross-split dedup, "
+            f"need {val_count} (fp_removed={fp_removed}, tid_removed={tid_removed})"
+        )
+        return 1
+    val_df = (
+        val_candidates.iloc[0:0].copy()
+        if val_count <= 0
+        else _stratified_head(val_candidates, val_count)
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    train_df.to_parquet(train_path, index=False)
+    val_df.to_parquet(val_path, index=False)
+    print(f"  {train_path}: {len(train_df)} rows (target={count})")
+    print(f"  {val_path}: {len(val_df)} rows (target={val_count})")
+    print(
+        f"  merge ok: {len(train_df)} train + {len(val_df)} val, "
+        f"fp_removed={fp_removed}, tid_removed={tid_removed}"
+    )
+    return 0
 
 
 def main() -> int:
@@ -192,58 +292,9 @@ def main() -> int:
     parser.add_argument("--val-count", type=int, required=True)
     args = parser.parse_args()
 
-    tmpdir = Path(args.tmpdir)
-    output_dir = Path(args.output_dir)
-    ok_train, train_df = merge_split(tmpdir, "shard_*_train.parquet", output_dir / "train.parquet", args.count)
-    ok_val, val_df = merge_split(tmpdir, "shard_*_val.parquet", output_dir / "val.parquet", args.val_count)
-    if not ok_train:
-        return 1
-    # val with 0 count is expected to be empty; skip overlap checks
-    if args.val_count <= 0 and len(val_df) == 0:
-        ok_val = True
-
-    if not ok_val:
-        return 1
-
-    train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
-
-    # 从 val 中删掉与 train 语义重叠的行，而不是直接报错
-    if len(val_df) > 0:
-        overlap_mask = val_df.apply(lambda row: _row_fingerprint(row) in train_fps, axis=1)
-        n_removed = int(overlap_mask.sum())
-    else:
-        n_removed = 0
-    if n_removed:
-        print(f"  WARNING: removed {n_removed} val rows overlapping with train, rewriting val.parquet")
-        val_df = val_df[~overlap_mask].reset_index(drop=True)
-        val_df.to_parquet(output_dir / "val.parquet", index=False)
-        print(f"  val.parquet: {len(val_df)} rows after overlap removal")
-        if len(val_df) < args.val_count:
-            print(f"  FATAL: val has {len(val_df)} rows after dedup, below target {args.val_count}")
-            return 1
-
-    train_ids = {_as_extra(row["extra_info"]).get("task_id", "") for _, row in train_df.iterrows()}
-    if len(val_df) > 0:
-        tid_overlap_mask = val_df.apply(
-            lambda row: _as_extra(row["extra_info"]).get("task_id", "") in train_ids, axis=1
-        )
-        n_tid_removed = int(tid_overlap_mask.sum())
-    else:
-        n_tid_removed = 0
-    if n_tid_removed:
-        print(f"  WARNING: removed {n_tid_removed} val rows with task_id overlap, rewriting val.parquet")
-        val_df = val_df[~tid_overlap_mask].reset_index(drop=True)
-        val_df.to_parquet(output_dir / "val.parquet", index=False)
-        print(f"  val.parquet: {len(val_df)} rows after task_id dedup")
-        if len(val_df) < args.val_count:
-            print(f"  FATAL: val has {len(val_df)} rows after task_id dedup, below target {args.val_count}")
-            return 1
-
-    print(
-        f"  merge ok: {len(train_df)} train + {len(val_df)} val, "
-        f"fp_removed={n_removed}, tid_removed={n_tid_removed}"
+    return merge_shards(
+        Path(args.tmpdir), Path(args.output_dir), args.count, args.val_count,
     )
-    return 0
 
 
 if __name__ == "__main__":

@@ -168,8 +168,16 @@ class TaskReward:
         #    |G| = len(required_tool_calls)，即 GT steps 数量，对齐论文公式(1)。
         #    m(g) = 1 if GT step g is matched in model output
         #    o(g) = 1 if all dependency predecessors of g are matched earlier
-        #    _match_required_calls_in_order 实现了 greedy dependency-order 匹配。
-        aligned_calls = self._match_required_calls_in_order(tool_events, required_tool_calls)
+        #    When dependency_edges are available, use partial-order matching:
+        #    non-dependent tools can be called in any order; only dependency
+        #    chains enforce ordering constraints.
+        dep_edges: list[tuple[int, int]] = task.get("dependency_edges", [])
+        if dep_edges:
+            aligned_calls = self._match_required_calls_partial_order(
+                tool_events, required_tool_calls, dep_edges,
+            )
+        else:
+            aligned_calls = self._match_required_calls_in_order(tool_events, required_tool_calls)
         total_preds = max(len(required_tool_calls), 1)
         completed = len(aligned_calls)
         result.completed_predicates = completed
@@ -232,7 +240,7 @@ class TaskReward:
         """三级 validity 的前两级，返回 (r_name_exists, r_args_present)。
 
         level-1 r_name_exists: tool_name 在 candidate schema 中存在
-            → event.tool_name_known（由 executor 在 schema lookup 时设置）
+            → event.tool_name_known（由 rollout candidate set 设置）
               若字段不存在则回退到 schema_valid（保持向后兼容）
         level-2 r_args_present: 所有必需参数存在且 JSON 类型兼容
             → event.schema_valid（executor 做完整 schema 校验后设置）
@@ -245,7 +253,7 @@ class TaskReward:
         args_ok = 0
         for e in tool_events:
             # level-1: name 存在性
-            # tool_name_known 由 executor 在 canonical_name 查找后设置；
+            # tool_name_known 由 rollout 根据最终 candidate set 设置；
             # 若旧版 event 没有该字段，回退到 schema_valid（两级合一）
             l1 = getattr(e, "tool_name_known", None)
             if l1 is None:
@@ -469,6 +477,82 @@ class TaskReward:
                 aligned.append((event, required))
                 cursor = idx + 1
                 break
+        return aligned
+
+    def _match_required_calls_partial_order(
+        self,
+        tool_events: list,
+        required_tool_calls: list[dict],
+        dependency_edges: list[tuple[int, int]],
+    ) -> list:
+        """P0-3: dependency partial-order coverage matching with temporal validation.
+
+        dependency_edges is a list of (src_idx, dst_idx) tuples where indices
+        refer to positions in required_tool_calls.  Builds preds_by_idx from
+        these edges directly — no tool-name lookup.
+
+        Matching rules:
+        1. A required step i can only match after all predecessors in
+           preds_by_idx[i] have been matched.
+        2. The matched event index must be STRICTLY GREATER than the max
+           event index of all matched predecessors (temporal ordering).
+        3. Non-dependent tools can be called in any order (no predecessor
+           constraint → no temporal constraint).
+
+        Returns list of (event, required_dict) for matched calls.
+        """
+        n_required = len(required_tool_calls)
+
+        # Build predecessor index sets from index-based edges
+        preds_by_idx: list[set[int]] = [set() for _ in range(n_required)]
+        for src, dst in dependency_edges:
+            if 0 <= src < n_required and 0 <= dst < n_required:
+                preds_by_idx[dst].add(src)
+
+        matched_preds: set[int] = set()            # indices of matched required calls
+        matched_event_idx: dict[int, int] = {}      # required_idx → event_idx
+        aligned: list = []
+        used_events: set[int] = set()
+
+        # Iterate until no progress (allow reordering for non-dependent tools)
+        for _attempt in range(n_required * 2):
+            made_progress = False
+            for i, required in enumerate(required_tool_calls):
+                if i in matched_preds:
+                    continue
+                preds = preds_by_idx[i]
+                if not preds.issubset(matched_preds):
+                    continue
+
+                # Compute the earliest allowed event index:
+                # must be after all matched predecessor events
+                min_event_idx = -1
+                if preds:
+                    max_pred_event = max(matched_event_idx[p] for p in preds)
+                    min_event_idx = max_pred_event
+
+                required_name = required.get("tool_name", "")
+                required_keys = set((required.get("arguments") or {}).keys())
+
+                for idx, event in enumerate(tool_events):
+                    if idx in used_events:
+                        continue
+                    if idx <= min_event_idx:
+                        continue  # temporal ordering: must be AFTER predecessors
+                    if event.tool_name != required_name or not event.execution_success:
+                        continue
+                    if not required_keys.issubset(set((event.tool_arguments or {}).keys())):
+                        continue
+                    aligned.append((event, required))
+                    used_events.add(idx)
+                    matched_preds.add(i)
+                    matched_event_idx[i] = idx
+                    made_progress = True
+                    break
+
+            if not made_progress:
+                break
+
         return aligned
 
     def _compute_arg_score(

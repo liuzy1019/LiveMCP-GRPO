@@ -11,7 +11,7 @@ Deployment modes:
   2. vLLM server:         --model Qwen3-8B --api-base http://localhost:8000/v1
 
 PROVE-aligned defaults:
-- Difficulty mix: complete=70%, missing=10%, minimal=20%
+- Difficulty mix: complete=60%, missing=20%, minimal=20%
   - Irrelevance ratio: 5%
   - Distractor rate: 40% (injects 3-8 irrelevant tools)
   - Missing function rate: 20% (hides one required tool)
@@ -123,10 +123,10 @@ def generate_data(args: argparse.Namespace):
     logger.info(f"Generating GRPO data: {args.count} train + {args.val_count} val tasks")
     logger.info(f"  Domain: {args.domain}")
     logger.info(f"  Model: {args.model}")
-    logger.info(f"  Difficulty mix: complete=70%, missing=10%, minimal=20%")
+    logger.info(f"  Difficulty mix: complete=60%, missing=20%, minimal=20%")
 
     branch = LiveMCPBranch.from_suite(args.suite)
-    difficulty_mix = {"complete": 0.7, "missing": 0.1, "minimal": 0.2}
+    difficulty_mix = {"complete": 0.6, "missing": 0.2, "minimal": 0.2}
 
     try:
         branch.start()
@@ -332,6 +332,51 @@ def _serialize_training_oracle(task) -> list[dict]:
     return tool_calls + [terminals[-1]]
 
 
+def _build_round_contracts(task) -> list[dict]:
+    """P0-2: Build per-round contracts from oracle_calls_per_round.
+
+    Each contract defines the expected tools and allowed terminal action
+    for one conversation round.  The rollout loop enforces these contracts
+    to prevent illegal terminal-advancing (e.g. report_error → follow-up).
+
+    Returns:
+        list[dict] with keys: round_idx, required_tools, allowed_terminal_actions
+    """
+    if not task.oracle_calls_per_round:
+        # Single-round legacy: derive from flattened oracle_program
+        oracle_calls = getattr(task.oracle_program, "calls", None) or []
+        tools: list[str] = []
+        terminal = "final_answer"
+        for oc in oracle_calls:
+            action = getattr(oc, "action", "tool_call")
+            if action == "tool_call":
+                tools.append(getattr(oc, "tool_name", ""))
+            elif action in ("final_answer", "ask_clarification", "report_error"):
+                terminal = action
+        return [{
+            "round_idx": 0,
+            "required_tools": [t for t in tools if t],
+            "allowed_terminal_actions": [terminal],
+        }]
+
+    contracts = []
+    for round_idx, round_calls in enumerate(task.oracle_calls_per_round):
+        tools: list[str] = []
+        terminal = "final_answer"
+        for oc in round_calls:
+            action = getattr(oc, "action", "tool_call")
+            if action == "tool_call":
+                tools.append(getattr(oc, "tool_name", ""))
+            elif action in ("final_answer", "ask_clarification", "report_error"):
+                terminal = action
+        contracts.append({
+            "round_idx": round_idx,
+            "required_tools": [t for t in tools if t],
+            "allowed_terminal_actions": [terminal],
+        })
+    return contracts
+
+
 def _has_stale_explicit_year(value) -> bool:
     import re
 
@@ -380,7 +425,7 @@ def _validate_task_training_contract(task) -> None:
     # cancel?") — see test_tasks_to_rows_accepts_tool_task_ending_with_clarification.
     expected_terminal_by_scenario = {
         "normal_safe_success": {"final_answer", "ask_clarification"},
-        "missing_function": {"ask_clarification"},
+        "missing_function": {"ask_clarification", "report_error"},
         "no_tool_or_abstention": {"report_error"},
         "irrelevant": {"report_error"},
         "clarification_required": {"ask_clarification"},
@@ -409,6 +454,23 @@ def _validate_task_training_contract(task) -> None:
             f"Tool task {task.task_id} has oracle length "
             f"{len(real_required_tools)}, expected 1-8"
         )
+
+    # ── P1-2(now P0): tool tasks must be chain-seeded ──
+    # PROVE baseline: every normal MCP conversation is a dependency-graph
+    # chain-seed query (§3.2 Step 2).  Unseeded fallback data pollutes the
+    # training distribution — reject before Parquet.
+    if not is_no_tool:
+        generation_mode = (
+            task.metadata.get("generation_mode", "")
+            if task.metadata
+            else ""
+        )
+        if generation_mode != "chain_seeded":
+            raise ValueError(
+                f"Task {task.task_id}: generation_mode='{generation_mode}', "
+                f"expected 'chain_seeded' for tool-task baseline. "
+                f"Unseeded fallback is NOT allowed in baseline training data."
+            )
 
     # ── P3e: unsafe_temptation must not execute unsafe operations ──
     # Teacher LLM has no safety-policy awareness — it always generates
@@ -470,11 +532,154 @@ def _validate_task_training_contract(task) -> None:
                 f"tool-call matching."
             )
 
+    # ── P0-2: validate round contract integrity before Parquet export ──
+    contracts = _build_round_contracts(task)
+    queries = task.conversation_queries or [task.user_prompt]
+    n_contracts = len(contracts)
+    n_queries = len(queries)
+    if n_contracts != n_queries:
+        raise ValueError(
+            f"Task {task.task_id}: {n_contracts} round_contracts vs "
+            f"{n_queries} conversation queries — counts must match."
+        )
+    for i, c in enumerate(contracts):
+        if c.get("round_idx", -1) != i:
+            raise ValueError(
+                f"Task {task.task_id}: round_contracts[{i}] "
+                f"round_idx={c.get('round_idx')}, expected {i}"
+            )
+        required = c.get("required_tools", [])
+        if not isinstance(required, list) or not all(isinstance(t, str) for t in required):
+            raise ValueError(
+                f"Task {task.task_id}: round_contracts[{i}].required_tools "
+                f"must be list[str], got {type(required)}"
+            )
+        allowed = c.get("allowed_terminal_actions", [])
+        if not isinstance(allowed, list) or not allowed:
+            raise ValueError(
+                f"Task {task.task_id}: round_contracts[{i}]."
+                f"allowed_terminal_actions must be non-empty list[str], "
+                f"got {allowed}"
+            )
+        for a in allowed:
+            if a not in ("final_answer", "ask_clarification", "report_error"):
+                raise ValueError(
+                    f"Task {task.task_id}: round_contracts[{i}]."
+                    f"allowed_terminal_actions contains unknown action '{a}'"
+                )
+
+    # ── P0-3: dependency edge integrity ──
+    # Chain-seeded tasks MUST produce exactly len(chain_seed)-1 valid edges.
+    # Incomplete or invalid edges are data integrity errors — reject before split.
+    chain_seed = (
+        task.metadata.get("chain_seed", [])
+        if task.metadata
+        else []
+    )
+    if chain_seed:
+        dependency_edges = _compute_dependency_edges(
+            oracle_calls_serialized,
+            chain_seed,
+        )
+        expected_edge_count = len(chain_seed) - 1
+        if len(dependency_edges) != expected_edge_count:
+            raise ValueError(
+                f"Task {task.task_id}: incomplete dependency graph: "
+                f"got {len(dependency_edges)} edges, "
+                f"expected {expected_edge_count}; "
+                f"chain_seed={chain_seed}"
+            )
+        # Validate every edge: src < dst, indices in range of real_required_tools
+        for edge in dependency_edges:
+            if (
+                not isinstance(edge, list)
+                or len(edge) != 2
+                or not all(isinstance(i, int) for i in edge)
+                or edge[0] < 0
+                or edge[1] >= len(real_required_tools)
+                or edge[0] >= edge[1]
+            ):
+                raise ValueError(
+                    f"Task {task.task_id}: invalid dependency edge "
+                    f"{edge}; chain_seed={chain_seed}; "
+                    f"oracle_tool_count={len(real_required_tools)}"
+                )
+
+    # ── P0: missing-function contract integrity ──
+    # Enforce that missing-function samples are internally consistent before
+    # they reach Parquet / rollout / reward.
+    has_missing_func = bool(
+        (task.metadata or {}).get("has_missing_function")
+    )
+    if has_missing_func:
+        hidden_tools_list = list(task.hidden_tools) if task.hidden_tools else []
+        hidden_tool = (task.metadata or {}).get("hidden_tool", "")
+        visible_names = {t.get("name", "") for t in (task.visible_tools or [])}
+
+        # 1. hidden_tools must be non-empty and consistent with metadata
+        if not hidden_tools_list:
+            raise ValueError(
+                f"Task {task.task_id}: has_missing_function=True but "
+                f"hidden_tools is empty — missing-function contract broken."
+            )
+        if hidden_tool and hidden_tool not in hidden_tools_list:
+            raise ValueError(
+                f"Task {task.task_id}: metadata.hidden_tool='{hidden_tool}' "
+                f"not in hidden_tools={hidden_tools_list}."
+            )
+
+        # 2. hidden tool must NOT appear in visible_tool_names (schema leak)
+        leaked = set(hidden_tools_list) & visible_names
+        if leaked:
+            raise ValueError(
+                f"Task {task.task_id}: hidden tool(s) {leaked} still present "
+                f"in visible_tools schema — schema leak."
+            )
+
+        # 3. hidden tool must NOT appear in oracle tool calls
+        oracle_tool_names = {
+            call["tool_name"] for call in oracle_calls_serialized
+            if call.get("action", "tool_call") == "tool_call"
+        }
+        oracle_blocked = set(hidden_tools_list) & oracle_tool_names
+        if oracle_blocked:
+            raise ValueError(
+                f"Task {task.task_id}: hidden tool(s) {oracle_blocked} "
+                f"appear in oracle tool calls — execution block failed."
+            )
+
+        # 4. terminal must be ask_clarification or report_error
+        if terminal_action not in ("ask_clarification", "report_error"):
+            raise ValueError(
+                f"Task {task.task_id}: missing_function terminal is "
+                f"'{terminal_action}', expected ask_clarification or report_error."
+            )
+        if real_required_tools:
+            raise ValueError(
+                f"Task {task.task_id}: missing-function contract requires zero "
+                f"oracle tool calls, got {real_required_tools}."
+            )
+        non_empty_rounds = [
+            c for c in contracts if c.get("required_tools")
+        ]
+        if non_empty_rounds:
+            raise ValueError(
+                f"Task {task.task_id}: missing-function round contracts contain "
+                f"required tools: {non_empty_rounds}."
+            )
+
 
 def _filter_training_eligible_tasks(tasks: list) -> list:
     eligible = []
     dropped = 0
     for task in tasks:
+        if task.metadata.get("project_outcome_valid") is False:
+            dropped += 1
+            logger.warning(
+                "Dropping generated task before split: {} failed final outcome criteria",
+                task.task_id,
+            )
+            continue
         try:
             _validate_task_training_contract(task)
         except ValueError as exc:
@@ -884,6 +1089,66 @@ def _assert_split_integrity(df_train, df_val, args) -> None:
             )
 
 
+def _compute_dependency_edges(
+    oracle_calls: list[dict],
+    chain_seed: list[str],
+) -> list[list[int]]:
+    """Compute dependency edges E by aligning chain_seed to oracle_calls.
+
+    PROVE eq.(1): o(g) = Π_{(j,g)∈E} ⊮[μ(j) < μ(g)] requires explicit edges.
+
+    Algorithm:
+      1. Map every tool_call in oracle_calls to its index, grouped by tool_name.
+      2. Walk chain_seed left-to-right, consuming the next occurrence after the
+         previous cursor.  A chain step can be both a dst (of the previous edge)
+         and a src (of the next edge) — intermediate nodes are NOT consumed.
+      3. If any chain step cannot be aligned (no occurrence after cursor), return
+         an empty list.  The caller (_validate_task_training_contract) rejects
+         chain-seeded tasks with incomplete edges.
+
+    Returns:
+        list[list[int]] — [[src_idx, dst_idx], ...] where src_idx < dst_idx,
+        or [] if the chain cannot be aligned to the oracle sequence.
+    """
+    if not chain_seed:
+        return []
+
+    # Step 1: collect all tool_call positions grouped by tool_name
+    tool_positions: dict[str, list[int]] = {}
+    for idx, call in enumerate(oracle_calls):
+        if call.get("action", "tool_call") != "tool_call":
+            continue
+        tool_name = call.get("tool_name")
+        if tool_name:
+            tool_positions.setdefault(tool_name, []).append(idx)
+
+    # Step 2: align chain_seed → strictly increasing oracle index sequence
+    chain_indices: list[int] = []
+    cursor = -1
+
+    for tool_name in chain_seed:
+        positions = tool_positions.get(tool_name, [])
+        next_idx = next(
+            (pos for pos in positions if pos > cursor),
+            None,
+        )
+        if next_idx is None:
+            logger.warning(
+                "_compute_dependency_edges: cannot align chain step "
+                "'{}' after oracle index {}. chain_seed={}",
+                tool_name, cursor, chain_seed,
+            )
+            return []
+        chain_indices.append(next_idx)
+        cursor = next_idx
+
+    # Step 3: build edges from consecutive aligned indices
+    return [
+        [chain_indices[i], chain_indices[i + 1]]
+        for i in range(len(chain_indices) - 1)
+    ]
+
+
 def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
     """Convert LiveTask list to verl-compatible data rows."""
     rows = []
@@ -908,8 +1173,9 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
 
         domain_desc = DOMAIN_DESCRIPTIONS.get(domain, "")
         reference_date = task.metadata.get("reference_date", "")
-        # Perturbations (enum stripping, distractors) are already applied to
-        # task.visible_tools by Perturber; format as-is.
+        # Robustness knobs (enum stripping, distractors, missing_function) are
+        # applied inside generate_one BEFORE Teacher processing and Replay.
+        # task.visible_tools already contains the Teacher-visible candidate set.
         tools_text = _format_tools(visible_tools)
         date_line = f"\nToday's date: {reference_date}." if reference_date else ""
 
@@ -986,6 +1252,19 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             if c.get("action", "tool_call") == "tool_call"
         ]
 
+        # ── Dependency edges (PROVE eq.(1) o(g) requires E) ──
+        chain_seed = task.metadata.get("chain_seed", []) if task.metadata else []
+        dependency_edges = _compute_dependency_edges(oracle_calls_serialized, chain_seed)
+        dependency_edges_json = json.dumps(dependency_edges, ensure_ascii=False)
+        # P0 quality flag: chain_seeded tasks MUST produce exactly
+        # len(chain_seed)-1 edges, enforced by _validate_task_training_contract
+        # before reaching this point.  This field is diagnostic only.
+        expected_edges = len(chain_seed) - 1 if chain_seed else 0
+        dependency_graph_complete = (
+            len(dependency_edges) == expected_edges and expected_edges > 0
+        ) or not chain_seed
+        generation_mode = task.metadata.get("generation_mode", "chain_seeded") if task.metadata else "chain_seeded"
+
         extra_info = {
             "task_id": task.task_id,
             "domain": domain,
@@ -1022,6 +1301,10 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "success_criteria": success_criteria_json,
             "hidden_tools": list(task.hidden_tools) if task.hidden_tools else [],
             "visible_tool_names": visible_tool_names,
+            "tool_owner_domains": json.dumps({
+                str(t.get("name")): str(t.get("_server_name") or domain)
+                for t in visible_tools if t.get("name")
+            }, ensure_ascii=False),
             "conversation_rounds": n_conversation_rounds,
             # Rollout perturbation support: clean tools (pre-perturbation) +
             # domain context so the agent loop can rebuild system_prompt with
@@ -1038,6 +1321,21 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "conversation_queries": json.dumps(
                 conversation_queries, ensure_ascii=False, default=str
             ),
+            # P0-2: per-round contracts for rollout enforcement.
+            # Each contract specifies required_tools and allowed_terminal_actions
+            # for one conversation round.  The rollout loop MUST validate the
+            # model's terminal against the contract before injecting follow-up.
+            "round_contracts": json.dumps(
+                _build_round_contracts(task), ensure_ascii=False, default=str
+            ),
+            "dependency_edges": dependency_edges_json,
+            "dependency_graph_complete": dependency_graph_complete,
+            "generation_mode": generation_mode,
+            # P0-3: data quality signals from replay validation.
+            "paper_replay_valid": task.metadata.get("paper_replay_valid", True),
+            "project_outcome_valid": task.metadata.get("project_outcome_valid", True),
+            "replay_error_rate": task.metadata.get("replay_error_rate", 0.0),
+            "criteria_failed_count": task.metadata.get("criteria_failed", 0),
         }
 
         row = {
@@ -1049,6 +1347,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
                     "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
                     "success_criteria": success_criteria_json,
                     "required_tools": real_required_tools,
+                    "dependency_edges": dependency_edges_json,
                 },
             },
             "extra_info": extra_info,

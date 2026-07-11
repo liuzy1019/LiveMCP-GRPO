@@ -1,4 +1,5 @@
 {
+  "cache_version": 2,
   "server_name": "email",
   "schema_hash": "c686961ea35ebebd",
   "tool_names": [
@@ -22,9 +23,7 @@
   ],
   "graph": {
     "add_label": {
-      "explicit": [
-        "remove_label"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "archive_email": {
@@ -32,10 +31,10 @@
       "implicit": []
     },
     "create_draft": {
-      "explicit": [
+      "explicit": [],
+      "implicit": [
         "send_email"
-      ],
-      "implicit": []
+      ]
     },
     "create_filter": {
       "explicit": [],
@@ -50,17 +49,7 @@
       "implicit": []
     },
     "get_email": {
-      "explicit": [
-        "add_label",
-        "archive_email",
-        "forward_email",
-        "get_attachments",
-        "mark_read",
-        "mark_unread",
-        "move_to_thread",
-        "remove_label",
-        "reply_email"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_thread": {
@@ -75,23 +64,21 @@
     },
     "list_inbox": {
       "explicit": [
-        "add_label",
-        "archive_email",
-        "forward_email",
-        "get_attachments",
         "get_email",
+        "forward_email",
+        "reply_email",
+        "add_label",
+        "remove_label",
+        "move_to_thread",
+        "archive_email",
         "mark_read",
         "mark_unread",
-        "move_to_thread",
-        "remove_label",
-        "reply_email"
+        "get_attachments"
       ],
       "implicit": []
     },
     "mark_read": {
-      "explicit": [
-        "mark_unread"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "mark_unread": {
@@ -112,17 +99,17 @@
     },
     "search_emails": {
       "explicit": [
-        "add_label",
-        "archive_email",
-        "forward_email",
-        "get_attachments",
         "get_email",
+        "forward_email",
+        "reply_email",
+        "add_label",
+        "remove_label",
+        "move_to_thread",
         "get_thread",
+        "archive_email",
         "mark_read",
         "mark_unread",
-        "move_to_thread",
-        "remove_label",
-        "reply_email"
+        "get_attachments"
       ],
       "implicit": []
     },
@@ -130,5 +117,10 @@
       "explicit": [],
       "implicit": []
     }
-  }
+  },
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
+  "classification_complete": true,
+  "deterministic_augmentation": false
 }

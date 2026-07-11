@@ -29,7 +29,16 @@ def jaccard_similarity(a: LiveTask, b: LiveTask) -> float:
     sigs_b = _call_sequence(b)
 
     if not sigs_a and not sigs_b:
-        return 0.0  # both empty (e.g., irrelevant / missing_function) → not duplicates
+        # Both zero-tool (irrelevance / missing_function) — dedup by query
+        # text similarity instead of ignoring them.  Jaccard on word sets
+        # provides a reasonable diversity filter for abstention tasks.
+        qa = set((a.user_prompt or "").lower().split())
+        qb = set((b.user_prompt or "").lower().split())
+        if not qa or not qb:
+            return 0.0
+        intersection = qa & qb
+        union = qa | qb
+        return len(intersection) / len(union)
     if not sigs_a or not sigs_b:
         return 0.0
 

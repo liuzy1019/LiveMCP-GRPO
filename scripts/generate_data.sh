@@ -15,6 +15,7 @@
 # Env override:
 #   OUTPUT_DIR=data  GPU_COUNT=8  VLLM_PORT_START=8001
 #   VLLM_CLIENTS_PER_INSTANCE=4  VLLM_MAX_NUM_SEQS=16
+#   GENERATION_WORKERS_PER_PROCESS=2  DEPENDENCY_CACHE_PREWARM=1
 
 set -euo pipefail
 
@@ -241,13 +242,34 @@ export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 export FLASHINFER_WORKSPACE_BASE="${FLASHINFER_WORKSPACE_BASE:-$HOME}"
 export NVCC_APPEND_FLAGS=-allow-unsupported-compiler
+DEPENDENCY_CACHE_PREWARM="${DEPENDENCY_CACHE_PREWARM:-1}"
+if [[ "${DEPENDENCY_CACHE_PREWARM}" != "0" && "${DEPENDENCY_CACHE_PREWARM}" != "1" ]]; then
+    echo "ERROR: DEPENDENCY_CACHE_PREWARM must be 0 or 1, got ${DEPENDENCY_CACHE_PREWARM}" >&2
+    exit 1
+fi
+GENERATION_CLIENT_SEED_STRIDE="${GENERATION_CLIENT_SEED_STRIDE:-1000000}"
+if ! [[ "${GENERATION_CLIENT_SEED_STRIDE}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: GENERATION_CLIENT_SEED_STRIDE must be >= 1, got ${GENERATION_CLIENT_SEED_STRIDE}" >&2
+    exit 1
+fi
+if [ "${GENERATION_CLIENT_SEED_STRIDE}" -le 200000 ]; then
+    echo "ERROR: GENERATION_CLIENT_SEED_STRIDE must exceed the 200000 recovery range, got ${GENERATION_CLIENT_SEED_STRIDE}" >&2
+    exit 1
+fi
 
 # ═══════════════════════════════════════════════════════════════════
 # MODE 1: Local transformers — 1 process per GPU
 # ═══════════════════════════════════════════════════════════════════
 if [ "$FITS_SINGLE_GPU" = "1" ]; then
+    GENERATION_WORKERS_PER_PROCESS="${GENERATION_WORKERS_PER_PROCESS:-1}"
+    if ! [[ "${GENERATION_WORKERS_PER_PROCESS}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: GENERATION_WORKERS_PER_PROCESS must be >= 1, got ${GENERATION_WORKERS_PER_PROCESS}" >&2
+        exit 1
+    fi
+    export LIVEMCP_GENERATION_MAX_WORKERS="${GENERATION_WORKERS_PER_PROCESS}"
     echo ""
     echo "Strategy: LOCAL — ${GPU_COUNT} parallel processes, 1 per GPU"
+    echo "Generation workers: ${GENERATION_WORKERS_PER_PROCESS} per process"
 
     GEN_COUNT=$(( (COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
     GEN_VAL_COUNT=$(( (VAL_COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
@@ -256,10 +278,21 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
     TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
     mkdir -p "${TMPDIR_SHARD}"
 
+    if [ "${DEPENDENCY_CACHE_PREWARM}" = "1" ]; then
+        echo ""
+        echo "Prewarming dependency graph cache for domain=${DOMAIN}..."
+        CUDA_VISIBLE_DEVICES="${GPU_INDEX_ARRAY[0]}" \
+            "${PYTHON_BIN}" scripts/dependency_graph.py live \
+                --domain "${DOMAIN}" \
+                --model "${MODEL}" \
+                --suite "${SUITE}" \
+                --device 0
+    fi
+
     PIDS=()
     for ((i=0; i<GPU_COUNT; i++)); do
         GPU_ID="${GPU_INDEX_ARRAY[$i]}"
-        SHARD_SEED=$((SEED + i * 20000))
+        SHARD_SEED=$((SEED + i * GENERATION_CLIENT_SEED_STRIDE))
 
         echo "  [shard $i] GPU=${GPU_ID}, train=${PER_GPU_TRAIN}, val=${PER_GPU_VAL}, seed=${SHARD_SEED}"
 
@@ -360,47 +393,43 @@ print(tp)
 
     PORT_START="${VLLM_PORT_START:-8001}"
 
-    # ── vLLM generation defaults (dynamically scaled by GPU memory) ──
-    # vLLM overhead (encoder cache, NCCL buffers) consumes ~1.5 GiB beyond raw weights.
-    # On tight GPUs (A10), auto-reduce max_model_len to leave enough KV cache.
-    # enforce_eager is always 0: CUDAGraph adds ~500 MiB but A10(sm_86) supports it;
-    # the perf win is worth it for generation, and Gemma-4 already forces TRITON_ATTN.
+    # ── vLLM generation defaults ──
+    # All parameters can be overridden via environment variables.
     VLLM_MAX_NUM_BATCHED_TOKENS="${VLLM_MAX_NUM_BATCHED_TOKENS:-16384}"
     VLLM_GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.88}"
-
-    VLLM_TIGHT_PARAMS=$("${PYTHON_BIN}" -c "
-model_per_gpu = ${MODEL_BF16_GB} / ${TP_SIZE}
-overhead = 1.5  # encoder + NCCL + misc (GiB)
-kv_budget = ${GPU_MEM_GB} * ${VLLM_GPU_MEMORY_UTILIZATION} - model_per_gpu - overhead
-# Gemma-4-31B KV cache: ~0.4 MiB per token per GPU (TP=4, 8 KV heads, 256-dim)
-# 8192 tokens need ~3.3 GiB per GPU. With 8576 observed allocation on A10:
-#   - max_num_seqs=32 → 268 tokens/seq → constant eviction, unusable
-#   - max_num_seqs=8  → 1072 tokens/seq → workable for generation workloads
-# Threshold at 4.0 GiB: below this, seqs=8/max_len=7168 to avoid thrashing
-tight = 1 if kv_budget < 4.0 else 0
-seqs = 8 if tight else 32
-max_len = 7168 if tight else 8192
-clients = 2 if tight else 4
-print(f'{tight} {seqs} {max_len} {clients} {kv_budget:.2f}')
-")
-
-    VLLM_TIGHT=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $1}')
-    if [ -z "${VLLM_MAX_NUM_SEQS:-}" ]; then
-        VLLM_MAX_NUM_SEQS=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $2}')
-    fi
-    if [ -z "${VLLM_MAX_MODEL_LEN:-}" ]; then
-        VLLM_MAX_MODEL_LEN=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $3}')
-    fi
-    if [ -z "${VLLM_CLIENTS_PER_INSTANCE:-}" ]; then
-        VLLM_CLIENTS_PER_INSTANCE=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $4}')
-    fi
-    KV_BUDGET=$(echo "$VLLM_TIGHT_PARAMS" | awk '{print $5}')
+    VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-8192}"
+    VLLM_MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-8}"
+    VLLM_CLIENTS_PER_INSTANCE="${VLLM_CLIENTS_PER_INSTANCE:-8}"
     VLLM_ENFORCE_EAGER="${VLLM_ENFORCE_EAGER:-0}"
+    if ! [[ "${VLLM_MAX_NUM_SEQS}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: VLLM_MAX_NUM_SEQS must be >= 1, got ${VLLM_MAX_NUM_SEQS}" >&2
+        exit 1
+    fi
+    if ! [[ "${VLLM_CLIENTS_PER_INSTANCE}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: VLLM_CLIENTS_PER_INSTANCE must be >= 1, got ${VLLM_CLIENTS_PER_INSTANCE}" >&2
+        exit 1
+    fi
+    AUTO_GENERATION_WORKERS=$(( VLLM_MAX_NUM_SEQS / VLLM_CLIENTS_PER_INSTANCE ))
+    if [ "${AUTO_GENERATION_WORKERS}" -lt 1 ]; then
+        AUTO_GENERATION_WORKERS=1
+    fi
+    GENERATION_WORKERS_PER_PROCESS="${GENERATION_WORKERS_PER_PROCESS:-${AUTO_GENERATION_WORKERS}}"
+    if ! [[ "${GENERATION_WORKERS_PER_PROCESS}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: GENERATION_WORKERS_PER_PROCESS must be >= 1, got ${GENERATION_WORKERS_PER_PROCESS}" >&2
+        exit 1
+    fi
+    export LIVEMCP_GENERATION_MAX_WORKERS="${GENERATION_WORKERS_PER_PROCESS}"
+    TOTAL_REQUEST_WORKERS_PER_INSTANCE=$(( VLLM_CLIENTS_PER_INSTANCE * GENERATION_WORKERS_PER_PROCESS ))
+    if [ "${TOTAL_REQUEST_WORKERS_PER_INSTANCE}" -gt "${VLLM_MAX_NUM_SEQS}" ]; then
+        echo "WARNING: generation request workers per instance (${TOTAL_REQUEST_WORKERS_PER_INSTANCE}) exceed VLLM_MAX_NUM_SEQS=${VLLM_MAX_NUM_SEQS}; excess requests will queue" >&2
+    fi
 
     echo ""
     echo "Strategy: vLLM API — TP=${TP_SIZE}, ${NUM_INSTANCES} instance(s)"
     echo "vLLM: version=${VLLM_VERSION}, gpu_memory_utilization=${VLLM_GPU_MEMORY_UTILIZATION}, max_model_len=${VLLM_MAX_MODEL_LEN}, max_num_seqs=${VLLM_MAX_NUM_SEQS}, max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS}, enforce_eager=${VLLM_ENFORCE_EAGER}"
     echo "Clients: ${VLLM_CLIENTS_PER_INSTANCE} generation process(es) per vLLM instance"
+    echo "Generation workers: ${GENERATION_WORKERS_PER_PROCESS} per process"
+    echo "Dependency cache prewarm: ${DEPENDENCY_CACHE_PREWARM}"
 
     TOTAL_GEN_CLIENTS=$(( NUM_INSTANCES * VLLM_CLIENTS_PER_INSTANCE ))
     GEN_COUNT=$(( (COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
@@ -488,6 +517,16 @@ print(f'{tight} {seqs} {max_len} {clients} {kv_budget:.2f}')
         fi
     done
 
+    if [ "${DEPENDENCY_CACHE_PREWARM}" = "1" ]; then
+        echo ""
+        echo "Prewarming dependency graph cache for domain=${DOMAIN}..."
+        "${PYTHON_BIN}" scripts/dependency_graph.py live \
+            --domain "${DOMAIN}" \
+            --model "${SERVED_MODEL}" \
+            --api-base "http://localhost:${PORT_START}/v1" \
+            --suite "${SUITE}"
+    fi
+
     # Generate
     echo ""
     echo "Generating data (${NUM_INSTANCES} instance(s) in parallel)..."
@@ -497,7 +536,7 @@ print(f'{tight} {seqs} {max_len} {clients} {kv_budget:.2f}')
         PORT=$(( PORT_START + inst ))
         for ((client=0; client<VLLM_CLIENTS_PER_INSTANCE; client++)); do
             CLIENT_ID=$(( inst * VLLM_CLIENTS_PER_INSTANCE + client ))
-            SHARD_SEED=$((SEED + CLIENT_ID * 20000))
+            SHARD_SEED=$((SEED + CLIENT_ID * GENERATION_CLIENT_SEED_STRIDE))
 
             echo "  Instance ${inst}/client ${client}: train=${PER_CLIENT_TRAIN}, val=${PER_CLIENT_VAL}, seed=${SHARD_SEED}"
 

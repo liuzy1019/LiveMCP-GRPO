@@ -15,7 +15,7 @@ Pipeline per task:
      d. Append to history
   4. Derive success criteria from state delta
   5. Replay validation against fresh session
-  6. Robustness knobs applied post-generation
+  6. Robustness plan is fixed before Teacher processing and reused by Replay
 """
 
 from __future__ import annotations
@@ -158,6 +158,13 @@ def _chain_goal_phrase(final_tool: str) -> str:
         "remove_from_cart": "remove an item from the cart",
         "update_cart_quantity": "change the quantity of an item in the cart",
         "clear_cart": "clear the cart",
+        "get_balance": "check an account balance",
+        "get_history": "check an account transaction history",
+        "get_statement": "get an account statement",
+        "list_orders": "list existing orders",
+        "get_order": "get order details",
+        "search_events": "search calendar events",
+        "list_events": "list calendar events",
     }
     if name in explicit:
         return explicit[name]
@@ -178,12 +185,35 @@ def _chain_goal_phrase(final_tool: str) -> str:
         "convert_": "convert",
         "freeze_": "freeze",
         "unfreeze_": "unfreeze",
+        "get_": "get",
+        "list_": "list",
+        "search_": "search for",
+        "find_": "find",
     }
     for prefix, verb in verb_map.items():
         if name.startswith(prefix):
             entity = name[len(prefix):].replace("_", " ")
             return f"{verb} {entity}".strip()
-    return ""
+    return name.replace("_", " ")
+
+
+def _target_tool_requirement(
+    tool_schemas: list[dict[str, Any]],
+    tool_name: str,
+) -> str:
+    """Describe an internal chain target without leaking it into user text."""
+    schema = next(
+        (tool for tool in tool_schemas if tool.get("name") == tool_name),
+        {},
+    )
+    description = str(schema.get("description") or "").strip()
+    required = list(schema.get("input_schema", {}).get("required", []) or [])
+    required_text = ", ".join(str(name) for name in required) or "none"
+    return (
+        f"Internal target capability: {tool_name}\n"
+        f"Capability description: {description or _chain_goal_phrase(tool_name)}\n"
+        f"Required information fields: {required_text}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -243,9 +273,9 @@ class ContinuationPolicy:
     """PROVE-style turn-decay schedule for deciding when to end a conversation.
 
     PROVE §3.2 Step 3.5: min_turns=2, max_turns=3 for conversation rounds
-    (user follow-up turns).  The dependency chain is distributed across
-    rounds via max_calls_this_round so each follow-up continues a meaningful
-    unfinished operation rather than creating unrelated goals.
+    (user follow-up turns).  A dependency chain seeds one complete user goal;
+    follow-up turns continue the live conversation after that goal instead of
+    exposing individual internal chain nodes as separate user requests.
 
     Perturbations (intermittent errors, pagination) may add 1-2 extra turns.
     """
@@ -255,6 +285,53 @@ class ContinuationPolicy:
     MIN_CONVERSATION_ROUNDS = 2
     MAX_CONVERSATION_ROUNDS = 3
     CONTINUE_AFTER_MIN_PROB = 0.30
+
+    # P1-3: Per-turn turn-decay probabilities for middle rounds.
+    # These are NOT published PROVE parameters — the paper does not disclose
+    # the exact turn-decay schedule.  These are local defaults configurable via
+    # experiment metadata.
+    CLARIFICATION_PROB: float = 0.10   # probability of clarification at middle rounds
+    END_PROB_BASE: float = 0.30        # base end probability, increases with round
+
+    @staticmethod
+    def sample_continuation_decision(
+        rounds_done: int,
+        rng: random.Random,
+    ) -> str:
+        """PROVE §3.2 Step 3.5: per-turn continuation decision.
+
+        Returns one of {"end", "follow_up", "clarification"}.
+
+        Rules:
+        - Before min_turns: cannot end. Sample follow_up vs clarification.
+        - At or after max_turns: must end.
+        - Middle rounds: turn-decay schedule (P(end) increases with round).
+
+        The probabilities are configurable via CLARIFICATION_PROB and
+        END_PROB_BASE class attributes.
+        """
+        min_r = ContinuationPolicy.MIN_CONVERSATION_ROUNDS
+        max_r = ContinuationPolicy.MAX_CONVERSATION_ROUNDS
+
+        if rounds_done >= max_r:
+            return "end"
+        if rounds_done < min_r:
+            # Cannot end — must continue.  Mostly follow_up, occasionally clarify.
+            return (
+                "clarification"
+                if rng.random() < ContinuationPolicy.CLARIFICATION_PROB
+                else "follow_up"
+            )
+        # Middle rounds: turn-decay end probability
+        t = (rounds_done - min_r) / max(1, max_r - min_r)
+        end_prob = min(0.70, ContinuationPolicy.END_PROB_BASE + 0.2 * t)
+        r = rng.random()
+        if r < end_prob:
+            return "end"
+        remaining = 1.0 - end_prob
+        if r < end_prob + ContinuationPolicy.CLARIFICATION_PROB:
+            return "clarification"
+        return "follow_up"
 
     @staticmethod
     def target_turns(chain_length: int, rng: random.Random) -> int:
@@ -433,19 +510,26 @@ class TaskPlanner:
             "follow the difficulty for WHAT to include, but keep the persona's VOICE and TONE."
         )
 
-        # ── PROVE §3.2: chain_seed selects relevant entities from live state
-        # for anti-hallucination and the final goal semantics. We do not expose
-        # tool names or the full sequence to the user-query generator; we only
-        # provide a natural-language outcome hint so the query actually asks
-        # for the operation that the oracle chain will later execute.
+        # ── PROVE §3.2: the complete dependency chain seeds one task. ──
         chain_goal_block = ""
         if chain_seed:
-            goal_phrase = _chain_goal_phrase(chain_seed[-1])
+            final_tool = chain_seed[-1]
+            goal_phrase = _chain_goal_phrase(final_tool)
             if goal_phrase:
+                chain_requirements = "\n".join(
+                    f"- {_target_tool_requirement(tool_schemas, tool_name)}"
+                    for tool_name in chain_seed
+                )
                 chain_goal_block = (
-                    "\n## Intended Outcome\n"
-                    f"The user's message should naturally ask to {goal_phrase}. "
-                    "Do not mention tool names or list steps; express only the goal.\n"
+                    "\n## Complete Task Goal (internal synthesis guide)\n"
+                    f"The grounded dependency chain is: {chain_seed}.\n"
+                    f"Capabilities in execution order:\n{chain_requirements}\n"
+                    f"The message MUST clearly request the final outcome: {goal_phrase}. "
+                    "Earlier chain items are internal prerequisites: express their "
+                    "user-visible effects only when necessary to make the combined "
+                    "goal coherent. Do not mention tool names, a workflow, or split "
+                    "chain nodes into future requests. For any write/update, state "
+                    "the concrete change that authorizes it.\n"
                 )
 
         # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
@@ -529,15 +613,19 @@ Return only:
 
         PROVE §3.2 Step 3.5: the user continues the conversation without
         knowing what tools the assistant called internally. The follow-up
-        is grounded only in the live server state (real entity IDs) and the
-        remaining dependency chain — NOT in the oracle execution history.
+        is grounded in the refreshed live server state (real entity IDs), not
+        in hidden oracle execution details.  The initial request already owns
+        the complete dependency-chain goal; a follow-up continues that user
+        intent instead of exposing an internal chain node as a new request.
 
         Passing execution_history to the follow-up generator was wrong: it
         caused the LLM to adopt the assistant's confirmation tone ("Got it,
         the transfer is scheduled...") instead of a genuine user perspective.
 
-        chain_seed + chain_progress: guides the follow-up to ask for the
-        remaining dependency chain steps naturally.
+        chain_seed + chain_progress is retained for recovery/legacy traces
+        whose chain is not yet complete.  Baseline successful traces normally
+        finish the complete chain before continuation, so no next chain goal is
+        injected in that case.
         """
         state_text = _format_state_compact(grounded_state, max_entities=20)
 
@@ -559,6 +647,20 @@ Return only:
             "Do not introduce an unrelated new goal; continue the same task."
         )
 
+        next_goal_block = ""
+        if chain_seed and chain_progress < len(chain_seed):
+            next_goal = _chain_goal_phrase(chain_seed[chain_progress])
+            if next_goal:
+                next_goal_block = (
+                    "\n## Next Conversation Goal\n"
+                    f"{_target_tool_requirement(tool_schemas, chain_seed[chain_progress])}\n"
+                    f"The next user message should naturally ask to {next_goal}. "
+                    "It MUST directly request this outcome. For a write/update, state "
+                    "the concrete field or value to change. Do not ask whether the "
+                    "assistant needs more information, do not merely request status, "
+                    "and do not mention the internal tool name or workflow steps.\n"
+                )
+
         user = f"""## Persona
 {persona if persona else 'A normal user messaging their AI assistant.'}
 {date_block}
@@ -567,10 +669,14 @@ Return only:
 
 ## Current State (real IDs and values you can reference)
 {state_text}
+{next_goal_block}
 
 ## Your task
 Write ONE short follow-up message as the user. Difficulty: {difficulty}.
 Ask for the next thing you need. Do NOT acknowledge or confirm what the assistant did.
+For complete difficulty, if the target capability requires an existing entity,
+copy its exact ID from Current State into the message and include every concrete
+detail needed for the requested change.
 
 Return only:
 {{"user_query": "<the follow-up message>"}}
@@ -595,211 +701,62 @@ Return only:
                 )
         raise RuntimeError(f"Failed to generate followup for {self.domain}")
 
-    # ── Step 1c: regenerate query grounded in oracle-used entity IDs ──
-
-    def regenerate_query_from_oracle(
-        self,
-        tool_schemas: list[dict[str, Any]],
-        grounded_state: dict[str, Any],
-        difficulty: str,
-        rng: random.Random,
-        oracle_entity_ids: list[str],
-        oracle_tool_names: list[str],
-        dep_hints: str = "",
-        persona: str = "",
-        reference_date: str = "",
-        chain_seed: list[str] | None = None,
-    ) -> str:
-        """PROVE §3.2 Step 4: regenerate user query grounded in oracle-used IDs.
-
-        After the oracle trace is executed, we know exactly which entity IDs
-        were used in tool_call arguments. This method regenerates the user
-        query so it references ONLY those IDs, eliminating the query-oracle
-        entity mismatch caused by independent LLM sampling.
-
-        This implements the PROVE "oracle-first, query-second" paradigm:
-        the oracle trace defines the ground truth, and the query is derived
-        from it — not the other way around.
-        """
-        difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(
-            difficulty, DIFFICULTY_DESCRIPTIONS["complete"]
-        )
-        state_text = _format_state_compact(grounded_state, max_entities=20)
-
-        date_block = ""
-        if reference_date:
-            date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
-
-        # Build the oracle entity constraint block
-        entity_block = ""
-        if oracle_entity_ids:
-            ids_text = ", ".join(oracle_entity_ids[:10])
-            entity_block = (
-                f"\n## Oracle Entity IDs (MUST reference these)\n"
-                f"The following entity IDs were used in the actual operation: {ids_text}\n"
-                f"⚠️ CRITICAL: Your message MUST reference these exact IDs (for 'complete' difficulty) "
-                f"or describe the entities they refer to (for 'minimal' difficulty). "
-                f"Do NOT use any other IDs from Current State.\n"
-            )
-
-        # Natural-language goal from oracle tools
-        chain_goal_block = ""
-        if oracle_tool_names:
-            goal_phrase = _chain_goal_phrase(oracle_tool_names[-1])
-            if goal_phrase:
-                chain_goal_block = (
-                    f"\n## Intended Outcome\n"
-                    f"The user's message should naturally ask to {goal_phrase}. "
-                    f"Do not mention tool names or list steps; express only the goal.\n"
-                )
-
-        system = (
-            "You are role-playing as a real person messaging their AI assistant. "
-            "Write ONE short message — the way a real human would actually type it. "
-            "Real people state what they WANT, not HOW to do it. "
-            "They don't list steps, don't mention tool names, don't describe workflows. "
-            "They just say their goal in 1-2 sentences max.\n\n"
-            "BAD (AI-like): 'I need to search for events, then create a new one, then add attendees.'\n"
-            "GOOD (human-like): 'set up a meeting with Sarah next Tuesday at 2pm'\n\n"
-            "BAD: 'First verify the account, then check the balance, then transfer funds.'\n"
-            "GOOD: 'move $200 from savings to checking'"
-        )
-
-        if difficulty == "minimal":
-            grounding_line = (
-                "Do NOT include entity IDs — just express your intent naturally."
-            )
-        elif difficulty == "complete":
-            grounding_line = (
-                "Reference the exact entity IDs from the Oracle Entity IDs section — "
-                "weave them in naturally. These are the ONLY IDs you may use."
-            )
-        else:
-            grounding_line = (
-                "You forgot one key detail. Use IDs from Oracle Entity IDs where you "
-                "remember them, but leave out the missing piece naturally."
-            )
-
-        priority_note = (
-            "\nIMPORTANT: If your persona style conflicts with the difficulty level, "
-            "follow the difficulty for WHAT to include, but keep the persona's VOICE and TONE."
-        )
-
-        user = f"""## Persona
-{persona if persona else 'A normal user messaging their AI assistant.'}
-{date_block}
-## What this assistant can help with
-{self.domain_desc}
-{dep_hints}
-## Current State (real IDs and values)
-{state_text}
-{chain_goal_block}
-{entity_block}
-## Your task
-Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
-
-{grounding_line}{priority_note}
-Remember: state your GOAL, not the steps. One message, 1-2 sentences max.
-
-Return only:
-{{"user_query": "<the message>"}}
-"""
-        for attempt in range(3):
-            try:
-                raw = self.client.generate_chat(
-                    [{"role": "system", "content": system},
-                     {"role": "user", "content": user}],
-                    temperature=0.4 + 0.1 * attempt,
-                )
-                data = _extract_json(raw)
-                if not isinstance(data, dict):
-                    continue
-                query = data.get("user_query", "")
-                if query:
-                    return query
-            except Exception as e:
-                logger.debug(
-                    f"regenerate_query_from_oracle attempt {attempt + 1}/3 failed for "
-                    f"{self.domain}: {type(e).__name__}: {e}"
-                )
-        raise RuntimeError(f"Failed to regenerate query for {self.domain}")
-
-    # ── Step 1d: regenerate follow-up query grounded in oracle-used IDs ──
-
-    def regenerate_followup_from_oracle(
+    def generate_clarification(
         self,
         tool_schemas: list[dict[str, Any]],
         grounded_state: dict[str, Any],
         previous_query: str,
         difficulty: str,
         rng: random.Random,
-        oracle_entity_ids: list[str],
-        oracle_tool_names: list[str],
         persona: str = "",
         reference_date: str = "",
     ) -> str:
-        """Regenerate follow-up query grounded in oracle-used entity IDs.
+        """Generate a user clarification question (PROVE §3.2 Step 3.5).
 
-        Same principle as regenerate_query_from_oracle but for continuation
-        rounds: the follow-up must reference the IDs that the oracle actually
-        operated on in this round.
+        Unlike generate_followup (which drives the task forward), this
+        generates a natural user question seeking clarification or more detail
+        — simulating a user who needs additional information before proceeding.
+        The clarification enters conversation_queries and round_contracts,
+        producing a genuine multi-round training sample.
         """
         state_text = _format_state_compact(grounded_state, max_entities=20)
 
         date_block = ""
         if reference_date:
-            date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
-
-        entity_block = ""
-        if oracle_entity_ids:
-            ids_text = ", ".join(oracle_entity_ids[:10])
-            entity_block = (
-                f"\n## Oracle Entity IDs (MUST reference these)\n"
-                f"The following entity IDs were operated on: {ids_text}\n"
-                f"⚠️ Your follow-up MUST reference these exact IDs or describe "
-                f"the entities they refer to. Do NOT use other IDs.\n"
-            )
-
-        goal_phrase = ""
-        if oracle_tool_names:
-            goal_phrase = _chain_goal_phrase(oracle_tool_names[-1])
+            date_block = f"\n## Reference Date\nToday is {reference_date}.\n"
 
         system = (
-            "You are role-playing as a real user who sent a request to an AI assistant "
-            "and is now sending a follow-up message.\n\n"
-            "IMPORTANT: You do NOT know what tools the assistant used internally. "
-            "You only know what you originally asked for. "
-            "Write the follow-up purely from your own perspective — what you want next.\n\n"
-            "DO NOT write confirmation phrases like 'Got it', 'Great', 'Thanks'. "
-            "Just state your next request directly.\n"
-            "DO NOT mention tool names or internal steps.\n"
-            "Keep it to 1-2 sentences. Be natural and direct.\n"
-            "Do not introduce an unrelated new goal; continue the same task."
+            "You are role-playing as a real user who asked an AI assistant for help "
+            "and the assistant needs more information to proceed.\n\n"
+            "Write a brief, natural clarification question the user might ask. "
+            "This should sound like a real person asking for more details, NOT "
+            "like a system prompt or a tool description.\n\n"
+            "DO NOT mention tool names, API calls, or technical implementation.\n"
+            "Keep it to 1-2 sentences. Be natural.\n"
         )
 
         user = f"""## Persona
 {persona if persona else 'A normal user messaging their AI assistant.'}
 {date_block}
-## Your original request
+## Original request
 "{previous_query}"
 
-## Current State (real IDs and values you can reference)
+## Current State
 {state_text}
-{entity_block}
-## Your task
-Write ONE short follow-up message as the user. Difficulty: {difficulty}.
-{f'Ask about or continue the operation to {goal_phrase}.' if goal_phrase else 'Ask for the next thing you need.'}
-Do NOT acknowledge or confirm what the assistant did.
+
+## Task
+Write ONE short user clarification question. The user realized they need to provide
+more information or ask a follow-up detail question.
 
 Return only:
-{{"user_query": "<the follow-up message>"}}
+{{"user_query": "<the clarification question>"}}
 """
         for attempt in range(3):
             try:
                 raw = self.client.generate_chat(
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
-                    temperature=0.4 + 0.1 * attempt,
+                    temperature=0.5 + 0.1 * attempt,
                 )
                 data = _extract_json(raw)
                 if not isinstance(data, dict):
@@ -809,10 +766,10 @@ Return only:
                     return query
             except Exception as e:
                 logger.debug(
-                    f"regenerate_followup_from_oracle attempt {attempt + 1}/3 failed for "
-                    f"{self.domain}: {type(e).__name__}: {e}"
+                    f"generate_clarification attempt {attempt + 1}/3 failed "
+                    f"for {self.domain}: {type(e).__name__}: {e}"
                 )
-        raise RuntimeError(f"Failed to regenerate followup for {self.domain}")
+        raise RuntimeError(f"Failed to generate clarification for {self.domain}")
 
     # ── Step 2-N: decide next action (LLM-in-the-loop) ──
 
@@ -828,6 +785,8 @@ Return only:
         chain_progress: int = 0,
         reference_date: str = "",
         chain_context: dict[str, Any] | None = None,
+        blocked_tools: set[str] | None = None,
+        missing_function: bool = False,
     ) -> ActionPlan:
         """LLM decides the next action given full context.
 
@@ -868,7 +827,15 @@ Return only:
         # execution errors. 'complete' tasks have specific entity IDs and should
         # start with a real tool call.
         if not execution_history:
-            if difficulty == "missing":
+            if missing_function:
+                first_turn_hint = (
+                    "\nThe user's complete request requires a capability that is not "
+                    "present in Available Tools. Do not call a partial-workflow tool. "
+                    "Ask a concise clarification or report that the request cannot be completed.\n"
+                )
+                default_action = "ask_clarification"
+                blocked_first = ("final_answer",)
+            elif difficulty == "missing":
                 first_turn_hint = (
                     "\nNote: This task has a MISSING parameter. "
                     "ask_clarification may be needed before calling a tool.\n"
@@ -918,6 +885,10 @@ Return only:
                 "- Prefer the next remaining chain tool. If a prerequisite entity ID is missing, call a read/list/search tool to discover it — do NOT skip.\n"
                 "- Do NOT final_answer until ALL remaining chain tools have been called or an unrecoverable failure makes progress impossible.\n"
                 "- A single execution error (e.g. precondition_failed) is recoverable — retry with corrected parameters, don't give up.\n"
+                "- The chain is a synthesis guide, not user authorization. NEVER call "
+                "a mutating remaining tool unless the current user message explicitly "
+                "requests that tool's effect and concrete change. If it does not, ask "
+                "for clarification instead of inventing a side effect.\n"
             )
 
         date_guide = (
@@ -1035,9 +1006,35 @@ Output one JSON object:
                             f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
                         )
                         continue
+                    if missing_function:
+                        logger.debug(
+                            f"decide_action rejected tool call '{tool_name}' under "
+                            f"missing-function zero-tool contract for {self.domain}."
+                        )
+                        continue
+                    # P0: reject calls to blocked (hidden) tools so Teacher
+                    # cannot produce an oracle that references a missing function.
+                    if blocked_tools and tool_name in blocked_tools:
+                        logger.debug(
+                            f"decide_action rejected blocked tool '{tool_name}' for "
+                            f"{self.domain}, retrying (attempt {_retry + 1}/3)."
+                        )
+                        continue
+                    if tool_name not in tool_names_set:
+                        logger.debug(
+                            f"decide_action rejected unknown candidate tool '{tool_name}' "
+                            f"for {self.domain}."
+                        )
+                        continue
                 elif action in _VALID_TERMINALS:
                     tool_name = ""
                 elif action in tool_names_set:
+                    if missing_function:
+                        logger.debug(
+                            f"decide_action rejected auto-corrected tool action '{action}' "
+                            f"under missing-function zero-tool contract for {self.domain}."
+                        )
+                        continue
                     # Model used a tool name as the action type (e.g.,
                     # {"action": "cd", "arguments": {...}} instead of
                     # {"action": "tool_call", "tool_name": "cd", ...}).
@@ -1056,6 +1053,19 @@ Output one JSON object:
                         f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
                     )
                     continue
+
+                # P2-1: tool_call arguments MUST be a JSON object (dict).
+                # Teacher may return list, string, or other types — reject and retry.
+                if action == "tool_call":
+                    raw_args = data.get("arguments")
+                    if not isinstance(raw_args, dict):
+                        logger.debug(
+                            f"decide_action rejected non-dict arguments "
+                            f"({type(raw_args).__name__}) for {self.domain}, "
+                            f"retrying (attempt {_retry + 1}/3). "
+                            f"LLM raw: {raw[:120]}..."
+                        )
+                        continue
 
                 return ActionPlan(
                     action=action,
@@ -1146,181 +1156,7 @@ Output ONLY the JSON, nothing else:
             logger.debug(f"decide_recovery failed for {self.domain}: {e}")
             return {"action": "give_up", "reason": str(e)}
 
-# Domain → perturbation group mapping, per PROVE §6 step 5a
-_DOMAIN_PERTURBATION_GROUP = {
-    # PROVE mappings
-    "filesystem":    "filesystem_terminal",
-    "calendar":      "calendar_crm",
-    "crm":           "calendar_crm",
-    "email":         "email_teamchat",
-    "team_chat":     "email_teamchat",
-    "shopping":      "search_shopping",
-    # Extended mappings (closest PROVE category)
-    "banking":       "transactional",
-    "payments":      "transactional",
-    "food_delivery": "lifecycle",
-    "issue_tracker": "workflow",
-}
 
-_PERTURBATION_SPEC = {
-    "filesystem_terminal": ["intermittent_api_error", "partial_batch_failure"],
-    "calendar_crm":        ["intermittent_api_error", "partial_batch_failure"],
-    "email_teamchat":      ["paginated_response", "partial_batch_failure"],
-    "search_shopping":     ["paginated_response", "incomplete_intermediate"],
-    "transactional":       ["intermittent_api_error", "partial_batch_failure"],
-    "lifecycle":           ["intermittent_api_error", "partial_batch_failure"],
-    "workflow":            ["intermittent_api_error", "partial_batch_failure"],
-}
-
-# Per-type probability (~0.10 each, total ~0.20 within PROVE 0.15–0.30)
-_PERTURBATION_PROB = {
-    "intermittent_api_error":   0.10,
-    "paginated_response":       0.10,
-    "incomplete_intermediate":  0.10,
-    "partial_batch_failure":    0.10,
-}
-
-
-def _perturb_intermittent_api_error(
-    observation: dict[str, Any] | str | None,
-    rng: random.Random,
-) -> dict[str, Any] | str | None:
-    """Return internal server error → oracle retries the same call."""
-    return {"error": "Internal Server Error", "retry": True}
-
-
-def _perturb_paginated_response(
-    observation: dict[str, Any] | str | None,
-    rng: random.Random,
-) -> dict[str, Any] | str | None:
-    """Wrap partial results with a cursor → oracle must paginate."""
-    if not isinstance(observation, dict):
-        return None
-    items = observation.get("items", observation.get("results", []))
-    if isinstance(items, list) and len(items) > 1:
-        mid = max(1, len(items) // 2)
-        return {**observation, "items": items[:mid], "next_cursor": "page_2"}
-    return None
-
-
-def _perturb_incomplete_intermediate(
-    observation: dict[str, Any] | str | None,
-    rng: random.Random,
-) -> dict[str, Any] | str | None:
-    """Return snippets instead of full details → oracle must extract/get detail.
-
-    PROVE: intermediate search results only show summaries, forcing
-    subsequent extract/detail calls to retrieve complete information.
-    """
-    if not isinstance(observation, dict):
-        return None
-    result_keys = ("items", "results", "matches", "entries", "records")
-    if not any(k in observation for k in result_keys):
-        return None
-    total = 0
-    for k in result_keys:
-        v = observation.get(k)
-        if isinstance(v, list):
-            total = len(v)
-            break
-    if total < 2:
-        return None
-    summary = {
-        "summary": "Partial results returned. Use get_detail / extract / get_item "
-                   "to retrieve complete information.",
-        "snippet_count": min(total, rng.randint(1, 3)),
-        "requires_detail_fetch": True,
-    }
-    for k in ("total", "count", "next_cursor", "cursor"):
-        if k in observation:
-            summary[k] = observation[k]
-    return summary
-
-
-def _perturb_partial_batch_failure(
-    observation: dict[str, Any] | str | None,
-    rng: random.Random,
-) -> dict[str, Any] | str | None:
-    """Mark a subset of batch results as failed → oracle must retry individually.
-
-    PROVE: bulk updates where some items fail. The model must inspect results
-    and re-process failed items one by one.
-    """
-    if not isinstance(observation, dict):
-        return None
-    batch_keys = ("results", "updated", "processed", "created")
-    batch_key = None
-    items = []
-    for k in batch_keys:
-        v = observation.get(k)
-        if isinstance(v, list) and len(v) > 1:
-            batch_key = k
-            items = v
-            break
-    if not items:
-        return None
-    assert batch_key is not None  # guaranteed by the loop above: items is non-empty
-    fail_count = max(1, len(items) // 3)
-    fail_indices = rng.sample(range(len(items)), fail_count)
-    new_items = list(items)
-    for idx in fail_indices:
-        if isinstance(new_items[idx], dict):
-            new_items[idx] = {
-                **new_items[idx],
-                "status": "failed",
-                "error": "Transient processing failure — retry required",
-            }
-    return {**observation, batch_key: new_items, "partial_failure": True, "failed_count": fail_count}
-
-
-_PERTURBATION_HANDLERS = {
-    "intermittent_api_error":   _perturb_intermittent_api_error,
-    "paginated_response":       _perturb_paginated_response,
-    "incomplete_intermediate":  _perturb_incomplete_intermediate,
-    "partial_batch_failure":    _perturb_partial_batch_failure,
-}
-
-
-def apply_perturbation(
-    observation: dict[str, Any] | str | None,
-    domain: str,
-    rng: random.Random,
-) -> dict[str, Any] | str | None:
-    """Apply domain-specific execution perturbation (PROVE-style).
-
-    Total perturbation probability: ~0.20 per tool call (PROVE: 0.15–0.30).
-
-    Perturbation types (per domain group):
-
-    ======================  ==============================================  ============================
-    Domain group             Domains                                         Perturbation types
-    ======================  ==============================================  ============================
-    filesystem_terminal      filesystem                                      intermittent, partial_batch
-    calendar_crm             calendar, crm                                   intermittent, partial_batch
-    email_teamchat           email, team_chat                                paginated, partial_batch
-    search_shopping          shopping                                        paginated, incomplete
-    transactional            banking, payments                               intermittent, partial_batch
-    lifecycle                food_delivery                                   intermittent, partial_batch
-    workflow                 issue_tracker                                   intermittent, partial_batch
-    ======================  ==============================================  ============================
-
-    Each applicable type is rolled independently at ~0.10 probability.
-    Types that don't match the observation structure silently skip
-    (e.g., paginated_response on a non-list observation does nothing).
-    """
-    group = _DOMAIN_PERTURBATION_GROUP.get(domain, "transactional")
-    pert_types = _PERTURBATION_SPEC.get(group, ["intermittent_api_error"])
-
-    for ptype in pert_types:
-        prob = _PERTURBATION_PROB.get(ptype, 0.10)
-        if rng.random() < prob:
-            handler = _PERTURBATION_HANDLERS.get(ptype)
-            if handler:
-                result = handler(observation, rng)
-                if result is not None:
-                    return result
-
-    return observation
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1821,7 +1657,8 @@ def replay_validate(
     domain: str,
     success_criteria: list[dict[str, Any]] | None = None,
     max_error_rate: float = 0.30,
-) -> tuple[bool, float, int, int]:
+    blocked_tools: set[str] | None = None,
+) -> tuple[bool, float, int, int, bool, int]:
     """Replay oracle trace against a fresh session to verify it's reproducible.
 
     Counts only schema-level and execution errors (not empty-result responses).
@@ -1830,15 +1667,21 @@ def replay_validate(
     for terminal shape and tool-call budget.
 
     Returns:
-        (passed, error_rate, num_errors, num_calls)
+        (passed, error_rate, num_errors, num_calls, criteria_ok, criteria_failed)
         - passed: True if error_rate <= max_error_rate (default 0.30)
-        - error_rate: fraction of calls that failed
-        - num_errors: count of schema/execution errors
+          ONLY counts schema/execution errors — paper-definition aligned.
+        - error_rate: fraction of tool calls that failed
+        - num_errors: count of schema/execution errors only
         - num_calls: total tool calls replayed
+        - criteria_ok: True if replay session satisfies all success_criteria
+          (or criteria list is empty). NOT merged into error_rate.
+        - criteria_failed: actual count of failed success_criteria
     """
     session = manager.create_session(seed=seed)
     num_errors = 0
     num_calls = 0
+    criteria_ok = True
+    criteria_failed = 0
     try:
         manager.discover_tools(session.session_id)
         for idx, call in enumerate(oracle_calls):
@@ -1849,9 +1692,17 @@ def replay_validate(
             result = executor.execute(
                 session.session_id,
                 ToolCall(call.tool_name, dict(call.arguments), call_id=f"replay_{idx}"),
-                domain=domain,
+                blocked_tools=blocked_tools,
+                domain=getattr(call, "server_name", "") or domain,
             )
             num_calls += 1
+            expected_success = getattr(call, "expected_success", None)
+            if expected_success is False and result.success:
+                # Replay must preserve the Teacher attempt outcome. A call that
+                # failed during synthesis but succeeds after reset can mutate
+                # state and no longer represents the completed conversation.
+                num_errors += 1
+                continue
             if not result.success or not result.schema_valid:
                 # Count only schema/execution errors, not empty-result responses.
                 # PROVE: "We count only schema-level and execution errors
@@ -1885,21 +1736,24 @@ def replay_validate(
                     # Unknown error type — count as error
                     num_errors += 1
 
+        # ── Criteria check (independent of tool-error-rate) ──
+        # PROVE's 30% threshold applies ONLY to schema/execution errors.
+        # Criteria validation is a separate quality signal — NOT merged
+        # into num_errors so it does not pollute the paper's error_rate.
         if success_criteria:
             from src.live_mcp.oracle import criterion_satisfied
 
             replay_state = manager.get_state(session.session_id)
-            criteria_errors = sum(
+            criteria_failed = sum(
                 1 for criterion in success_criteria
                 if not criterion_satisfied(replay_state, criterion)
             )
-            # PROVE allows up to 30% error rate on tool calls.  For state
-            # criteria we use a floor-based 25% threshold: int(N*0.25).
-            # With 1-3 criteria this is 0 (all must pass); with 4+ criteria
-            # this is 1+ (one failure tolerated).  Unlike max(1, ...) this
-            # does not silently accept the only failing criterion when N=1.
-            threshold = int(len(success_criteria) * 0.25)
-            num_errors += criteria_errors if criteria_errors > threshold else 0
+            criteria_ok = (criteria_failed == 0)
+            if not criteria_ok:
+                logger.debug(
+                    f"Replay criteria check: {criteria_failed}/{len(success_criteria)} "
+                    f"failed in fresh session — criteria_ok=False"
+                )
         else:
             # Project-specific quality gate (NOT part of PROVE / OVAL-MCP §5.0):
             # Mutating tool calls with empty success_criteria are suspicious
@@ -1924,7 +1778,7 @@ def replay_validate(
         error_rate = num_errors / num_calls if num_calls > 0 else float(num_errors > 0)
         passed = error_rate <= max_error_rate
 
-        return passed, error_rate, num_errors, num_calls
+        return passed, error_rate, num_errors, num_calls, criteria_ok, criteria_failed
     finally:
         manager.close_session(session.session_id)
 
