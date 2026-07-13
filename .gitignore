@@ -65,6 +65,8 @@ CLAUDE.md
 
 # Development documentation (not needed for running)
 docs/
+data/README.md
+configs/README.md
 
 # Reference papers (not needed for running)
 reference/
