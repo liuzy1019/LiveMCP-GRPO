@@ -48,12 +48,6 @@ class _NoneRelationClient:
                     "target": "tool_b",
                     "relation": "none",
                 },
-                {
-                    "pair": "tool_b → tool_a",
-                    "source": "tool_b",
-                    "target": "tool_a",
-                    "relation": "none",
-                },
             ],
         })
 
@@ -67,7 +61,7 @@ class _IncompleteClient:
         return '{"classifications": []}'
 
 
-class _BidirectionalClient:
+class _DirectedClient:
     def generate_chat(self, *_args, **_kwargs) -> str:
         return json.dumps({
             "classifications": [
@@ -75,11 +69,19 @@ class _BidirectionalClient:
                     "pair": "tool_a → tool_b", "source": "tool_a",
                     "target": "tool_b", "relation": "explicit",
                 },
-                {
-                    "pair": "tool_b → tool_a", "source": "tool_b",
-                    "target": "tool_a", "relation": "implicit",
-                },
             ],
+        })
+
+
+class _ReverseDirectedClient:
+    def generate_chat(self, *_args, **_kwargs) -> str:
+        return json.dumps({
+            "classifications": [{
+                "pair": "tool_a → tool_b",
+                "source": "tool_b",
+                "target": "tool_a",
+                "relation": "implicit",
+            }],
         })
 
 
@@ -128,13 +130,23 @@ def test_none_relation_uses_pair_when_model_returns_none_endpoints() -> None:
     }
 
 
-def test_ordered_pairs_can_retain_both_dependency_directions() -> None:
+def test_unordered_pair_records_teacher_selected_direction() -> None:
     orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
-    orchestrator.client = _BidirectionalClient()
+    orchestrator.client = _DirectedClient()
 
     graph = orchestrator._classify_edges_llm(TOOLS, "probe")
 
     assert graph["tool_a"]["explicit"] == ["tool_b"]
+    assert graph["tool_b"]["implicit"] == []
+
+
+def test_unordered_pair_accepts_reverse_teacher_direction() -> None:
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.client = _ReverseDirectedClient()
+
+    graph = orchestrator._classify_edges_llm(TOOLS, "probe")
+
+    assert graph["tool_a"]["explicit"] == []
     assert graph["tool_b"]["implicit"] == ["tool_a"]
 
 
@@ -166,7 +178,7 @@ def test_atomic_cache_save_publishes_only_complete_json(tmp_path, monkeypatch) -
     payload = json.loads(cache_path.read_text(encoding="utf-8"))
     assert replace_observations[0]["old"] == {"sentinel": "old"}
     assert replace_observations[0]["new"]["classification_complete"] is True
-    assert payload["classified_pair_count"] == 2
+    assert payload["classified_pair_count"] == 1
     assert payload["dependency_semantics_version"] == TaskOrchestrator.DEPENDENCY_SEMANTICS_VERSION
     assert not list(cache_path.parent.glob(f".{cache_path.name}.*.tmp"))
 
@@ -219,7 +231,7 @@ def test_cold_cache_is_classified_once_across_processes(tmp_path) -> None:
     assert len(cache_files) == 1
     payload = json.loads(cache_files[0].read_text(encoding="utf-8"))
     assert payload["classification_complete"] is True
-    assert payload["classified_pair_count"] == 2
+    assert payload["classified_pair_count"] == 1
 
 
 def test_production_cache_load_preserves_llm_classification(tmp_path, monkeypatch) -> None:
@@ -251,8 +263,8 @@ def test_production_cache_load_preserves_llm_classification(tmp_path, monkeypatc
         "schema_hash": schema_hash,
         "tool_names": sorted(t["name"] for t in tools),
         "graph": graph,
-        "expected_pair_count": 2,
-        "classified_pair_count": 2,
+        "expected_pair_count": 1,
+        "classified_pair_count": 1,
         "classification_complete": True,
     }), encoding="utf-8")
 

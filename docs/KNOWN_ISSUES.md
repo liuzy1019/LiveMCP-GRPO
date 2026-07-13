@@ -109,7 +109,7 @@ Replay 只能证明 schema/execution 可复现，不能单独证明 query 语义
 - `reorder` 已同时建模为“消费旧 order、创建新 order”，避免后续调用绑定旧订单；
 - Stage 1/2 验证为 52 pass、0 fail、14 diagnostic warning；当前全量测试 56 pass；十域各 1 条真实生成探针通过并精确覆盖 10 个 domain。
 
-PROVE 对齐边界：论文写“all n² tool pairs”，但未公开是否包含 self-pair，也未公开 chain traversal 是否允许重复节点；当前实现使用不同工具的有序 `n(n-1)` pair 和 simple path，因此只能认定机制对齐，不能声称逐实现一致。raw cache 还存在 LLM classifier noise，例如 email `create_draft → get_email/archive_email` 与实际 drafts/emails 容器语义不符；按照论文机制不手工改写 cache，此风险由真实生成质量审查暴露。若后续获得官方代码，再决定是否调整 self-pair/repeated-node 语义并重建 cache。
+PROVE 原文公式为 `C(n,2)=n(n-1)/2`，不是 OCR 文本中的 `n²`。当前 semantics v10 对每个无序 pair 只分类一次，由 LLM 决定有向 source/target；semantics v9 的有序 `n(n-1)` cache 自动失效。论文未公开 chain traversal 是否允许重复节点，当前仍采用 simple path。raw cache 可能存在 LLM classifier noise，例如 email `create_draft → get_email/archive_email` 与实际 drafts/emails 容器语义不符；按照论文机制不手工改写 cache，此风险由 live execution、replay 和数据审查暴露。
 
 剩余验收：正式批量生成后逐条检查 query、oracle、状态变化和 terminal 语义。图中的孤立点与环仅作为 LLM 分类结果诊断，不作为 corpus rejection gate。
 

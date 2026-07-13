@@ -113,8 +113,11 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
 
 DIFFICULTY_DESCRIPTIONS: dict[str, str] = {
     "complete": (
-        "The user knows exactly what they want and says it clearly — includes "
-        "specific IDs and the desired outcome. No follow-up needed. "
+        "The user knows exactly what they want and provides all user-known "
+        "information needed for the desired outcome. Use a specific existing ID "
+        "only when that entity is naturally known before execution; an ID produced "
+        "by an earlier chain capability does not belong in the user message. "
+        "No follow-up needed. "
         "Example tone: 'move $500 from acc_01 to checking', "
         "'cancel evt_042', 'cat /home/user/report.txt'."
     ),
@@ -130,6 +133,16 @@ DIFFICULTY_DESCRIPTIONS: dict[str, str] = {
         "No entity IDs, no parameters — just what they want done."
     ),
 }
+
+
+@dataclass(frozen=True)
+class GeneratedQuery:
+    """Auditable result of PROVE chain-seeded query synthesis."""
+
+    user_query: str
+    target_capability: str
+    chain_supported: bool
+    attempts: int
 
 
 def _chain_goal_phrase(final_tool: str) -> str:
@@ -370,7 +383,7 @@ class TaskPlanner:
         reference_date: str = "",
         chain_seed: list[str] | None = None,
         chain_context: dict[str, Any] | None = None,
-    ) -> str:
+    ) -> GeneratedQuery:
         """LLM generates a natural-language user query grounded in live state.
 
         PROVE §4: injects persona (character role) and reference_date (temporal anchor)
@@ -409,7 +422,10 @@ class TaskPlanner:
             )
         elif difficulty == "complete":
             grounding_line = (
-                "Reference the exact entity IDs from Current State — weave them in naturally."
+                "Include all user-known information needed to complete the goal. "
+                "If you naturally reference an entity that already exists, copy its exact ID "
+                "from Current State. Do not substitute an existing ID for an entity that an "
+                "earlier capability in the dependency chain will create."
             )
         else:
             grounding_line = (
@@ -440,6 +456,20 @@ class TaskPlanner:
                     f"The grounded dependency chain is: {chain_seed}.\n"
                     f"Capabilities in execution order:\n{chain_requirements}\n"
                     f"The message MUST clearly request the final outcome: {goal_phrase}. "
+                    f"Return target_capability exactly as {final_tool!r}. If you cannot "
+                    "write a natural request for this target, return user_query as "
+                    "'UNSAT' instead of switching to another task. "
+                    "The request must preserve the dependency: do not give the user "
+                    "an ID or value that an earlier capability is supposed to discover "
+                    "or produce. Each earlier capability must remain a plausible internal "
+                    "prerequisite for the final outcome. If that cannot be expressed as "
+                    "one natural user goal, return UNSAT. Set chain_supported=true only "
+                    "when these conditions hold. "
+                    "Treat each entity label as a typed resource: an invoice ID is not "
+                    "a payment ID, order ID, or any other ID type. Choose only entities "
+                    "whose shown status and numeric facts satisfy the target capability. "
+                    "For a state-dependent amount, use the exact shown amount or remaining "
+                    "allowance; do not invent a convenient value. "
                     "Read-only earlier items may be internal prerequisites. Every "
                     "write/update/delete/send/pay or other state-changing item MUST "
                     "be explicitly requested in this same message; a dependency edge "
@@ -459,15 +489,30 @@ class TaskPlanner:
         # invent IDs.  Without this constraint, the LLM hallucinates entity
         # IDs that don't exist in any seed, causing 100% replay failure.
         anti_halluc_block = ""
-        if chain_context and chain_context.get("entity_summaries"):
-            summaries_text = "\n".join(chain_context["entity_summaries"][:15])
-            anti_halluc_block = (
-                f"\n## Chain-Aligned Entities (ONLY these IDs exist)\n"
-                f"{summaries_text}\n\n"
-                f"⚠️ CRITICAL: You MUST ONLY reference entity IDs from this list "
-                f"or from Current State above. Do NOT invent, modify, or guess IDs. "
-                f"If an ID is 'evt_001', write 'evt_001' — not 'evt_005' or 'evt_0001'.\n"
+        if chain_context and chain_context.get("query_grounding_summaries"):
+            summaries_text = "\n".join(
+                chain_context["query_grounding_summaries"][:15]
             )
+            hidden_types = chain_context.get("opaque_id_hidden_types", [])
+            if hidden_types:
+                anti_halluc_block = (
+                    f"\n## Chain-Aligned Grounded Candidates\n"
+                    f"{summaries_text}\n\n"
+                    f"Opaque IDs are intentionally hidden for these entity types: "
+                    f"{hidden_types}. Refer to them only through the shown natural "
+                    f"selectors (name, customer, status, category, amount, etc.). "
+                    f"Do NOT invent an ID or copy an ID for another entity. The "
+                    f"assistant must discover the exact ID with the earlier read/list/search "
+                    f"capability in the sampled chain.\n"
+                )
+            else:
+                anti_halluc_block = (
+                    f"\n## Chain-Aligned Entities (ONLY these IDs exist)\n"
+                    f"{summaries_text}\n\n"
+                    f"⚠️ CRITICAL: You MUST ONLY reference entity IDs from this list "
+                    f"or from Current State above. Do NOT invent, modify, or guess IDs. "
+                    f"If an ID is 'evt_001', write 'evt_001' — not 'evt_005' or 'evt_0001'.\n"
+                )
         elif difficulty == "complete":
             # Even without chain_context, enforce anti-hallucination on
             # the full state for complete-difficulty tasks.
@@ -494,7 +539,7 @@ Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
 Remember: state your GOAL, not the steps. One message, 1-2 sentences max.
 
 Return only:
-{{"user_query": "<the message>"}}
+{{"user_query": "<the message or UNSAT>", "target_capability": "<sampled chain final capability>", "chain_supported": <true or false>}}
 """
         for attempt in range(3):
             try:
@@ -507,8 +552,35 @@ Return only:
                 if not isinstance(data, dict):
                     continue
                 query = data.get("user_query", "")
+                target_capability = str(data.get("target_capability", "")).strip()
+                chain_supported = data.get("chain_supported") is True
+                expected_target = chain_seed[-1] if chain_seed else ""
+                if str(query).strip().upper() == "UNSAT":
+                    logger.debug(
+                        f"generate_query attempt {attempt + 1}/3 reported UNSAT "
+                        f"for {self.domain} chain={chain_seed}"
+                    )
+                    continue
+                if expected_target and target_capability != expected_target:
+                    logger.debug(
+                        f"generate_query attempt {attempt + 1}/3 target mismatch "
+                        f"for {self.domain}: expected={expected_target!r}, "
+                        f"got={target_capability!r}"
+                    )
+                    continue
+                if expected_target and not chain_supported:
+                    logger.debug(
+                        f"generate_query attempt {attempt + 1}/3 did not support "
+                        f"the sampled chain for {self.domain}: chain={chain_seed}"
+                    )
+                    continue
                 if query:
-                    return query
+                    return GeneratedQuery(
+                        user_query=str(query),
+                        target_capability=target_capability,
+                        chain_supported=chain_supported,
+                        attempts=attempt + 1,
+                    )
             except Exception as e:
                 logger.debug(
                     f"generate_query attempt {attempt + 1}/3 failed for "
@@ -550,6 +622,7 @@ Return only:
         dependency graph or exposing internal chain nodes.
         """
         state_text = _format_state_compact(grounded_state, max_entities=20)
+        tools_text = _format_tools(tool_schemas)
 
         date_block = ""
         if reference_date:
@@ -570,6 +643,9 @@ Return only:
             "Do not introduce an unrelated new goal; continue the same task.\n"
             "Choose a request that is feasible for the entity's current status. "
             "For example, do not ask to cancel an already delivered order.\n"
+            "Use the Available Tools descriptions as the authority for allowed "
+            "statuses, resource types, exact amounts, and other preconditions. "
+            "Never use one resource type's ID where another is required.\n"
             "If you request a state-changing action, include user-decided required "
             "values when the difficulty is complete. For missing or minimal difficulty, "
             "it is acceptable to omit such a value so the assistant can clarify; never "
@@ -601,6 +677,9 @@ Return only:
 ## What this assistant can help with
 {self.domain_desc}
 
+## Available Tools and Preconditions
+{tools_text}
+
 ## Your original request
 "{previous_query}"
 {response_block}
@@ -617,7 +696,10 @@ continue this same domain conversation. Do not request an unavailable
 cross-domain capability.
 For complete difficulty, if the target capability requires an existing entity,
 copy its exact ID from Current State into the message and include every concrete
-detail needed for the requested change.
+detail needed for the requested change. Select only an entity whose shown type,
+status, amount, and linked IDs satisfy the tool description. If no such entity
+exists, ask for a read-only status/detail check rather than requesting an
+impossible mutation.
 
 Return only:
 {{"user_query": "<the follow-up message>"}}
@@ -831,7 +913,7 @@ Return only:
                 f"⚠️ CRITICAL — ID Provenance Rule:\n"
                 f"- Entity IDs (event_id, account_id, invoice_id, order_id, etc.) "
                 f"MUST come from one of these sources:\n"
-                f"  1. The Chain-Aligned Entities list above\n"
+                f"  1. The User Task itself\n"
                 f"  2. Current State (shown in the Execution History)\n"
                 f"  3. Prior tool observations in the Execution History\n"
                 f"- If you don't know the correct ID, call a read/search/list tool first "
@@ -846,7 +928,7 @@ Return only:
             anti_halluc_block = (
                 "\n## Anti-Hallucination Rule\n"
                 "⚠️ Entity IDs (event_id, account_id, invoice_id, etc.) MUST come "
-                "from the Execution History or Current State. If unsure, call a "
+                "from the User Task, Execution History, or Current State. If unsure, call a "
                 "read/search/list tool to find the correct ID. NEVER guess.\n"
             )
 
@@ -881,6 +963,12 @@ Return only:
             "an amount, destination, address, message body, or replacement value), and do "
             "not copy it from another entity merely to satisfy the schema. If the user did "
             "not provide it and no prior tool output determines it, ask_clarification.\n"
+            "- Treat grounded IDs as typed resources. Match invoice_id only to an invoice, "
+            "payment_id only to a payment, and likewise for every other schema field.\n"
+            "- Before every mutating call, compare its arguments with the grounded entity "
+            "and latest tool observations. Respect shown status, exact amount, remaining "
+            "allowance, and linked IDs. If a prerequisite is unknown, discover it with a "
+            "read/list/search tool rather than guessing.\n"
             "\n"
             "⚠ FORMAT RULES (follow exactly):\n"
             "- When calling a tool, \"action\" MUST be \"tool_call\". Put the tool name in \"tool_name\".\n"
@@ -1927,6 +2015,8 @@ def _format_state_compact(state: dict[str, Any], max_entities: int = 20) -> str:
                 for fk, fv in entity_data.items():
                     if fk.endswith("_id") or fk.endswith("_name"):
                         id_fields.append(f"{fk}={fv}")
+                if entity_data.get("summary"):
+                    id_fields.append(f"facts={entity_data['summary']}")
                 summary = ", ".join(id_fields[:5])
                 lines.append(f"  {entity_type}/{entity_id}: {summary}" if summary else f"  {entity_type}/{entity_id}")
             else:

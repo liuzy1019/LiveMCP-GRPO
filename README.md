@@ -45,7 +45,7 @@ Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
 │   ├── generate_data.py       # 数据生成 Python 入口（5 步状态机管线）
 │   ├── train_grpo.sh          # GRPO 训练 shell 入口
 │   ├── train_grpo.py          # GRPO 训练 Hydra 入口
-│   ├── dependency_graph.py    # 依赖图预计算（当前为 distinct ordered n(n-1) pair 分类）
+│   ├── dependency_graph.py    # 依赖图预计算（C(n,2) 无序 pair，各分类一次）
 │   ├── validate_pipeline.py   # 端到端管线验证
 │   ├── verify_entities.py     # 实体验证
 │   ├── merge_rollout_shards.py # Rollout 分片合并（含质量门禁）

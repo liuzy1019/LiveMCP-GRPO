@@ -1,8 +1,8 @@
 {
   "cache_version": 4,
-  "dependency_semantics_version": 9,
+  "dependency_semantics_version": 10,
   "server_name": "email",
-  "schema_hash": "825a8e96cce0d7d6",
+  "schema_hash": "891c98cab0324d14",
   "tool_names": [
     "add_label",
     "archive_email",
@@ -35,14 +35,9 @@
     },
     "create_draft": {
       "explicit": [
-        "get_email",
         "add_label",
         "remove_label",
-        "move_to_thread",
-        "archive_email",
-        "mark_read",
-        "mark_unread",
-        "get_attachments"
+        "move_to_thread"
       ],
       "implicit": []
     },
@@ -64,13 +59,6 @@
     },
     "get_thread": {
       "explicit": [
-        "get_email",
-        "send_email",
-        "forward_email",
-        "reply_email",
-        "add_label",
-        "remove_label",
-        "move_to_thread",
         "archive_email",
         "mark_read",
         "mark_unread",
@@ -135,18 +123,19 @@
     },
     "send_email": {
       "explicit": [
+        "add_label",
+        "remove_label",
         "move_to_thread",
         "get_thread",
         "archive_email",
         "mark_read",
-        "mark_unread",
-        "get_attachments"
+        "mark_unread"
       ],
       "implicit": []
     }
   },
   "tool_count": 17,
-  "expected_pair_count": 272,
-  "classified_pair_count": 272,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
   "classification_complete": true
 }

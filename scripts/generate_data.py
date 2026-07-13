@@ -1296,6 +1296,15 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "source_chain_seed": list(
                 task.metadata.get("source_chain_seed", []) if task.metadata else []
             ),
+            "query_generation_attempts": int(
+                task.metadata.get("query_generation_attempts", 1)
+            ),
+            "query_target_capability": str(
+                task.metadata.get("query_target_capability", "")
+            ),
+            "query_chain_supported": bool(
+                task.metadata.get("query_chain_supported", False)
+            ),
             # Serialize oracle_calls as JSON so sparse heterogeneous argument
             # dicts round-trip through Parquet without struct unification.
             "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
@@ -1335,6 +1344,12 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "project_outcome_valid": task.metadata.get("project_outcome_valid", True),
             "replay_error_rate": task.metadata.get("replay_error_rate", 0.0),
             "criteria_failed_count": task.metadata.get("criteria_failed", 0),
+            "fsm_final_state": task.metadata.get("fsm_final_state", ""),
+            "fsm_transitions": json.dumps(
+                task.metadata.get("fsm_transitions", []),
+                ensure_ascii=False,
+                default=str,
+            ),
         }
 
         row = {

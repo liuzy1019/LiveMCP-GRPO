@@ -1,8 +1,8 @@
 {
   "cache_version": 4,
-  "dependency_semantics_version": 9,
+  "dependency_semantics_version": 10,
   "server_name": "banking",
-  "schema_hash": "0a31903993bc1f11",
+  "schema_hash": "84812765075df0fb",
   "tool_names": [
     "apply_loan",
     "bill_pay",
@@ -97,12 +97,8 @@
     "unfreeze_account": {
       "explicit": [],
       "implicit": [
-        "transfer",
-        "wire_transfer",
-        "deposit",
         "withdraw",
-        "bill_pay",
-        "schedule_transfer"
+        "bill_pay"
       ]
     },
     "verify_account": {
@@ -119,7 +115,7 @@
     }
   },
   "tool_count": 17,
-  "expected_pair_count": 272,
-  "classified_pair_count": 272,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
   "classification_complete": true
 }

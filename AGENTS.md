@@ -59,7 +59,7 @@ verl 0.6.1 从 `./verl` editable 安装。关键版本：
 
 > 管线细节见 `data/README.md`，对齐 PROVE 论文 §3.2 的五步流程。核心约束如下：
 
-- **PROVE §3.2 五步机制对齐**：依赖图构建 → Live-State 采样 → 状态机编排 → Robustness Knobs → Replay 验证 + 去重；论文未公开的 self-pair、重复节点和 Jaccard 细节必须标为本地选择，不宣称逐实现一致
+- **PROVE §3.2 五步机制对齐**：依赖图构建 → Live-State 采样 → 状态机编排 → Robustness Knobs → Replay 验证 + 去重；依赖图按论文 `C(n,2)=n(n-1)/2` 无序 pair 各分类一次，由 LLM 决定有向 source/target；论文未公开的重复节点 traversal 和 Jaccard 细节必须标为本地选择
 - **Robustness 注入时机**：在 Teacher 处理前采样并固定。distractor 加入 Teacher candidate set，enum stripping 作用于 Teacher-visible schema，missing function 在完整 chain/query 生成后从 Teacher schema/hints/执行器中隐藏；同一配置用于 Replay 和 Parquet
 - **PROVE corpus hard gates**：只把 fresh replay（schema/execution error rate ≤30%）、sensitive-parameter provenance 和 tool-call sequence Jaccard 0.70 记为论文公开过滤；不得自行增加 exact-chain、词法 capability、query/tool-name 或通用 mutation hard gate
 - **Graceful give-up**：PROVE recovery 允许在当前 candidate tools 无法完成目标时直接 `report_error`；不得要求先制造一次 execution failure。无失败历史只可作为 Teacher 质量诊断，不得作为 corpus hard gate

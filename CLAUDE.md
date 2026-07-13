@@ -147,7 +147,7 @@ python -c "import flashinfer; print(flashinfer.__version__)"
 
 ```
 Step 1 — Auto-Discovered Dependency Graph
-  distinct ordered n(n-1) pairwise LLM classification → directed graph → simple chains (len 2–5)
+  unordered C(n,2) pairwise LLM classification → directed graph → simple chains (len 2–5)
 Step 2 — Live-State Sampling (Grounded Query Generation)
   Probe live MCP servers for real entities → inject sampling context into prompt
 Step 3 — State-Machine Orchestrator
@@ -202,7 +202,7 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 
 | 步骤 | 对齐状态 | 说明 |
 |------|----------|------|
-| Step 1 — 依赖图构建 | 机制对齐，非逐实现复现 | 论文写 `n²` 但未公开 self-pair/repeated-node 细节；本实现分类不同工具的有序 `n(n-1)` pair → simple chains len 2–5；严格 cache 校验完整性；不做论文外手工改图 |
+| Step 1 — 依赖图构建 | 对齐 | 论文公式为 `C(n,2)=n(n-1)/2`；每个无序 pair 分类一次，由 LLM 决定有向 source/target → simple chains len 2–5；严格 cache 校验完整性；不做论文外手工改图 |
 | Step 2 — Live-State Sampling | 机制对齐，过滤细节本地化 | 通过 readonly discovery tools 探针真实实体；context 绑定 session，chain-aligned context 注入 prompt。当前以 chain-specific handler 条件筛选，不实现论文举例的全局 supporting-data filter 表 |
 | Step 3 — 状态机 | 机制 smoke 已验证 | query → LLM 决策 → 执行 → recovery → continuation；真实 normal 两轮 chain 已完成 |
 | Step 4 — Robustness Knobs | 机制对齐 | robustness plan 在 Teacher 前固定；distractor / enum stripping / missing function 均作用于 Teacher candidate contract |

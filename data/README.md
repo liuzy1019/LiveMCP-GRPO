@@ -46,7 +46,7 @@ data/
 ### Step 1 — 自动发现依赖图（Auto-Discovered Dependency Graph）
 
 ```
-对每个 domain，对所有有序 `n(n-1)` 工具对（不含 self-pair）调用 LLM 分类器，判断关系：
+对每个 domain，对全部无序工具对 `C(n,2)=n(n-1)/2` 各调用一次 LLM 分类器，判断关系：
   explicit（工具 A 的输出是工具 B 的必需输入）
   implicit（A 必须先执行以建立状态）
   none
@@ -55,8 +55,8 @@ data/
 ```
 
 每个 domain 的依赖图缓存在 `data/dependency_graphs/{domain}_{hash}.json`。
-严格 cache 必须同时记录 `expected_pair_count=n(n-1)`、`classified_pair_count` 和 `classification_complete=true`；旧的无序 `nC2` cache 或缺少这些字段的 artifact 均不能作为“全部有向 pair 已由 LLM 分类”的证据。
-论文写作“all n² tool pairs”，但没有公开是否包含 self-pair，也没有公开 chain traversal 是否允许重复节点。当前工程选择全部不同工具的有序 pair，即 `n(n-1)`，并提取不重复节点的 simple paths；这是可审计的本地实现选择，不能宣称为论文逐实现事实。pairwise classifier 默认每批 8 个 pair、最多 512 输出 tokens；若返回缺项，只重问未分类 pair。任一 batch 重试耗尽仍不完整时，整张 graph fail-closed，不缓存部分结果。
+严格 cache 必须同时记录 `expected_pair_count=n(n-1)/2`、`classified_pair_count` 和 `classification_complete=true`；旧的有序 `n(n-1)` cache 或缺少这些字段的 artifact 均不能作为论文全部 pair 已分类的证据。
+每个无序 pair 只分类一次，LLM 输出 source/target 决定有向关系；`none` 表示该 pair 不建立边。论文没有公开 chain traversal 是否允许重复节点，当前提取不重复节点的 simple paths，这是可审计的本地实现选择。pairwise classifier 默认每批 8 个 pair、最多 512 输出 tokens；若返回缺项，只重问未分类 pair。任一 batch 重试耗尽仍不完整时，整张 graph fail-closed，不缓存部分结果。
 并行生成时，同一 `{domain}_{hash}` 的冷缓存只允许一个进程执行 LLM 分类；等待进程获得文件锁后必须再次读取缓存。缓存通过同目录临时文件和 `os.replace` 原子发布，生成 shard 启动前默认由单进程完成所选 domain 的预热。
 
 缓存保留 LLM 对全部有向 pair 的分类结果，不再经过本地 handler denylist、domain 黑名单、entity heuristic 或强制破环改写。候选 chain 的可行性由后续 live-state、execution 与 replay 验证；handler 事实只能用于 feasibility 或运行验证，不能回写 pairwise classifier 的 cache。
@@ -92,6 +92,14 @@ data/
 
 首轮 user query 由一条 live-state feasible dependency chain 生成。该 chain 及其 graph hints 不传给 Teacher action prompt；Teacher 只根据 query、candidate tool schemas 和真实 execution history 决策。前置节点不拆成后续 user turn；continuation 只根据刷新后的 live state、此前 query 与真实 execution history继续同一 conversation，不为后续 round 重新构造 dependency chain。Replay 可执行不等于语义正确，正式 smoke 还必须核对 query、oracle 和 terminal。
 
+Query Teacher 返回 `user_query`、内部 `target_capability` 和 `chain_supported`；目标必须等于 sampled chain 尾节点，且 query 不得直接给出本应由前置节点产生或发现的信息。无法自然构造该多步目标时返回 `UNSAT`。不满足时在 Query Generation 内最多重试三次，耗尽后拒绝 candidate。以上声明不写入用户 query、不传给 action planner，也不是 oracle exact-chain gate。`complete` 只要求用户已知且完成目标所需的信息充分；若某个 ID 只能由 chain 前置 creator 产生，不能强制 query 引用执行前 Current State 中的其他 ID。
+
+首轮 Query Teacher 的 `Current State` 与 `Chain-Aligned Entities` 使用同一份 chain-specific view；不得额外暴露未通过当前 chain handler 前置条件过滤的全量实体。summary 保留实体类型、status、amount、关联 ID 及可计算余额，避免 invoice/payment ID 混用以及对不可 refund/dispute 状态生成请求。Action Teacher 不接收 chain，只按 query、schema、同轮 grounded entities 和真实 execution history 核对资源类型与状态/数值约束。
+
+tool description 必须与真实 handler 前置条件一致。Continuation 不构造新 dependency chain，但 query generator 同时看到同轮 schemas 与刷新后的 state，不能仅凭 domain 示例猜测合法状态或参数类型。
+
+对无参数 discovery 前置节点将发现的实体，query view 隐藏 opaque ID，仅暴露真实 name/customer/category/status/value 等 selector；validation view 继续保存完整 ID。Action Teacher 不直接读取 sampler context，ID 来源只允许 user query 或 prior tool observation。该机制不改变 Replay/Jaccard 门禁，也不强制最终 oracle exact-match sampled chain。
+
 可行链在通过 schema/handler/live-state feasibility 后均匀采样；不再按 mutation 数量或单一工具名设置论文外优先池。失败由真实 execution、state-machine recovery 与 fresh replay 处理。
 
 运行链路不执行状态反转、capability 同义词或实体字符串匹配过滤；PROVE 未发布这些 gate。是否保留样本由用户目标的实际执行、fresh replay、provenance 和去重决定。`chain_seed`/`dependency_edges` 的完整性仅是本项目 OVAL coverage reward 的本地结构合约。
@@ -109,6 +117,8 @@ Recovery 边界：论文明确包含 graceful give-up with fallback explanation�
 真实十域 smoke 的补充约束：成功 normal conversation 必须有 2--3 个真实 user turns；follow-up 必须依赖当前 live state 并继续此前 conversation，不得由内部 chain 节点机械改写。filesystem archive 操作只使用 live-state 中的 file 实体。
 
 每一步 LLM 决策都看到完整 domain context（tools, live state, execution history），形成 teacher 轨迹。每条轨迹记录为 oracle trace，包含全部 tool call 参数和 server 响应。
+
+实现显式记录并转换 `query / turn / tool_execution / response / continuation` 五组状态。MCP outcome 分为 `SUCCESS / PARTIAL_SUCCESS / FAILURE`：三者都写入 response evidence，`FAILURE` 进入 recovery，`PARTIAL_SUCCESS` 作为独立 outcome 返回 Teacher 继续决策，不能折叠为普通 success。
 
 ### Step 4 — 鲁棒性注入（Robustness Knobs）
 
@@ -137,6 +147,12 @@ distractor:
   在 Teacher 生成前把 3-8 个跨 domain 无关工具加入 candidate set，并对同一候选集 replay
   schema 携带 owner domain 并路由到真实 MCP server
   ground-truth oracle 不应调用无关 distractor
+
+irrelevance:
+  impossible query 与 assistant terminal 都经过 Teacher FSM
+  完成 oracle 不含成功 tool-call，并以 report_error / ask_clarification 合法终止
+  失败尝试保留并接受统一 replay 30% gate，不额外要求零尝试
+  不得由生成器直接硬编码 terminal oracle
 ```
 
 ### Step 5 — 重放验证与去重（Replay Validation and Deduplication）

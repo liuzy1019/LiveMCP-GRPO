@@ -24,7 +24,7 @@ from scripts.merge_rollout_shards import (
 )
 from scripts.validate_pipeline import _stage3_output_issue
 from src.live_mcp.orchestrator import (
-    TaskOrchestrator,
+    ConversationFSM, FSMStateGroup, TaskOrchestrator,
     RobustnessPlan,
     _CREATED_ENTITY_BY_TOOL,
     _build_teacher_visible_tools,
@@ -33,16 +33,18 @@ from src.live_mcp.orchestrator import (
     _detect_missing_dependency,
     _entity_record_satisfies_chain,
     _extract_chain_context,
+    _live_context_to_prompt_state,
     _tool_existing_entity_requirements,
     _classify_scenario,
     _compact_sampling_context,
 )
 from src.live_mcp.schema_registry import SchemaRegistry
 from src.live_mcp.servers.food_delivery.server import TOOLS as FOOD_DELIVERY_TOOLS
+from src.live_mcp.servers.payments.server import TOOLS as PAYMENTS_TOOLS
 from src.live_mcp.task_planner import (
     ActionPlan, TaskPlanner, derive_success_criteria, provenance_check, replay_validate,
 )
-from src.live_mcp.task_planner import _format_tools
+from src.live_mcp.task_planner import _format_state_compact, _format_tools
 from src.live_mcp.types import LiveTask, OracleCall, OracleProgram
 from src.reward.oval_reward_fn import _build_task_dict
 
@@ -60,6 +62,62 @@ def test_multi_round_action_budget_covers_tools_and_terminals() -> None:
         for i in range(3)
     ]
     assert _minimum_action_budget(oracle, contracts) == 13
+
+
+def test_explicit_fsm_preserves_partial_success_as_distinct_outcome() -> None:
+    class _Teacher:
+        calls = 0
+
+        def decide_action(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return ActionPlan(
+                    action="tool_call", tool_name="list_items", arguments={}, text="",
+                )
+            return ActionPlan(
+                action="final_answer", tool_name="", arguments={}, text="No items found.",
+            )
+
+    class _Executor:
+        def execute(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                success=True,
+                observation=[],
+                error_type="",
+                error_message="",
+                execution_status="PARTIAL_SUCCESS",
+            )
+
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.executor = _Executor()
+    fsm = ConversationFSM()
+    oracle, history, *_ = orchestrator._run_turn_loop(
+        teacher=_Teacher(),
+        current_query="List the items.",
+        server_tools=[{"name": "list_items"}],
+        server_name="probe",
+        session_id="session",
+        difficulty="complete",
+        round_idx=0,
+        fsm=fsm,
+    )
+
+    assert history[0]["execution_status"] == "PARTIAL_SUCCESS"
+    assert any(
+        transition.get("outcome") == "PARTIAL_SUCCESS"
+        and transition["to"] == FSMStateGroup.RESPONSE.value
+        for transition in fsm.transitions
+    )
+    assert [call.action for call in oracle] == ["tool_call", "final_answer"]
+
+
+def test_irrelevance_path_does_not_hardcode_terminal_or_fallback_query() -> None:
+    source = Path("src/live_mcp/orchestrator.py").read_text()
+    block = source[source.index("def _generate_irrelevant_tasks("):]
+    block = block[:block.index("def _generate_irrelevant_query(")]
+    assert "self._run_turn_loop(" in block
+    assert "_fallback_irrelevant_query" not in block
+    assert 'arguments={"text": "No available tool can satisfy this request."}' not in block
 
 
 def test_export_raises_row_budget_to_reproducible_minimum() -> None:
@@ -123,11 +181,11 @@ def test_query_prompt_requires_complete_chain_final_outcome() -> None:
 
         def generate_chat(self, messages, **kwargs):
             self.messages = messages
-            return '{"user_query": "copy the file into the new complaints folder"}'
+            return '{"user_query": "copy the file into the new complaints folder", "target_capability": "cp", "chain_supported": true}'
 
     client = CapturingClient()
     planner = TaskPlanner(client, "filesystem", seed=1)
-    query = planner.generate_query(
+    generated = planner.generate_query(
         tool_schemas=[
             {"name": "mkdir", "description": "create a directory", "inputSchema": {}},
             {"name": "cp", "description": "copy a file", "inputSchema": {}},
@@ -137,11 +195,42 @@ def test_query_prompt_requires_complete_chain_final_outcome() -> None:
         rng=__import__("random").Random(1),
         chain_seed=["mkdir", "cp"],
     )
-    assert query.startswith("copy the file")
+    assert generated.user_query.startswith("copy the file")
+    assert generated.target_capability == "cp"
+    assert generated.chain_supported is True
+    assert generated.attempts == 1
     prompt = client.messages[1]["content"]
     assert "['mkdir', 'cp']" in prompt
     assert "final outcome" in prompt
     assert "copy a file" in prompt
+
+
+def test_query_generation_retries_mismatched_chain_target() -> None:
+    class SequencedClient:
+        def __init__(self):
+            self.calls = 0
+
+        def generate_chat(self, messages, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return '{"user_query": "dispute inv_1", "target_capability": "dispute_invoice", "chain_supported": true}'
+            return '{"user_query": "create an invoice and show me its details", "target_capability": "get_invoice", "chain_supported": true}'
+
+    client = SequencedClient()
+    planner = TaskPlanner(client, "payments", seed=1)
+    generated = planner.generate_query(
+        tool_schemas=[
+            {"name": "create_invoice", "description": "create invoice", "inputSchema": {}},
+            {"name": "get_invoice", "description": "get invoice", "inputSchema": {}},
+        ],
+        grounded_state={},
+        difficulty="complete",
+        rng=__import__("random").Random(1),
+        chain_seed=["create_invoice", "get_invoice"],
+    )
+    assert generated.target_capability == "get_invoice"
+    assert generated.attempts == 2
+    assert client.calls == 2
 
 
 def test_verify_account_is_a_valid_read_predecessor_for_apply_loan() -> None:
@@ -390,13 +479,27 @@ def test_followup_prompt_contains_previous_visible_response() -> None:
     client = CapturingClient()
     planner = TaskPlanner(client, "food_delivery", seed=1)
     planner.generate_followup(
-        tool_schemas=[], grounded_state={}, previous_query="Reorder ord_1",
+        tool_schemas=[{
+            "name": "cancel_order",
+            "description": "Cancel only a placed or confirmed order.",
+            "input_schema": {"type": "object", "properties": {}, "required": []},
+        }], grounded_state={}, previous_query="Reorder ord_1",
         difficulty="complete", rng=__import__("random").Random(1),
         previous_response="Your new order is ord_3.",
     )
     prompt = client.messages[1]["content"]
     assert "Assistant reply you just received" in prompt
     assert "Your new order is ord_3." in prompt
+    assert "Available Tools and Preconditions" in prompt
+    assert "Cancel only a placed or confirmed order." in prompt
+
+
+def test_payments_tool_descriptions_expose_handler_preconditions() -> None:
+    descriptions = {tool["name"]: tool["description"] for tool in PAYMENTS_TOOLS}
+    assert "exactly its full invoice amount" in descriptions["pay_invoice"]
+    assert "remaining refundable amount" in descriptions["refund_invoice"]
+    assert "payment_id" in descriptions["cancel_payment"]
+    assert "paid or pending" in descriptions["dispute_invoice"]
 
 
 def test_empty_oracle_round_is_rejected_before_export() -> None:
@@ -992,6 +1095,98 @@ def test_payment_entity_filter_matches_dispute_handler_statuses() -> None:
         server_name="payments", chain_seed=["list_invoices", "dispute_invoice"],
         etype="invoice", record={"status": "pending"},
     )
+
+
+def test_payment_chain_context_exposes_only_legal_typed_entities_and_amounts() -> None:
+    live_context = {
+        "qualified_entity_ids": [
+            {"type": "invoice", "id": "inv_paid"},
+            {"type": "invoice", "id": "inv_pending"},
+            {"type": "payment", "id": "pay_pending"},
+        ],
+        "qualified_entity_records": [
+            {"type": "invoice", "id": "inv_paid", "data": {
+                "status": "partially_refunded", "amount": 100.0,
+                "total_refunded": 25.0, "payment_id": "pay_settled",
+                "payment_status": "settled",
+            }},
+            {"type": "invoice", "id": "inv_pending", "data": {
+                "status": "pending", "amount": 90.0,
+            }},
+            {"type": "payment", "id": "pay_pending", "data": {
+                "status": "pending", "amount": 90.0,
+                "invoice_id": "inv_pending",
+            }},
+        ],
+        "entity_ids": [
+            {"type": "invoice", "id": "inv_paid"},
+            {"type": "invoice", "id": "inv_pending"},
+            {"type": "payment", "id": "pay_pending"},
+        ],
+        "entity_records": [
+            {"type": "invoice", "id": "inv_paid", "data": {
+                "status": "partially_refunded", "amount": 100.0,
+                "total_refunded": 25.0, "payment_id": "pay_settled",
+                "payment_status": "settled",
+            }},
+            {"type": "invoice", "id": "inv_pending", "data": {
+                "status": "pending", "amount": 90.0,
+            }},
+            {"type": "payment", "id": "pay_pending", "data": {
+                "status": "pending", "amount": 90.0,
+                "invoice_id": "inv_pending",
+            }},
+        ],
+        "entity_summaries": [
+            "  inv_paid (invoice): {'status': 'partially_refunded', 'amount': 100.0}",
+            "  inv_pending (invoice): {'status': 'pending', 'amount': 90.0}",
+            "  pay_pending (payment): {'status': 'pending', 'amount': 90.0}",
+        ],
+    }
+    refund_context = _extract_chain_context(
+        ["list_invoices", "refund_invoice"], "payments", live_context,
+    )
+    assert refund_context["entity_ids"] == [{"id": "inv_paid", "type": "invoice"}]
+    assert "remaining_refundable=75.0" in refund_context["entity_summaries"][0]
+    assert refund_context["query_visible_entity_ids"] == []
+    assert refund_context["opaque_id_hidden_types"] == ["invoice"]
+    assert "inv_paid" not in refund_context["query_grounding_summaries"][0]
+    assert "partially_refunded" in refund_context["query_grounding_summaries"][0]
+
+    cancel_context = _extract_chain_context(
+        ["cancel_payment"], "payments", live_context,
+    )
+    assert cancel_context["entity_ids"] == [{"id": "pay_pending", "type": "payment"}]
+    assert "resource_type=payment" in cancel_context["entity_summaries"][0]
+    assert cancel_context["query_visible_entity_ids"] == [
+        {"id": "pay_pending", "type": "payment"}
+    ]
+
+
+def test_chain_context_summary_survives_prompt_state_formatting() -> None:
+    context = {
+        "entity_ids": [{"type": "invoice", "id": "inv_1"}],
+        "entity_summaries": ["inv_1 (invoice): status=paid; payable_amount=100"],
+    }
+    prompt_state = _live_context_to_prompt_state(context)
+    rendered = _format_state_compact(prompt_state)
+    assert "status=paid" in rendered
+    assert "payable_amount=100" in rendered
+
+
+def test_initial_query_uses_chain_specific_grounding_state() -> None:
+    source = Path("src/live_mcp/orchestrator.py").read_text()
+    block = source[source.index("query_chain_context ="):source.index("conversation_fsm.transition(")]
+    assert "query_grounding_state = _live_context_to_prompt_state" in block
+    assert "grounded_state=query_grounding_state" in block
+    assert "grounded_state=teacher_grounding_state" not in block
+
+
+def test_action_teacher_does_not_receive_sampler_private_ids() -> None:
+    source = Path("src/live_mcp/orchestrator.py").read_text()
+    loop = source[source.index("round_idx = 0"):source.index("max_calls_r = 0")]
+    assert "round_action_context: dict[str, Any] = {}" in loop
+    assert "_compact_sampling_context" not in loop
 
 
 def test_food_chain_context_exposes_only_handler_legal_next_status() -> None:

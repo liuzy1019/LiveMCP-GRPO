@@ -167,12 +167,24 @@ dedup:                  tool-call sequence Jaccard threshold 0.70
 生成链路的事实门禁：
 
 1. normal tool-use task 必须来自 live-state feasible dependency chain，不允许 unseeded fallback 进入 baseline；
-2. 论文公开描述为全部 `n²` tool pairs，但未说明 self-pair 与重复节点 traversal。当前 dependency-graph cache 对全部不同工具的有序 `n(n-1)` pair 分类，并提取 simple paths；这是本地实现选择，不宣称逐实现一致。cache 绑定 tool schema 与 dependency semantics 版本；同一 domain/hash 的冷缓存构建必须跨进程互斥，加锁后再次检查缓存，并以原子替换发布完整 JSON。基线缓存保留 LLM pairwise 分类结果，不绑定 handler 文件 hash，也不在 build/load 路径叠加 handler denylist、实体启发式、偏好性或分布性手写改图；handler precondition 只参与后续 live-state feasibility、真实 execution 与 replay；
+2. 严格按论文公式分类全部无序工具对 `C(n,2)=n(n-1)/2`。每个 pair 只送入 LLM 一次，由 LLM 输出 `source / target / explicit|implicit|none` 决定有向边；不分类 self-pair。论文未公开 repeated-node traversal，当前仍提取 length-2--5 simple paths，并明确标为本地选择。cache 绑定 tool schema 与 dependency semantics 版本；同一 domain/hash 的冷缓存构建必须跨进程互斥，加锁后再次检查缓存，并以原子替换发布完整 JSON。基线缓存保留 LLM pairwise 分类结果，不绑定 handler 文件 hash，也不在 build/load 路径叠加 handler denylist、实体启发式、偏好性或分布性手写改图；handler precondition 只参与后续 live-state feasibility、真实 execution 与 replay；
 3. robustness plan 在 Teacher 处理前采样并固定，Teacher、Replay、Parquet、rollout 使用同一 candidate contract；
 4. 每条 task 必须经过 fresh-session Replay 和 sensitive-parameter provenance；
 5. 只有从当前 checkout 生成并通过 Parquet/reward 读回及人工语义检查的数据，才可声明为可训练。
 
+状态机严格对齐约束：实现必须显式保存论文五组状态 `query / turn / tool_execution / response / continuation`，每次 LLM 决策或 MCP 执行都通过可审计 transition 更新状态。执行结果必须区分 `SUCCESS / PARTIAL_SUCCESS / FAILURE`；三者都进入 response 状态，只有 `FAILURE` 进入 recovery，`PARTIAL_SUCCESS` 必须作为独立 outcome 暴露给下一次 Teacher 决策，不能在状态记录中折叠成 `SUCCESS`。
+
+Irrelevance 严格对齐约束：5% impossible query 的 assistant refusal 必须经过同一 Teacher action FSM、candidate schemas、fresh-session replay 与 provenance 路径产生；不得直接硬编码 `report_error` oracle。完成 oracle 不得包含成功工具调用，且必须以合法 refusal/clarification terminal 结束；失败尝试保留在完整 attempt trace 中并接受论文 30% replay gate，不增加论文未公开的零尝试 hard gate。
+
 多轮 Teacher 语义约束：首轮 user query 从 live-state feasible dependency chain 生成；前置节点是完成首轮目标的内部工作流，不机械拆成后续 user turn。Continuation module 按论文从 `end / follow-up / clarification` 中决策，后续消息只基于刷新后的 live state、此前 query 与真实 execution history继续同一 conversation，不重新构造论文未描述的 per-round dependency graph。成功 normal conversation 按 `min_turns=2, max_turns=3` 生成；missing-function、clarification、irrelevance 或不可恢复失败可合法提前终止。
+
+Query Generation 的最小对齐合同：Query Teacher 必须同时返回自然语言 query、其声明的目标 capability 与 chain 是否能自然支撑该 query；目标 capability 必须等于 sampled chain 的尾节点，且 query 不得直接泄漏本应由前置节点产生或发现的信息，否则只在生成阶段重试，最多三次后放弃 candidate。无法构造自然多步请求时必须返回 `UNSAT`，不能换成同域其他任务。此检查不传入 action planner，也不要求最终 oracle exact-match chain，不构成论文之外的 corpus hard gate。`complete` 表示用户侧完成目标所需信息充分；只有 query 自然引用执行前已存在实体时才要求 exact ID，不能要求引用前置 creator 尚未产生的 ID。
+
+Step 2 到 Query Teacher 的状态必须使用已选 chain 的 context view，不能同时暴露未经过该 chain handler 前置条件筛选的全量 live entities；否则 Teacher 可从全量状态选择 pending/overdue 等对目标 capability 不可执行的实体，绕过 chain-specific feasibility。context summary 必须保留资源类型、status、amount、关联 ID 和可计算的剩余额度等执行事实。Action Teacher 仍只消费 query、candidate schemas、该轮 grounded context 与真实 history；prompt 仅要求在调用前核对资源类型和状态/数值事实，不注入 sampled chain。
+
+Teacher-visible tool descriptions 必须如实公开 handler 的硬前置条件（允许状态、精确金额/剩余额度、输入资源类型）；隐藏这些事实会让 Query/Continuation Teacher 无法生成可执行请求。Continuation 不重新采样 dependency chain，但必须接收同轮 tool schemas 和刷新后的 live state，据此选择状态可行的同域 follow-up。这是 live schema/state grounding 的实现完整性，不是新增 corpus gate。
+
+实体 ID 最小可见性补全：若 chain 的无参数 `list/search/filter/browse` 前置节点负责发现下游实体，则 Query Teacher 只看到该实体的真实 selector/status/value facts，不看到 opaque ID；其他用户可合理已知的 ID 保持可见。Action Teacher 不读取 sampler 私有 context，只能使用 user query 中的 ID 或 prior tool observation 产生的 ID。完整 ID 仍保留在 validation/replay view。该边界用于避免 sampler 提前泄漏 discovery 输出，不要求 oracle exact-match chain。
 
 Continuation 的 query generator 与 assistant action planner 必须消费同一轮刷新后的 live state；首轮 chain-aligned context 不能继续充当后续轮次的完整实体事实。每个新 user round 都重新进入 query→tool execution/response 状态，不能因为 execution history 非空而默认直接结束；clarification 型 user round 可直接回答，follow-up 型 user round 仍须实际完成新 outcome。后续请求若缺少 mutation schema 的用户决定型必填值，由 Teacher 走 clarification，而不是从无关实体复制或臆造。业务背景（例如“用于明天的会议”）不等于跨域请求，是否可完成按用户要求的核心 outcome 与 candidate tools 判断。以上属于状态机输入合同，不新增论文之外的 corpus hard gate。
 

@@ -1,8 +1,8 @@
 {
   "cache_version": 4,
-  "dependency_semantics_version": 9,
+  "dependency_semantics_version": 10,
   "server_name": "shopping",
-  "schema_hash": "9fa6753b8edaeb74",
+  "schema_hash": "9653bef37bce5b11",
   "tool_names": [
     "add_review",
     "add_to_cart",
@@ -51,7 +51,9 @@
     },
     "apply_coupon": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "checkout"
+      ]
     },
     "checkout": {
       "explicit": [
@@ -60,7 +62,7 @@
         "return_order"
       ],
       "implicit": [
-        "get_return_status"
+        "list_orders"
       ]
     },
     "clear_cart": {
@@ -76,9 +78,7 @@
       "implicit": []
     },
     "get_coupons": {
-      "explicit": [
-        "apply_coupon"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_order": {
@@ -87,21 +87,17 @@
     },
     "get_product": {
       "explicit": [
-        "add_review"
+        "compare_products"
       ],
       "implicit": []
     },
     "get_recommendations": {
       "explicit": [
-        "get_product",
-        "compare_products",
         "add_to_cart",
         "update_cart_quantity",
         "remove_from_cart",
-        "add_review",
         "get_reviews",
-        "add_to_wishlist",
-        "remove_from_wishlist"
+        "add_to_wishlist"
       ],
       "implicit": []
     },
@@ -114,10 +110,7 @@
       "implicit": []
     },
     "get_wishlist": {
-      "explicit": [
-        "get_product",
-        "compare_products"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "list_categories": {
@@ -128,7 +121,11 @@
       "explicit": [
         "get_order",
         "track_order",
-        "return_order"
+        "return_order",
+        "add_review",
+        "get_reviews",
+        "add_to_wishlist",
+        "remove_from_wishlist"
       ],
       "implicit": []
     },
@@ -167,11 +164,13 @@
     },
     "update_cart_quantity": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "checkout"
+      ]
     }
   },
   "tool_count": 23,
-  "expected_pair_count": 506,
-  "classified_pair_count": 506,
+  "expected_pair_count": 253,
+  "classified_pair_count": 253,
   "classification_complete": true
 }

@@ -1,0 +1,82 @@
+{
+  "cache_version": 4,
+  "dependency_semantics_version": 10,
+  "server_name": "payments",
+  "schema_hash": "7c89895e7ab71d1c",
+  "tool_names": [
+    "cancel_payment",
+    "create_invoice",
+    "create_webhook",
+    "delete_webhook",
+    "dispute_invoice",
+    "get_invoice",
+    "list_invoices",
+    "list_webhooks",
+    "pay_invoice",
+    "refund_invoice"
+  ],
+  "graph": {
+    "cancel_payment": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_invoice": {
+      "explicit": [
+        "get_invoice",
+        "pay_invoice",
+        "refund_invoice",
+        "dispute_invoice"
+      ],
+      "implicit": []
+    },
+    "create_webhook": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "delete_webhook": {
+      "explicit": [],
+      "implicit": []
+    },
+    "dispute_invoice": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_invoice": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_invoices": {
+      "explicit": [
+        "pay_invoice",
+        "refund_invoice",
+        "dispute_invoice"
+      ],
+      "implicit": []
+    },
+    "list_webhooks": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "pay_invoice": {
+      "explicit": [
+        "cancel_payment"
+      ],
+      "implicit": [
+        "refund_invoice",
+        "dispute_invoice"
+      ]
+    },
+    "refund_invoice": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "tool_count": 10,
+  "expected_pair_count": 45,
+  "classified_pair_count": 45,
+  "classification_complete": true
+}

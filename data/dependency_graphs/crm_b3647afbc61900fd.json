@@ -1,8 +1,8 @@
 {
   "cache_version": 4,
-  "dependency_semantics_version": 9,
+  "dependency_semantics_version": 10,
   "server_name": "crm",
-  "schema_hash": "ac33b9e1e676dc92",
+  "schema_hash": "b3647afbc61900fd",
   "tool_names": [
     "add_note",
     "complete_task",
@@ -34,7 +34,9 @@
       "explicit": [
         "update_contact",
         "delete_contact",
-        "create_deal"
+        "create_deal",
+        "list_deals",
+        "create_task"
       ],
       "implicit": []
     },
@@ -43,6 +45,7 @@
         "update_contact",
         "delete_contact",
         "create_deal",
+        "list_deals",
         "create_task",
         "add_note"
       ],
@@ -53,6 +56,7 @@
         "update_deal",
         "get_deal",
         "create_task",
+        "list_tasks",
         "add_note"
       ],
       "implicit": []
@@ -83,18 +87,13 @@
     },
     "get_deal": {
       "explicit": [
-        "update_lead",
-        "convert_lead",
-        "delete_lead",
-        "update_contact",
-        "delete_contact",
-        "update_deal"
+        "create_task",
+        "list_tasks"
       ],
       "implicit": []
     },
     "list_deals": {
       "explicit": [
-        "update_deal",
         "get_deal",
         "create_task",
         "list_tasks",
@@ -104,9 +103,6 @@
     },
     "list_leads": {
       "explicit": [
-        "update_lead",
-        "convert_lead",
-        "delete_lead",
         "create_deal",
         "list_deals",
         "add_note"
@@ -133,7 +129,7 @@
     }
   },
   "tool_count": 16,
-  "expected_pair_count": 240,
-  "classified_pair_count": 240,
+  "expected_pair_count": 120,
+  "classified_pair_count": 120,
   "classification_complete": true
 }

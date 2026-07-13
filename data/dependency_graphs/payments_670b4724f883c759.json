@@ -1,8 +1,8 @@
 {
   "cache_version": 4,
-  "dependency_semantics_version": 9,
+  "dependency_semantics_version": 10,
   "server_name": "payments",
-  "schema_hash": "e80c5d240f4b6f9c",
+  "schema_hash": "670b4724f883c759",
   "tool_names": [
     "cancel_payment",
     "create_invoice",
@@ -49,7 +49,6 @@
     },
     "list_invoices": {
       "explicit": [
-        "get_invoice",
         "pay_invoice",
         "refund_invoice",
         "dispute_invoice"
@@ -63,10 +62,12 @@
       "implicit": []
     },
     "pay_invoice": {
-      "explicit": [],
+      "explicit": [
+        "cancel_payment"
+      ],
       "implicit": [
         "refund_invoice",
-        "cancel_payment"
+        "dispute_invoice"
       ]
     },
     "refund_invoice": {
@@ -75,7 +76,7 @@
     }
   },
   "tool_count": 10,
-  "expected_pair_count": 90,
-  "classified_pair_count": 90,
+  "expected_pair_count": 45,
+  "classified_pair_count": 45,
   "classification_complete": true
 }
