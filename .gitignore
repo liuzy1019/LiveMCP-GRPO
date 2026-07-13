@@ -58,8 +58,37 @@ wandb/
 tmp_*
 
 # Internal project docs (not for public repo)
+AGENTS.md
+CLAUDE.md
 修复记录.MD
 *.修复记录.*
+
+# Development documentation (not needed for running)
+docs/
+
+# Reference papers (not needed for running)
+reference/
+
+# Tests (not needed for running)
+tests/
+
+# Models (downloaded separately, not committed)
+models/
+
+# Dependency graph lock files (runtime artifacts)
+*.json.lock
+
+# Development/benchmark scripts (not needed for running)
+scripts/bench_vllm_throughput.py
+scripts/inspect_prompts.py
+scripts/validate_pipeline.py
+scripts/verify_entities.py
+
+# External datasets (not needed for running)
+data/external/
+
+# Experiment outputs
+experiments/
 
 # Model cache / temp files
 *.msc
