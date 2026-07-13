@@ -29,16 +29,10 @@ def jaccard_similarity(a: LiveTask, b: LiveTask) -> float:
     sigs_b = _call_sequence(b)
 
     if not sigs_a and not sigs_b:
-        # Both zero-tool (irrelevance / missing_function) — dedup by query
-        # text similarity instead of ignoring them.  Jaccard on word sets
-        # provides a reasonable diversity filter for abstention tasks.
-        qa = set((a.user_prompt or "").lower().split())
-        qb = set((b.user_prompt or "").lower().split())
-        if not qa or not qb:
-            return 0.0
-        intersection = qa & qb
-        union = qa | qb
-        return len(intersection) / len(union)
+        # PROVE publishes Jaccard on tool-call sequences, not a query-text
+        # fallback. Empty sequences therefore provide no positive similarity
+        # evidence and must not collapse clarification/abstention examples.
+        return 0.0
     if not sigs_a or not sigs_b:
         return 0.0
 
@@ -58,21 +52,13 @@ def dedup_tasks(
 ) -> list[LiveTask]:
     """Greedy deduplication: keep first occurrence, discard subsequent similar tasks.
 
-    Only compares tasks within the same domain — cross-domain Jaccard is
-    always 0 (different tool sets) so cross-domain comparison is wasteful
-    and never triggers dedup.
-
     Preserves insertion order.  For each task, if any previously kept task
-    *in the same domain* has Jaccard similarity >= *threshold*, it is skipped.
+    has Jaccard similarity >= *threshold*, it is skipped.
     """
     kept: list[LiveTask] = []
     for task in tasks:
-        task_domain = task.target_servers[0] if task.target_servers else ""
         is_dup = False
         for kept_task in kept:
-            kept_domain = kept_task.target_servers[0] if kept_task.target_servers else ""
-            if task_domain != kept_domain:
-                continue
             if jaccard_similarity(task, kept_task) >= threshold:
                 is_dup = True
                 break
@@ -91,19 +77,6 @@ def _call_sequence(task: LiveTask) -> list[str]:
     ignored to match PROVE's sequence-level Jaccard deduplication.
     """
     calls = task.oracle_program.calls
-    has_tool_call = any(
-        (call.get("action", "tool_call") if isinstance(call, dict)
-         else getattr(call, "action", "tool_call")) == "tool_call"
-        for call in calls
-    )
-    if not has_tool_call:
-        # Fallback: use original oracle program from metadata for
-        # missing_function tasks (oracle_program.calls was cleared
-        # in _apply_missing_function but original stored in metadata).
-        orig = task.metadata.get("original_oracle_program", {})
-        if isinstance(orig, dict) and orig.get("calls"):
-            calls = orig["calls"]
-
     sigs: list[str] = []
     for call in calls:
         tool_name: str = ""

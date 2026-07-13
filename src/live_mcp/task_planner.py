@@ -8,7 +8,7 @@ inference needed.
 Pipeline per task:
   1. create_session(seed) — fresh isolated state
   2. LLM generates user_query
-  3. Loop (max_turns):
+  3. Per-round action loop (tool/terminal action budget):
      a. LLM decides next action: tool_call(name, args) | final_answer | report_error
      b. Execute tool_call against live MCP → record observation
      c. Apply execution perturbations (intermittent errors, pagination, …)
@@ -264,9 +264,9 @@ _REFERENCE_DATES: list[str] = [
 #     = # of teacher decision STEPS inside a single conversation round
 #       (tool_call attempts + retries + terminal), unrelated to PROVE §3.2
 #       Step 3.5.  It only bounds the state-machine's inner loop so it
-#       terminates on stuck LLMs; the PROVE §6 rollout config "5 user
-#       turns / 10 assistant turns" bounds an entirely different loop
-#       (the RL rollout, not data generation).
+#       terminates on stuck LLMs.  RL rollout uses a verified per-row action
+#       budget for generated data; the configured max is only a legacy/default
+#       fallback and is unrelated to PROVE §3.2 conversation rounds.
 # ═══════════════════════════════════════════════════════════════════════
 
 class ContinuationPolicy:
@@ -284,8 +284,6 @@ class ContinuationPolicy:
     # must span at least two user turns with at least one follow-up).
     MIN_CONVERSATION_ROUNDS = 2
     MAX_CONVERSATION_ROUNDS = 3
-    CONTINUE_AFTER_MIN_PROB = 0.30
-
     # P1-3: Per-turn turn-decay probabilities for middle rounds.
     # These are NOT published PROVE parameters — the paper does not disclose
     # the exact turn-decay schedule.  These are local defaults configurable via
@@ -332,89 +330,6 @@ class ContinuationPolicy:
         if r < end_prob + ContinuationPolicy.CLARIFICATION_PROB:
             return "clarification"
         return "follow_up"
-
-    @staticmethod
-    def target_turns(chain_length: int, rng: random.Random) -> int:
-        """Return the target number of state-machine STEPS inside one round.
-
-        This is NOT the PROVE §3.2 Step 3.5 min/max_turns=2/3 bound —
-        that bound lives in MIN/MAX_CONVERSATION_ROUNDS above and applies
-        to user turns per task.  This function bounds the inner
-        _run_turn_loop's step count so it can execute (chain_length)
-        tool_calls plus one terminal action.
-
-        Conservative: exact = chain_length + 1 (N tools + terminal),
-        no jitter.  Perturbations (intermittent errors) may cause additional
-        retry turns beyond this budget, handled by recovery.
-        """
-        return max(2, chain_length + 1)
-
-    @staticmethod
-    def should_continue(turn: int, target: int, last_action_success: bool, tool_calls_done: int) -> bool:
-        """Decide whether the conversation should continue.
-
-        Conservative: stop after target turns.  Allow 1 extra turn only if
-        the last action was unsuccessful (recovery budget).
-        """
-        if turn >= target:
-            return False
-        return True
-
-    @staticmethod
-    def conversation_rounds(rng: random.Random) -> int:
-        """PROVE §3.2 Step 3.5: turn-decay schedule for USER TURNS per task.
-
-        Samples the number of conversation rounds (user turns) between 2 and 3,
-        biased 70/30 so most tasks are 2-turn but a meaningful minority are
-        3-turn for diversity.  The training rollout injects follow-up user
-        turns after intermediate terminal actions, so the oracle remains a
-        single live conversation instead of hidden teacher history in the
-        initial prompt.
-
-        Do not confuse with _run_turn_loop's max_turns (step budget inside a
-        single round).
-        """
-        return rng.choices([2, 3], weights=[0.7, 0.3], k=1)[0]
-
-    @staticmethod
-    def should_continue_conversation(
-        rounds_done: int,
-        max_rounds: int,
-        chain_seed: list[str] | None,
-        chain_progress: int,
-        rng: random.Random,
-        min_rounds: int | None = None,
-    ) -> bool:
-        """PROVE continuation decision: end, follow up, or clarify.
-
-        PROVE §3.2 Step 3.5: "A decision module *samples* whether to end the
-        conversation, generate a follow-up, or ask a clarification, using a
-        turn-decay schedule bounded by min_turns=2 and max_turns=3."
-
-        The turn-decay randomness is already captured in conversation_rounds()
-        which samples max_rounds ∈ {2, 3} with weights [0.7, 0.3]. Once
-        max_rounds is determined, this function deterministically continues
-        until max_rounds is reached — the probabilistic decision was already
-        made at sampling time.
-
-        Previously this function applied a SECOND random gate (30% prob) after
-        min_rounds, causing double-randomization: only 30% × 30% = 9% of tasks
-        reached round 3 instead of the intended 30%.
-        """
-        min_rounds = (
-            ContinuationPolicy.MIN_CONVERSATION_ROUNDS
-            if min_rounds is None else min_rounds
-        )
-        if rounds_done >= max_rounds:
-            return False
-        if rounds_done < min_rounds:
-            return True
-        # max_rounds was already sampled by conversation_rounds() with the
-        # PROVE turn-decay schedule. Continue deterministically until we
-        # reach max_rounds. Early termination is handled by the caller
-        # (ask_clarification break, chain completion, etc.).
-        return True
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # TaskPlanner — LLM-in-the-loop state machine
@@ -525,11 +440,17 @@ class TaskPlanner:
                     f"The grounded dependency chain is: {chain_seed}.\n"
                     f"Capabilities in execution order:\n{chain_requirements}\n"
                     f"The message MUST clearly request the final outcome: {goal_phrase}. "
-                    "Earlier chain items are internal prerequisites: express their "
-                    "user-visible effects only when necessary to make the combined "
-                    "goal coherent. Do not mention tool names, a workflow, or split "
-                    "chain nodes into future requests. For any write/update, state "
-                    "the concrete change that authorizes it.\n"
+                    "Read-only earlier items may be internal prerequisites. Every "
+                    "write/update/delete/send/pay or other state-changing item MUST "
+                    "be explicitly requested in this same message; a dependency edge "
+                    "does not grant permission for its side effect. Do not mention tool "
+                    "names, a workflow, or split chain nodes into future requests. For "
+                    "each state change, state the concrete change that authorizes it. "
+                    "Every required field that controls a state change MUST have a "
+                    "concrete user-authorized value in the message or an unambiguous "
+                    "value in Current State; never leave such a field for the assistant "
+                    "to invent (for example an amount, recipient, status, path, date, "
+                    "quantity, or message body).\n"
                 )
 
         # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
@@ -608,6 +529,7 @@ Return only:
         reference_date: str = "",
         chain_seed: list[str] | None = None,
         chain_progress: int = 0,
+        previous_response: str = "",
     ) -> str:
         """Generate a follow-up user message from the user's perspective.
 
@@ -622,10 +544,10 @@ Return only:
         caused the LLM to adopt the assistant's confirmation tone ("Got it,
         the transfer is scheduled...") instead of a genuine user perspective.
 
-        chain_seed + chain_progress is retained for recovery/legacy traces
-        whose chain is not yet complete.  Baseline successful traces normally
-        finish the complete chain before continuation, so no next chain goal is
-        injected in that case.
+        chain_seed + chain_progress is retained only when the initial chain is
+        still incomplete. Once it is complete, the refreshed live state and
+        previous query ground a related next request without synthesizing a new
+        dependency graph or exposing internal chain nodes.
         """
         state_text = _format_state_compact(grounded_state, max_entities=20)
 
@@ -638,13 +560,25 @@ Return only:
             "and is now sending a follow-up message.\n\n"
             "IMPORTANT: You do NOT know what tools the assistant used internally. "
             "You only know what you originally asked for. "
+            "You also know the assistant's visible reply from the preceding round. "
             "Write the follow-up purely from your own perspective — what you want next.\n\n"
             "DO NOT write confirmation phrases like 'Got it', 'Great', 'Thanks', "
             "'That looks right', or any acknowledgment of the assistant's actions. "
             "Just state your next request directly.\n"
             "DO NOT mention tool names or internal steps.\n"
             "Keep it to 1-2 sentences. Be natural and direct.\n"
-            "Do not introduce an unrelated new goal; continue the same task."
+            "Do not introduce an unrelated new goal; continue the same task.\n"
+            "Choose a request that is feasible for the entity's current status. "
+            "For example, do not ask to cancel an already delivered order.\n"
+            "If you request a state-changing action, include user-decided required "
+            "values when the difficulty is complete. For missing or minimal difficulty, "
+            "it is acceptable to omit such a value so the assistant can clarify; never "
+            "copy a business value from an unrelated entity."
+        )
+
+        response_block = (
+            f'\n## Assistant reply you just received\n"{previous_response}"\n'
+            if previous_response.strip() else ""
         )
 
         next_goal_block = ""
@@ -664,8 +598,12 @@ Return only:
         user = f"""## Persona
 {persona if persona else 'A normal user messaging their AI assistant.'}
 {date_block}
+## What this assistant can help with
+{self.domain_desc}
+
 ## Your original request
 "{previous_query}"
+{response_block}
 
 ## Current State (real IDs and values you can reference)
 {state_text}
@@ -674,6 +612,9 @@ Return only:
 ## Your task
 Write ONE short follow-up message as the user. Difficulty: {difficulty}.
 Ask for the next thing you need. Do NOT acknowledge or confirm what the assistant did.
+The follow-up MUST stay within the assistant capabilities listed above and
+continue this same domain conversation. Do not request an unavailable
+cross-domain capability.
 For complete difficulty, if the target capability requires an existing entity,
 copy its exact ID from Current State into the message and include every concrete
 detail needed for the requested change.
@@ -710,6 +651,7 @@ Return only:
         rng: random.Random,
         persona: str = "",
         reference_date: str = "",
+        previous_response: str = "",
     ) -> str:
         """Generate a user clarification question (PROVE §3.2 Step 3.5).
 
@@ -740,6 +682,9 @@ Return only:
 {date_block}
 ## Original request
 "{previous_query}"
+
+## Assistant reply you just received
+"{previous_response}"
 
 ## Current State
 {state_text}
@@ -779,14 +724,12 @@ Return only:
         user_query: str,
         execution_history: list[dict[str, Any]],
         attempt: int = 0,
-        dep_hints: str = "",
         difficulty: str = "complete",
-        chain_seed: list[str] | None = None,
-        chain_progress: int = 0,
         reference_date: str = "",
         chain_context: dict[str, Any] | None = None,
         blocked_tools: set[str] | None = None,
         missing_function: bool = False,
+        allow_direct_answer: bool = False,
     ) -> ActionPlan:
         """LLM decides the next action given full context.
 
@@ -796,9 +739,6 @@ Return only:
         For 'missing' difficulty tasks, ask_clarification is expected on the
         first turn (the query deliberately omits a parameter), so the
         first-turn enforcement is relaxed.
-
-        chain_seed + chain_progress: guides the LLM toward multi-step tasks,
-        showing which tools have been called and which remain.
 
         chain_context: live-probed entities used to ground ID arguments.
         """
@@ -826,22 +766,30 @@ Return only:
         # valid first action; forcing a tool call on vague queries causes spurious
         # execution errors. 'complete' tasks have specific entity IDs and should
         # start with a real tool call.
-        if not execution_history:
+        if attempt == 0:
             if missing_function:
                 first_turn_hint = (
                     "\nThe user's complete request requires a capability that is not "
-                    "present in Available Tools. Do not call a partial-workflow tool. "
-                    "Ask a concise clarification or report that the request cannot be completed.\n"
+                    "present in Available Tools. You may use visible tools when they make "
+                    "useful progress or establish that the capability is missing. Never "
+                    "invent or call an unavailable tool. End with a concise clarification "
+                    "or report that the request cannot be completed.\n"
                 )
                 default_action = "ask_clarification"
-                blocked_first = ("final_answer",)
+            elif allow_direct_answer:
+                first_turn_hint = (
+                    "\nThis is the first assistant action for a new user clarification "
+                    "round. You may answer directly when no live lookup or state change "
+                    "is needed. Otherwise, call the appropriate tool. A terminal answer "
+                    "must contain a concrete, non-empty response.\n"
+                )
+                default_action = "final_answer"
             elif difficulty == "missing":
                 first_turn_hint = (
                     "\nNote: This task has a MISSING parameter. "
                     "ask_clarification may be needed before calling a tool.\n"
                 )
                 default_action = "ask_clarification"
-                blocked_first = ("final_answer", "report_error")
             elif difficulty == "minimal":
                 first_turn_hint = (
                     "\nThis is your FIRST turn. The user's request is terse. "
@@ -850,7 +798,6 @@ Return only:
                     "is acceptable. Do NOT produce final_answer.\n"
                 )
                 default_action = "tool_call"
-                blocked_first = ("final_answer", "report_error")
             else:
                 first_turn_hint = (
                     "\n⚠️  This is your FIRST turn. You MUST call a tool to "
@@ -860,50 +807,26 @@ Return only:
                     "request has enough detail to start.\n"
                 )
                 default_action = "tool_call"
-                blocked_first = ("final_answer", "report_error", "ask_clarification")
         else:
-            # After the first turn, the LLM decides the next action based on
-            # the user query, execution history, and chain guidance in the
-            # prompt. PROVE §3.2: the teacher LLM is prompted with chain
-            # guidance and a format validator; no post-hoc action-type
-            # blocking is applied. If the teacher produces a short trajectory,
-            # that is a model quality issue, not a pipeline bug.
+            # After the first turn, the LLM decides the next action from the
+            # query, schemas and execution history.
             first_turn_hint = ""
             default_action = "final_answer"
-            blocked_first: tuple[str, ...] = ()
-
-        chain_guidance = ""
-        if chain_seed and chain_progress < len(chain_seed):
-            remaining = chain_seed[chain_progress:]
-            completed = chain_seed[:chain_progress]
-            chain_guidance = (
-                "\n## Oracle Synthesis Target\n"
-                "You are generating the teacher oracle trace for training data, not the final policy prompt.\n"
-                "The user request was generated from a dependency chain. Follow through to completion.\n"
-                f"- Completed: {completed if completed else '[]'}\n"
-                f"- Remaining (in order): {remaining}\n"
-                "- Prefer the next remaining chain tool. If a prerequisite entity ID is missing, call a read/list/search tool to discover it — do NOT skip.\n"
-                "- Do NOT final_answer until ALL remaining chain tools have been called or an unrecoverable failure makes progress impossible.\n"
-                "- A single execution error (e.g. precondition_failed) is recoverable — retry with corrected parameters, don't give up.\n"
-                "- The chain is a synthesis guide, not user authorization. NEVER call "
-                "a mutating remaining tool unless the current user message explicitly "
-                "requests that tool's effect and concrete change. If it does not, ask "
-                "for clarification instead of inventing a side effect.\n"
-            )
 
         date_guide = (
             f"## Reference Date\nToday is {reference_date}. Do not invent dates from an earlier year.\n"
             if reference_date else ""
         )
 
-        # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
-        # Mirror the generate_query constraint: entity IDs in tool_call arguments
-        # must come from the known entity context, not invented by the LLM.
+        # ── Live-state grounding constraint (PROVE §3.2 Step 2) ──
+        # The initial round receives a chain-aligned subset. Continuation rounds
+        # receive a refreshed live-state snapshot, so the planner must not treat
+        # the initial subset as an exhaustive list of server entities.
         anti_halluc_block = ""
         if chain_context and chain_context.get("entity_summaries"):
             summaries_text = "\n".join(chain_context["entity_summaries"][:15])
             anti_halluc_block = (
-                f"\n## Chain-Aligned Entities (ONLY these IDs exist)\n"
+                f"\n## Current Grounded Entities (use these exact IDs)\n"
                 f"{summaries_text}\n\n"
                 f"⚠️ CRITICAL — ID Provenance Rule:\n"
                 f"- Entity IDs (event_id, account_id, invoice_id, order_id, etc.) "
@@ -941,6 +864,24 @@ Return only:
             '- {"action": "ask_clarification", "question": "<what you need>"}\n'
             '    → only when genuinely ambiguous and no tool can resolve it.\n'
             "\n"
+            "Completion and recovery rules:\n"
+            "- Use final_answer only after the current user request is actually complete. "
+            "A successful read or partial side effect is not completion when a requested "
+            "outcome remains undone.\n"
+            "- On failure, retry with corrected parameters or an alternative tool only "
+            "when it preserves the same user-requested outcome. Do not substitute a "
+            "different business action (for example, disputing an invoice when the user "
+            "asked to cancel it).\n"
+            "- If no available tool can complete the requested outcome, stop making "
+            "state changes and use report_error with a concise explanation.\n"
+            "- Separate the requested outcome from incidental context. A phrase such as "
+            "'for tomorrow's meeting' does not require calendar or messaging access when "
+            "the requested outcome itself can be completed with the available tools.\n"
+            "- Never invent a user-decided required value for a mutating call (for example "
+            "an amount, destination, address, message body, or replacement value), and do "
+            "not copy it from another entity merely to satisfy the schema. If the user did "
+            "not provide it and no prior tool output determines it, ask_clarification.\n"
+            "\n"
             "⚠ FORMAT RULES (follow exactly):\n"
             "- When calling a tool, \"action\" MUST be \"tool_call\". Put the tool name in \"tool_name\".\n"
             "- NEVER put the tool name directly in \"action\" (e.g., WRONG: {\"action\": \"search_events\", ...}).\n"
@@ -958,8 +899,6 @@ Return only:
 ## Available Tools
 {tools_text}
 
-{dep_hints}
-{chain_guidance}
 {anti_halluc_block}
 {date_guide}
 ## User Task
@@ -983,20 +922,6 @@ Output one JSON object:
                     continue
                 action = data.get("action", default_action)
 
-                # Reject blocked action types. PROVE §3.2: on the first turn,
-                # the teacher must call a tool — block final_answer and
-                # report_error. After the first turn, no action-type blocking
-                # is applied; the teacher decides based on chain guidance in
-                # the prompt.
-                if action in blocked_first:
-                    logger.debug(
-                        f"decide_action rejected '{action}' for {self.domain} "
-                        f"(difficulty={difficulty}, chain_progress={chain_progress}/"
-                        f"{len(chain_seed) if chain_seed else 0}), "
-                        f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
-                    )
-                    continue
-
                 # Validate: tool_call MUST have a non-empty tool_name
                 if action == "tool_call":
                     tool_name = data.get("tool_name", "").strip()
@@ -1004,12 +929,6 @@ Output one JSON object:
                         logger.debug(
                             f"decide_action got tool_call with empty tool_name for {self.domain}, "
                             f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
-                        )
-                        continue
-                    if missing_function:
-                        logger.debug(
-                            f"decide_action rejected tool call '{tool_name}' under "
-                            f"missing-function zero-tool contract for {self.domain}."
                         )
                         continue
                     # P0: reject calls to blocked (hidden) tools so Teacher
@@ -1028,13 +947,16 @@ Output one JSON object:
                         continue
                 elif action in _VALID_TERMINALS:
                     tool_name = ""
-                elif action in tool_names_set:
-                    if missing_function:
+                    terminal_text = data.get(
+                        "text", data.get("reason", data.get("question", ""))
+                    )
+                    if not isinstance(terminal_text, str) or not terminal_text.strip():
                         logger.debug(
-                            f"decide_action rejected auto-corrected tool action '{action}' "
-                            f"under missing-function zero-tool contract for {self.domain}."
+                            f"decide_action rejected empty terminal '{action}' for "
+                            f"{self.domain}, retrying (attempt {_retry + 1}/3)."
                         )
                         continue
+                elif action in tool_names_set:
                     # Model used a tool name as the action type (e.g.,
                     # {"action": "cd", "arguments": {...}} instead of
                     # {"action": "tool_call", "tool_name": "cd", ...}).
@@ -1276,6 +1198,8 @@ def derive_success_criteria(
                 if isinstance(ie, dict) and isinstance(fe, dict):
                     for fk in fe:
                         if fk in ie and ie[fk] != fe[fk] and fe[fk] is not None:
+                            if isinstance(fe[fk], (dict, list)):
+                                continue
                             criteria.append({
                                 "type": "state_equals", "server": domain,
                                 "path": f"{key}.{ck}.{fk}",
@@ -1321,11 +1245,32 @@ def derive_success_criteria(
     tool_names = [c.tool_name for c in oracle_calls if c.action == "tool_call"]
     criteria.extend(_domain_criteria(tool_names, initial_state, final_state, domain))
 
+    # Generic state deltas and domain-specific helpers can describe the same
+    # postcondition (for example lead.status after convert_lead).  Keep the
+    # first, richer criterion and avoid rewarding one state change twice.
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for criterion in criteria:
+        value_key = _json.dumps(
+            criterion.get("value", None), sort_keys=True,
+            ensure_ascii=False, default=str,
+        )
+        key = (
+            str(criterion.get("type", "")),
+            str(criterion.get("server", "")),
+            str(criterion.get("path", "")),
+            value_key,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(criterion)
+
     # When no criteria can be derived, keep the list empty.
     # r_coverage uses max(outcome_count + criteria_count, 1) as denominator,
     # so an empty criteria list degrades gracefully to outcome-only coverage.
 
-    return criteria
+    return deduped
 
 
 def _tool_entity(name: str, domain: str = "") -> str:
@@ -1711,30 +1656,10 @@ def replay_validate(
                 # Schema validation failures (schema_valid=False) are ALWAYS
                 # counted as errors — the observation dict may lack an "error"
                 # key, containing only validation details.
-                if not result.schema_valid:
-                    num_errors += 1
-                    continue
-
-                obs = result.observation
-                if isinstance(obs, dict):
-                    err_msg = obs.get("error", "")
-                    # Empty results (e.g., search returned 0 items) are NOT errors
-                    empty_indicators = (
-                        "not found", "no results", "empty", "no items",
-                        "0 results", "no matches",
-                    )
-                    if err_msg and not any(ind in str(err_msg).lower() for ind in empty_indicators):
-                        num_errors += 1
-                elif isinstance(obs, str):
-                    empty_indicators = (
-                        "not found", "no results", "empty", "no items",
-                        "0 results", "no matches",
-                    )
-                    if not any(ind in obs.lower() for ind in empty_indicators):
-                        num_errors += 1
-                else:
-                    # Unknown error type — count as error
-                    num_errors += 1
+                # A failed execution is an execution error regardless of its
+                # message text. PROVE exempts successful empty-result responses,
+                # not precondition/schema failures such as "entity not found".
+                num_errors += 1
 
         # ── Criteria check (independent of tool-error-rate) ──
         # PROVE's 30% threshold applies ONLY to schema/execution errors.
@@ -1810,6 +1735,8 @@ def provenance_check(
     oracle_calls: list[OracleCall],
     user_query: str,
     aligned_observations: list[dict[str, Any]],
+    user_queries: list[str] | None = None,
+    call_round_indices: list[int] | None = None,
 ) -> tuple[bool, list[dict[str, Any]]]:
     """PROVE §3.2 Step 5: check that sensitive parameters are traceable.
 
@@ -1830,14 +1757,28 @@ def provenance_check(
     """
     violations: list[dict[str, Any]] = []
 
-    # Build corpus of traceable values from the user query and observations
-    # that occurred before the current oracle call. Future observations must
-    # never validate an earlier argument.
-    initial_traceable: list[str] = [user_query]
+    queries = list(user_queries or [user_query])
+    if not queries:
+        queries = [user_query]
+    round_indices = list(call_round_indices or [0] * len(oracle_calls))
+    if len(round_indices) != len(oracle_calls):
+        raise ValueError(
+            "call_round_indices must align 1:1 with oracle_calls"
+        )
 
     # Check each oracle call's arguments for sensitive params
-    traceable_values: list[str] = list(initial_traceable)
+    traceable_values: list[str] = []
+    latest_query_round = -1
     for idx, call in enumerate(oracle_calls):
+        call_round = round_indices[idx]
+        if call_round < 0 or call_round >= len(queries):
+            raise ValueError(
+                f"call_round_indices[{idx}]={call_round} outside "
+                f"user_queries range 0..{len(queries) - 1}"
+            )
+        while latest_query_round < call_round:
+            latest_query_round += 1
+            traceable_values.append(queries[latest_query_round])
         if call.action != "tool_call":
             continue
         for param_name, param_value in call.arguments.items():
@@ -1918,13 +1859,35 @@ def _format_tools(tool_schemas: list[dict[str, Any]], strip_enums: bool = False)
             if strip_enums and "enum" in info:
                 info = {kk: vv for kk, vv in info.items() if kk != "enum"}
             req = "*" if k in required else ""
-            ptype = info.get("type", "")
+            ptype = _schema_type_hint(info)
             enum_str = f": {', '.join(info['enum'])}" if "enum" in info else ""
             desc_part = f" ({ptype}{enum_str})" if ptype else ""
             args_parts.append(f"{k}{req}{desc_part}")
         args_str = ", ".join(args_parts)
         lines.append(f"  - {name}({args_str}): {desc}")
     return "\n".join(lines)
+
+
+def _schema_type_hint(schema: dict[str, Any]) -> str:
+    """Render the argument structure the Teacher must actually produce."""
+    ptype = str(schema.get("type") or "")
+    if ptype == "array" and isinstance(schema.get("items"), dict):
+        return f"array<{_schema_type_hint(schema['items'])}>"
+    if ptype == "object":
+        properties = schema.get("properties") or {}
+        required = set(schema.get("required") or [])
+        fields = []
+        for name, child in properties.items():
+            marker = "*" if name in required else ""
+            child_hint = _schema_type_hint(child) if isinstance(child, dict) else ""
+            fields.append(f"{name}{marker}: {child_hint or 'any'}")
+        return "object{" + ", ".join(fields) + "}"
+    constraints = []
+    if "minimum" in schema:
+        constraints.append(f"minimum={schema['minimum']}")
+    if constraints:
+        return f"{ptype}({', '.join(constraints)})"
+    return ptype
 
 
 def _format_state_compact(state: dict[str, Any], max_entities: int = 20) -> str:

@@ -248,6 +248,11 @@ if [[ "${DEPENDENCY_CACHE_PREWARM}" != "0" && "${DEPENDENCY_CACHE_PREWARM}" != "
     exit 1
 fi
 GENERATION_CLIENT_SEED_STRIDE="${GENERATION_CLIENT_SEED_STRIDE:-1000000}"
+GENERATION_MAX_RECOVERY_ROUNDS="${GENERATION_MAX_RECOVERY_ROUNDS:-6}"
+if ! [[ "${GENERATION_MAX_RECOVERY_ROUNDS}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: GENERATION_MAX_RECOVERY_ROUNDS must be >= 1, got ${GENERATION_MAX_RECOVERY_ROUNDS}" >&2
+    exit 1
+fi
 if ! [[ "${GENERATION_CLIENT_SEED_STRIDE}" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: GENERATION_CLIENT_SEED_STRIDE must be >= 1, got ${GENERATION_CLIENT_SEED_STRIDE}" >&2
     exit 1
@@ -273,8 +278,10 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
 
     GEN_COUNT=$(( (COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
     GEN_VAL_COUNT=$(( (VAL_COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
-    PER_GPU_TRAIN=$(( (GEN_COUNT + GPU_COUNT - 1) / GPU_COUNT ))
-    PER_GPU_VAL=$(( (GEN_VAL_COUNT + GPU_COUNT - 1) / GPU_COUNT ))
+    BASE_GPU_TRAIN=$(( GEN_COUNT / GPU_COUNT ))
+    REM_GPU_TRAIN=$(( GEN_COUNT % GPU_COUNT ))
+    BASE_GPU_VAL=$(( GEN_VAL_COUNT / GPU_COUNT ))
+    REM_GPU_VAL=$(( GEN_VAL_COUNT % GPU_COUNT ))
     TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
     mkdir -p "${TMPDIR_SHARD}"
 
@@ -282,7 +289,7 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
         echo ""
         echo "Prewarming dependency graph cache for domain=${DOMAIN}..."
         CUDA_VISIBLE_DEVICES="${GPU_INDEX_ARRAY[0]}" \
-            "${PYTHON_BIN}" scripts/dependency_graph.py live \
+            "${PYTHON_BIN}" scripts/dependency_graph.py \
                 --domain "${DOMAIN}" \
                 --model "${MODEL}" \
                 --suite "${SUITE}" \
@@ -293,16 +300,22 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
     for ((i=0; i<GPU_COUNT; i++)); do
         GPU_ID="${GPU_INDEX_ARRAY[$i]}"
         SHARD_SEED=$((SEED + i * GENERATION_CLIENT_SEED_STRIDE))
+        SHARD_TRAIN=$(( BASE_GPU_TRAIN + (i < REM_GPU_TRAIN ? 1 : 0) ))
+        SHARD_VAL=$(( BASE_GPU_VAL + (i < REM_GPU_VAL ? 1 : 0) ))
 
-        echo "  [shard $i] GPU=${GPU_ID}, train=${PER_GPU_TRAIN}, val=${PER_GPU_VAL}, seed=${SHARD_SEED}"
+        echo "  [shard $i] GPU=${GPU_ID}, train=${SHARD_TRAIN}, val=${SHARD_VAL}, seed=${SHARD_SEED}"
 
         CUDA_VISIBLE_DEVICES="${GPU_ID}" "${PYTHON_BIN}" scripts/generate_data.py \
-            --count "${PER_GPU_TRAIN}" \
-            --val-count "${PER_GPU_VAL}" \
+            --count "${SHARD_TRAIN}" \
+            --val-count "${SHARD_VAL}" \
             --seed "${SHARD_SEED}" \
             --domain "${DOMAIN}" \
             --model "${MODEL}" \
             --suite "${SUITE}" \
+            --shard-mode \
+            --pool-oversample-pct 0 \
+            --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
+            --checkpoint-path "${TMPDIR_SHARD}/shard_${i}_checkpoint.json" \
             --output "${TMPDIR_SHARD}/shard_${i}_train.parquet" \
             --val-output "${TMPDIR_SHARD}/shard_${i}_val.parquet" \
             --log-file "${TMPDIR_SHARD}/shard_${i}.log" \
@@ -326,7 +339,8 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
         --tmpdir "${TMPDIR_SHARD}" \
         --output-dir "${RUN_DIR}" \
         --count "${COUNT}" \
-        --val-count "${VAL_COUNT}"
+        --val-count "${VAL_COUNT}" \
+        --domain "${DOMAIN}"
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 
 # ═════════════════════════════════════════════════════════════════
@@ -434,8 +448,10 @@ print(tp)
     TOTAL_GEN_CLIENTS=$(( NUM_INSTANCES * VLLM_CLIENTS_PER_INSTANCE ))
     GEN_COUNT=$(( (COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
     GEN_VAL_COUNT=$(( (VAL_COUNT * (100 + GEN_OVERSAMPLE_PCT) + 99) / 100 ))
-    PER_CLIENT_TRAIN=$(( (GEN_COUNT + TOTAL_GEN_CLIENTS - 1) / TOTAL_GEN_CLIENTS ))
-    PER_CLIENT_VAL=$(( (GEN_VAL_COUNT + TOTAL_GEN_CLIENTS - 1) / TOTAL_GEN_CLIENTS ))
+    BASE_CLIENT_TRAIN=$(( GEN_COUNT / TOTAL_GEN_CLIENTS ))
+    REM_CLIENT_TRAIN=$(( GEN_COUNT % TOTAL_GEN_CLIENTS ))
+    BASE_CLIENT_VAL=$(( GEN_VAL_COUNT / TOTAL_GEN_CLIENTS ))
+    REM_CLIENT_VAL=$(( GEN_VAL_COUNT % TOTAL_GEN_CLIENTS ))
     TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
     mkdir -p "${TMPDIR_SHARD}"
 
@@ -520,7 +536,7 @@ print(tp)
     if [ "${DEPENDENCY_CACHE_PREWARM}" = "1" ]; then
         echo ""
         echo "Prewarming dependency graph cache for domain=${DOMAIN}..."
-        "${PYTHON_BIN}" scripts/dependency_graph.py live \
+        "${PYTHON_BIN}" scripts/dependency_graph.py \
             --domain "${DOMAIN}" \
             --model "${SERVED_MODEL}" \
             --api-base "http://localhost:${PORT_START}/v1" \
@@ -537,17 +553,23 @@ print(tp)
         for ((client=0; client<VLLM_CLIENTS_PER_INSTANCE; client++)); do
             CLIENT_ID=$(( inst * VLLM_CLIENTS_PER_INSTANCE + client ))
             SHARD_SEED=$((SEED + CLIENT_ID * GENERATION_CLIENT_SEED_STRIDE))
+            SHARD_TRAIN=$(( BASE_CLIENT_TRAIN + (CLIENT_ID < REM_CLIENT_TRAIN ? 1 : 0) ))
+            SHARD_VAL=$(( BASE_CLIENT_VAL + (CLIENT_ID < REM_CLIENT_VAL ? 1 : 0) ))
 
-            echo "  Instance ${inst}/client ${client}: train=${PER_CLIENT_TRAIN}, val=${PER_CLIENT_VAL}, seed=${SHARD_SEED}"
+            echo "  Instance ${inst}/client ${client}: train=${SHARD_TRAIN}, val=${SHARD_VAL}, seed=${SHARD_SEED}"
 
             "${PYTHON_BIN}" scripts/generate_data.py \
-                --count "${PER_CLIENT_TRAIN}" \
-                --val-count "${PER_CLIENT_VAL}" \
+                --count "${SHARD_TRAIN}" \
+                --val-count "${SHARD_VAL}" \
                 --seed "${SHARD_SEED}" \
                 --domain "${DOMAIN}" \
                 --model "${SERVED_MODEL}" \
                 --api-base "http://localhost:${PORT}/v1" \
                 --suite "${SUITE}" \
+                --shard-mode \
+                --pool-oversample-pct 0 \
+                --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
+                --checkpoint-path "${TMPDIR_SHARD}/shard_${inst}_${client}_checkpoint.json" \
                 --output "${TMPDIR_SHARD}/shard_${inst}_${client}_train.parquet" \
                 --val-output "${TMPDIR_SHARD}/shard_${inst}_${client}_val.parquet" \
                 --log-file "${TMPDIR_SHARD}/shard_${inst}_${client}.log" \
@@ -572,23 +594,17 @@ print(tp)
         --tmpdir "${TMPDIR_SHARD}" \
         --output-dir "${RUN_DIR}" \
         --count "${COUNT}" \
-        --val-count "${VAL_COUNT}"
+        --val-count "${VAL_COUNT}" \
+        --domain "${DOMAIN}"
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 fi
 
 # ── Update symlinks & print stats ──────────────────────────────────
-GEN_SUCCESS=1
 echo ""
 echo "=== Generation Complete ==="
 echo "Run dir:       ${RUN_DIR}/"
 echo "Train parquet: ${RUN_DIR}/train.parquet"
 echo "Val parquet:   ${RUN_DIR}/val.parquet"
-
-# 更新 data/train.parquet 和 data/val.parquet 符号链接指向最新 run
-ln -sfn "runs/${RUN_ID}/train.parquet" "${OUTPUT_DIR}/train.parquet"
-ln -sfn "runs/${RUN_ID}/val.parquet"   "${OUTPUT_DIR}/val.parquet"
-echo "Symlinks:      ${OUTPUT_DIR}/train.parquet → runs/${RUN_ID}/train.parquet"
-echo "               ${OUTPUT_DIR}/val.parquet   → runs/${RUN_ID}/val.parquet"
 
 # ── Parquet integrity validation ────────────────────────────────────
 echo ""
@@ -670,6 +686,13 @@ if [ $? -ne 0 ]; then
     echo "ERROR: Parquet integrity check failed. See above for details." >&2
     exit 1
 fi
+
+# Publish default training inputs only after both parquet files pass all gates.
+ln -sfn "runs/${RUN_ID}/train.parquet" "${OUTPUT_DIR}/train.parquet"
+ln -sfn "runs/${RUN_ID}/val.parquet"   "${OUTPUT_DIR}/val.parquet"
+echo "Symlinks:      ${OUTPUT_DIR}/train.parquet → runs/${RUN_ID}/train.parquet"
+echo "               ${OUTPUT_DIR}/val.parquet   → runs/${RUN_ID}/val.parquet"
+GEN_SUCCESS=1
 
 echo ""
 echo "Done. [$(date '+%Y-%m-%d %H:%M:%S')]"

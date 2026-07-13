@@ -12,8 +12,11 @@ from typing import Any, cast
 
 import pandas as pd
 
+DOMAINS_ALL = [
+    "banking", "calendar", "crm", "email", "filesystem",
+    "food_delivery", "issue_tracker", "payments", "shopping", "team_chat",
+]
 
-_TERMINALS = {"final_answer", "ask_clarification", "report_error"}
 _LEAK_MARKERS = (
     "oracle_calls",
     "success_criteria",
@@ -21,18 +24,6 @@ _LEAK_MARKERS = (
     "allowed_terminal_actions",
     "hidden_tools",
 )
-_EXPECTED_TERMINALS = {
-    "normal_safe_success": {"final_answer", "ask_clarification"},
-    "missing_function": {"ask_clarification", "report_error"},
-    "no_tool_or_abstention": {"report_error"},
-    "irrelevant": {"report_error"},
-    "clarification_required": {"ask_clarification"},
-    "tool_error_recovery": {"final_answer", "report_error"},
-    "missing_dependency": {"final_answer", "ask_clarification", "report_error"},
-    "unsafe_temptation": {"final_answer"},
-}
-
-
 def _as_extra(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -58,11 +49,6 @@ def _oracle_calls(extra: dict[str, Any]) -> list[dict[str, Any]]:
     return [call for call in calls if isinstance(call, dict)]
 
 
-def _terminal_action(calls: list[dict[str, Any]]) -> str:
-    terminals = [call.get("action") for call in calls if call.get("action") in _TERMINALS]
-    return str(terminals[-1]) if terminals else ""
-
-
 def _row_fingerprint(row: pd.Series) -> str:
     extra = _as_extra(row["extra_info"])
     domain = extra.get("domain", "")
@@ -82,15 +68,11 @@ def _quality_issue(row: pd.Series) -> str:
     paper_replay_valid = extra.get("paper_replay_valid")
     if paper_replay_valid is not None and not bool(paper_replay_valid):
         return "paper_replay_invalid"
-    project_outcome_valid = extra.get("project_outcome_valid")
-    if project_outcome_valid is not None and not bool(project_outcome_valid):
-        return "project_outcome_invalid"
     scenario = str(row.get("scenario_type") or extra.get("scenario_type") or "")
     calls = _oracle_calls(extra)
-    terminal = _terminal_action(calls)
-    expected = _EXPECTED_TERMINALS.get(scenario)
-    if expected and terminal not in expected:
-        return f"terminal_mismatch:{scenario}->{terminal or 'NONE'}"
+    # PROVE filters completed traces by replay error rate, provenance, and
+    # sequence similarity. Scenario labels are metadata, not a rejection gate;
+    # recovery may legitimately end in final_answer or graceful report_error.
 
     hidden = set(_as_json_list(extra.get("hidden_tools", [])))
     visible = set(_as_json_list(extra.get("visible_tool_names", [])))
@@ -105,16 +87,6 @@ def _quality_issue(row: pd.Series) -> str:
     prompt_text = "\n".join(str(message.get("content", "")) for message in prompt)
     if any(marker in prompt_text for marker in _LEAK_MARKERS):
         return "prompt_leaks_training_target"
-
-    seen_calls: set[tuple[str, str]] = set()
-    for call in calls:
-        if call.get("action", "tool_call") != "tool_call":
-            continue
-        args = json.dumps(call.get("arguments", {}), sort_keys=True, ensure_ascii=False, default=str)
-        key = (str(call.get("tool_name", "")), args)
-        if key in seen_calls:
-            return "duplicate_tool_call"
-        seen_calls.add(key)
 
     return ""
 
@@ -145,6 +117,46 @@ def _stratified_head(df: pd.DataFrame, target: int) -> pd.DataFrame:
                 next_keys.append(key)
         ordered_keys = next_keys
     return df.loc[selected].reset_index(drop=True)
+
+
+def _domain_quotas(target: int, domains: list[str]) -> dict[str, int]:
+    base, remainder = divmod(target, len(domains))
+    return {
+        domain: base + (1 if index < remainder else 0)
+        for index, domain in enumerate(domains)
+    }
+
+
+def _balanced_domain_split(
+    pool: pd.DataFrame,
+    count: int,
+    val_count: int,
+    domains: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame] | None:
+    train_quotas = _domain_quotas(count, domains)
+    val_quotas = _domain_quotas(val_count, domains)
+    train_parts: list[pd.DataFrame] = []
+    val_parts: list[pd.DataFrame] = []
+    for domain in domains:
+        domain_rows = pool.loc[
+            pool["extra_info"].map(
+                lambda value: str(_as_extra(value).get("domain", "")) == domain
+            )
+        ].reset_index(drop=True)
+        needed = train_quotas[domain] + val_quotas[domain]
+        if len(domain_rows) < needed:
+            print(
+                f"  FATAL: domain {domain} has {len(domain_rows)} global unique "
+                f"candidates, need {needed} "
+                f"(train={train_quotas[domain]}, val={val_quotas[domain]})"
+            )
+            return None
+        selected = _stratified_head(domain_rows, needed)
+        train_parts.append(selected.iloc[:train_quotas[domain]])
+        val_parts.append(selected.iloc[train_quotas[domain]:needed])
+    train_df = pd.concat(train_parts, ignore_index=True) if train_parts else pool.iloc[:0].copy()
+    val_df = pd.concat(val_parts, ignore_index=True) if val_parts else pool.iloc[:0].copy()
+    return train_df, val_df
 
 
 def merge_split(
@@ -213,7 +225,43 @@ def _dedup_task_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return df.loc[keep].reset_index(drop=True), removed
 
 
-def merge_shards(tmpdir: Path, output_dir: Path, count: int, val_count: int) -> int:
+def _row_tool_sequence(row: pd.Series) -> list[str]:
+    return [
+        str(call.get("tool_name", ""))
+        for call in _oracle_calls(_as_extra(row["extra_info"]))
+        if call.get("action", "tool_call") == "tool_call"
+    ]
+
+
+def _row_jaccard(a: pd.Series, b: pd.Series) -> float:
+    seq_a, seq_b = _row_tool_sequence(a), _row_tool_sequence(b)
+    if not seq_a and not seq_b:
+        return 0.0
+    if not seq_a or not seq_b:
+        return 0.0
+    pos_a = set(enumerate(seq_a))
+    pos_b = set(enumerate(seq_b))
+    return len(pos_a & pos_b) / len(pos_a | pos_b)
+
+
+def _dedup_jaccard(df: pd.DataFrame, threshold: float = 0.70) -> tuple[pd.DataFrame, int]:
+    kept: list[Hashable] = []
+    removed = 0
+    for idx, row in df.iterrows():
+        if any(_row_jaccard(row, df.loc[prior]) >= threshold for prior in kept):
+            removed += 1
+            continue
+        kept.append(idx)
+    return df.loc[kept].reset_index(drop=True), removed
+
+
+def merge_shards(
+    tmpdir: Path,
+    output_dir: Path,
+    count: int,
+    val_count: int,
+    domains: list[str] | None = None,
+) -> int:
     """Globally deduplicate candidates before final train/val truncation."""
     train_path = output_dir / "train.parquet"
     val_path = output_dir / "val.parquet"
@@ -226,51 +274,34 @@ def merge_shards(tmpdir: Path, output_dir: Path, count: int, val_count: int) -> 
     if not ok_train or (val_count > 0 and not ok_val):
         return 1
 
-    train_candidates, train_tid_removed = _dedup_task_ids(train_candidates)
-    val_candidates, val_tid_internal_removed = _dedup_task_ids(val_candidates)
-    if train_tid_removed or val_tid_internal_removed:
+    pool = pd.concat([train_candidates, val_candidates], ignore_index=True)
+    pool, tid_removed = _dedup_task_ids(pool)
+    before_exact = len(pool)
+    pool["_semantic_fp"] = pool.apply(_row_fingerprint, axis=1)
+    pool = pool.drop_duplicates(subset=["_semantic_fp"], keep="first").drop(
+        columns=["_semantic_fp"],
+    ).reset_index(drop=True)
+    exact_removed = before_exact - len(pool)
+    pool, jaccard_removed = _dedup_jaccard(pool, threshold=0.70)
+
+    required = count + val_count
+    if len(pool) < required:
         print(
-            "  task_id dedup: removed "
-            f"train={train_tid_removed}, val={val_tid_internal_removed}"
-        )
-
-    if len(train_candidates) < count:
-        print(f"  FATAL: train candidates={len(train_candidates)}, need {count}")
-        return 1
-    train_df = _stratified_head(train_candidates, count)
-    train_fps = {_row_fingerprint(row) for _, row in train_df.iterrows()}
-    train_ids = {
-        str(_as_extra(row["extra_info"]).get("task_id", ""))
-        for _, row in train_df.iterrows()
-    }
-    train_ids.discard("")
-
-    fp_overlap_mask = val_candidates.apply(
-        lambda row: _row_fingerprint(row) in train_fps, axis=1,
-    ) if len(val_candidates) else pd.Series(dtype=bool)
-    fp_removed = int(fp_overlap_mask.sum()) if len(val_candidates) else 0
-    if fp_removed:
-        val_candidates = val_candidates.loc[~fp_overlap_mask].reset_index(drop=True)
-
-    tid_overlap_mask = val_candidates.apply(
-        lambda row: str(_as_extra(row["extra_info"]).get("task_id", "")) in train_ids,
-        axis=1,
-    ) if len(val_candidates) else pd.Series(dtype=bool)
-    tid_removed = int(tid_overlap_mask.sum()) if len(val_candidates) else 0
-    if tid_removed:
-        val_candidates = val_candidates.loc[~tid_overlap_mask].reset_index(drop=True)
-
-    if len(val_candidates) < val_count:
-        print(
-            f"  FATAL: val candidates={len(val_candidates)} after cross-split dedup, "
-            f"need {val_count} (fp_removed={fp_removed}, tid_removed={tid_removed})"
+            f"  FATAL: global unique candidates={len(pool)}, need {required} "
+            f"(task_id_removed={tid_removed}, exact_removed={exact_removed}, "
+            f"jaccard_removed={jaccard_removed})"
         )
         return 1
-    val_df = (
-        val_candidates.iloc[0:0].copy()
-        if val_count <= 0
-        else _stratified_head(val_candidates, val_count)
-    )
+
+    if domains:
+        split = _balanced_domain_split(pool, count, val_count, domains)
+        if split is None:
+            return 1
+        train_df, val_df = split
+    else:
+        selected = _stratified_head(pool, required)
+        train_df = selected.iloc[:count].reset_index(drop=True)
+        val_df = selected.iloc[count:count + val_count].reset_index(drop=True)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     train_df.to_parquet(train_path, index=False)
@@ -279,7 +310,8 @@ def merge_shards(tmpdir: Path, output_dir: Path, count: int, val_count: int) -> 
     print(f"  {val_path}: {len(val_df)} rows (target={val_count})")
     print(
         f"  merge ok: {len(train_df)} train + {len(val_df)} val, "
-        f"fp_removed={fp_removed}, tid_removed={tid_removed}"
+        f"task_id_removed={tid_removed}, exact_removed={exact_removed}, "
+        f"jaccard_removed={jaccard_removed}"
     )
     return 0
 
@@ -290,10 +322,20 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--count", type=int, required=True)
     parser.add_argument("--val-count", type=int, required=True)
+    parser.add_argument("--domain", default="all")
     args = parser.parse_args()
 
+    domains = (
+        list(DOMAINS_ALL)
+        if args.domain == "all"
+        else [item.strip() for item in args.domain.split(",") if item.strip()]
+    )
+    unknown = sorted(set(domains) - set(DOMAINS_ALL))
+    if not domains or unknown:
+        parser.error(f"invalid --domain value: {args.domain!r}; unknown={unknown}")
     return merge_shards(
         Path(args.tmpdir), Path(args.output_dir), args.count, args.val_count,
+        domains=domains,
     )
 
 

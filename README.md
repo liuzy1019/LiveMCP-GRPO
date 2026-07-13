@@ -45,7 +45,7 @@ Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
 │   ├── generate_data.py       # 数据生成 Python 入口（5 步状态机管线）
 │   ├── train_grpo.sh          # GRPO 训练 shell 入口
 │   ├── train_grpo.py          # GRPO 训练 Hydra 入口
-│   ├── dependency_graph.py    # 依赖图预计算/重建（n² pairwise LLM 分类）
+│   ├── dependency_graph.py    # 依赖图预计算（当前为 distinct ordered n(n-1) pair 分类）
 │   ├── validate_pipeline.py   # 端到端管线验证
 │   ├── verify_entities.py     # 实体验证
 │   ├── merge_rollout_shards.py # Rollout 分片合并（含质量门禁）
@@ -61,9 +61,9 @@ Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
 │   ├── external/               # 外部数据集
 │   ├── runs/                   # 生成产出（每次运行独立子目录）
 │   ├── experiments/            # 实验记录（config.json + result.json）
-│   ├── train.parquet           # 符号链接 → 最新 run 的 train.parquet
-│   └── val.parquet             # 符号链接 → 最新 run 的 val.parquet
-├── reference/                  # 参考论文（PROVE / TOUCAN）
+│   ├── train.parquet           # 完整生成成功后建立的符号链接 → 当前可用 run
+│   └── val.parquet             # 完整生成成功后建立的符号链接 → 当前可用 run
+├── reference/                  # 参考论文（PROVE / COVERT）
 ├── tests/                      # pytest 测试
 ├── verl/                       # verl 0.6.1（vendored, editable install）
 ├── pyproject.toml
@@ -73,6 +73,16 @@ Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
 ---
 
 ## 🚀 Quick Start
+
+### Activate the verified environment
+
+```bash
+export ARL_ENV=/mnt/data2/liuzhanyi/envs/arl
+conda activate "$ARL_ENV"
+export PYTHON_BIN="$ARL_ENV/bin/python"
+```
+
+本机的 Conda 名称索引仍把 `arl` 指向已不存在的 `/mnt/data1/.../envs/arl`，因此当前不要使用 `conda activate arl`。生成和训练脚本均支持显式解释器变量。
 
 ### Install
 

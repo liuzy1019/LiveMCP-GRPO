@@ -91,7 +91,7 @@ class LiveMCPBranch:
         device: int | None = None,
         irrelevance_ratio: float = 0.05,
         distractor_rate: float = 0.40,
-        missing_function_rate: float = 0.20,
+        missing_function_rate: float = 1500 / (10895 + 1500),
     ) -> list[LiveTask]:
         """Generate tasks with PROVE-style two-phase teacher."""
         self._require_started()

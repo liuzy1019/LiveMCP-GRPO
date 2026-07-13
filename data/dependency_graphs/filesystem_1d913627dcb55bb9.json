@@ -1,7 +1,8 @@
 {
-  "cache_version": 2,
+  "cache_version": 4,
+  "dependency_semantics_version": 9,
   "server_name": "filesystem",
-  "schema_hash": "8b7a1bd1fda5596c",
+  "schema_hash": "1d913627dcb55bb9",
   "tool_names": [
     "awk",
     "cat",
@@ -55,7 +56,10 @@
     },
     "cd": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "ls",
+        "pwd"
+      ]
     },
     "chmod": {
       "explicit": [],
@@ -91,18 +95,48 @@
     },
     "find": {
       "explicit": [
+        "cd",
         "cat",
+        "head",
+        "tail",
+        "wc",
+        "stat",
+        "grep",
         "mv",
         "cp",
         "rm",
         "chmod",
         "chown",
+        "du",
+        "symlink",
+        "readlink",
+        "tar_create",
+        "tar_extract",
+        "zip",
+        "diff",
+        "sort",
+        "uniq",
+        "cut",
+        "sed",
+        "awk",
+        "md5sum",
+        "sha256sum",
+        "file_info",
+        "xxd",
+        "truncate",
+        "split",
         "join"
       ],
       "implicit": []
     },
     "grep": {
-      "explicit": [],
+      "explicit": [
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "stat"
+      ],
       "implicit": []
     },
     "head": {
@@ -114,9 +148,7 @@
       "implicit": []
     },
     "ls": {
-      "explicit": [
-        "cat"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "md5sum": {
@@ -126,10 +158,9 @@
     "mkdir": {
       "explicit": [],
       "implicit": [
-        "mv",
-        "cp",
-        "chmod",
-        "chown"
+        "stat",
+        "find",
+        "tree"
       ]
     },
     "mv": {
@@ -142,7 +173,26 @@
     },
     "readlink": {
       "explicit": [
-        "join"
+        "ls",
+        "cd",
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "stat",
+        "find",
+        "grep",
+        "tree",
+        "touch",
+        "mv",
+        "sed",
+        "awk",
+        "md5sum",
+        "sha256sum",
+        "file_info",
+        "xxd",
+        "truncate",
+        "split"
       ],
       "implicit": []
     },
@@ -161,11 +211,16 @@
     "sort": {
       "explicit": [],
       "implicit": [
-        "join"
+        "uniq"
       ]
     },
     "split": {
-      "explicit": [],
+      "explicit": [
+        "wc",
+        "stat",
+        "grep",
+        "mv"
+      ],
       "implicit": []
     },
     "stat": {
@@ -173,15 +228,27 @@
       "implicit": []
     },
     "symlink": {
-      "explicit": [],
-      "implicit": []
+      "explicit": [
+        "tail",
+        "wc",
+        "stat",
+        "grep"
+      ],
+      "implicit": [
+        "readlink"
+      ]
     },
     "tail": {
       "explicit": [],
       "implicit": []
     },
     "tar_create": {
-      "explicit": [],
+      "explicit": [
+        "stat",
+        "mv",
+        "cp",
+        "tar_extract"
+      ],
       "implicit": []
     },
     "tar_extract": {
@@ -191,11 +258,38 @@
     "touch": {
       "explicit": [],
       "implicit": [
+        "head",
+        "tail",
+        "wc",
+        "stat",
+        "grep",
+        "mv",
+        "cp",
+        "rm",
+        "chmod",
+        "chown",
+        "uniq",
+        "cut",
+        "sed",
+        "awk",
+        "md5sum",
+        "sha256sum",
+        "file_info",
+        "xxd",
+        "truncate",
+        "split",
         "join"
       ]
     },
     "tree": {
-      "explicit": [],
+      "explicit": [
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "stat",
+        "grep"
+      ],
       "implicit": []
     },
     "truncate": {
@@ -204,7 +298,11 @@
     },
     "umask": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "mkdir",
+        "touch",
+        "cp"
+      ]
     },
     "uniq": {
       "explicit": [],
@@ -212,7 +310,15 @@
     },
     "unzip": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "cat",
+        "head",
+        "tail",
+        "wc",
+        "stat",
+        "find",
+        "grep"
+      ]
     },
     "wc": {
       "explicit": [],
@@ -223,13 +329,21 @@
       "implicit": []
     },
     "zip": {
-      "explicit": [],
-      "implicit": []
+      "explicit": [
+        "sha256sum",
+        "file_info",
+        "xxd",
+        "truncate",
+        "split",
+        "join"
+      ],
+      "implicit": [
+        "unzip"
+      ]
     }
   },
   "tool_count": 40,
-  "expected_pair_count": 780,
-  "classified_pair_count": 780,
-  "classification_complete": true,
-  "deterministic_augmentation": false
+  "expected_pair_count": 1560,
+  "classified_pair_count": 1560,
+  "classification_complete": true
 }

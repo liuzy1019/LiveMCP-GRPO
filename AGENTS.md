@@ -7,7 +7,9 @@
 ## 环境
 
 ```bash
-conda activate arl          # Python 3.11, PyTorch 2.10.0+cu128
+export ARL_ENV=/mnt/data2/liuzhanyi/envs/arl
+conda activate "$ARL_ENV"   # named `arl` 当前错误指向已不存在的 /mnt/data1 环境
+export PYTHON_BIN="$ARL_ENV/bin/python"
 nvidia-smi                  # 确认 GPU 可用（A10 ×8, 22GB/卡）
 ```
 
@@ -57,11 +59,14 @@ verl 0.6.1 从 `./verl` editable 安装。关键版本：
 
 > 管线细节见 `data/README.md`，对齐 PROVE 论文 §3.2 的五步流程。核心约束如下：
 
-- **PROVE §3.2 五步全部对齐**：依赖图构建 → Live-State 采样 → 状态机编排 → Robustness Knobs → Replay 验证 + 去重
+- **PROVE §3.2 五步机制对齐**：依赖图构建 → Live-State 采样 → 状态机编排 → Robustness Knobs → Replay 验证 + 去重；论文未公开的 self-pair、重复节点和 Jaccard 细节必须标为本地选择，不宣称逐实现一致
 - **Robustness 注入时机**：在 Teacher 处理前采样并固定。distractor 加入 Teacher candidate set，enum stripping 作用于 Teacher-visible schema，missing function 在完整 chain/query 生成后从 Teacher schema/hints/执行器中隐藏；同一配置用于 Replay 和 Parquet
+- **PROVE corpus hard gates**：只把 fresh replay（schema/execution error rate ≤30%）、sensitive-parameter provenance 和 tool-call sequence Jaccard 0.70 记为论文公开过滤；不得自行增加 exact-chain、词法 capability、query/tool-name 或通用 mutation hard gate
+- **Graceful give-up**：PROVE recovery 允许在当前 candidate tools 无法完成目标时直接 `report_error`；不得要求先制造一次 execution failure。无失败历史只可作为 Teacher 质量诊断，不得作为 corpus hard gate
+- **多轮预算语义**：论文 `min_turns=2, max_turns=3` 表示 conversation rounds，不是 tool-action 次数。Parquet action budget 必须至少覆盖全部 ground-truth tool calls 和每轮一个 terminal；PROVE adaptive efficiency budget 只用于 reward，不作为 episode 截断上限
 - **Irrelevance（5%）**：独立生成无可用工具满足的 query，并显式保存 no-tool terminal oracle
 - `success_criteria` 的 `value` 字段类型混合（str/float/int），必须序列化为 JSON 字符串存入 Parquet，不能裸存 list[dict]
-- `OracleCall(action="clarification")` 的 `action` 字段必须保留到 parquet，reward 端据此设 `allowed_terminal=["ask_clarification"]`
+- `OracleCall(action="ask_clarification")` 的 `action` 字段必须保留到 parquet；legacy `clarification` 仅在 reward 读回时兼容
 - 每轮数据生成改动后必须验证 `generate_data.py` → `to_parquet` → `read_parquet` → `_build_task_dict` 全链路
 - 生成失败率需关注日志中的 `generate_many progress` 行和 WARNING 计数
 - Replay validation 错误率阈值 30%（仅计 schema + execution 错误，不含空结果）
@@ -115,6 +120,6 @@ Conventional Commits：`<type>: <subject>`
 - OVAL GRPO 是唯一训练路线（`bash scripts/train_grpo.sh`）
 - SFT cold-start 相关代码已清除
 - 环境：8×A10 22GB，脚本自动检测 GPU 数（`GPU_COUNT=4` 可限制）
-- Teacher 生成参数：difficulty_mix = `complete:60%, missing:20%, minimal:20%`，missing_function 20%，irrelevance 5%，enum stripping 30%
+- Teacher 生成参数：difficulty_mix = `complete:60%, missing-required:20%, minimal:20%`；missing-function 默认目标比例 `1500/(10895+1500)≈12.1%`，由论文公开 corpus count 推导，非论文直接发布的 knob；irrelevance 5%，enum stripping 30%
 - Distractor 40%——在 Teacher 处理前向 candidate set 注入 3–8 个跨域工具；Teacher、Replay metadata 和 RL rollout 使用同一可见 schema，成功调用 distractor 的轨迹不得进入 ground-truth oracle
 - Oversample 50% + 最多 3 轮 recovery 保证产出数量

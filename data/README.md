@@ -20,15 +20,15 @@ data/
 │   └── {MMDD_HHMM}/                # 单次生成目录，命名与日志一致
 │       ├── train.parquet
 │       └── val.parquet
-├── train.parquet -> runs/{MMDD_HHMM}/train.parquet   # 符号链接，指向最新 run
-├── val.parquet   -> runs/{MMDD_HHMM}/val.parquet     # 符号链接，指向最新 run
+├── train.parquet -> runs/{MMDD_HHMM}/train.parquet   # 完整 run 验收后建立
+├── val.parquet   -> runs/{MMDD_HHMM}/val.parquet     # 完整 run 验收后建立
 └── README.md
 ```
 
 ### 命名约定
 
 - `runs/{MMDD_HHMM}/` — 与 `logs/{MMDD_HHMM}_gen_{N}.log` 时间戳对应，方便追溯
-- `data/train.parquet` 和 `data/val.parquet` 始终是符号链接，指向最新 run
+- `data/train.parquet` 和 `data/val.parquet` 只在 train/val 均完整产出并通过生成门禁后更新；失败或零验证集 smoke 不得覆盖入口
 - 旧 run 目录保留，手动清理时删除对应 `runs/{MMDD_HHMM}/` 即可
 - vLLM 运行日志写到 `logs/`，生成成功后自动删除；失败时保留用于排查
 
@@ -36,49 +36,42 @@ data/
 
 ## 数据生成管线
 
-> 重新生成后建议运行 `python scripts/validate_pipeline.py --live` 验证管线完整性。
+> 重新生成后建议运行 `python scripts/validate_pipeline.py --stages 1,2`，并用 Stage 3 或正式生成 artifact 核对运行链路。
 > 完整设计参考 PROVE 论文 §3.2。
 
-### 当前 Teacher smoke 状态（2026-07-10）
+### 当前验收状态
 
-当前 checkout 已用本地 Gemma-4-31B-it 完成四条真实生成与 Parquet 读回：
-
-| 场景 | 结果 |
-|------|------|
-| normal multi-turn | `list_events → set_reminder`，两轮 query/oracle/round-contract 对齐，Replay error 0% |
-| missing-function | `update_event` 从 Teacher schema 隐藏，零工具 `report_error`，Replay error 0% |
-| distractor + enum stripping | 4 个跨域 distractor；oracle 未调用 distractor，Replay error 0% |
-| irrelevance | 无工具可满足 query，零工具 `report_error`，Replay error 0% |
-
-smoke artifacts 位于 `data/runs/0710_teacher_smoke/`。这些结果只证明 Teacher 机制路径闭环；批量 yield、difficulty/robustness 分布和更大样本的语义质量仍需单独统计。
+当前未通过修复后的十域端到端验收。有效问题、证据路径和下一步门禁统一记录在 `docs/KNOWN_ISSUES.md`；本文件不保留已失效 smoke 或旧 cache 数量。
 
 ### Step 1 — 自动发现依赖图（Auto-Discovered Dependency Graph）
 
 ```
-对每个 domain，对所有 n² 个工具对调用 LLM 分类器，判断关系：
+对每个 domain，对所有有序 `n(n-1)` 工具对（不含 self-pair）调用 LLM 分类器，判断关系：
   explicit（工具 A 的输出是工具 B 的必需输入）
   implicit（A 必须先执行以建立状态）
   none
-→ 缓存为有向依赖图（按 tool schema hash 索引）
+→ 缓存为有向依赖图（按 tool schema 和 dependency semantics 版本索引）
 → 提取 length-2 到 length-5 的工具链，作为多步 query 的种子
 ```
 
 每个 domain 的依赖图缓存在 `data/dependency_graphs/{domain}_{hash}.json`。
-严格 cache 必须同时记录 `expected_pair_count`、`classified_pair_count` 和 `classification_complete=true`；旧 cache 缺少这些字段时只能视为 legacy artifact，不能作为“全 pair 已由 LLM 分类”的证据。
-pairwise classifier 默认每批 12 个 pair；若返回缺项，只重问未分类 pair。任一 batch 重试耗尽仍不完整时，整张 graph fail-closed，不缓存部分结果。
+严格 cache 必须同时记录 `expected_pair_count=n(n-1)`、`classified_pair_count` 和 `classification_complete=true`；旧的无序 `nC2` cache 或缺少这些字段的 artifact 均不能作为“全部有向 pair 已由 LLM 分类”的证据。
+论文写作“all n² tool pairs”，但没有公开是否包含 self-pair，也没有公开 chain traversal 是否允许重复节点。当前工程选择全部不同工具的有序 pair，即 `n(n-1)`，并提取不重复节点的 simple paths；这是可审计的本地实现选择，不能宣称为论文逐实现事实。pairwise classifier 默认每批 8 个 pair、最多 512 输出 tokens；若返回缺项，只重问未分类 pair。任一 batch 重试耗尽仍不完整时，整张 graph fail-closed，不缓存部分结果。
 并行生成时，同一 `{domain}_{hash}` 的冷缓存只允许一个进程执行 LLM 分类；等待进程获得文件锁后必须再次读取缓存。缓存通过同目录临时文件和 `os.replace` 原子发布，生成 shard 启动前默认由单进程完成所选 domain 的预热。
+
+缓存保留 LLM 对全部有向 pair 的分类结果，不再经过本地 handler denylist、domain 黑名单、entity heuristic 或强制破环改写。候选 chain 的可行性由后续 live-state、execution 与 replay 验证；handler 事实只能用于 feasibility 或运行验证，不能回写 pairwise classifier 的 cache。
 
 ### Step 2 — 实时状态采样（Live-State Sampling / Grounded Query Generation）
 
 ```
 在 query 生成前, 对每个 domain 调用只读探测工具（search / list / get_unique_values）
 → 枚举真实存在的实体（账户、联系人、事件、商品等）
-→ 过滤到有足够支撑数据的子集（如至少有 20 个商家的城市、有非零余额的账户）
-→ 缓存 compact "sampling context"（每 k 个对话刷新一次）
+→ 按已选 chain 的真实 handler 前置条件筛选可用实体；当前不维护论文示例中的全局 supporting-data filter 表
+→ 每个 seed/session 首次使用时重建 compact sampling context；同一未变化 session 内最多复用 k 次，写入后的 continuation 强制刷新
 → 注入 query 生成 prompt，约束 LLM 只能使用 context 中存在的实体
 ```
 
-这一步解决了 naive 生成器产生不存在的实体 ID / 名称的问题，保证生成的 tool chain 端到端可执行。
+这一步约束 query 使用真实实体，并在生成前排除已知不可行 chain；最终是否可执行仍以 live execution 和 fresh replay 为准。
 
 ### Step 3 — 状态机编排器（State-Machine Orchestrator）
 
@@ -97,12 +90,23 @@ pairwise classifier 默认每批 12 个 pair；若返回缺项，只重问未分
      min_turns=2, max_turns=3
 ```
 
-初始 query 由完整 dependency chain 生成，必须明确请求 chain 末端的用户可观察结果；前置节点作为内部工作流在同一 task 中执行，不拆成后续 user turn。follow-up 是基于此前真实 execution history 的 continuation。Replay 可执行不等于语义正确，正式 smoke 还必须核对 query、oracle 和 terminal。
-mutating 末端 capability 必须在 query 中有明确动作和目标实体，不能仅凭 chain guidance 擅自制造用户未请求的副作用。
-Teacher 对话结束后必须在返回 `LiveTask` 前完成整个 `chain_seed`；不完整 chain 在 `generate_one` 内换 seed 重试，不能延迟到 Parquet 导出时才发现。
-三次 task retry 均失败时必须抛出 `RuntimeError`，不得把最后一次失败轨迹包装成 task。`complete` query 对需要 `*_id` 的目标工具必须引用 live context 中的真实 ID。
+首轮 user query 由一条 live-state feasible dependency chain 生成。该 chain 及其 graph hints 不传给 Teacher action prompt；Teacher 只根据 query、candidate tool schemas 和真实 execution history 决策。前置节点不拆成后续 user turn；continuation 只根据刷新后的 live state、此前 query 与真实 execution history继续同一 conversation，不为后续 round 重新构造 dependency chain。Replay 可执行不等于语义正确，正式 smoke 还必须核对 query、oracle 和 terminal。
 
-`chain_seed` 表示支撑用户目标的工具工作流，不要求把每个工具节点机械拆成一个独立 user turn。词法 capability 检查只作为诊断，不得因 Unix 命令名或自然语言同义表达单独拒绝任务。每个 round 进入 continuation 前必须成功完成该 round 生成时绑定的 capability；若执行失败，只能在同一 round 内 retry / alternative-tool / give-up，不能跳过未完成意图。Missing-function 在 chain 选择后直接隐藏必要工具；共享 entity type 不构成能力等价证据。
+可行链在通过 schema/handler/live-state feasibility 后均匀采样；不再按 mutation 数量或单一工具名设置论文外优先池。失败由真实 execution、state-machine recovery 与 fresh replay 处理。
+
+运行链路不执行状态反转、capability 同义词或实体字符串匹配过滤；PROVE 未发布这些 gate。是否保留样本由用户目标的实际执行、fresh replay、provenance 和去重决定。`chain_seed`/`dependency_edges` 的完整性仅是本项目 OVAL coverage reward 的本地结构合约。
+
+`source_chain_seed` 表示生成 query 时使用的工作流种子；只有 oracle 实际完整覆盖该序列时才写入 `chain_seed` 并构造 OVAL dependency edges。PROVE 没有发布“必须逐节点覆盖 seed chain”的 corpus hard gate。每个 round 的用户目标仍须由成功执行完成，或以 clarification / abstention 合法终止。Missing-function 在 chain 选择后隐藏必要工具。
+
+Recovery 的 alternative tool 不要求与 chain 节点名称相同；成功轨迹由 live execution 和 fresh replay 判定。Missing-function 可以先调用仍可见的前置工具，再因隐藏能力缺失而 clarification / abstention；不得以 `missing_function=True` 拒绝所有 tool call。硬约束仅包括 hidden tool 不可见、不可执行、不可进入 oracle，以及最终 clarification / abstention。
+
+过滤边界：fresh replay、sensitive-parameter provenance 和 Jaccard 0.70 是论文公开 corpus gates。Parquet schema、显式 terminal、round contracts、hidden-tool 不泄漏与 dependency-edge 索引是本项目 rollout/reward 的结构合同。位置感知 Jaccard 和按公开 corpus 数量反推的 missing-function 采样率属于本地工程选择，必须在实验 metadata 中记录，不能写成论文公布的实现细节。
+
+Recovery 边界：论文明确包含 graceful give-up with fallback explanation。Teacher 判断当前 candidate tools 无法完成用户结果时可以直接 `report_error`，不要求先执行一个必然失败的工具调用；“无 execution failure 的 report_error”只记录诊断，不作为导出拒绝条件。
+
+预算边界：论文 continuation 的 `min_turns=2, max_turns=3` 指 conversation rounds；一次 round 内可以包含多个顺序 tool calls。Parquet `budget` 是本项目 rollout 的 action-turn 工程合同，必须满足 `budget >= ground-truth tool-call 数 + conversation round 数`，从而至少容纳每轮一个 terminal。论文 §3.3 的 adaptive efficiency budget 按 tool-call 数计算奖励惩罚，不负责截断 episode。
+
+真实十域 smoke 的补充约束：成功 normal conversation 必须有 2--3 个真实 user turns；follow-up 必须依赖当前 live state 并继续此前 conversation，不得由内部 chain 节点机械改写。filesystem archive 操作只使用 live-state 中的 file 实体。
 
 每一步 LLM 决策都看到完整 domain context（tools, live state, execution history），形成 teacher 轨迹。每条轨迹记录为 oracle trace，包含全部 tool call 参数和 server 响应。
 
@@ -113,7 +117,7 @@ Teacher 对话结束后必须在返回 `LiveTask` 前完成整个 `chain_seed`�
   - Distractor injection（40%）：混入 3-8 个来自其他 domain 的无关工具
   - Enum stripping（30%）：从参数 schema 中移除枚举值列表，迫使模型从描述推理约束
   - Irrelevance queries（5%）：生成没有可用工具能处理的 query，训练拒绝能力
-  - Missing function（20%）：在链选择后隐藏一个必需工具，产生 abstention/clarification 样本
+  - Missing function（目标约 12.1%）：在链选择后隐藏一个必需工具，产生 abstention/clarification 样本；比例由论文公开的 1,500 / (10,895 + 1,500) corpus count 推导
 ```
 
 强制执行契约：
@@ -121,7 +125,8 @@ Teacher 对话结束后必须在返回 `LiveTask` 前完成整个 `chain_seed`�
 ```text
 missing-function:
   完整 query_chain 先生成确实需要 hidden tool 的 query
-  Teacher 只接收移除 hidden tool 后的 schema/hints，最终 oracle 为零工具 clarification/abstention
+  Teacher 只接收移除 hidden tool 后的 candidate schemas，不接收 graph hints
+  可先执行仍可见的前置工具，最终以 clarification/abstention 终止
   hidden_tools 在生成、Parquet、rollout executor 和 reward 中保持一致
 
 Replay / provenance:
@@ -129,8 +134,9 @@ Replay / provenance:
   ground-truth oracle 仅保留最终有效步骤
 
 distractor:
+  在 Teacher 生成前把 3-8 个跨 domain 无关工具加入 candidate set，并对同一候选集 replay
   schema 携带 owner domain 并路由到真实 MCP server
-  candidate name existence 与 schema-valid/execution-success 分层计分
+  ground-truth oracle 不应调用无关 distractor
 ```
 
 ### Step 5 — 重放验证与去重（Replay Validation and Deduplication）
@@ -141,7 +147,8 @@ distractor:
   - 错误率 > 30% 的对话丢弃
   - Provenance check：敏感参数（passwords, tokens）只能出现在可追溯到前序 user
     turn 或 tool output 的位置
-  - Jaccard 去重：基于 tool-call 序列，阈值 0.70（位置感知）
+  - Jaccard 去重：全部 replay/provenance 存活样本进入同一 tool-call sequence 候选池，阈值 0.70；不按 domain 豁免
+  - 零工具 clarification/abstention 不回退到 query-text Jaccard，避免加入论文未发布的文本过滤
 ```
 
 ### 训练数据构成
@@ -154,14 +161,16 @@ distractor:
                        + xLAM-Irrelevance（316 条，不相关 query）
 ```
 
-**生成策略**：目标数量 N，实际生成 N + max(10, N/2) 条（50% oversample），经 replay 验证、Jaccard 去重、训练合约过滤后取前 N 条。不足时自动 recovery（最多 3 轮），用不同 seed 偏移补充。
+**生成策略**：全局只计算一次候选预算；shard 子进程不重复增加固定 oversample floor。`generate_many` 按 domain 增量提交任务，达到 quota 后停止为该 domain 创建新 future。不足时 recovery 只补充缺口，经 replay、Jaccard 去重和训练合约过滤后取精确 N 条。recovery 默认最多 3 轮；正式十域任务可通过 `--max-recovery-rounds` 提高上限，直到每域满足最终配额，不能用其他域的富余样本代替缺口。长任务应指定 `--checkpoint-path`：每轮完成后原子保存候选 `LiveTask`、下一轮缺口请求和配置指纹；用相同配置重启时只补剩余 domain，不重复首轮。
+
+多 shard 边界：`--shard-mode` 子进程只保证本 shard 的总 Jaccard-unique 行数和可消费结构，不要求每个 shard 独立满足十域比例，也不按单 shard domain 缺口 recovery；所有 shard 汇总后，global merge 才执行跨 shard Jaccard、逐域 train/val quota 与 split 隔离。只有全局 domain 候选不足才 fail-closed。
 
 ### 难度分布
 
 | 类型 | 比例 | 说明 |
 |------|------|------|
-| **complete** | 70% | user query 包含全部所需信息 |
-| **missing** | 10% | user query 省略一个关键参数 |
+| **complete** | 60% | user query 包含全部所需信息 |
+| **missing** | 20% | user query 省略一个关键参数 |
 | **minimal** | 20% | user query 极其简略，需模型自行推断 |
 
 ---
@@ -212,25 +221,18 @@ Rollout 缺 contract 或 contract 数量与对话轮数不一致 → `RuntimeErr
 
 ### Entity Quality Filtering（P0-1）
 
-数据生成时对 live probe 结果进行两阶段实体质量过滤：
+数据生成时先构造 probe record，再按候选 chain 做实体可行性判断：
 
 1. **首轮 probe**：枚举所有实体（list_/search_ 只读工具）
 2. **阶段 enrichment**（仅 food_delivery）：对 restaurant 实体逐次调用 `get_menu`，合并菜单数据到 record
-3. **质量过滤**：按域 predicates 判定合格实体
+3. **状态过滤**：全局 `DOMAIN_ENTITY_QUALITY_FILTERS` 当前为空；按已选 chain 的 handler 前置条件判定，只有字段明确冲突才排除，字段缺失交给 live execution/replay
 
-| 域 | 实体类型 | 条件 |
-|----|---------|------|
-| banking | account | balance > 0 |
-| shopping | product | stock/available/in_stock 非零 |
-| food_delivery | restaurant | menu 非空（经 enrichment） |
-| 其他域 | 全部类型 | 保守全通过（无 predicate） |
-
-`_extract_chain_context` 按字段**存在性**判断是否使用 qualified list，空 qualified 不会回退到原始实体。predicate 抛异常时 **fail-closed**（判定为不合格）。
+chain-specific 条件包括账户基数/状态、商品库存、订单 lifecycle、filesystem 类型等；它们只在对应 chain 需要时生效。`_extract_chain_context` 按字段**存在性**判断是否使用 qualified list，空 qualified 不会回退到原始实体。
 
 ### 关键约束
 
 - `reward_model.ground_truth.success_criteria` 是 **JSON 字符串**（非 list[dict]），避免 pyarrow 混合类型崩溃
-- `reward_model.ground_truth.oracle_calls` 保存完整 2-5 步工具链和一个显式终止动作；`action` 为 `tool_call` / `ask_clarification` / `final_answer` / `report_error`
+- `reward_model.ground_truth.oracle_calls` 保存 Teacher 实际成功 oracle calls 和一个显式终止动作；seed chain 仅在完整实现时写入 `chain_seed/dependency_edges`，不能假定每条 oracle 都严格等于 2–5 步 seed chain
 - `prompt` 是 JSON 字符串，OVAL loop 端自动 `json.loads` 恢复
 - `oracle_calls` 在 `extra_info` 中也是 JSON 字符串序列化，避免 pyarrow struct 统一化导致的字段丢失
 
@@ -298,7 +300,7 @@ bash scripts/generate_data.sh --domain calendar --count 200
   "val_count": 100,
   "seed": 42,
   "distractor_rate": 0.40,
-  "missing_function_rate": 0.20,
+  "missing_function_rate": 0.121,
   "irrelevance_ratio": 0.05,
   "difficulty_mix": {"complete": 0.6, "missing": 0.2, "minimal": 0.2},
   "git_commit": "abc1234",

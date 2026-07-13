@@ -10,7 +10,7 @@ rollout 流程：
   2. 解析 tool_call → 执行 LiveMCPExecutor → 获取真实 observation
   3. 通过 AuditWrapper 记录审计事件
   4. 返回 observation 给模型 → 继续生成下一步
-  5. 终止或 max_turns → 将 audit_events 存入 extra_fields
+  5. 终止或 row action budget 耗尽 → 将 audit_events 存入 extra_fields
 
 verl 集成方式：
   - 通过 configs/agent_loop.yaml 注册为 "livemcp_oval"
@@ -161,13 +161,15 @@ class LiveMCPOvalLoop(AgentLoopBase):
     1. 模型生成 response（可能包含 <tool_call>）
     2. 如果是 tool_call：通过 LiveMCPExecutor 执行 → 获取真实 observation → 记录审计事件
     3. 如果是 terminal：记录终止事件 → 结束
-    4. 重复直到 max_turns 或 response_length 耗尽
+    4. 重复直到逐行 action budget 或 response_length 耗尽
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         rollout_cfg = self.config.actor_rollout_ref.rollout
         multi_turn_cfg = rollout_cfg.get("multi_turn", {})
+        # Fallback for legacy rows without an explicit action budget. Generated
+        # rows carry a verified per-row budget and use that value directly.
         self.max_turns = int(
             multi_turn_cfg.get("max_assistant_turns", None)
             or rollout_cfg.get("max_turns", 5)
@@ -271,6 +273,23 @@ class LiveMCPOvalLoop(AgentLoopBase):
                         f"Multi-round task {task_id}: round_contracts[{i}] "
                         f"has round_idx={actual_idx}, expected {i}."
                     )
+
+        # A generated row must be structurally executable even before model
+        # exploration: one action per reference tool call plus one terminal per
+        # conversation round.  This is a rollout contract, not a PROVE corpus
+        # quality gate.
+        minimum_action_budget = len(required_tools) + max(1, n_conversation_rounds)
+        try:
+            row_action_budget = int(budget)
+        except (TypeError, ValueError):
+            row_action_budget = self.max_turns
+        if row_action_budget < minimum_action_budget:
+            raise RuntimeError(
+                f"Task {task_id}: action budget {row_action_budget} cannot reproduce "
+                f"{len(required_tools)} reference tool calls across "
+                f"{max(1, n_conversation_rounds)} conversation round(s); "
+                f"minimum is {minimum_action_budget}."
+            )
 
         # ── 获取 OvalMCPWorkerContext ──
         if self._ctx is None:
@@ -394,13 +413,16 @@ class LiveMCPOvalLoop(AgentLoopBase):
             f"| required_tools={required_tools} | budget={budget}"
         )
 
-        # P2-9: respect per-task budget when smaller than max_turns.
-        # budget comes from extra_info; max_turns is the loop hard cap.
+        # The row-level action budget is authoritative for generated data.
+        # PROVE's 2--3 ``turns`` are conversation rounds, while this loop spends
+        # one iteration on each tool call and each per-round terminal.  Using
+        # the configured default as a smaller hard cap can make a verified
+        # reference trajectory impossible to reproduce.
         try:
             budget_int = int(budget)
         except (TypeError, ValueError):
             budget_int = self.max_turns
-        effective_max_turns = min(self.max_turns, max(1, budget_int))
+        effective_max_turns = max(1, budget_int)
         turn_idx = -1  # so turn_idx+1 == 0 if loop never enters
         conversation_round_idx = 0
         round_successful_tool_names: list[str] = []  # P0-2: tools called in current round (preserves multiplicity)

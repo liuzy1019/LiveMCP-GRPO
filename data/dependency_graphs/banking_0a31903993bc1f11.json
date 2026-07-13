@@ -1,7 +1,8 @@
 {
-  "cache_version": 2,
+  "cache_version": 4,
+  "dependency_semantics_version": 9,
   "server_name": "banking",
-  "schema_hash": "40a459ae3f3d781a",
+  "schema_hash": "0a31903993bc1f11",
   "tool_names": [
     "apply_loan",
     "bill_pay",
@@ -84,10 +85,10 @@
       "implicit": []
     },
     "schedule_transfer": {
-      "explicit": [],
-      "implicit": [
+      "explicit": [
         "cancel_transfer"
-      ]
+      ],
+      "implicit": []
     },
     "transfer": {
       "explicit": [],
@@ -95,13 +96,18 @@
     },
     "unfreeze_account": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "transfer",
+        "wire_transfer",
+        "deposit",
+        "withdraw",
+        "bill_pay",
+        "schedule_transfer"
+      ]
     },
     "verify_account": {
       "explicit": [],
-      "implicit": [
-        "apply_loan"
-      ]
+      "implicit": []
     },
     "wire_transfer": {
       "explicit": [],
@@ -113,8 +119,7 @@
     }
   },
   "tool_count": 17,
-  "expected_pair_count": 136,
-  "classified_pair_count": 136,
-  "classification_complete": true,
-  "deterministic_augmentation": false
+  "expected_pair_count": 272,
+  "classified_pair_count": 272,
+  "classification_complete": true
 }

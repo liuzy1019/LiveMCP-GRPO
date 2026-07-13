@@ -106,6 +106,7 @@ def oracle_program_from_dict(data: dict[str, Any]) -> OracleProgram:
         task_id=data["task_id"],
         calls=calls,
         success_criteria=list(data.get("success_criteria", [])),
+        progress_predicates=list(data.get("progress_predicates", [])),
     )
 
 

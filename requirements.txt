@@ -39,7 +39,7 @@ transformers==5.13.0
 tokenizers==0.22.2
 protobuf>=5.29.6
 
-# SFT
+# veRL training/model support (the project has no SFT route)
 trl==0.29.1
 peft==0.18.1
 accelerate==1.14.0

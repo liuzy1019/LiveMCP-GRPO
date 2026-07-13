@@ -4,12 +4,10 @@
 Stage 1 — 拓扑级：验证 dependency graph JSON 结构
     • 边引用的 tool 是否存在于 tool_names
     • 孤立节点检测（无入边也无出边）
-    • 链长分布统计 + 环路检测
-    • 确定性 schema 边 vs LLM 分类图对比表
+    • 链长分布统计 + 环路诊断
 
 Stage 2 — 逻辑级：Server tool schema 交叉验证
     • Config dependency_graph / tools 分类 vs Server TOOLS 一致性
-    • explicit 边参数覆盖检查（source output 是否包含 target required）
     • SchemaRegistry 注册与解析正确性
     • Handler 完整性（每个 TOOLS 中的 tool 都有对应 handler）
     • 跨 domain tool 名冲突检测
@@ -37,13 +35,14 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 # ── 项目内部依赖 ────────────────────────────────────────────────
 from src.live_mcp.config import load_suite_config
 from src.live_mcp.schema_registry import SchemaRegistry
-from src.live_mcp.orchestrator import _deterministic_schema_edges
 
 DOMAINS_ALL = [
     "banking", "calendar", "crm", "email", "filesystem",
@@ -165,20 +164,6 @@ def stage1_topology(domains: list[str]) -> None:
 
     cached = _load_cached_graphs()
 
-    suite_config = load_suite_config("configs/live_mcp/suite_mvp.yaml")
-    config_graphs: dict[str, dict] = {}
-    for cfg in suite_config.servers:
-        if cfg.dependency_graph:
-            edges = cfg.dependency_graph.get("edges", [])
-            g: dict[str, dict] = {}
-            for e in edges:
-                src, tgt = e["source_tool"], e["target_tool"]
-                rel = e.get("relation", "implicit")
-                g.setdefault(src, {"explicit": [], "implicit": []})
-                g.setdefault(tgt, {"explicit": [], "implicit": []})
-                g[src][rel].append(tgt)
-            config_graphs[cfg.name] = g
-
     for domain in domains:
         print(f"\n── {domain} ──")
 
@@ -223,7 +208,7 @@ def stage1_topology(domains: list[str]) -> None:
 
         # ── 1d. 环路检测 ──
         if _has_cycle(graph):
-            _fail("S1", f"{domain}: 检测到环路！")
+            _warn("S1", f"{domain}: 图中存在环路；chain DFS 通过 visited 避免循环")
         else:
             _ok("S1", f"{domain}: 无环路")
 
@@ -237,30 +222,6 @@ def stage1_topology(domains: list[str]) -> None:
         ex = sum(len(g.get("explicit", [])) for g in graph.values())
         im = sum(len(g.get("implicit", [])) for g in graph.values())
         print(f"     nodes={len(graph)}  edges: explicit={ex}  implicit={im}")
-
-        # ── 1g. 确定性图 vs 缓存图对比 ──
-        if domain not in config_graphs:
-            _warn("S1", f"{domain}: 无 config dependency_graph，跳过确定性对比")
-            continue
-
-        det = config_graphs[domain]
-        det_edges: set[tuple[str, str]] = set()
-        for src, node in det.items():
-            for tgt in node.get("explicit", []):
-                det_edges.add((src, tgt))
-
-        cached_ex_edges: set[tuple[str, str]] = set()
-        for src, node in graph.items():
-            for tgt in node.get("explicit", []):
-                cached_ex_edges.add((src, tgt))
-
-        only_det = det_edges - cached_ex_edges
-        only_cached = cached_ex_edges - det_edges
-        if only_det:
-            _warn("S1", f"{domain}: {len(only_det)} explicit 边仅存在于确定性图中: {sorted(only_det)[:5]}...")
-        if only_cached and det_edges:  # only warn if det graph exists
-            _warn("S1", f"{domain}: {len(only_cached)} explicit 边仅存在于 LLM 分类图中: {sorted(only_cached)[:5]}...")
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Stage 2 — 逻辑级验证
@@ -389,6 +350,37 @@ def stage2_logic(domains: list[str]) -> None:
 # Stage 3 — 生成冒烟
 # ═══════════════════════════════════════════════════════════════════
 
+def _stage3_output_issue(
+    output_path: Path,
+    domains: list[str],
+    count: int,
+) -> str:
+    total = count * len(domains)
+    if not output_path.exists():
+        return "generate_data 返回成功但未生成 train parquet"
+    try:
+        frame = pd.read_parquet(output_path)
+    except Exception as exc:
+        return f"train parquet 无法读取: {exc}"
+    actual_counts: dict[str, int] = defaultdict(int)
+    for value in frame.get("extra_info", []):
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                value = {}
+        if isinstance(value, dict):
+            actual_counts[str(value.get("domain", ""))] += 1
+    expected_counts = {domain: count for domain in domains}
+    if len(frame) != total:
+        return f"train parquet 行数错误: expected={total}, actual={len(frame)}"
+    if actual_counts != expected_counts:
+        return (
+            f"domain 配额错误: expected={expected_counts}, "
+            f"actual={dict(actual_counts)}"
+        )
+    return ""
+
 def stage3_smoke(domains: list[str], model: str, count: int, api_base: str | None, device: int | None) -> None:
     """Stage 3: 一次性 data generation smoke test（避免重复加载模型）。"""
     total = count * len(domains)
@@ -422,7 +414,12 @@ def stage3_smoke(domains: list[str], model: str, count: int, api_base: str | Non
         if result.returncode != 0:
             _fail("S3", f"generate_data 返回码 {result.returncode}")
         else:
-            _ok("S3", f"generate_data 成功 ({total} 条)")
+            output_path = Path("/tmp/validate_pipeline_train.parquet")
+            issue = _stage3_output_issue(output_path, domains, count)
+            if issue:
+                _fail("S3", issue)
+            else:
+                _ok("S3", f"generate_data 成功，行数和 domain 配额通过 ({total} 条)")
     except subprocess.TimeoutExpired:
         _fail("S3", f"generate_data 超时 (>{3600}s)")
     except Exception as e:

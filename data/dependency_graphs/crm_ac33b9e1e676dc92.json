@@ -1,7 +1,8 @@
 {
-  "cache_version": 2,
+  "cache_version": 4,
+  "dependency_semantics_version": 9,
   "server_name": "crm",
-  "schema_hash": "3eab3e72e102a369",
+  "schema_hash": "ac33b9e1e676dc92",
   "tool_names": [
     "add_note",
     "complete_task",
@@ -32,14 +33,18 @@
     "convert_lead": {
       "explicit": [
         "update_contact",
-        "delete_contact"
+        "delete_contact",
+        "create_deal"
       ],
       "implicit": []
     },
     "create_contact": {
       "explicit": [
         "update_contact",
-        "delete_contact"
+        "delete_contact",
+        "create_deal",
+        "create_task",
+        "add_note"
       ],
       "implicit": []
     },
@@ -47,6 +52,7 @@
       "explicit": [
         "update_deal",
         "get_deal",
+        "create_task",
         "add_note"
       ],
       "implicit": []
@@ -55,7 +61,9 @@
       "explicit": [
         "update_lead",
         "convert_lead",
-        "delete_lead"
+        "delete_lead",
+        "create_deal",
+        "add_note"
       ],
       "implicit": []
     },
@@ -75,19 +83,34 @@
     },
     "get_deal": {
       "explicit": [
-        "add_note"
+        "update_lead",
+        "convert_lead",
+        "delete_lead",
+        "update_contact",
+        "delete_contact",
+        "update_deal"
       ],
       "implicit": []
     },
     "list_deals": {
       "explicit": [
+        "update_deal",
         "get_deal",
+        "create_task",
+        "list_tasks",
         "add_note"
       ],
       "implicit": []
     },
     "list_leads": {
-      "explicit": [],
+      "explicit": [
+        "update_lead",
+        "convert_lead",
+        "delete_lead",
+        "create_deal",
+        "list_deals",
+        "add_note"
+      ],
       "implicit": []
     },
     "list_tasks": {
@@ -110,8 +133,7 @@
     }
   },
   "tool_count": 16,
-  "expected_pair_count": 120,
-  "classified_pair_count": 120,
-  "classification_complete": true,
-  "deterministic_augmentation": false
+  "expected_pair_count": 240,
+  "classified_pair_count": 240,
+  "classification_complete": true
 }

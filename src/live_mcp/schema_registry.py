@@ -78,13 +78,17 @@ class SchemaRegistry:
             for key in keys:
                 if self._server_from_key(key) == domain:
                     return domain
-        # Multiple matches — try to disambiguate by validating arguments
+        # Multiple matches — disambiguate only when exactly one schema accepts
+        # the arguments. Silently picking registration order can execute a
+        # same-name tool in the wrong domain (for example get_thread).
         if arguments:
-            for key in keys:
-                schema = self._schemas[key]
-                if _validate_args(schema, arguments):
-                    return self._server_from_key(key)
-        return self._server_from_key(keys[0])
+            valid_keys = [
+                key for key in keys
+                if _validate_args(self._schemas[key], arguments)
+            ]
+            if len(valid_keys) == 1:
+                return self._server_from_key(valid_keys[0])
+        return None
 
     def canonical_name(self, visible_name: str) -> str:
         canonical = self._name_map.get(visible_name, visible_name)

@@ -307,16 +307,11 @@ def _build_task_dict(extra_info: dict) -> dict:
         if isinstance(oc, dict) and oc.get("action", "tool_call") == "tool_call"
     ]
 
-    # P4a CRITICAL: missing_function / irrelevant tasks MUST NOT have
-    # required_tool_calls — the model should abstain (report_error), not
-    # call any tools.  Even when required_tools still lists tool names
-    # (from generation-time planning), the training contract demands
-    # zero tool calls.
+    # Irrelevance/no-tool tasks require zero calls. Missing-function and
+    # clarification trajectories may contain successful visible-prefix calls
+    # before the hidden capability is discovered; preserve those oracle calls.
     scenario_type = extra_info.get("scenario_type", "")
-    has_missing_func = bool(extra_info.get("has_missing_function"))
-    is_abstain_task = has_missing_func or scenario_type in (
-        "missing_function", "irrelevant", "no_tool_or_abstention", "clarification_required"
-    )
+    is_abstain_task = scenario_type in ("irrelevant", "no_tool_or_abstention")
 
     if is_abstain_task:
         required_tool_calls = []

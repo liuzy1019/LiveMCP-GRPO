@@ -1,7 +1,8 @@
 {
-  "cache_version": 2,
+  "cache_version": 4,
+  "dependency_semantics_version": 9,
   "server_name": "issue_tracker",
-  "schema_hash": "8e87dc417c7ae4b0",
+  "schema_hash": "0204e25c282524f4",
   "tool_names": [
     "add_label",
     "add_to_sprint",
@@ -65,19 +66,37 @@
         "add_to_sprint",
         "remove_from_sprint",
         "create_subtask",
+        "list_subtasks",
         "time_track",
+        "get_time_report",
         "set_milestone"
       ],
       "implicit": []
     },
     "create_sprint": {
       "explicit": [
-        "add_to_sprint"
+        "add_to_sprint",
+        "get_time_report"
       ],
       "implicit": []
     },
     "create_subtask": {
-      "explicit": [],
+      "explicit": [
+        "update_issue",
+        "assign_issue",
+        "transition_issue",
+        "comment_issue",
+        "add_label",
+        "remove_label",
+        "add_watcher",
+        "remove_watcher",
+        "add_to_sprint",
+        "remove_from_sprint",
+        "list_subtasks",
+        "time_track",
+        "get_time_report",
+        "set_milestone"
+      ],
       "implicit": []
     },
     "get_issue": {
@@ -102,19 +121,33 @@
         "add_to_sprint",
         "remove_from_sprint",
         "create_subtask",
+        "list_subtasks",
         "time_track",
+        "get_time_report",
         "set_milestone"
       ],
       "implicit": []
     },
     "list_sprints": {
       "explicit": [
-        "add_to_sprint"
+        "list_issues",
+        "add_to_sprint",
+        "get_time_report"
       ],
       "implicit": []
     },
     "list_subtasks": {
-      "explicit": [],
+      "explicit": [
+        "get_issue",
+        "update_issue",
+        "assign_issue",
+        "transition_issue",
+        "comment_issue",
+        "add_label",
+        "time_track",
+        "get_time_report",
+        "set_milestone"
+      ],
       "implicit": []
     },
     "remove_from_sprint": {
@@ -147,8 +180,7 @@
     }
   },
   "tool_count": 20,
-  "expected_pair_count": 190,
-  "classified_pair_count": 190,
-  "classification_complete": true,
-  "deterministic_augmentation": false
+  "expected_pair_count": 380,
+  "classified_pair_count": 380,
+  "classification_complete": true
 }

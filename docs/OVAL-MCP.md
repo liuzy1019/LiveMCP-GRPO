@@ -151,7 +151,7 @@ OVAL-MCP 在此基础上新增：
    防止长回复或多轮工具调用稀释局部信号。
 ```
 
-### 1.1.2 当前 Teacher 生成机制状态（2026-07-10）
+### 1.1.2 当前 Teacher 生成机制状态（2026-07-12）
 
 本节只约束 PROVE Teacher 数据生成机制，不把 domain/tool 数量和 external mixture 纳入判断：
 
@@ -159,7 +159,7 @@ OVAL-MCP 在此基础上新增：
 默认 Teacher:           Gemma-4-31B-it
 difficulty mix:         complete 60% / missing 20% / minimal 20%
 robustness:             distractor 40% / enum stripping 30% /
-                        missing function 20% / irrelevance 5%
+                        missing function target 12.1% (derived from published corpus counts) / irrelevance 5%
 replay gate:            schema + execution error rate <= 30%
 dedup:                  tool-call sequence Jaccard threshold 0.70
 ```
@@ -167,19 +167,33 @@ dedup:                  tool-call sequence Jaccard threshold 0.70
 生成链路的事实门禁：
 
 1. normal tool-use task 必须来自 live-state feasible dependency chain，不允许 unseeded fallback 进入 baseline；
-2. dependency-graph cache 必须证明所有预期 pair 已分类，不能只凭 schema hash 声称完整；同一 domain/schema 的冷缓存构建必须跨进程互斥，加锁后再次检查缓存，并以原子替换发布完整 JSON；
+2. 论文公开描述为全部 `n²` tool pairs，但未说明 self-pair 与重复节点 traversal。当前 dependency-graph cache 对全部不同工具的有序 `n(n-1)` pair 分类，并提取 simple paths；这是本地实现选择，不宣称逐实现一致。cache 绑定 tool schema 与 dependency semantics 版本；同一 domain/hash 的冷缓存构建必须跨进程互斥，加锁后再次检查缓存，并以原子替换发布完整 JSON。基线缓存保留 LLM pairwise 分类结果，不绑定 handler 文件 hash，也不在 build/load 路径叠加 handler denylist、实体启发式、偏好性或分布性手写改图；handler precondition 只参与后续 live-state feasibility、真实 execution 与 replay；
 3. robustness plan 在 Teacher 处理前采样并固定，Teacher、Replay、Parquet、rollout 使用同一 candidate contract；
 4. 每条 task 必须经过 fresh-session Replay 和 sensitive-parameter provenance；
 5. 只有从当前 checkout 生成并通过 Parquet/reward 读回及人工语义检查的数据，才可声明为可训练。
 
-多轮 Teacher 语义约束：初始 user query 由完整 dependency chain 生成，必须明确授权 chain 末端的用户可观察结果；前置节点是完成该结果的内部工作流，不机械拆成后续 user turn。后续 user turn 是在真实 execution history 上的 continuation。Replay 通过只证明轨迹可执行，不替代 query-oracle 语义检查。
-初始 query 必须表达 chain 末端 capability；对 mutating capability，query 必须包含明确动作和目标实体。chain guidance 不构成用户授权，Teacher 不得执行 query 未请求的副作用。
-Teacher 对话结束时必须完整覆盖 `chain_seed`；不完整 chain 在 task 返回前重试/拒绝，不允许进入 split 或 Parquet 阶段。
-三次 retry 均未完成 chain 时 fail-closed，不构造 `LiveTask`。`complete` 层级中，目标 capability 若要求 `*_id`，对应 user turn 必须引用当前 live context 的真实 ID。
+多轮 Teacher 语义约束：首轮 user query 从 live-state feasible dependency chain 生成；前置节点是完成首轮目标的内部工作流，不机械拆成后续 user turn。Continuation module 按论文从 `end / follow-up / clarification` 中决策，后续消息只基于刷新后的 live state、此前 query 与真实 execution history继续同一 conversation，不重新构造论文未描述的 per-round dependency graph。成功 normal conversation 按 `min_turns=2, max_turns=3` 生成；missing-function、clarification、irrelevance 或不可恢复失败可合法提前终止。
 
-实现约束（2026-07-11 数据审查后修订）：dependency chain 是支撑用户目标的工具工作流，不等价于“每个 user turn 只能对应一个工具节点”。词法 capability 检查不得因 Unix 风格工具名或自然语言同义表达而单独 fail-closed；它只能作为诊断，最终以 grounded entity、live execution 和 replay 为准。每个 user turn 在进入 continuation 前必须由成功工具调用完成其计划 capability，或以 clarification / abstention 合法终止；失败尝试后只执行辅助 read 工具不能视为当前 round 已完成。Missing-function baseline 在 chain 选择后隐藏必要工具，不使用“共享 entity type”作为可替代能力判据。
+Continuation 的 query generator 与 assistant action planner 必须消费同一轮刷新后的 live state；首轮 chain-aligned context 不能继续充当后续轮次的完整实体事实。每个新 user round 都重新进入 query→tool execution/response 状态，不能因为 execution history 非空而默认直接结束；clarification 型 user round 可直接回答，follow-up 型 user round 仍须实际完成新 outcome。后续请求若缺少 mutation schema 的用户决定型必填值，由 Teacher 走 clarification，而不是从无关实体复制或臆造。业务背景（例如“用于明天的会议”）不等于跨域请求，是否可完成按用户要求的核心 outcome 与 candidate tools 判断。以上属于状态机输入合同，不新增论文之外的 corpus hard gate。
 
-当前验证事实：2026-07-10 使用 Gemma-4-31B-it 完成 normal multi-turn、missing-function、distractor+enum stripping、irrelevance 四条真实 smoke；均完成 fresh Replay 和 Parquet round-trip，error rate 为 0%。该结论仅覆盖 Teacher 机制闭环，不外推批量 yield 或所有 seed 的语义质量。
+Continuation 生成还必须接收上一轮对用户可见的 assistant response；只看旧 user query 与 live state 会生成“操作完成后才追问操作前消歧信息”的因果倒置。若某轮 Teacher 在格式重试后没有产生任何 action，该 conversation 候选直接视为状态机生成失败，不得把空 round 导出成默认 `final_answer` contract。状态机不在轨迹内部抑制或复用重复调用：每个 Teacher tool-call action 都真实发送到 MCP，并保留真实 observation；重复和低效率由 fresh replay、效率 reward 以及会话级 Jaccard 去重处理。
+
+运行链路不执行状态反转授权、capability 同义词或实体字符串匹配 gate；这些规则未由 PROVE 发布。Dependency chain 和 graph hints 只用于 grounded query generation，不进入 Teacher action prompt，不作为必须逐节点执行的隐藏 Oracle 指令；Teacher 根据 query、candidate tool schemas 和真实 execution history 决策。最终使用论文公开的 live execution、replay、provenance 与 Jaccard 去重，不新增通用 semantic judge。
+
+Grounding 诊断：complete query 的实体引用按执行前已存在的 entity type 核对，前置 creator 已产生的实体按数量扣除。该检查用于发现 query/state 偏移，不因自然语言没有逐字包含内部 ID 单独拒绝；真实执行与 fresh replay 是 PROVE 对齐的硬门禁。
+论文公开的 hard corpus gates 是 fresh replay error rate、sensitive-parameter provenance 与 Jaccard 去重。`source_chain_seed` 记录 query seed；仅当 oracle 实际完整覆盖时才写 `chain_seed` 和 OVAL dependency edges，未覆盖不得冒充依赖完成，也不作为 PROVE 拒绝条件。
+
+论文 continuation 的 `min_turns=2, max_turns=3` 是 conversation-round 范围，不是 tool-action 硬上限。工程侧 Parquet `budget` 必须至少覆盖 ground-truth tool calls 与每轮一个 terminal；§3.3 的 complexity-adaptive efficiency budget 只用于计算多余 tool calls 的惩罚，不得被误用为截断一条可复现 ground-truth trajectory 的 episode cap。
+
+Recovery 允许成功的 alternative tool，不使用“必须命中 chain 精确工具名”的本地 gate。Missing-function 只要求 hidden tool 从 candidate、executor 与 oracle 中消失，并以 clarification / abstention 终止；隐藏前仍可执行的可见前置工具调用允许保留，不设零工具合同。Replay 前不做 exact-query 预去重，全部 surviving conversations 统一进入 Jaccard 0.70 去重池。
+
+Graceful give-up 不要求先产生 execution failure。若 Teacher 根据 query、candidate schemas 与真实 history 判断当前能力无法完成目标，可直接 `report_error`；强制先调用失败工具既不在论文公开过滤中，也会人为增加无效调用。此类终止仍接受后续 fresh replay、provenance 与 Jaccard 门禁。
+
+论文公开的 corpus hard gates 与工程结构合同必须分开记录。PROVE hard gates 是 fresh replay error rate、sensitive-parameter provenance 与 Jaccard 0.70 去重；Parquet schema、显式 terminal、round contract 数量、hidden-tool 不泄漏和 dependency-edge 索引有效性是本项目 rollout/reward 的可消费性合同。不得把后者写成论文公开过滤规则。论文未公开 Jaccard 对 sequence 的集合化细节；当前位置感知实现属于本地工程选择，不宣称逐实现一致。Missing-function 默认比例由公开 corpus 数量反推，同样不宣称为论文公布超参。
+
+实现约束（2026-07-12 数据审查后修订）：dependency chain 只作为首轮完整 query seed，不等价于 Teacher 必须完成的 Oracle 清单，也不按节点拆成 user turn。运行时不执行 mutating-tool 词法授权、capability 同义词、实体字符串或 per-round chain gate。Missing-function 在首轮 chain/query 生成后隐藏必要工具并允许提前终止。
+
+当前验证事实：2026-07-12 使用 Gemma-4-31B-it 完成十域各 1 条真实探针、Parquet/reward 读回和 CRM 同 seed 定向重放。该结论仅覆盖 Teacher 机制闭环，不外推正式批量 yield、分布或所有 seed 的语义质量。
 
 ### 1.2 COVERT
 
@@ -709,7 +723,7 @@ clarification / no-tool / missing-function:
   terminal action 必须显式保存且与 allowed_terminal_actions 一致
   missing-function terminal 允许 ask_clarification 或 report_error（对应论文 clarification / abstention）
   missing-function 必须保留两条链：query_chain 使用隐藏前的完整 dependency chain，
-  teacher_chain 不得包含 hidden tool；query 必须在隐藏前生成并通过 capability-required gate
+  teacher_chain 不得包含 hidden tool；query 在隐藏前由完整 chain 生成，不使用论文未发布的 capability 词典作 hard gate
   hidden tool 同时从 Teacher schema、dependency hints、执行器和 rollout candidate set 移除
 
 Replay / provenance:
@@ -720,7 +734,7 @@ Replay / provenance:
 distractor:
   candidate schema 必须携带 owner domain，调用时路由到真实 owner server
   R_validity level-1 依据最终 candidate tool-name set，而不是目标 domain schema lookup
-  Teacher 若成功执行 distractor，该样本不得把 distractor 写入 ground-truth oracle
+  distractor 在 Teacher 生成前加入 candidate set，并随同一 candidate contract 接受 replay；ground-truth oracle 不应调用无关 distractor
 
 all rows:
   prompt 不含 ground-truth oracle 泄漏
@@ -2321,7 +2335,7 @@ Domain mixing 约束：
 
 ## 12. 工程实现
 
-工程实现细节（目录结构、测试清单、维护约定）见 [oval_mcp_engineering.md](./oval_mcp_engineering.md)。
+工程入口与维护约定见 [CLAUDE.md](../CLAUDE.md)，数据生成合同见 [data/README.md](../data/README.md)。
 
 
 ## 13. 严谨性检查
@@ -2355,18 +2369,13 @@ Domain mixing 约束：
 
 ### 15.1 Entity Quality Filtering（Live-State Supporting Data）
 
-数据生成时对 live probe 结果进行两阶段实体质量过滤，防止不可支撑工具链的实体进入 sampling context（如 balance=0 的 account、无库存的 product、空菜单的 restaurant）。
+数据生成时对 live probe 结果进行 chain-specific 状态过滤，防止已知不可支撑当前工具链的实体进入 sampling context，同时不把未知字段当成失败。当前全局 `DOMAIN_ENTITY_QUALITY_FILTERS` 为空，不宣称实现了论文示例中的统一 supporting-data predicate 表。
 
 - **首轮 probe**：枚举所有实体（list_/search_ 只读工具）
 - **阶段 enrichment**：仅 food_delivery，对 restaurant 实体逐次调用 `get_menu` 合并菜单数据
-- **质量过滤**：| 域 | 实体类型 | 条件 |
-  |----|---------|------|
-  | banking | account | balance > 0 |
-  | shopping | product | stock/available 非零 |
-  | food_delivery | restaurant | menu 非空 |
-  | 其他域 | 全部 | 保守全通过 |
+- **状态过滤**：仅在当前 chain 需要相应条件且 probe 明确返回字段时判断，例如多账户基数、add-to-cart 库存、order lifecycle 与 filesystem 类型；deposit、只读查询等不得被这些条件连带误杀。
+- **unknown-pass**：probe 未返回 attendee/read/status/type 等字段时，不据此预过滤，交给真实 execution 和 fresh replay。
 - `_extract_chain_context` 按字段存在性判断（非 truthiness），空 qualified 不回退到原始实体
-- predicate 异常时 fail-closed（记录 warning + "quality_predicate_error"）
 
 ### 15.2 Round Contracts（多轮 Terminal/Follow-up 契约）
 

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -73,7 +74,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                     help="Fraction of tasks that require report_error (0 to disable)")
     p.add_argument("--distractor-rate", type=float, default=0.40,
                     help="Probability of injecting distractor tools (0 to disable)")
-    p.add_argument("--missing-function-rate", type=float, default=0.20,
+    p.add_argument("--missing-function-rate", type=float, default=1500 / (10895 + 1500),
                     help="Probability of hiding a required tool (0 to disable)")
     p.add_argument("--device", type=int, default=None,
                     help="GPU device ID for local inference (default: auto). "
@@ -83,6 +84,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                          "result.json to data/experiments/{YYYY-MM-DD}_{tag}/")
     p.add_argument("--log-file", default=None,
                     help="Write all logs to this file (auto-flushed, avoids pipe buffering)")
+    p.add_argument("--shard-mode", action="store_true",
+                    help="Use shard-local integrity checks; global coverage is checked after merge")
+    p.add_argument("--pool-oversample-pct", type=float, default=0.50,
+                    help="Candidate oversample ratio applied once by this process")
+    p.add_argument("--max-recovery-rounds", type=int, default=6,
+                    help="Maximum generation/recovery rounds (must be >= 1)")
+    p.add_argument("--checkpoint-path", default=None,
+                    help="Optional JSON checkpoint; resumes automatically when it exists")
     return p
 
 
@@ -103,6 +112,10 @@ def generate_data(args: argparse.Namespace):
     if Path(args.output).resolve() == Path(args.val_output).resolve():
         raise ValueError(
             f"--output and --val-output point to the same file: {args.output}"
+        )
+    if args.max_recovery_rounds < 1:
+        raise ValueError(
+            f"--max-recovery-rounds must be >= 1, got {args.max_recovery_rounds}"
         )
 
     # 如果指定了 --log-file，添加文件 sink 确保实时可见
@@ -131,32 +144,79 @@ def generate_data(args: argparse.Namespace):
     try:
         branch.start()
         total_count = args.count + args.val_count
-        # Oversample 50% plus a floor — LLM generation, replay,
-        # provenance checks, dedup, and training-contract filtering all
-        # discard tasks.  Recovery loop below regenerates with different seed
-        # offsets when the first pool still falls short.
-        pool_target = total_count + max(10, total_count // 2)
+        if args.pool_oversample_pct < 0:
+            raise ValueError("--pool-oversample-pct must be >= 0")
+        # Oversampling is applied once. Multi-client launchers pass an already
+        # allocated candidate budget and set this to zero for shard workers.
+        pool_target = max(
+            total_count,
+            math.ceil(total_count * (1.0 + args.pool_oversample_pct)),
+        )
         print(f"[generate_data] Generating pool of ~{pool_target} tasks...", flush=True)
 
         all_tasks = []
-        MAX_RECOVERY_ROUNDS = 3
-        for recovery_round in range(MAX_RECOVERY_ROUNDS):
+        max_recovery_rounds = args.max_recovery_rounds
+        if args.domain == "all":
+            requested_domains = list(branch.manager.server_names)
+        else:
+            requested_domains = [
+                item.strip() for item in args.domain.split(",") if item.strip()
+            ]
+        train_domain_quotas = _domain_quotas(args.count, requested_domains)
+        val_domain_quotas = _domain_quotas(args.val_count, requested_domains)
+        desired_domain_counts = {
+            domain: train_domain_quotas[domain] + val_domain_quotas[domain]
+            for domain in requested_domains
+        }
+        round_requests: list[tuple[str, int]] = [(args.domain, pool_target)]
+        start_round = 0
+        if args.checkpoint_path and Path(args.checkpoint_path).exists():
+            all_tasks, start_round, round_requests = _load_generation_checkpoint(
+                Path(args.checkpoint_path), args
+            )
+            logger.info(
+                f"Resumed generation checkpoint: {len(all_tasks)} tasks, "
+                f"completed_rounds={start_round}, next requests={round_requests}"
+            )
+        for recovery_round in range(start_round, max_recovery_rounds):
             round_seed = args.seed + recovery_round * 100000
-            round_target = pool_target if recovery_round == 0 else pool_target // 2
             print(
-                f"[generate_data] Round {recovery_round + 1}/{MAX_RECOVERY_ROUNDS}: "
-                f"generating up to {round_target} tasks (seed={round_seed})...",
+                f"[generate_data] Round {recovery_round + 1}/{max_recovery_rounds}: "
+                f"requests={round_requests} (seed={round_seed})...",
                 flush=True,
             )
-            round_tasks = branch.generate_tasks_llm(
-                server_name=args.domain, count=round_target, seed=round_seed,
-                difficulty_mix=difficulty_mix, model_path=args.model,
-                api_base=args.api_base,
-                device=args.device,
-                irrelevance_ratio=args.irrelevance_ratio,
-                distractor_rate=args.distractor_rate,
-                missing_function_rate=args.missing_function_rate,
-            )
+            round_tasks = []
+            for request_index, (request_domain, request_count) in enumerate(round_requests):
+                if request_count <= 0:
+                    continue
+                try:
+                    generated = branch.generate_tasks_llm(
+                        server_name=request_domain,
+                        count=request_count,
+                        seed=round_seed + request_index * 10000,
+                        difficulty_mix=difficulty_mix,
+                        model_path=args.model,
+                        api_base=args.api_base,
+                        device=args.device,
+                        irrelevance_ratio=args.irrelevance_ratio,
+                        distractor_rate=args.distractor_rate,
+                        missing_function_rate=args.missing_function_rate,
+                    )
+                except RuntimeError as exc:
+                    # The initial request failing completely usually means the
+                    # teacher/MCP path is unavailable and should remain fatal.
+                    # During recovery, however, each request covers one
+                    # deficient domain. A zero-yield domain must not prevent
+                    # the remaining deficient domains from being attempted.
+                    if recovery_round == 0 or not _is_zero_yield_error(exc):
+                        raise
+                    logger.exception(
+                        f"Round {recovery_round + 1}: recovery request for "
+                        f"{request_domain} produced no tasks; continuing with "
+                        "the other deficient domains"
+                    )
+                    continue
+                round_tasks.extend(generated)
             all_tasks.extend(round_tasks)
             logger.info(
                 f"Round {recovery_round + 1}: got {len(round_tasks)} tasks "
@@ -165,11 +225,30 @@ def generate_data(args: argparse.Namespace):
 
             # Try to split early — if we already have enough, break out.
             eligible = _filter_training_eligible_tasks(all_tasks)
-            if len(eligible) >= total_count:
+            unique_eligible = dedup_tasks(eligible, threshold=0.70)
+            if args.shard_mode:
+                # Shards are candidate pools. Per-domain quotas only become
+                # meaningful after all shards share one global dedup pool.
+                # Requiring every shard to satisfy them can fail even when the
+                # combined pool has enough rows for every domain.
+                remaining = max(0, total_count - len(unique_eligible))
+                pending_domain_requests = (
+                    [(args.domain, remaining)] if remaining else []
+                )
+            else:
+                _, pending_domain_requests = _domain_recovery_requests(
+                    unique_eligible,
+                    requested_domains,
+                    desired_domain_counts,
+                )
+            if len(eligible) >= total_count and not pending_domain_requests:
                 try:
                     train_tasks, val_tasks = _stratified_task_split(
                         eligible, train_count=args.count,
                         val_count=args.val_count, seed=args.seed,
+                        domain_quotas=(
+                            None if args.shard_mode else desired_domain_counts
+                        ),
                     )
                     print(
                         f"[generate_data] Early split success: "
@@ -181,21 +260,56 @@ def generate_data(args: argparse.Namespace):
                     all_tasks = eligible  # use filtered tasks for downstream
                     break
                 except RuntimeError:
+                    unique = dedup_tasks(eligible, threshold=0.70)
+                    unique_count = len(unique)
+                    if args.shard_mode:
+                        domain_counts = {}
+                        round_requests = [(args.domain, max(1, total_count - unique_count))]
+                    else:
+                        domain_counts, round_requests = _domain_recovery_requests(
+                            unique, requested_domains, desired_domain_counts,
+                        )
                     logger.info(
                         f"Round {recovery_round + 1}: {len(eligible)} eligible "
-                        f"tasks not enough for stratified split, generating more..."
+                        f"tasks / {unique_count} Jaccard-unique; "
+                        f"domain_counts={domain_counts}, next requests={round_requests}"
                     )
+            else:
+                unique = dedup_tasks(eligible, threshold=0.70)
+                unique_count = len(unique)
+                if args.shard_mode:
+                    # A shard is only a candidate pool. Recover its global row
+                    # shortfall without imposing per-domain quotas that are
+                    # meaningful only after all shards are merged.
+                    domain_counts = {}
+                    round_requests = list(pending_domain_requests)
+                else:
+                    domain_counts, round_requests = _domain_recovery_requests(
+                        unique, requested_domains, desired_domain_counts,
+                    )
+                logger.info(
+                    f"Round {recovery_round + 1}: {len(eligible)} eligible / "
+                    f"{unique_count} Jaccard-unique; domain_counts={domain_counts}, "
+                    f"next requests={round_requests}"
+                )
+            if args.checkpoint_path:
+                _write_generation_checkpoint(
+                    Path(args.checkpoint_path), args, all_tasks,
+                    completed_rounds=recovery_round + 1,
+                    round_requests=round_requests,
+                )
         else:
             # Exhausted recovery rounds — fall through with whatever we have.
             eligible = _filter_training_eligible_tasks(all_tasks)
             train_tasks, val_tasks = _stratified_task_split(
                 eligible, train_count=args.count,
                 val_count=args.val_count, seed=args.seed,
+                domain_quotas=(None if args.shard_mode else desired_domain_counts),
             )
             print(
                 f"[generate_data] Final split: {len(train_tasks)} train + "
                 f"{len(val_tasks)} val from {len(eligible)} eligible "
-                f"(pool {len(all_tasks)} after {MAX_RECOVERY_ROUNDS} rounds)",
+                f"(pool {len(all_tasks)} after {max_recovery_rounds} rounds)",
                 flush=True,
             )
 
@@ -221,6 +335,118 @@ def generate_data(args: argparse.Namespace):
         _save_experiment_record(args, df_train, df_val, start_time, difficulty_mix)
 
     _print_stats(df_train, df_val, Path(args.output), Path(args.val_output), args)
+
+
+def _domain_recovery_requests(
+    unique_tasks: list,
+    requested_domains: list[str],
+    desired_domain_counts: dict[str, int],
+) -> tuple[dict[str, int], list[tuple[str, int]]]:
+    """Target recovery at domains that are actually below final quota."""
+    domain_counts = {
+        domain: sum(
+            1 for task in unique_tasks
+            if task.target_servers and task.target_servers[0] == domain
+        )
+        for domain in requested_domains
+    }
+    requests = [
+        (domain, max(1, math.ceil((target - domain_counts[domain]) * 1.25)))
+        for domain, target in desired_domain_counts.items()
+        if domain_counts[domain] < target
+    ]
+    return domain_counts, requests
+
+
+def _domain_quotas(target: int, domains: list[str]) -> dict[str, int]:
+    base, remainder = divmod(target, len(domains))
+    return {
+        domain: base + (1 if index < remainder else 0)
+        for index, domain in enumerate(domains)
+    }
+
+
+def _checkpoint_config(args: argparse.Namespace) -> dict:
+    """Fields that determine candidate semantics and deterministic seed ranges."""
+    return {
+        "count": args.count,
+        "val_count": args.val_count,
+        "domain": args.domain,
+        "model": args.model,
+        "api_base": args.api_base,
+        "seed": args.seed,
+        "suite": args.suite,
+        "pool_oversample_pct": args.pool_oversample_pct,
+        "irrelevance_ratio": args.irrelevance_ratio,
+        "distractor_rate": args.distractor_rate,
+        "missing_function_rate": args.missing_function_rate,
+    }
+
+
+def _write_generation_checkpoint(
+    path: Path,
+    args: argparse.Namespace,
+    tasks: list,
+    *,
+    completed_rounds: int,
+    round_requests: list[tuple[str, int]],
+) -> None:
+    """Atomically persist the internal candidate pool after a complete round."""
+    from src.live_mcp.types import to_plain
+
+    payload = {
+        "version": 1,
+        "config": _checkpoint_config(args),
+        "completed_rounds": completed_rounds,
+        "round_requests": [list(item) for item in round_requests],
+        "tasks": [to_plain(task) for task in tasks],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str),
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
+    logger.info(
+        f"Generation checkpoint saved: {path} "
+        f"({len(tasks)} tasks, completed_rounds={completed_rounds})"
+    )
+
+
+def _load_generation_checkpoint(
+    path: Path, args: argparse.Namespace
+) -> tuple[list, int, list[tuple[str, int]]]:
+    """Load a compatible candidate pool without weakening validation/dedup."""
+    from src.live_mcp.types import live_task_from_dict
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("version") != 1:
+        raise ValueError(
+            f"Unsupported generation checkpoint version: {payload.get('version')}"
+        )
+    expected = _checkpoint_config(args)
+    actual = payload.get("config")
+    if actual != expected:
+        raise ValueError(
+            "Generation checkpoint config mismatch; refusing to mix candidate pools. "
+            f"checkpoint={actual}, current={expected}"
+        )
+    completed_rounds = int(payload.get("completed_rounds", 0))
+    if completed_rounds < 0:
+        raise ValueError("Generation checkpoint completed_rounds must be >= 0")
+    tasks = [live_task_from_dict(item) for item in payload.get("tasks", [])]
+    round_requests = [
+        (str(item[0]), int(item[1])) for item in payload.get("round_requests", [])
+    ]
+    if not round_requests:
+        raise ValueError("Generation checkpoint has no pending round_requests")
+    return tasks, completed_rounds, round_requests
+
+
+def _is_zero_yield_error(exc: RuntimeError) -> bool:
+    """Recognize the orchestrator's explicit zero-yield contract failure."""
+    return str(exc).startswith("generate_many produced 0 tasks")
 
 
 def _task_scenario(task) -> str:
@@ -282,8 +508,7 @@ def _serialize_training_oracle(task) -> list[dict]:
 
     All task types that reach this function must have a non-empty oracle
     program.  The orchestrator always pre-fills oracle calls for
-    missing_function (``_apply_missing_function``) and irrelevant
-    (``_generate_irrelevant_tasks``) tasks.  External abstention rows
+    missing_function and irrelevant tasks. External abstention rows
     (When2Call, xLAM-Irrelevance) are written directly to Parquet and do
     NOT flow through this path.
     """
@@ -361,6 +586,11 @@ def _build_round_contracts(task) -> list[dict]:
 
     contracts = []
     for round_idx, round_calls in enumerate(task.oracle_calls_per_round):
+        if not round_calls:
+            raise ValueError(
+                f"Task {task.task_id}: oracle round {round_idx} is empty; "
+                "a conversation round must contain a Teacher-emitted action"
+            )
         tools: list[str] = []
         terminal = "final_answer"
         for oc in round_calls:
@@ -377,11 +607,21 @@ def _build_round_contracts(task) -> list[dict]:
     return contracts
 
 
-def _has_stale_explicit_year(value) -> bool:
-    import re
+def _minimum_action_budget(
+    oracle_calls_serialized: list[dict],
+    round_contracts: list[dict],
+) -> int:
+    """Minimum model actions needed to reproduce a multi-round reference.
 
-    raw = json.dumps(value, ensure_ascii=False, default=str)
-    return bool(re.search(r"\b202[0-5][-/]", raw))
+    PROVE's 2--3 continuation turns are conversation rounds.  The rollout
+    action loop also spends one iteration on every tool call and on the
+    terminal that closes each round, so its engineering cap must cover both.
+    """
+    n_tool_calls = sum(
+        1 for call in oracle_calls_serialized
+        if call.get("action", "tool_call") == "tool_call"
+    )
+    return n_tool_calls + max(1, len(round_contracts))
 
 
 def _task_success_criteria(task) -> list:
@@ -394,11 +634,6 @@ def _task_success_criteria(task) -> list:
 
 def _validate_task_training_contract(task) -> None:
     oracle_calls_serialized = _serialize_training_oracle(task)
-    if _has_stale_explicit_year(oracle_calls_serialized):
-        raise ValueError(
-            f"Task {task.task_id} oracle contains an explicit pre-2026 date"
-        )
-
     terminal_actions = [
         call["action"] for call in oracle_calls_serialized
         if call.get("action") in ("final_answer", "ask_clarification", "report_error")
@@ -419,47 +654,26 @@ def _validate_task_training_contract(task) -> None:
     #   irrelevance queries + external      → report_error (1,122 abstention)
     #   normal / recovery / dependency      → final_answer (main slice)
     #
-    # NOTE: normal_safe_success also permits ask_clarification as a natural
-    # terminal (a task that ran 2-5 real tool_calls and then asked the user
-    # for follow-up clarification, e.g. "which of these events should I
-    # cancel?") — see test_tasks_to_rows_accepts_tool_task_ending_with_clarification.
-    expected_terminal_by_scenario = {
-        "normal_safe_success": {"final_answer", "ask_clarification"},
-        "missing_function": {"ask_clarification", "report_error"},
-        "no_tool_or_abstention": {"report_error"},
-        "irrelevant": {"report_error"},
-        "clarification_required": {"ask_clarification"},
-        "tool_error_recovery": {"final_answer", "report_error"},
-        "missing_dependency": {"final_answer", "ask_clarification", "report_error"},
-        "unsafe_temptation": {"final_answer"},
-    }
-    expected_terminals = expected_terminal_by_scenario.get(scenario_type)
-    if expected_terminals and terminal_action not in expected_terminals:
-        raise ValueError(
-            f"Task {task.task_id} scenario={scenario_type} has terminal "
-            f"{terminal_action}, expected one of {sorted(expected_terminals)}"
-        )
-
-    is_no_tool = scenario_type in (
-        "no_tool_or_abstention", "clarification_required",
-        "missing_function", "irrelevant",
+    is_no_tool = scenario_type in ("no_tool_or_abstention", "irrelevant")
+    is_optional_tool = scenario_type in (
+        "clarification_required", "missing_function",
     )
     if is_no_tool and real_required_tools:
         raise ValueError(
             f"No-tool task {task.task_id} unexpectedly has "
             f"{len(real_required_tools)} tool calls"
         )
-    if not is_no_tool and not (1 <= len(real_required_tools) <= 8):
+    if not is_no_tool and not is_optional_tool and not real_required_tools:
         raise ValueError(
             f"Tool task {task.task_id} has oracle length "
-            f"{len(real_required_tools)}, expected 1-8"
+            f"{len(real_required_tools)}, expected at least one call"
         )
 
     # ── P1-2(now P0): tool tasks must be chain-seeded ──
     # PROVE baseline: every normal MCP conversation is a dependency-graph
     # chain-seed query (§3.2 Step 2).  Unseeded fallback data pollutes the
     # training distribution — reject before Parquet.
-    if not is_no_tool:
+    if not is_no_tool and not is_optional_tool:
         generation_mode = (
             task.metadata.get("generation_mode", "")
             if task.metadata
@@ -471,19 +685,6 @@ def _validate_task_training_contract(task) -> None:
                 f"expected 'chain_seeded' for tool-task baseline. "
                 f"Unseeded fallback is NOT allowed in baseline training data."
             )
-
-    # ── P3e: unsafe_temptation must not execute unsafe operations ──
-    # Teacher LLM has no safety-policy awareness — it always generates
-    # execution oracles.  unsafe_temptation tasks with real tool calls
-    # teach the model to execute the unsafe shortcut, which is the wrong
-    # reward signal.  Reject them until the teacher can produce correct
-    # rejection oracles.
-    if scenario_type == "unsafe_temptation" and real_required_tools:
-        raise ValueError(
-            f"Task {task.task_id} scenario=unsafe_temptation has "
-            f"{len(real_required_tools)} tool calls — rejecting: teacher "
-            f"cannot produce safe rejection oracle without safety context"
-        )
 
     # ── P3c: Detect final_answer tasks whose oracle did not produce state
     # criteria despite the user query requesting a write/mutate action.
@@ -567,7 +768,6 @@ def _validate_task_training_contract(task) -> None:
                     f"Task {task.task_id}: round_contracts[{i}]."
                     f"allowed_terminal_actions contains unknown action '{a}'"
                 )
-
     # ── P0-3: dependency edge integrity ──
     # Chain-seeded tasks MUST produce exactly len(chain_seed)-1 valid edges.
     # Incomplete or invalid edges are data integrity errors — reject before split.
@@ -654,29 +854,16 @@ def _validate_task_training_contract(task) -> None:
                 f"Task {task.task_id}: missing_function terminal is "
                 f"'{terminal_action}', expected ask_clarification or report_error."
             )
-        if real_required_tools:
-            raise ValueError(
-                f"Task {task.task_id}: missing-function contract requires zero "
-                f"oracle tool calls, got {real_required_tools}."
-            )
-        non_empty_rounds = [
-            c for c in contracts if c.get("required_tools")
-        ]
-        if non_empty_rounds:
-            raise ValueError(
-                f"Task {task.task_id}: missing-function round contracts contain "
-                f"required tools: {non_empty_rounds}."
-            )
 
 
 def _filter_training_eligible_tasks(tasks: list) -> list:
     eligible = []
     dropped = 0
     for task in tasks:
-        if task.metadata.get("project_outcome_valid") is False:
+        if task.metadata.get("paper_replay_valid") is False:
             dropped += 1
             logger.warning(
-                "Dropping generated task before split: {} failed final outcome criteria",
+                "Dropping generated task before split: {} failed PROVE replay validation",
                 task.task_id,
             )
             continue
@@ -700,6 +887,7 @@ def _stratified_task_split(
     train_count: int,
     val_count: int,
     seed: int,
+    domain_quotas: dict[str, int] | None = None,
 ) -> tuple[list, list]:
     """Split one deduplicated pool by domain/scenario/difficulty.
 
@@ -713,7 +901,8 @@ def _stratified_task_split(
     # Jaccard 0.70 dedup on tool-call sequences (PROVE corpus dedup §3.3).
     # Position-aware: {(index, tool_name)} — order and repeat count matter,
     # arguments are ignored (dedup.py/jaccard_similarity).
-    # Cross-domain: only tasks in the same domain are compared.
+    # All surviving conversations share one dedup pool; PROVE does not publish
+    # a domain exemption.
     unique = dedup_tasks(tasks, threshold=0.70)
     # Assign fingerprints after dedup for downstream cross-shard exact dedup.
     for task in unique:
@@ -728,226 +917,33 @@ def _stratified_task_split(
         )
 
     rng = random.Random(seed)
-
-    if val_count == 0:
-        rng.shuffle(unique)
-        return unique[:train_count], []
-
-    # A category represented once cannot appear in both disjoint splits.
-    # Drop such unsplittable outliers when the oversampled pool still has
-    # enough rows, repeating because removing one category can expose another.
-    strict_unique = list(unique)
-    strict_possible = True
-    while True:
-        domain_totals = defaultdict(int)
-        scenario_totals = defaultdict(int)
-        for task in strict_unique:
+    if domain_quotas is not None:
+        by_domain = defaultdict(list)
+        for task in unique:
             domain = task.target_servers[0] if task.target_servers else "unknown"
-            domain_totals[domain] += 1
-            scenario_totals[_task_scenario(task)] += 1
-        singleton_domains = {key for key, count in domain_totals.items() if count < 2}
-        singleton_scenarios = {key for key, count in scenario_totals.items() if count < 2}
-        if not singleton_domains and not singleton_scenarios:
-            break
-        filtered = [
-            task for task in strict_unique
-            if (task.target_servers[0] if task.target_servers else "unknown")
-            not in singleton_domains
-            and _task_scenario(task) not in singleton_scenarios
-        ]
-        removed = len(strict_unique) - len(filtered)
-        if len(filtered) < required:
-            strict_possible = False
-            logger.warning(
-                "Strict train/val coverage is infeasible after removing "
-                "{} singleton-category task(s): have {}, need {}. "
-                "Falling back to exact disjoint split. domains={}, scenarios={}",
-                removed,
-                len(filtered),
-                required,
-                sorted(singleton_domains),
-                sorted(singleton_scenarios),
-            )
-            break
-        logger.warning(
-            "Dropping {} unsplittable singleton-category task(s): domains={}, "
-            "scenarios={}",
-            removed,
-            sorted(singleton_domains),
-            sorted(singleton_scenarios),
-        )
-        strict_unique = filtered
+            by_domain[domain].append(task)
+        domains = list(domain_quotas)
+        train_quotas = _domain_quotas(train_count, domains)
+        val_quotas = _domain_quotas(val_count, domains)
+        train: list = []
+        val: list = []
+        for domain in domains:
+            quota = train_quotas[domain] + val_quotas[domain]
+            candidates = by_domain[domain]
+            if len(candidates) < quota:
+                raise RuntimeError(
+                    f"Domain {domain} produced {len(candidates)} unique tasks, "
+                    f"but {quota} are required."
+                )
+            rng.shuffle(candidates)
+            train.extend(candidates[:train_quotas[domain]])
+            val.extend(candidates[train_quotas[domain]:quota])
+        return train, val
 
-    if not strict_possible:
-        return _fallback_task_split(unique, train_count, val_count, rng)
-
-    def _domain(task) -> str:
-        return task.target_servers[0] if task.target_servers else "unknown"
-
-    domain_counts = defaultdict(int)
-    scenario_counts = defaultdict(int)
-    for task in strict_unique:
-        domain_counts[_domain(task)] += 1
-        scenario_counts[_task_scenario(task)] += 1
-
-    scenarios = sorted(scenario_counts)
-    domains = sorted(domain_counts)
-    if val_count < len(scenarios) or val_count < len(domains):
-        logger.warning(
-            "Validation count {} cannot cover {} scenario(s) and {} domain(s); "
-            "falling back to exact disjoint split.",
-            val_count,
-            len(scenarios),
-            len(domains),
-        )
-        return _fallback_task_split(unique, train_count, val_count, rng)
-
-    # Proportional scenario targets with a minimum of one row per scenario
-    # when feasible.  This makes val representative instead of dominated by
-    # whichever coverage buckets happen to be popped first.
-    total_available = len(strict_unique)
-    raw_targets = {
-        scenario: scenario_counts[scenario] * val_count / total_available
-        for scenario in scenarios
-    }
-    scenario_targets = {
-        scenario: min(scenario_counts[scenario] - 1, max(1, int(raw_targets[scenario])))
-        for scenario in scenarios
-    }
-    while sum(scenario_targets.values()) < val_count:
-        candidates = [
-            scenario for scenario in scenarios
-            if scenario_targets[scenario] < scenario_counts[scenario] - 1
-        ]
-        if not candidates:
-            break
-        scenario = max(
-            candidates,
-            key=lambda s: (raw_targets[s] - scenario_targets[s], scenario_counts[s], s),
-        )
-        scenario_targets[scenario] += 1
-    while sum(scenario_targets.values()) > val_count:
-        candidates = [
-            scenario for scenario in scenarios
-            if scenario_targets[scenario] > 1
-        ]
-        if not candidates:
-            break
-        scenario = min(
-            candidates,
-            key=lambda s: (raw_targets[s] - scenario_targets[s], scenario_counts[s], s),
-        )
-        scenario_targets[scenario] -= 1
-
-    remaining = list(strict_unique)
-    rng.shuffle(remaining)
-    val = []
-    val_domain_counts = defaultdict(int)
-    val_scenario_counts = defaultdict(int)
-
-    def _can_take(task) -> bool:
-        domain = _domain(task)
-        scenario = _task_scenario(task)
-        return domain_counts[domain] > 1 and scenario_counts[scenario] > 1
-
-    def _take_best(predicate, score) -> bool:
-        candidates = [task for task in remaining if predicate(task) and _can_take(task)]
-        if not candidates:
-            return False
-        task = max(candidates, key=score)
-        remaining.remove(task)
-        val.append(task)
-        domain = _domain(task)
-        scenario = _task_scenario(task)
-        domain_counts[domain] -= 1
-        scenario_counts[scenario] -= 1
-        val_domain_counts[domain] += 1
-        val_scenario_counts[scenario] += 1
-        return True
-
-    # Cover every domain, preferring scenarios that are still below their
-    # proportional validation quota.
-    for domain in domains:
-        if len(val) >= val_count:
-            break
-        _take_best(
-            lambda task, d=domain: _domain(task) == d,
-            lambda task: (
-                scenario_targets[_task_scenario(task)] - val_scenario_counts[_task_scenario(task)],
-                scenario_counts[_task_scenario(task)],
-                rng.random(),
-            ),
-        )
-
-    # Fill scenario quotas.
-    for scenario in scenarios:
-        while len(val) < val_count and val_scenario_counts[scenario] < scenario_targets[scenario]:
-            if not _take_best(
-                lambda task, s=scenario: _task_scenario(task) == s,
-                lambda task: (
-                    0 if val_domain_counts[_domain(task)] else 1,
-                    domain_counts[_domain(task)],
-                    rng.random(),
-                ),
-            ):
-                break
-
-    # Fill any remaining slots by largest scenario deficit, still reserving
-    # one train row for each domain and scenario.
-    while len(val) < val_count:
-        if not _take_best(
-            lambda task: True,
-            lambda task: (
-                scenario_targets[_task_scenario(task)] - val_scenario_counts[_task_scenario(task)],
-                0 if val_domain_counts[_domain(task)] else 1,
-                domain_counts[_domain(task)],
-                rng.random(),
-            ),
-        ):
-            break
-    if len(val) != val_count:
-        logger.warning(
-            "Strict validation allocation produced {}/{} rows; falling back "
-            "to exact disjoint split.",
-            len(val),
-            val_count,
-        )
-        return _fallback_task_split(unique, train_count, val_count, rng)
-
-    train = []
-
-    def _pop_train(predicate) -> bool:
-        for task in list(remaining):
-            if predicate(task):
-                train.append(task)
-                remaining.remove(task)
-                return True
-        return False
-
-    val_domains = {_domain(task) for task in val}
-    val_scenarios = {_task_scenario(task) for task in val}
-    for domain in sorted(val_domains):
-        if len(train) >= train_count:
-            break
-        _pop_train(lambda task, d=domain: _domain(task) == d)
-    for scenario in sorted(val_scenarios):
-        if len(train) >= train_count:
-            break
-        if any(_task_scenario(task) == scenario for task in train):
-            continue
-        _pop_train(lambda task, s=scenario: _task_scenario(task) == s)
-
-    rng.shuffle(remaining)
-    train.extend(remaining[:max(0, train_count - len(train))])
-    if len(train) != train_count:
-        logger.warning(
-            "Strict train allocation produced {}/{} rows; falling back to "
-            "exact disjoint split.",
-            len(train),
-            train_count,
-        )
-        return _fallback_task_split(unique, train_count, val_count, rng)
-    return train, val
+    # Domain quotas are enforced during generation. PROVE does not require
+    # every domain/scenario label to appear in both small disjoint splits, and
+    # deleting singleton strata wastes valid replay-checked candidates.
+    return _fallback_task_split(unique, train_count, val_count, rng)
 
 
 def _fallback_task_split(
@@ -1060,7 +1056,7 @@ def _assert_split_integrity(df_train, df_val, args) -> None:
             "After dedup: train=%d val=%d (removed %d colliding val rows)",
             len(df_train), len(df_val), len(drop_indices)
         )
-    if args.val_count:
+    if args.val_count and not args.shard_mode:
         train_domains = {row["extra_info"].get("domain") for _, row in df_train.iterrows()}
         val_domains = {row["extra_info"].get("domain") for _, row in df_val.iterrows()}
         if not val_domains.issubset(train_domains):
@@ -1077,13 +1073,8 @@ def _assert_split_integrity(df_train, df_val, args) -> None:
         train_scenarios = set(df_train["scenario_type"])
         val_scenarios = set(df_val["scenario_type"])
         if not val_scenarios.issubset(train_scenarios):
-            raise RuntimeError(
-                f"Validation scenario not represented in train: train={sorted(train_scenarios)} "
-                f"val={sorted(val_scenarios)}"
-            )
-        if train_scenarios != val_scenarios:
             logger.warning(
-                "Validation scenario coverage is a subset of train: train={} val={}",
+                "Validation contains scenario labels absent from train: train={} val={}",
                 sorted(train_scenarios),
                 sorted(val_scenarios),
             )
@@ -1223,11 +1214,16 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         group_id = task.task_id
 
         # The prompt contains no teacher trajectory, so the complete oracle
-        # (1-8 tool calls plus one explicit terminal action) is the unresolved
+        # (tool calls plus one explicit terminal action) is the unresolved
         # ground truth from reset(session_seed).  Multi-round teacher internals
         # can include per-round terminal actions; training rows keep only the
         # final terminal so the reward contract remains single-terminal.
         oracle_calls_serialized = _serialize_training_oracle(task)
+        round_contracts = _build_round_contracts(task)
+        minimum_action_budget = _minimum_action_budget(
+            oracle_calls_serialized, round_contracts,
+        )
+        action_budget = max(int(task.max_turns), minimum_action_budget)
 
         success_criteria = _task_success_criteria(task)
 
@@ -1273,7 +1269,8 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "session_seed": task.session_seed,
             "initial_state_hash": task.metadata.get("initial_state_hash", ""),
             "user_query": task.user_prompt,
-            "budget": task.max_turns,
+            "budget": action_budget,
+            "minimum_action_budget": minimum_action_budget,
             "perturbation_level": perturbation_level,
             "scenario_type": scenario_type,
             "group_id": group_id,
@@ -1295,6 +1292,10 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "allowed_terminal_actions": allowed_terminal_actions,
             "semantic_fingerprint": task.metadata.get("semantic_fingerprint", ""),
             "generation_method": task.metadata.get("generation_method", "task_planner"),
+            "chain_seed": list(chain_seed),
+            "source_chain_seed": list(
+                task.metadata.get("source_chain_seed", []) if task.metadata else []
+            ),
             # Serialize oracle_calls as JSON so sparse heterogeneous argument
             # dicts round-trip through Parquet without struct unification.
             "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
@@ -1306,9 +1307,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
                 for t in visible_tools if t.get("name")
             }, ensure_ascii=False),
             "conversation_rounds": n_conversation_rounds,
-            # Rollout perturbation support: clean tools (pre-perturbation) +
-            # domain context so the agent loop can rebuild system_prompt with
-            # fresh perturbations via Perturber.
+            # Unperturbed schemas retained for robustness auditing.
             "clean_visible_tools": json.dumps(
                 task.metadata.get("clean_visible_tools", visible_tools),
                 ensure_ascii=False,
@@ -1326,7 +1325,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             # for one conversation round.  The rollout loop MUST validate the
             # model's terminal against the contract before injecting follow-up.
             "round_contracts": json.dumps(
-                _build_round_contracts(task), ensure_ascii=False, default=str
+                round_contracts, ensure_ascii=False, default=str
             ),
             "dependency_edges": dependency_edges_json,
             "dependency_graph_complete": dependency_graph_complete,

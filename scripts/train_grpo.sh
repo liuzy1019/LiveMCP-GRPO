@@ -169,7 +169,22 @@ export OVAL_GPU_MEM_UTIL="${GPU_MEM_UTIL}"
 
 # ── Setup Python (config + experiment) ──────────────────────────────
 # 将结果写入临时 JSON 文件，避免 shell 字符串转义 / marker 匹配问题
-CONDA_PYTHON="${CONDA_PYTHON:-python3}"
+if [ -z "${CONDA_PYTHON:-}" ]; then
+    if [ -n "${PYTHON_BIN:-}" ] && [ -x "${PYTHON_BIN}" ]; then
+        CONDA_PYTHON="${PYTHON_BIN}"
+    elif [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/python" ]; then
+        CONDA_PYTHON="${CONDA_PREFIX}/bin/python"
+    else
+        CONDA_PYTHON="$(command -v python3 || command -v python)"
+    fi
+fi
+if [ ! -x "${CONDA_PYTHON}" ]; then
+    echo "ERROR: Python interpreter is not executable: ${CONDA_PYTHON}" >&2
+    echo "Set PYTHON_BIN=/mnt/data2/liuzhanyi/envs/arl/bin/python" >&2
+    exit 1
+fi
+export CONDA_PYTHON
+export PYTHONNOUSERSITE=1
 CONFIG_JSON_FILE=$(mktemp /tmp/livemcp_config.XXXXXX.json)
 
 # 把 shell 布尔值转成 Python 可识别的 True/False

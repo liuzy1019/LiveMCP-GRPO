@@ -21,7 +21,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,12 +40,8 @@ from src.utils import extract_json as _extract_json
 class RobustnessPlan:
     """Immutable robustness perturbation plan, sampled before Teacher.
 
-    Sampled once per task seed so that Teacher-visible schemas, Replay, and
-    Parquet metadata all refer to the same configuration.  Rollout never
-    re-randomizes perturbations for baseline.
-
-    PROVE §3.2 Figure 2: robustness knobs are applied during generation,
-    before the completed conversation is replay-validated.
+    Sampled once per task seed. Distractors, enum stripping, and
+    missing-function affect the generation-time Teacher contract.
     """
     inject_distractors: bool = False
     distractor_tools: list[dict] = field(default_factory=list)
@@ -100,15 +96,21 @@ class RobustnessPlan:
 
 def _strip_enums_from_schemas(tools: list[dict]) -> list[dict]:
     """Return new list of tool dicts with enum values removed from input_schema."""
+    def _strip(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: _strip(child)
+                for key, child in value.items()
+                if key != "enum"
+            }
+        if isinstance(value, list):
+            return [_strip(child) for child in value]
+        return value
+
     result: list[dict] = []
     for tool in tools:
         t = dict(tool)
-        props = t.get("input_schema", {}).get("properties", {})
-        if props:
-            stripped: dict[str, dict] = {}
-            for k, v in props.items():
-                stripped[k] = {kk: vv for kk, vv in v.items() if kk != "enum"}
-            t["input_schema"] = {**t.get("input_schema", {}), "properties": stripped}
+        t["input_schema"] = _strip(tool.get("input_schema", {}))
         result.append(t)
     return result
 
@@ -119,19 +121,21 @@ def _build_teacher_visible_tools(
 ) -> list[dict]:
     """Build the tool schemas that the Teacher LLM sees.
 
-    Distractors are added BEFORE enum stripping (PROVE §3.2: distractor
-    schemas also have enums stripped if that knob is active).  For
-    missing-function tasks, the hidden tool is removed from Teacher-visible
-    schemas so the Teacher generates a clarification/abstention trajectory.
+    Distractors are included in the Teacher candidate set. For
+    missing-function tasks, the hidden tool is removed so the Teacher generates
+    clarification/abstention.
     """
     tools = [dict(t) for t in domain_tools]
-    # 1. Add distractor tools
-    if plan.inject_distractors:
-        tools.extend([dict(t) for t in plan.distractor_tools])
-    # 2. Strip enums from Teacher-visible schemas only
+    existing_names = {str(tool.get("name") or "") for tool in tools}
+    for distractor in plan.distractor_tools:
+        name = str(distractor.get("name") or "")
+        if name and name not in existing_names:
+            tools.append(dict(distractor))
+            existing_names.add(name)
+    # 1. Strip enums from Teacher-visible schemas only
     if plan.strip_enums:
         tools = _strip_enums_from_schemas(tools)
-    # 3. Hide the missing-function tool
+    # 2. Hide the missing-function tool
     if plan.missing_function and plan.hidden_tool:
         tools = [t for t in tools if t["name"] != plan.hidden_tool]
     return tools
@@ -153,17 +157,16 @@ class TaskOrchestrator:
         tasks = orch.generate_many("all", count=100, seed=42)
     """
 
-    # PROVE §3.2 Step 2: refresh sampling context every k conversations.
-    # k=10 balances freshness (state changes after writes) vs. probe overhead.
+    # PROVE refreshes compact context every k conversations. This repository's
+    # seeded sessions can contain different entity IDs, so cross-session reuse
+    # is unsafe: the cache is invalidated on session change and force-refreshed
+    # after in-session writes. K only bounds reuse inside an unchanged session.
     SAMPLING_CONTEXT_REFRESH_K: int = 10
-    DEPENDENCY_CACHE_VERSION: int = 2
-    DEPENDENCY_PAIR_BATCH_SIZE: int = 12
+    DEPENDENCY_CACHE_VERSION: int = 4
+    DEPENDENCY_SEMANTICS_VERSION: int = 9
+    DEPENDENCY_PAIR_BATCH_SIZE: int = 8
+    DEPENDENCY_CLASSIFICATION_MAX_TOKENS: int = 512
     DEPENDENCY_FAILURE_RETRY_SECONDS: float = 60.0
-
-    # PROVE §3.2 Step 1 builds the graph from pairwise LLM classifications.
-    # Deterministic augmentation is kept as an explicit ablation hook, but is
-    # disabled for the baseline because it changes the LLM-discovered graph.
-    ENABLE_DETERMINISTIC_GRAPH_AUGMENTATION: bool = False
 
     def __init__(
         self,
@@ -197,19 +200,6 @@ class TaskOrchestrator:
                 progress += 1
         return progress
 
-    @staticmethod
-    def _round_goal_satisfied(round_calls: list, goal_tool: str) -> bool:
-        """Return whether a round completed its bound capability or abstained."""
-        if not goal_tool:
-            return True
-        for call in round_calls:
-            action = getattr(call, "action", "tool_call")
-            if action in ("ask_clarification", "report_error"):
-                return True
-            if action == "tool_call" and getattr(call, "tool_name", "") == goal_tool:
-                return True
-        return False
-
     def _run_turn_loop(
         self,
         teacher,
@@ -218,27 +208,20 @@ class TaskOrchestrator:
         server_name: str,
         session_id: str,
         difficulty: str,
-        dep_hints: str,
-        local_rng: random.Random,
-        chain_seed: list[str] | None,
         round_idx: int,
+        turn_budget: int = 8,
         reference_date: str = "",
-        chain_progress_start: int = 0,
         max_calls_this_round: int = 0,
         chain_context: dict[str, Any] | None = None,
         blocked_tools: set[str] | None = None,
         missing_function_contract: bool = False,
         prior_execution_history: list[dict[str, Any]] | None = None,
+        allow_direct_answer: bool = False,
     ) -> tuple[list, list[dict], list[Any], set[str], list[OracleCall], list[Any]]:
         """Run one conversation round of teacher-driven tool execution.
 
-        chain_progress_start: cumulative chain_seed steps already satisfied.
-        Baseline initial turns should complete the atomic chain goal; this value
-        remains useful for retry/recovery and defensive validation.
-
         max_calls_this_round: optional diagnostic/ablation cap on real tool
-        calls. Baseline passes 0 (no per-round cap); it must not distribute
-        dependency-chain nodes across user turns.
+        calls. Baseline passes 0 (no per-round cap).
 
         chain_context: live-probed entity values for hallucination prevention
         in decide_action. Extracted from _extract_chain_context in generate_one.
@@ -248,7 +231,6 @@ class TaskOrchestrator:
         raw tool observation dict for the corresponding oracle call, or {} for
         terminal actions (ask_clarification, final_answer, report_error).
         """
-        from src.live_mcp.task_planner import ContinuationPolicy
         from src.live_mcp.types import ToolCall
 
         oracle_calls: list = []
@@ -293,115 +275,34 @@ class TaskOrchestrator:
                 "execution_status": "SUCCESS",
             })
 
-        # Dedup oracle tool calls within a round. Same (tool_name, args_repr)
-        # must not appear twice because repeated oracle calls inflate the ground
-        # truth without adding new task progress.
-        seen_oracle_keys: set[tuple[str, str]] = set()
-        # LIST-class discovery tools are one-shot collection reads.
-        seen_read_tools: set[str] = set()
-
-        def _oracle_key(name: str, args: dict) -> tuple[str, str]:
-            try:
-                args_repr = json.dumps(args, sort_keys=True, default=str, ensure_ascii=False)
-            except Exception:
-                args_repr = repr(sorted(args.items()) if isinstance(args, dict) else args)
-            return (name, args_repr)
-
         def _add_oracle(call: OracleCall) -> bool:
-            """Append call to oracle_calls if not duplicate / not over budget.
-            Returns True if appended.
-            """
-            # Terminal actions are part of the oracle contract but do not
-            # consume the 2-5 tool-call budget and are not deduplicated.
-            if call.action != "tool_call":
-                oracle_calls.append(call)
-                return True
-
-            # Hard cap on real tool calls per task.
-            real_count = sum(1 for oc in oracle_calls if oc.action == "tool_call")
-            if real_count >= 5:
-                return False
-            # LIST-class tools (one-shot collections): dedup by name only.
-            # get_/search_/find_ are entity reads — different entities are
-            # legitimate, so they fall through to (name,args) dedup below.
-            tname = call.tool_name or ""
-            if tname.startswith("list_"):
-                if tname in seen_read_tools:
-                    return False
-                seen_read_tools.add(tname)
-            # All other (write-class) tools dedup by (name, args).
-            key = _oracle_key(call.tool_name, call.arguments or {})
-            if key in seen_oracle_keys:
-                return False
-            seen_oracle_keys.add(key)
+            """Append the state-machine oracle without intra-trace pruning."""
             oracle_calls.append(call)
             return True
 
-        if round_idx == 0:
-            round_chain_len = len(chain_seed) if chain_seed else 3
-        else:
-            # Use actual remaining chain steps instead of a random number.
-            # chain_progress_start is the cumulative steps done in prior rounds.
-            # Remaining = total chain length - steps already done.
-            # Fallback to 2 if no chain (matches PROVE §3.2 min_turns=2).
-            if chain_seed:
-                remaining = max(1, len(chain_seed) - chain_progress_start)
-                round_chain_len = remaining
-            else:
-                round_chain_len = 2
-        target_turns = ContinuationPolicy.target_turns(round_chain_len, local_rng)
-        max_turns = min(target_turns + 2, 8)
-
-        # PROVE limits oracle chains to at most five real tool calls.
-        MAX_ORACLE_CALLS_PER_TASK = 5
+        max_turns = max(1, int(turn_budget))
 
         attempt = 0          # raw LLM call count (for temperature scaling)
         _turn: int = 0       # real turn count (tool exec + terminal)
 
-        def _round_chain_progress() -> int:
-            progress = chain_progress_start
-            if chain_seed and progress < len(chain_seed):
-                for previous in oracle_calls:
-                    if previous.action != "tool_call":
-                        continue
-                    if progress < len(chain_seed) and previous.tool_name == chain_seed[progress]:
-                        progress += 1
-            elif not chain_seed:
-                progress = chain_progress_start + sum(
-                    1 for oc in oracle_calls if oc.action == "tool_call"
-                )
-            return progress
-
         while _turn < max_turns:
-            # Progress means satisfying the seeded dependency chain in order,
-            # not merely calling the same number of arbitrary unique tools.
-            chain_progress = _round_chain_progress()
-
-            # Stop emitting new oracle entries once the PROVE call budget is full.
-            real_oracle_count = sum(1 for oc in oracle_calls if oc.action == "tool_call")
-            if real_oracle_count >= MAX_ORACLE_CALLS_PER_TASK:
-                break
-
             try:
                 action = teacher.decide_action(
                     tool_schemas=server_tools,
                     user_query=current_query,
                     execution_history=prior_history + execution_history,
                     attempt=attempt,
-                    dep_hints=dep_hints,
                     difficulty=difficulty,
-                    chain_seed=chain_seed,
-                    chain_progress=chain_progress,
                     reference_date=reference_date,
                     chain_context=chain_context,
                     blocked_tools=blocked_tools,
                     missing_function=missing_function_contract,
+                    allow_direct_answer=allow_direct_answer,
                 )
             except RuntimeError:
                 logger.debug(
-                    f"_run_turn_loop: decide_action exhausted retries "
-                    f"(chain_progress={chain_progress}/{len(chain_seed) if chain_seed else 0}), "
-                    f"breaking turn loop."
+                    "_run_turn_loop: decide_action exhausted retries; "
+                    "breaking turn loop."
                 )
                 break
 
@@ -428,22 +329,6 @@ class TaskOrchestrator:
 
             tool_name = action.tool_name
             tool_name = _fuzzy_match_tool(tool_name, {t["name"] for t in server_tools}) or tool_name
-
-            if _has_stale_year(action.arguments, reference_date):
-                rejection = {
-                    "error": f"Arguments use a year earlier than the reference date {reference_date}."
-                }
-                _record_attempt(tool_name, action.arguments, rejection, False, _owner_domain(tool_name))
-                execution_history.append({
-                    "tool_name": "__reject__",
-                    "arguments": dict(action.arguments),
-                    "observation": rejection,
-                    "success": False,
-                    "execution_status": "FAILURE",
-                })
-                _turn += 1
-                attempt += 1
-                continue
 
             # P0: missing-function — block hidden tools at execution layer.
             # Teacher may still output the tool name (it's in chain_seed hints),
@@ -609,24 +494,19 @@ class TaskOrchestrator:
                 if real_this_round >= max_calls_this_round:
                     break
 
-            if not ContinuationPolicy.should_continue(
-                _turn, target_turns, result.success,
-                sum(1 for oc in oracle_calls if oc.action == "tool_call"),
-            ):
-                break
-
-        # A successful tool trace always has an explicit terminal contract.
-        # This also covers turn-decay / budget exits where the teacher did not
-        # get another generation turn to emit final_answer.
+        # A completed round must contain a Teacher-emitted terminal action.
+        # Never fabricate success when the action budget is exhausted.
         if (any(oc.action == "tool_call" for oc in oracle_calls)
                 and not any(oc.action in ("final_answer", "report_error", "ask_clarification")
                             for oc in oracle_calls)):
-            _add_oracle(OracleCall(
-                tool_name="final_answer",
-                arguments={"text": "Task completed."},
-                action="final_answer",
-            ))
-            oracle_observations.append({})
+            raise RuntimeError(
+                "Teacher exhausted the per-round action budget without a "
+                "terminal response"
+            )
+        if not oracle_calls:
+            raise RuntimeError(
+                "Teacher produced no action for the current conversation round"
+            )
 
         return (
             oracle_calls,
@@ -680,22 +560,26 @@ class TaskOrchestrator:
         # PROVE §3.2 Step 2 guard: defer chain selection until live state is
         # available so we can filter out chains whose first step has no entity.
 
-        # ── Conversation-level continuation (PROVE §3.2 Step 3.5) ──
-        # PROVE §3.2 Step 3.5 bounds CONVERSATION ROUNDS (user turns) to 2..3.
-        # This is unrelated to _run_turn_loop's max_turns (state-machine step
-        # budget inside a single round) which stays at 8.
-        # The training rollout consumes conversation_queries[1:] as live
-        # follow-up messages.
-        enable_continuation = getattr(self, 'enable_continuation', True)
-        min_conversation_rounds = (
-            ContinuationPolicy.MIN_CONVERSATION_ROUNDS
-            if enable_continuation else 1
-        )
-        # max_conversation_rounds is sampled per-task inside the retry loop
-        # (PROVE turn-decay schedule §3.2 Step 3.5).
+        # ── Conversation-level continuation ──
+        # The dependency chain is one atomic user goal. Continuation is useful
+        # only while that goal remains incomplete; forcing another user turn
+        # after the chain is complete leaves no capability to bind the new
+        # query to and produces unrelated or unsupported requests.
 
         # ── Defensive initialisation (all variables reused after the retry loop).
-        # Python guarantees range(3) iterates at least once, but Pylance cannot
+        # Candidate-level regeneration is intentionally one-shot by default.
+        # PROVE performs recovery inside the state machine, then filters the
+        # completed candidate with replay/provenance. Re-generating the whole
+        # conversation several times hides rejection rates and wastes Teacher
+        # requests; pool-level oversampling/recovery replaces it.
+        try:
+            max_task_attempts = max(
+                1, int(os.environ.get("LIVEMCP_TASK_GENERATION_ATTEMPTS", "1")),
+            )
+        except ValueError:
+            max_task_attempts = 1
+
+        # Python guarantees range(max_task_attempts) iterates at least once, but Pylance cannot
         # prove that and flags "possibly unbound".  Initialising here silences
         # the linter and protects against edge cases.
         all_oracle_calls: list = []
@@ -722,6 +606,7 @@ class TaskOrchestrator:
         source_chain_seed: list[str] | None = None
         all_attempt_calls: list[OracleCall] = []
         all_attempt_observations: list[Any] = []
+        all_attempt_round_indices: list[int] = []
         # replay / provenance variables (set inside retry loop, used after)
         valid: bool = False
         criteria_ok: bool = True
@@ -734,14 +619,9 @@ class TaskOrchestrator:
         generation_succeeded = False
 
         # ── Retry with different seed if LLM refuses to call tools ──
-        for retry_attempt in range(3):
+        for retry_attempt in range(max_task_attempts):
             local_seed = seed + retry_attempt * 1000
             local_rng = random.Random(local_seed)
-
-            max_conversation_rounds = (
-                ContinuationPolicy.conversation_rounds(local_rng)
-                if enable_continuation else 1
-            )
 
             teacher = TaskPlanner(self.client, server_name, seed=local_seed)
 
@@ -767,7 +647,7 @@ class TaskOrchestrator:
             else:
                 plan = RobustnessPlan()
 
-            # ── Build Teacher-visible tools (with knob set A, before enum stripping and distractor) ──
+            # Build the generation-time candidate set, including distractors.
             # Teacher sees perturbed schemas; executor uses clean server_tools.
             # For missing_function: we select the chain first with full tools
             # (for feasibility), pick hidden_tool from chain_seed later, then
@@ -800,17 +680,18 @@ class TaskOrchestrator:
                 elif all_chains:
                     # Feasible chains exist but none passed live-state filter.
                     # Retry with a fresh session/state (PROVE: Step 2 requires
-                    # executable chains). After 3 retries, raise so the caller
-                    # retries with a fresh seed — no unseeded fallback in baseline.
-                    if retry_attempt < 2:
+                    # executable chains). Optional candidate regeneration is
+                    # controlled explicitly; default is one attempt.
+                    if retry_attempt + 1 < max_task_attempts:
                         logger.debug(
                             f"No feasible chain for {server_name} "
-                            f"(retry {retry_attempt + 1}/3), re-sampling session"
+                            f"(attempt {retry_attempt + 1}/{max_task_attempts}), re-sampling session"
                         )
                         self.manager.close_session(session_id)
                         continue
                     raise RuntimeError(
-                        f"No feasible chain for {server_name} after 3 retries; "
+                        f"No feasible chain for {server_name} after "
+                        f"{max_task_attempts} attempt(s); "
                         f"rejecting task so generate_many retries with a fresh seed. "
                         f"Unseeded fallback is NOT allowed in baseline."
                     )
@@ -837,7 +718,6 @@ class TaskOrchestrator:
                 # one grounded task.  Continuation is a later interaction
                 # mechanism; it must not be used to turn individual chain nodes
                 # into separate user requests.
-                query_goal_tool = source_chain_seed[-1] if source_chain_seed else ""
                 query_generation_chain = source_chain_seed
                 user_query = teacher.generate_query(
                     tool_schemas=server_tools,
@@ -850,41 +730,9 @@ class TaskOrchestrator:
                     chain_seed=query_generation_chain,
                     chain_context=query_chain_context,
                 )
-                query_intent_ok = (
-                    not query_goal_tool
-                    or _query_requires_hidden_capability(
-                        user_query, query_goal_tool, server_name,
-                    )
-                )
-                query_grounding_ok = (
-                    not query_goal_tool
-                    or _query_has_required_live_entity_grounding(
-                        query=user_query,
-                        tool_name=query_goal_tool,
-                        domain=server_name,
-                        difficulty=difficulty,
-                        tool_schemas=server_tools,
-                        live_context=query_chain_context,
-                    )
-                )
-                if not query_grounding_ok:
-                    logger.debug(
-                        f"Initial query is not grounded for chain capability "
-                        f"'{query_goal_tool}' in {server_name}; retrying: "
-                        f"{user_query}"
-                    )
-                    continue
-                if not query_intent_ok:
-                    logger.debug(
-                        f"Initial query lexical capability diagnostic failed for "
-                        f"'{query_goal_tool}' in {server_name}; accepting because "
-                        f"live grounding/execution/replay are authoritative: {user_query}"
-                    )
-
                 # Missing-function query generation must use the complete chain.
                 # Only the Teacher execution contract receives the hidden version.
                 blocked_tools_set: set[str] | None = None
-                teacher_dep_hints = dep_hints
                 chain_context = query_chain_context
                 if plan.missing_function:
                     if not source_chain_seed:
@@ -895,25 +743,9 @@ class TaskOrchestrator:
                         continue
                     else:
                         hidden_tool = source_chain_seed[-1]
-                        if not _query_satisfies_chain_capability(
-                            query=user_query,
-                            tool_name=hidden_tool,
-                            domain=server_name,
-                            difficulty=difficulty,
-                            tool_schemas=server_tools,
-                            live_context=query_chain_context,
-                        ):
-                            logger.debug(
-                                f"Generated query does not require hidden capability "
-                                f"'{hidden_tool}' for {server_name}; retrying: {user_query}"
-                            )
-                            continue
                         plan.hidden_tool = hidden_tool
                         teacher_visible_tools = _build_teacher_visible_tools(server_tools, plan)
                         blocked_tools_set = {hidden_tool}
-                        teacher_dep_hints = _remove_tool_from_dependency_hints(
-                            dep_hints, hidden_tool,
-                        )
                         chain_seed = None
                         chain_context = {}
 
@@ -924,6 +756,7 @@ class TaskOrchestrator:
                 all_aligned_observations: list[Any] = []
                 all_attempt_calls = []
                 all_attempt_observations = []
+                all_attempt_round_indices = []
                 all_required_tools = set()
                 conversation_queries = [user_query]  # track all user messages
                 oracle_calls_per_round = []  # per-round for prompt construction
@@ -932,18 +765,22 @@ class TaskOrchestrator:
                 retry_label = f" (retry {retry_attempt})" if retry_attempt > 0 else ""
 
                 current_query = user_query
+                previous_assistant_response = ""
 
                 logger.debug(
                     f"CONTINUATION: {server_name} task {task_id} "
-                    f"starting state-machine continuation (min={min_conversation_rounds}, "
-                    f"max={ContinuationPolicy.MAX_CONVERSATION_ROUNDS})"
+                    f"starting state-machine continuation "
+                    f"(max={ContinuationPolicy.MAX_CONVERSATION_ROUNDS})"
                 )
 
                 round_idx = 0
                 decision = "follow_up"  # dummy, overwritten on round_idx==0 path below
-                current_round_goal_tool = query_goal_tool
-                round_goal_failed = False
                 while True:
+                    # The action planner must see the same live-state snapshot that
+                    # grounded this round's user continuation.  Reusing the initial
+                    # chain subset here incorrectly turns valid entities outside that
+                    # subset into "non-existent" IDs.
+                    round_action_context = chain_context
                     if round_idx > 0:
                         followup_live_context = self._get_live_sampling_context(
                             session_id=session_id,
@@ -951,13 +788,7 @@ class TaskOrchestrator:
                             server_tools=server_tools,
                             force_refresh=True,
                         )
-                        followup_chain_progress = self._chain_progress_for_calls(all_oracle_calls, chain_seed)
                         if decision == "clarification":
-                            current_round_goal_tool = (
-                                chain_seed[followup_chain_progress]
-                                if chain_seed and followup_chain_progress < len(chain_seed)
-                                else ""
-                            )
                             current_query = teacher.generate_clarification(
                                 tool_schemas=teacher_visible_tools,
                                 grounded_state=_live_context_to_prompt_state(followup_live_context),
@@ -966,72 +797,29 @@ class TaskOrchestrator:
                                 rng=local_rng,
                                 persona=persona,
                                 reference_date=reference_date,
+                                previous_response=previous_assistant_response,
                             )
                         else:
-                            next_chain_tool = (
-                                chain_seed[followup_chain_progress]
-                                if chain_seed and followup_chain_progress < len(chain_seed)
-                                else ""
+                            current_query = teacher.generate_followup(
+                                tool_schemas=teacher_visible_tools,
+                                grounded_state=_live_context_to_prompt_state(followup_live_context),
+                                previous_query=current_query,
+                                difficulty=difficulty,
+                                rng=local_rng,
+                                persona=persona,
+                                reference_date=reference_date,
+                                chain_seed=None,
+                                chain_progress=0,
+                                previous_response=previous_assistant_response,
                             )
-                            current_round_goal_tool = next_chain_tool
-                            for followup_attempt in range(3):
-                                candidate_query = teacher.generate_followup(
-                                    tool_schemas=teacher_visible_tools,
-                                    grounded_state=_live_context_to_prompt_state(followup_live_context),
-                                    previous_query=current_query,
-                                    difficulty=difficulty,
-                                    rng=local_rng,
-                                    persona=persona,
-                                    reference_date=reference_date,
-                                    chain_seed=chain_seed,
-                                    chain_progress=followup_chain_progress,
-                                )
-                                grounding_ok = (
-                                    not next_chain_tool
-                                    or _query_has_required_live_entity_grounding(
-                                        query=candidate_query,
-                                        tool_name=next_chain_tool,
-                                        domain=server_name,
-                                        difficulty=difficulty,
-                                        tool_schemas=teacher_visible_tools,
-                                        live_context=followup_live_context,
-                                    )
-                                )
-                                if grounding_ok:
-                                    current_query = candidate_query
-                                    if (
-                                        next_chain_tool
-                                        and not _query_requires_hidden_capability(
-                                            candidate_query, next_chain_tool, server_name,
-                                        )
-                                    ):
-                                        logger.debug(
-                                            f"Follow-up query lexical capability diagnostic "
-                                            f"failed for '{next_chain_tool}' in {server_name}; "
-                                            f"accepting grounded query: {candidate_query}"
-                                        )
-                                    break
-                                logger.debug(
-                                    f"Follow-up query does not express next chain "
-                                    f"capability '{next_chain_tool}' for {server_name} "
-                                    f"(attempt {followup_attempt + 1}/3): "
-                                    f"{candidate_query}"
-                                )
-                            else:
-                                raise RuntimeError(
-                                    f"Failed to generate follow-up requiring "
-                                    f"'{next_chain_tool}' for {server_name}"
-                                )
                         conversation_queries.append(current_query)
+                        round_action_context = _compact_sampling_context(
+                            followup_live_context
+                        )
                     else:
                         # round_idx == 0: first round, no decision yet
                         decision = "follow_up"  # dummy for the first iteration
 
-                    current_chain_progress = self._chain_progress_for_calls(all_oracle_calls, chain_seed)
-
-                    # The dependency chain is an atomic task seed, not a
-                    # per-turn schedule.  The Teacher may execute the whole
-                    # chain in this turn (subject to the global five-call cap).
                     max_calls_r = 0
 
                     (
@@ -1048,17 +836,15 @@ class TaskOrchestrator:
                         server_name=server_name,
                         session_id=session_id,
                         difficulty=difficulty,
-                        dep_hints=teacher_dep_hints,
-                        local_rng=local_rng,
-                        chain_seed=chain_seed,
                         round_idx=round_idx,
+                        turn_budget=max_turns,
                         reference_date=reference_date,
-                        chain_progress_start=current_chain_progress,
                         max_calls_this_round=max_calls_r,
-                        chain_context=chain_context,
+                        chain_context=round_action_context,
                         blocked_tools=blocked_tools_set,
                         missing_function_contract=plan.missing_function,
                         prior_execution_history=all_execution_history,
+                        allow_direct_answer=(round_idx > 0 and decision == "clarification"),
                     )
 
                     if round_idx == 0:
@@ -1074,7 +860,7 @@ class TaskOrchestrator:
                             or (difficulty == "minimal" and _clar_round)
                         )
                         if not _real_round and not allow_zero_tool:
-                            if retry_attempt < 2:
+                            if retry_attempt + 1 < max_task_attempts:
                                 logger.debug(
                                     f"No tool calls recorded for {server_name}{retry_label}, "
                                     f"retrying with new seed ({retry_attempt + 1}/3)"
@@ -1085,76 +871,36 @@ class TaskOrchestrator:
                                 f"(LLM answered without using tools)"
                             )
 
-                    # Cross-round dedup + total length cap to align with PROVE
-                    # red lines.  _run_turn_loop dedups within a single round,
-                    # but seen_read_tools / seen_oracle_keys reset between
-                    # rounds, so a 4-round task can still emit list_invoices
-                    # 4 times.  Apply the same rules globally here.
-                    #
-                    # Preserve the last round's calls as the supervised target
-                    # while enforcing the global five-call oracle budget.
-                    global_seen_read = {oc.tool_name for oc in all_oracle_calls
-                                        if getattr(oc, "action", "tool_call") == "tool_call"
-                                        and (oc.tool_name or "").startswith("list_")}
-                    global_seen_keys = set()
-                    for _oc in all_oracle_calls:
-                        try:
-                            _args_repr = json.dumps(_oc.arguments or {}, sort_keys=True, default=str, ensure_ascii=False)
-                        except Exception:
-                            _args_repr = repr(_oc.arguments)
-                        global_seen_keys.add((_oc.tool_name, _args_repr))
-
-                    is_last_round = (round_idx == max_conversation_rounds - 1)
-                    real_so_far = sum(1 for oc in all_oracle_calls if getattr(oc, "action", "tool_call") == "tool_call")
-                    filtered_round_ocs = []
-                    filtered_round_obs = []
-                    for i, oc in enumerate(round_ocs):
-                        action = getattr(oc, "action", "tool_call")
-                        if action != "tool_call":
-                            filtered_round_ocs.append(oc)
-                            filtered_round_obs.append(round_obs[i])
-                            continue
-                        if not is_last_round and real_so_far >= 5:
-                            break
-                        if is_last_round and real_so_far >= 5:
-                            # PROVE hard cap: oracle chain ≤ 5 across ALL rounds.
-                            break
-                        tname = oc.tool_name or ""
-                        if tname.startswith("list_"):
-                            if tname in global_seen_read:
-                                continue
-                            global_seen_read.add(tname)
-                        try:
-                            args_repr = json.dumps(oc.arguments or {}, sort_keys=True, default=str, ensure_ascii=False)
-                        except Exception:
-                            args_repr = repr(oc.arguments)
-                        key = (tname, args_repr)
-                        if key in global_seen_keys:
-                            continue
-                        global_seen_keys.add(key)
-                        filtered_round_ocs.append(oc)
-                        filtered_round_obs.append(round_obs[i])
-                        real_so_far += 1
+                    # Preserve the successful oracle emitted by the state
+                    # machine. PROVE deduplicates conversations by Jaccard; it
+                    # does not delete repeated reads/calls inside recovery or a
+                    # later user round.
+                    filtered_round_ocs = list(round_ocs)
+                    filtered_round_obs = list(round_obs)
 
                     all_oracle_calls.extend(filtered_round_ocs)
                     all_aligned_observations.extend(filtered_round_obs)
                     all_execution_history.extend(round_hist)
                     all_attempt_calls.extend(round_attempts)
                     all_attempt_observations.extend(round_attempt_obs)
+                    all_attempt_round_indices.extend(
+                        [round_idx] * len(round_attempts)
+                    )
                     all_required_tools |= round_reqs
                     oracle_calls_per_round.append(list(filtered_round_ocs))
                     execution_history_per_round.append(list(round_hist))
 
-                    if not self._round_goal_satisfied(
-                        filtered_round_ocs, current_round_goal_tool,
-                    ):
-                        logger.debug(
-                            f"Round {round_idx} did not complete bound capability "
-                            f"'{current_round_goal_tool}' for {server_name}; "
-                            f"rejecting task instead of advancing continuation"
+                    round_terminals = [
+                        oc for oc in filtered_round_ocs
+                        if getattr(oc, "action", "tool_call") != "tool_call"
+                    ]
+                    if round_terminals:
+                        terminal_args = getattr(round_terminals[-1], "arguments", {}) or {}
+                        previous_assistant_response = str(
+                            terminal_args.get("text")
+                            or terminal_args.get("question")
+                            or ""
                         )
-                        round_goal_failed = True
-                        break
 
                     # ask_clarification / report_error break the conversation
                     # immediately — they indicate the Teacher cannot proceed further
@@ -1167,23 +913,12 @@ class TaskOrchestrator:
                     ):
                         break
 
-                    completed_rounds = round_idx + 1
-                    completed_chain_progress = self._chain_progress_for_calls(
-                        all_oracle_calls, chain_seed,
-                    )
-                    if (
-                        chain_seed
-                        and completed_chain_progress >= len(chain_seed)
-                        and completed_rounds >= min_conversation_rounds
-                    ):
-                        # The seeded user goal has been completed. Generating an
-                        # extra round here produces confirmation chatter or an
-                        # unrelated request rather than useful continuation data.
-                        break
-
-                    # P1-3: per-turn continuation decision (PROVE §3.2 Step 3.5).
-                    # Replaces the pre-sampled max_rounds approach with a true
-                    # per-turn end / follow_up / clarification decision.
+                    # PROVE §3.2 continuation is a conversation-level decision,
+                    # not a mechanism for splitting dependency-chain nodes. Once
+                    # the initial chain goal is complete, the refreshed live state
+                    # and prior conversation still ground a natural follow-up.
+                    # Missing-function/clarification/report_error paths terminate
+                    # above and are not forced to meet the normal 2--3-turn bound.
                     round_idx += 1
                     decision = ContinuationPolicy.sample_continuation_decision(
                         round_idx, local_rng,
@@ -1191,9 +926,6 @@ class TaskOrchestrator:
                     if decision == "end":
                         break
                     # follow_up or clarification: continue loop
-
-                if round_goal_failed:
-                    continue
 
                 # If we broke out of conversation loop early (first round failed)
                 _real_now = [c for c in all_oracle_calls if getattr(c, "action", "tool_call") == "tool_call"]
@@ -1203,29 +935,29 @@ class TaskOrchestrator:
                     if getattr(c, "action", "tool_call") in ("ask_clarification", "report_error")
                 ]
                 if plan.missing_function:
-                    if _real_now or not _abstain_now:
+                    if not _abstain_now:
                         self.manager.close_session(session_id)
                         continue
-                    all_required_tools.clear()
                 elif not _real_now and not (difficulty == "missing" and _clar_now):
                     self.manager.close_session(session_id)
                     continue  # retry loop
 
+                realized_chain_seed: list[str] = []
                 if chain_seed and not plan.missing_function:
-                    # Allow incomplete chain for "missing" difficulty (Teacher
-                    # produced ask_clarification before calling all chain tools).
-                    # missing_function perturbation also skips — zero tools expected.
-                    if difficulty != "missing":
-                        completed_chain_steps = self._chain_progress_for_calls(
-                            all_oracle_calls, chain_seed,
+                    completed_chain_steps = self._chain_progress_for_calls(
+                        all_oracle_calls, chain_seed,
+                    )
+                    if completed_chain_steps == len(chain_seed):
+                        realized_chain_seed = list(chain_seed)
+                    else:
+                        logger.debug(
+                            f"Teacher completed the bound user goal without the full "
+                            f"seed chain for {server_name} task {task_id}: "
+                            f"{completed_chain_steps}/{len(chain_seed)}. Keeping "
+                            f"source_chain_seed for audit and omitting OVAL dependency "
+                            f"edges; PROVE does not publish full-chain coverage as a "
+                            f"corpus rejection gate."
                         )
-                        if completed_chain_steps != len(chain_seed):
-                            logger.debug(
-                                f"Incomplete Teacher chain for {server_name} task "
-                                f"{task_id}: completed {completed_chain_steps}/"
-                                f"{len(chain_seed)}; retrying with a fresh seed"
-                            )
-                            continue
 
                 distractor_names = {
                     str(tool.get("name") or "") for tool in plan.distractor_tools
@@ -1285,7 +1017,7 @@ class TaskOrchestrator:
                     blocked_tools=blocked_tools_set,
                 )
                 if not valid:
-                    if retry_attempt < 2:
+                    if retry_attempt + 1 < max_task_attempts:
                         logger.debug(
                             f"Replay validation failed for {server_name}: "
                             f"{num_errors}/{num_calls} errors ({error_rate:.0%}), "
@@ -1309,11 +1041,13 @@ class TaskOrchestrator:
                 # ── Provenance check (PROVE §3.2 Step 5: sensitive params) ──
                 prov_ok, prov_violations = provenance_check(
                     oracle_calls=all_attempt_calls,
-                    user_query="\n".join(conversation_queries),
+                    user_query=conversation_queries[0],
                     aligned_observations=all_attempt_observations,
+                    user_queries=conversation_queries,
+                    call_round_indices=all_attempt_round_indices,
                 )
                 if not prov_ok:
-                    if retry_attempt < 2:
+                    if retry_attempt + 1 < max_task_attempts:
                         logger.debug(
                             f"Provenance check failed for {server_name}: "
                             f"{len(prov_violations)} untraceable sensitive params "
@@ -1378,8 +1112,8 @@ class TaskOrchestrator:
 
         if not generation_succeeded:
             raise RuntimeError(
-                f"Teacher generation exhausted 3 retries for {server_name} "
-                f"without a complete replay-valid dependency chain"
+                f"Teacher generation exhausted {max_task_attempts} attempt(s) for {server_name} "
+                f"without a replay-valid completed user goal"
             )
 
         # ── Final guard: ensure the oracle matches the task type ──
@@ -1395,20 +1129,18 @@ class TaskOrchestrator:
             if getattr(c, "action", "tool_call") in ("ask_clarification", "report_error")
         ]
         if plan.missing_function:
-            if real_calls or not abstention_calls:
+            if not abstention_calls:
                 raise RuntimeError(
                     f"Invalid missing-function oracle for {server_name} task {task_id}: "
                     f"real_calls={len(real_calls)} terminals={len(abstention_calls)}"
                 )
-        elif not real_calls and not (difficulty == "missing" and clarification_calls):
+        elif not real_calls and not (
+            difficulty in ("missing", "minimal") and clarification_calls
+        ):
             raise RuntimeError(
                 f"No real tool_call recorded for {server_name} task {task_id} "
-                f"after 3 retries (LLM only produced clarifications/refusals)"
-            )
-        if real_calls and not (1 <= len(real_calls) <= 8):
-            raise RuntimeError(
-                f"Oracle chain length {len(real_calls)} outside required 1-8 "
-                f"for {server_name} task {task_id}"
+                f"after {max_task_attempts} attempt(s) "
+                f"(LLM only produced clarifications/refusals)"
             )
         # ── Build final task ──
         oracle_program = OracleProgram(
@@ -1433,9 +1165,11 @@ class TaskOrchestrator:
                 "live_sampling_context": _compact_sampling_context(live_sampling_context),
             },
         )
-        # P0: visible_tools = actual Teacher-visible schemas (perturbed).
-        # This ensures Parquet candidate set == RL rollout candidate set.
-        live_task.visible_tools = final_teacher_visible_tools or live_task.visible_tools
+        # Preserve the same candidate contract used by the Teacher. Distractors
+        # were already added before generation; missing tools remain hidden.
+        live_task.visible_tools = list(
+            final_teacher_visible_tools or live_task.visible_tools
+        )
         # P0: hidden_tools must be set on the LiveTask object so generate_data.py
         # serialises it into Parquet and livemcp_oval_loop.py can build blocked_tools.
         if plan.hidden_tool:
@@ -1466,7 +1200,7 @@ class TaskOrchestrator:
             "scenario_type": scenario_type,
             "terminal_action": terminal_action,
             "reference_date": reference_date,
-            "chain_seed": [] if plan.missing_function else (list(chain_seed) if chain_seed else []),
+            "chain_seed": [] if plan.missing_function else realized_chain_seed,
             "source_chain_seed": list(source_chain_seed) if source_chain_seed else [],
             "generation_mode": "chain_seeded" if source_chain_seed else "unseeded_fallback",
             # P0-3: data quality signals from replay validation.
@@ -1482,8 +1216,8 @@ class TaskOrchestrator:
                 1 for call in all_attempt_calls if call.expected_success is False
             ),
             "criteria_failed": criteria_failed,
-            # P0: robustness contract — applied before Replay, not after
             "robustness_applied_before_replay": True,
+            "distractor_injection_stage": "pre_teacher",
             "has_distractors": plan.inject_distractors,
             "distractor_count": len(plan.distractor_tools),
             "strip_enums": plan.strip_enums,
@@ -1504,7 +1238,7 @@ class TaskOrchestrator:
                       difficulty_mix: dict[str, float] | None = None,
                       irrelevance_ratio: float = 0.05,
                       distractor_rate: float = 0.40,
-                      missing_function_rate: float = 0.20,
+                      missing_function_rate: float = 1500 / (10895 + 1500),
                       ) -> list[LiveTask]:
         tasks: list[LiveTask] = []
         if server_name == "all":
@@ -1518,11 +1252,26 @@ class TaskOrchestrator:
         unknown = [s for s in servers if s not in self.manager.server_names]
         if unknown:
             raise ValueError(f"unknown servers: {unknown}")
+        # Small shards may have fewer rows than domains. Rotate which domains
+        # receive the remainder using the launcher client seed stride so the
+        # merged candidate pool remains domain-balanced.
+        if server_name == "all" and len(servers) > 1:
+            stride_raw = os.environ.get("GENERATION_CLIENT_SEED_STRIDE", "1000000")
+            try:
+                stride = max(1, int(stride_raw))
+            except ValueError:
+                stride = 1000000
+            rotation = (seed // stride) % len(servers)
+            servers = servers[rotation:] + servers[:rotation]
 
         effective_mix = difficulty_mix or {"complete": 0.6, "missing": 0.2, "minimal": 0.2}
 
-        # Pre-count irrelevance tasks (proportional, no forced minimum)
-        n_irrelevant = round(count * irrelevance_ratio) if irrelevance_ratio > 0 else 0
+        # Sample per candidate instead of rounding per process. Rounding small
+        # shards independently makes a 5% global ratio collapse to zero.
+        n_irrelevant = sum(
+            random.Random(seed + i).random() < irrelevance_ratio
+            for i in range(count)
+        ) if irrelevance_ratio > 0 else 0
         n_normal = count - n_irrelevant
 
         # Per-domain budget: each domain gets its fair share (PROVE uniform distribution)
@@ -1530,12 +1279,6 @@ class TaskOrchestrator:
         remainder = n_normal % len(servers)
         global_seed_offset = 0
         failed = 0
-        # Deduplicate by first user query string before sequence-level dedup,
-        # since identical user requests are semantically duplicate tasks even
-        # if later oracle details differ slightly.
-        seen_queries: set[str] = set()
-        dropped_dup_query = 0
-
         # ── tqdm progress bar ──
         try:
             from tqdm import tqdm as _tqdm
@@ -1598,74 +1341,68 @@ class TaskOrchestrator:
         max_workers = min(configured_workers, max(1, len(servers)))
         domain_ok: dict[str, int] = {s: 0 for s in servers}
         domain_failed_count: dict[str, int] = {s: 0 for s in servers}
-        seen_lock = threading.Lock()
+        submitted_futures = 0
+        completed_futures = 0
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures: dict[Any, tuple[str, int]] = {}
-            for server_name, task_seed, difficulty in task_specs:
-                fut = executor.submit(
-                    self._generate_task_with_postprocess,
-                    server_name, task_seed, difficulty,
-                    distractor_rate, missing_function_rate,
-                )
-                futures[fut] = (server_name, task_seed)
+            spec_index = 0
 
-            for fut in as_completed(futures):
-                server_name, task_seed = futures[fut]
-
-                # Skip domains that already hit quota or max failures
-                if domain_ok[server_name] >= domain_quotas[server_name]:
-                    continue
-                if domain_failed_count[server_name] >= domain_max_failures[server_name]:
-                    continue
-
-                try:
-                    task = fut.result()
-                except Exception as e:
-                    failed += 1
-                    domain_failed_count[server_name] += 1
-                    if pbar:
-                        pbar.set_postfix_str(f"fail={failed}")
-                    logger.warning(
-                        f"generate failed for {server_name} "
-                        f"(seed={task_seed}, {domain_failed_count[server_name]}x): {e}"
+            def submit_until_full() -> None:
+                nonlocal spec_index, submitted_futures
+                while len(futures) < max_workers and spec_index < len(task_specs):
+                    current_server, task_seed, difficulty = task_specs[spec_index]
+                    spec_index += 1
+                    if domain_ok[current_server] >= domain_quotas[current_server]:
+                        continue
+                    if domain_failed_count[current_server] >= domain_max_failures[current_server]:
+                        continue
+                    fut = executor.submit(
+                        self._generate_task_with_postprocess,
+                        current_server, task_seed, difficulty,
+                        distractor_rate, missing_function_rate,
                     )
-                    continue
+                    futures[fut] = (current_server, task_seed)
+                    submitted_futures += 1
 
-                if task is None:
-                    failed += 1
-                    domain_failed_count[server_name] += 1
-                    if pbar:
-                        pbar.set_postfix_str(f"fail={failed}")
-                    continue
-
-                q_key = (task.user_prompt or "").strip().lower()
-                with seen_lock:
-                    if q_key and q_key in seen_queries:
-                        dropped_dup_query += 1
-                        logger.debug(
-                            f"{server_name}: dropping duplicate query "
-                            f"(seen #{dropped_dup_query}): {q_key[:80]}"
+            submit_until_full()
+            while futures:
+                done, _ = wait(tuple(futures), return_when=FIRST_COMPLETED)
+                for fut in done:
+                    completed_futures += 1
+                    current_server, task_seed = futures.pop(fut)
+                    try:
+                        task = fut.result()
+                    except Exception as e:
+                        failed += 1
+                        domain_failed_count[current_server] += 1
+                        logger.warning(
+                            f"generate failed for {current_server} "
+                            f"(seed={task_seed}, {domain_failed_count[current_server]}x): {e}"
                         )
                         continue
-                    if q_key:
-                        seen_queries.add(q_key)
-
-                tasks.append(task)
-                domain_ok[server_name] += 1
-                if pbar:
-                    pbar.update(1)
-                    pbar.set_postfix_str(f"fail={failed}")
-                # Loguru progress: every task with elapsed time & completion %
-                elapsed = time.time() - _gen_start
-                pct = len(tasks) * 100.0 / n_normal if n_normal > 0 else 0
-                if len(tasks) - _last_log >= 1:
-                    _last_log = len(tasks)
-                    logger.info(
-                        f"[generate_many] {len(tasks)}/{n_normal} ({pct:.0f}%) "
-                        f"| {failed} fail | elapsed={elapsed:.0f}s "
-                        f"| rate={len(tasks)/elapsed:.2f} task/s"
-                    )
+                    if task is None:
+                        failed += 1
+                        domain_failed_count[current_server] += 1
+                        continue
+                    if domain_ok[current_server] >= domain_quotas[current_server]:
+                        continue
+                    tasks.append(task)
+                    domain_ok[current_server] += 1
+                    if pbar:
+                        pbar.update(1)
+                        pbar.set_postfix_str(f"fail={failed}")
+                    elapsed = time.time() - _gen_start
+                    pct = len(tasks) * 100.0 / n_normal if n_normal > 0 else 0
+                    if len(tasks) - _last_log >= 1:
+                        _last_log = len(tasks)
+                        logger.info(
+                            f"[generate_many] {len(tasks)}/{n_normal} ({pct:.0f}%) "
+                            f"| submitted={submitted_futures} completed={completed_futures} "
+                            f"| {failed} fail | elapsed={elapsed:.0f}s "
+                            f"| rate={len(tasks)/elapsed:.2f} task/s"
+                        )
+                submit_until_full()
 
         if pbar:
             pbar.close()
@@ -1729,7 +1466,8 @@ class TaskOrchestrator:
 
         logger.info(
             f"LLM teacher: {len(tasks)} tasks (target {count}, {failed} failures, "
-            f"{removed} dedup removed, {dropped_dup_query} dup-query dropped)"
+            f"submitted={submitted_futures}, completed={completed_futures}, "
+            f"{removed} dedup removed)"
         )
         return tasks
 
@@ -1973,8 +1711,15 @@ class TaskOrchestrator:
         return next(iter(sorted(difficulty_mix)))
 
     @staticmethod
-    def _tool_schema_hash(server_tools: list[dict]) -> str:
-        """Stable schema hash for PROVE dependency-graph caching."""
+    def _tool_schema_hash(
+        server_tools: list[dict], server_name: str | None = None,
+    ) -> str:
+        """Hash tool schemas plus dependency-classification semantics.
+
+        PROVE caches the pairwise LLM graph against the tool schema. Handler
+        implementation changes affect live feasibility/execution, not the
+        cached classifier output.
+        """
         schema_payload = []
         for tool in sorted(server_tools, key=lambda t: str(t.get("name", ""))):
             schema_payload.append({
@@ -1983,7 +1728,11 @@ class TaskOrchestrator:
                 "input_schema": tool.get("input_schema", {}),
                 "annotations": tool.get("annotations", {}),
             })
-        raw = json.dumps(schema_payload, sort_keys=True, ensure_ascii=True, default=str)
+        payload: dict[str, Any] = {
+            "schema": schema_payload,
+            "dependency_semantics_version": TaskOrchestrator.DEPENDENCY_SEMANTICS_VERSION,
+        }
+        raw = json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
     @staticmethod
@@ -2075,19 +1824,18 @@ class TaskOrchestrator:
             graph = payload.get("graph") if isinstance(payload, dict) else None
             expected_tool_names = sorted(t.get("name", "") for t in server_tools)
             cached_tool_names = payload.get("tool_names") if isinstance(payload, dict) else None
-            expected_pair_count = len(expected_tool_names) * (len(expected_tool_names) - 1) // 2
+            expected_pair_count = len(expected_tool_names) * (len(expected_tool_names) - 1)
             classification_complete = bool(
                 isinstance(payload, dict)
                 and payload.get("cache_version") == self.DEPENDENCY_CACHE_VERSION
+                and payload.get("dependency_semantics_version")
+                    == self.DEPENDENCY_SEMANTICS_VERSION
                 and payload.get("classification_complete") is True
                 and payload.get("expected_pair_count") == expected_pair_count
                 and payload.get("classified_pair_count") == expected_pair_count
-                and payload.get("deterministic_augmentation")
-                    == self.ENABLE_DETERMINISTIC_GRAPH_AUGMENTATION
             )
             if isinstance(graph, dict) and cached_tool_names == expected_tool_names:
                 graph = self._normalize_cached_graph(graph, expected_tool_names)
-                _break_graph_cycles(graph)
             if (
                 isinstance(payload, dict)
                 and payload.get("schema_hash") == schema_hash
@@ -2116,9 +1864,7 @@ class TaskOrchestrator:
         """Persist PROVE's per-environment graph cache keyed by tool schema."""
         expected_tool_names = sorted(t.get("name", "") for t in server_tools)
         graph = self._normalize_cached_graph(graph, expected_tool_names)
-        # The LLM-classified edges were already normalized and filtered inside
-        # _classify_edges_llm. Optional deterministic augmentation, when enabled
-        # for an ablation, is recorded explicitly in cache metadata.
+        # Preserve the complete normalized pairwise LLM classification.
         if not self._valid_cached_graph(graph, expected_tool_names):
             logger.warning(f"Skipping invalid dependency graph cache for {server_name}")
             return
@@ -2126,15 +1872,15 @@ class TaskOrchestrator:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "cache_version": self.DEPENDENCY_CACHE_VERSION,
+            "dependency_semantics_version": self.DEPENDENCY_SEMANTICS_VERSION,
             "server_name": server_name,
             "schema_hash": schema_hash,
             "tool_names": expected_tool_names,
             "graph": graph,
             "tool_count": len(expected_tool_names),
-            "expected_pair_count": len(expected_tool_names) * (len(expected_tool_names) - 1) // 2,
-            "classified_pair_count": len(expected_tool_names) * (len(expected_tool_names) - 1) // 2,
+            "expected_pair_count": len(expected_tool_names) * (len(expected_tool_names) - 1),
+            "classified_pair_count": len(expected_tool_names) * (len(expected_tool_names) - 1),
             "classification_complete": True,
-            "deterministic_augmentation": self.ENABLE_DETERMINISTIC_GRAPH_AUGMENTATION,
         }
         serialized = json.dumps(payload, indent=2, ensure_ascii=False)
         temp_fd, temp_name = tempfile.mkstemp(
@@ -2164,8 +1910,7 @@ class TaskOrchestrator:
 
         Probe the live MCP server for tool schemas, load the schema-hash graph
         cache when available, and otherwise ask the teacher LLM to classify
-        every unordered tool pair as explicit, implicit, or none, with the
-        classifier choosing the directed edge when a dependency exists.
+        every ordered tool pair as explicit, implicit, or none.
         """
         session = self.manager.create_session(seed=0)
         try:
@@ -2180,7 +1925,7 @@ class TaskOrchestrator:
             self.manager.close_session(session.session_id)
             return {}
 
-        schema_hash = self._tool_schema_hash(server_tools)
+        schema_hash = self._tool_schema_hash(server_tools, server_name)
         try:
             cached = self._maybe_load_cached_graph(server_name, schema_hash, server_tools)
             if cached is not None:
@@ -2218,31 +1963,11 @@ class TaskOrchestrator:
                 if graph is None:
                     failure_message = (
                         f"Pairwise dependency classification incomplete for {server_name}; "
-                        f"refusing deterministic-only fallback"
+                        f"refusing incomplete graph"
                     )
                     failures[failure_key] = (time.monotonic(), failure_message)
                     raise RuntimeError(failure_message)
 
-                det = (
-                    _deterministic_schema_edges(server_tools, server_name)
-                    if self.ENABLE_DETERMINISTIC_GRAPH_AUGMENTATION
-                    else {}
-                )
-                for src, edge_info in det.items():
-                    if src not in graph:
-                        graph[src] = edge_info
-                    else:
-                        ex = set(graph[src].get("explicit", []))
-                        im = set(graph[src].get("implicit", []))
-                        graph[src] = {
-                            "explicit": sorted(ex | set(edge_info.get("explicit", []))),
-                            "implicit": sorted(
-                                (im | set(edge_info.get("implicit", []))) - ex
-                            ),
-                        }
-
-                # Pairwise decisions can still form cycles across batches.
-                _break_graph_cycles(graph, det)
                 self._save_cached_graph(
                     server_name, schema_hash, server_tools, graph,
                 )
@@ -2257,9 +1982,8 @@ class TaskOrchestrator:
     ) -> dict | None:
         """PROVE §3.2 Step 1: LLM-based pairwise tool relationship classification.
 
-        Sends all unordered nC2 tool pairs to the LLM in batches. For each
-        pair, the classifier chooses a single dependency direction or none,
-        yielding a directed graph.
+        Sends all ordered n(n-1) tool pairs to the LLM in batches. Each A → B
+        pair is independently classified as explicit, implicit, or none.
 
         Returns a graph dict with the same structure as _probe_dependency_graph,
         or None if LLM classification fails.
@@ -2297,23 +2021,22 @@ class TaskOrchestrator:
         pairs = [
             (tool_names[i], tool_names[j])
             for i in range(len(tool_names))
-            for j in range(i + 1, len(tool_names))
+            for j in range(len(tool_names))
+            if i != j
         ]
         logger.debug(
             f"_classify_edges_llm: {server_name} classifying {len(pairs)} "
-            f"unordered tool pairs"
+            f"ordered tool pairs"
         )
 
         # Batch pairs to fit LLM context and bound single-request decode time.
-        # This remains PROVE-style pairwise LLM classification over all nC2
-        # pairs; each request just carries the schemas needed for its batch.
+        # This remains PROVE-style pairwise LLM classification over all ordered
+        # n(n-1) pairs; each request carries only the schemas for its batch.
         BATCH_SIZE = self.DEPENDENCY_PAIR_BATCH_SIZE
         all_classifications: dict[str, str] = {}  # "A → B" → "explicit"|"implicit"
         classified_pairs: set = set()
 
-        all_pair_keys: set[tuple[str, str]] = {
-            tuple(sorted((a, b))) for a, b in pairs
-        }
+        all_pair_keys: set[tuple[str, str]] = set(pairs)
         expected_pair_count = len(all_pair_keys)
         BATCH_RETRIES = 2
 
@@ -2337,7 +2060,7 @@ class TaskOrchestrator:
                 pair_text = str(entry.get("pair") or "")
                 pair_parts = [
                     part.strip()
-                    for part in re.split(r"\s*(?:↔|→)\s*", pair_text, maxsplit=1)
+                    for part in re.split(r"\s*→\s*", pair_text, maxsplit=1)
                 ]
                 pair_members = (
                     pair_parts
@@ -2354,52 +2077,46 @@ class TaskOrchestrator:
                     pair_members = [source, target]
                 if not pair_members:
                     continue
-                pair_key = tuple(sorted(pair_members))
+                pair_key = tuple(pair_members)
                 if pair_key not in valid_pairs or pair_key in classified_pairs:
                     continue
 
-                # A none relation is undirected. Some models correctly emit
-                # source="none", target="none"; pair identifies the tools.
                 if relation == "none":
                     classified_pairs.add(pair_key)
                     continue
 
                 if source not in tool_desc_by_name or target not in tool_desc_by_name:
                     continue
-                if source == target or {source, target} != set(pair_members):
+                if source != pair_members[0] or target != pair_members[1]:
                     continue
                 classified_pairs.add(pair_key)
                 all_classifications[f"{source} → {target}"] = relation
 
         for batch_start in range(0, len(pairs), BATCH_SIZE):
             batch_pairs = pairs[batch_start:batch_start + BATCH_SIZE]
-            valid_batch_pairs = {tuple(sorted(pair)) for pair in batch_pairs}
+            valid_batch_pairs = set(batch_pairs)
 
             system = (
                 "You are analyzing tool dependencies for an MCP server. "
-                "For each unordered tool pair {A, B}, choose at most ONE directed "
-                "dependency edge:\n"
+                "For each ordered tool pair A → B, classify whether A is a "
+                "dependency of B:\n"
                 '- "explicit": source produces output that is a REQUIRED INPUT of target '
                 "(e.g., source returns an entity ID that target needs as a parameter).\n"
                 '- "implicit": source must execute BEFORE target to establish state, '
                 "but source's output is not a direct input to target.\n"
-                '- "none": neither direction is a dependency.\n\n'
+                '- "none": A is not a dependency of B.\n\n'
                 "Classification rules:\n"
-                "- If one tool creates/returns something that the other tool's "
-                "required parameters reference, choose that direction and mark explicit.\n"
+                "- If A creates/returns something that B's required parameters "
+                "reference, mark explicit.\n"
                 "- Mark implicit only when source establishes live server state that target "
                 "cannot succeed without, such as create_draft → send_draft, "
                 "add_to_cart → checkout, or schedule_transfer → cancel_transfer.\n"
+                "- If B can succeed with the same arguments and pre-existing server state "
+                "without running A first, classify A → B as none. Mere topical relevance, "
+                "a useful recommendation, or a common workflow order is none.\n"
+                "- A read-only A is not an implicit dependency merely because its result is "
+                "helpful. It is explicit only when B requires a value produced by A.\n"
                 "- Prefer explicit over implicit when both could apply.\n"
-                "- Direction matters: if B is merely a later read, verification, "
-                "history lookup, or same-entity follow-up after A, mark none unless "
-                "B truly requires state created by A.\n"
-                "- Read-after-write/audit-after-write is usually none: "
-                "pay_invoice → get_invoice, dispute_invoice → get_invoice, "
-                "bill_pay → get_history, mark_read → get_email, and "
-                "add_attendee → list_events are none unless B requires a new ID "
-                "that only A created.\n"
-                "- Same entity type alone is NOT a dependency.\n"
                 "- Only mark implicit if there is a genuine required state dependency."
             )
             batch_complete = False
@@ -2409,7 +2126,7 @@ class TaskOrchestrator:
                 # never fill truncated/omitted tail entries.
                 pending_pairs = [
                     pair for pair in batch_pairs
-                    if tuple(sorted(pair)) not in classified_pairs
+                    if pair not in classified_pairs
                 ]
                 pending_tool_names = sorted({
                     name for pair in pending_pairs for name in pair
@@ -2420,7 +2137,7 @@ class TaskOrchestrator:
                     if name in tool_desc_by_name
                 )
                 pending_pairs_text = "\n".join(
-                    f"{i + 1}. {a_name} ↔ {b_name}"
+                    f"{i + 1}. {a_name} → {b_name}"
                     for i, (a_name, b_name) in enumerate(pending_pairs)
                 )
                 user = (
@@ -2430,9 +2147,9 @@ class TaskOrchestrator:
                     f"Classify every listed pair exactly once. Do not omit any pair.\n\n"
                     f"## Output Format\n"
                     f'{{"classifications": [\n'
-                    f'  {{"pair": "tool_a ↔ tool_b", "source": "tool_a", "target": "tool_b", "relation": "explicit"}},\n'
-                    f'  {{"pair": "tool_c ↔ tool_d", "source": "tool_d", "target": "tool_c", "relation": "implicit"}},\n'
-                    f'  {{"pair": "tool_e ↔ tool_f", "source": "tool_e", "target": "tool_f", "relation": "none"}}\n'
+                    f'  {{"pair": "tool_a → tool_b", "source": "tool_a", "target": "tool_b", "relation": "explicit"}},\n'
+                    f'  {{"pair": "tool_c → tool_d", "source": "tool_c", "target": "tool_d", "relation": "implicit"}},\n'
+                    f'  {{"pair": "tool_e → tool_f", "source": "tool_e", "target": "tool_f", "relation": "none"}}\n'
                     f']}}\n\n'
                     f"Output ONLY the JSON, nothing else:"
                 )
@@ -2441,7 +2158,7 @@ class TaskOrchestrator:
                         [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
                         temperature=0.1 + 0.05 * batch_attempt,
-                        max_tokens=2048,
+                        max_tokens=self.DEPENDENCY_CLASSIFICATION_MAX_TOKENS,
                     )
                     _consume_classifications(_extract_json(raw), valid_batch_pairs)
                 except Exception as e:
@@ -2467,7 +2184,7 @@ class TaskOrchestrator:
                 return None
 
         # P1-1: completeness gate — refuse to return an incomplete graph.
-        # Expected: n(n-1)/2 unordered pairs, each must get exactly one
+        # Expected: n(n-1) ordered pairs, each must get exactly one
         # classification (explicit, implicit, or none).
         if len(classified_pairs) != expected_pair_count:
             logger.warning(
@@ -2492,63 +2209,10 @@ class TaskOrchestrator:
                     elif relation == "implicit":
                         graph[a_name]["implicit"].append(b_name)
 
-        self._apply_prove_dependency_definition_filter(graph, server_tools, server_name)
+        # Return the complete pairwise LLM classification. Build/load preserves
+        # these LLM edges; handler facts are applied only when candidate chains
+        # are checked against live state and execution.
         return graph
-
-    @staticmethod
-    def _apply_prove_dependency_definition_filter(
-        graph: dict[str, dict],
-        server_tools: list[dict],
-        server_name: str,
-    ) -> None:
-        """Enforce PROVE's explicit/implicit dependency definitions.
-
-        The LLM classifier proposes edges, but a same-entity read after a write
-        is not a dependency unless the read requires an entity that the write
-        created. Likewise, a target with no required state/input cannot depend
-        on a prior tool under PROVE's definitions.
-        """
-        tool_by_name = {str(tool.get("name") or ""): tool for tool in server_tools}
-
-        def is_mutating(tool_name: str) -> bool:
-            annotations = tool_by_name.get(tool_name, {}).get("annotations") or {}
-            return bool(annotations.get("mutating")) and not bool(annotations.get("readonly"))
-
-        def is_readonly(tool_name: str) -> bool:
-            annotations = tool_by_name.get(tool_name, {}).get("annotations") or {}
-            return bool(annotations.get("readonly")) and not bool(annotations.get("mutating"))
-
-        for source, edge_groups in graph.items():
-            source_created = _CREATED_ENTITY_BY_TOOL.get(source.lower(), set())
-            source_relevant = _tool_relevant_entity_types(source, server_name)
-            for relation in ("explicit", "implicit"):
-                kept: list[str] = []
-                for target in edge_groups.get(relation, []):
-                    target_requirements = _tool_existing_entity_requirements(target, server_name)
-                    state_edge = (server_name, source, target) in _PROVE_STATE_DEPENDENCY_EDGES
-
-                    # State-dependency edges bypass entity checks entirely
-                    if state_edge:
-                        kept.append(target)
-                        continue
-
-                    if not target_requirements:
-                        continue
-
-                    source_satisfies_target = bool(source_created & target_requirements)
-                    observable_read_satisfies_target = (
-                        is_readonly(source)
-                        and bool(source_relevant & target_requirements)
-                    )
-
-                    if not (source_satisfies_target or observable_read_satisfies_target or state_edge):
-                        continue
-
-                    if is_mutating(source) and is_readonly(target) and not source_satisfies_target:
-                        continue
-
-                    kept.append(target)
-                edge_groups[relation] = kept
 
     def _extract_dependency_chains(self, server_name: str) -> list[list[str]]:
         """PROVE §6 step 2: extract length-2 to length-5 tool chains from dependency graph.
@@ -2710,12 +2374,17 @@ class TaskOrchestrator:
         # _live_context_to_prompt_state iterates qualified_entity_ids and needs
         # summaries at the same index — using raw entity_summaries would give
         # wrong summaries after filtering.
-        id_to_summary: dict[str, str] = {
-            str(entity_ids[i].get("id", "")): entity_summaries[i]
+        entity_key_to_summary: dict[tuple[str, str], str] = {
+            (
+                str(entity_ids[i].get("type", "")),
+                str(entity_ids[i].get("id", "")),
+            ): entity_summaries[i]
             for i in range(min(len(entity_ids), len(entity_summaries)))
         }
         qualified_summaries: list[str] = [
-            id_to_summary.get(str(q.get("id", "")), "")
+            entity_key_to_summary.get(
+                (str(q.get("type", "")), str(q.get("id", ""))), "",
+            )
             for q in qualified_ids
         ]
 
@@ -2880,17 +2549,6 @@ def _stable_state_hash(state: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _has_stale_year(arguments: dict[str, Any], reference_date: str) -> bool:
-    import re
-
-    match = re.search(r"\b(20\d{2})\b", reference_date or "")
-    if not match:
-        return False
-    reference_year = int(match.group(1))
-    raw = json.dumps(arguments, ensure_ascii=False, default=str)
-    return any(int(year) < reference_year for year in re.findall(r"\b(20\d{2})[-/]", raw))
-
-
 def _identity_policy_for_domain(domain: str) -> str:
     return {
         "calendar": "preserve",
@@ -3017,253 +2675,6 @@ _WRITE_INTENT_BY_PREFIX: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
 )
 
 
-def _tool_annotations(task: LiveTask, tool_name: str) -> dict[str, Any]:
-    for tool in task.visible_tools:
-        if tool.get("name") == tool_name:
-            annotations = tool.get("annotations") or {}
-            return annotations if isinstance(annotations, dict) else {}
-    return {}
-
-
-def _query_has_read_intent(query: str) -> bool:
-    q = f" {query.lower()} "
-    return any(f" {marker} " in q or marker in q for marker in _READ_INTENT_MARKERS)
-
-
-def _query_has_write_intent_for_tool(query: str, tool_name: str) -> bool:
-    q = f" {query.lower().replace('_', ' ')} "
-    name = tool_name.lower()
-    for prefixes, markers in _WRITE_INTENT_BY_PREFIX:
-        if any(name.startswith(prefix) for prefix in prefixes):
-            return any(f" {marker} " in q or marker in q for marker in markers)
-
-    # Unknown mutating tool shape.  Fall back to direct token overlap with the
-    # tool name so explicit requests such as "run foo_bar" are still eligible.
-    tool_tokens = [part for part in name.replace("_", " ").split() if len(part) > 2]
-    return bool(tool_tokens and all(token in q for token in tool_tokens))
-
-
-def _missing_function_candidate_is_semantically_required(
-    task: LiveTask,
-    hidden_tool: str,
-) -> bool:
-    """Return whether hiding hidden_tool creates a valid abstention task.
-
-    PROVE-style missing_function samples must be impossible because a required
-    tool is absent.  They must not turn a read-only request into report_error
-    just because the teacher trajectory happened to include an unrelated write
-    tool later in the conversation.
-    """
-    if not hidden_tool:
-        return False
-
-    oracle_calls = getattr(task.oracle_program, "calls", None) or []
-    if hidden_tool not in {
-        call.tool_name for call in oracle_calls
-        if getattr(call, "action", "tool_call") == "tool_call"
-    }:
-        return False
-
-    annotations = _tool_annotations(task, hidden_tool)
-    is_mutating = bool(annotations.get("mutating")) and not bool(annotations.get("readonly"))
-    if not is_mutating:
-        return True
-
-    # Check ALL conversation queries, not just the first round.
-    # In multi-round tasks, the write operation may only appear in a later
-    # query (e.g., round 1 is read-only, round 2 requests a payment).
-    queries_text: str = " ".join([
-        q for q in ([task.user_prompt or ""] + list(task.conversation_queries or []))
-        if q
-    ])
-
-    if _query_has_read_intent(queries_text) and not _query_has_write_intent_for_tool(queries_text, hidden_tool):
-        return False
-
-    return _query_has_write_intent_for_tool(queries_text, hidden_tool)
-
-
-def _remove_tool_from_dependency_hints(dep_hints: str, hidden_tool: str) -> str:
-    """Remove every dependency-hint line that exposes a hidden tool name."""
-    if not dep_hints or not hidden_tool:
-        return dep_hints
-    return "\n".join(
-        line for line in dep_hints.splitlines()
-        if hidden_tool not in line
-    )
-
-
-def _query_requires_hidden_capability(
-    query: str,
-    hidden_tool: str,
-    domain: str = "",
-) -> bool:
-    """Conservative lexical gate that proves the query asks for hidden capability."""
-    from src.live_mcp.task_planner import _chain_goal_phrase
-
-    q = query.lower().replace("_", " ")
-    name = hidden_tool.lower()
-    phrase = _chain_goal_phrase(name).lower()
-    entity_tokens = [
-        token for token in (name.replace("_", " ") + " " + phrase).split()
-        if len(token) > 3 and token not in {
-            "create", "update", "delete", "remove", "search", "list",
-            "check", "complete", "place", "existing", "details", "from",
-            "with", "into", "account", "calendar",
-        }
-    ]
-    entity_ok = any(
-        re.search(r'\b' + re.escape(token.rstrip("s")) + r'\b', q)
-        for token in entity_tokens
-    )
-    entity = _tool_entity(name, domain)
-    entity_aliases = {
-        "event": (
-            "event", "call", "meeting", "appointment", "invite",
-            "reservation", "session", "review",
-        ),
-        "order": ("order", "purchase", "delivery"),
-        "email": ("email", "mail", "message", "thread"),
-        "account": ("account", "card", "checking", "savings"),
-        "invoice": ("invoice", "bill", "payment"),
-        "issue": ("issue", "bug", "ticket", "task"),
-        "file": ("file", "folder", "directory", "path"),
-        "channel": ("channel", "room", "chat"),
-    }
-    if entity in entity_aliases:
-        entity_ok = entity_ok or any(alias in q for alias in entity_aliases[entity])
-
-    # Command-style filesystem tools do not follow verb_object naming, so the
-    # generic prefix gate below cannot recognize ordinary user wording.
-    if domain == "filesystem":
-        command_markers: dict[str, tuple[str, ...]] = {
-            "ls": ("list", "show", "what", "inside", "contents"),
-            "find": ("find", "search", "locate"),
-            "mkdir": ("create", "make", "new folder", "new directory"),
-            "touch": ("create", "make", "empty file", "new file"),
-            "cat": ("show", "read", "display", "content"),
-            "head": ("show", "read", "first", "top"),
-            "tail": ("show", "read", "last", "bottom"),
-            "sort": ("sort", "alphabetize", "order"),
-            "join": ("join", "merge", "combine"),
-            "readlink": ("link", "point", "target", "where"),
-            "grep": ("grep", "find", "search", "match"),
-            "pwd": ("current directory", "working directory", "where am i"),
-        }
-        markers = command_markers.get(name)
-        if markers is not None:
-            return any(marker in q for marker in markers)
-
-    action_groups: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
-        (("create_",), (
-            "create", "make", "start", "set up", "place", "schedule", "book", "plan",
-        )),
-        (("update_", "set_", "assign_", "transition_"), ("update", "change", "set", "assign", "move")),
-        (("delete_", "remove_", "clear_"), ("delete", "remove", "clear")),
-        (("cancel_",), ("cancel", "stop")),
-        (("add_",), ("add", "include", "put")),
-        (("send_", "reply_", "forward_"), ("send", "reply", "forward")),
-        (("pay_",), ("pay", "settle")),
-        (("refund_", "return_"), ("refund", "return")),
-        (("get_", "list_", "search_", "find_"), (
-            "get", "show", "list", "find", "search", "check", "what", "which",
-            "when", "next", "give me", "tell me", "details",
-        )),
-    )
-    action_ok = False
-    for prefixes, markers in action_groups:
-        if any(name.startswith(prefix) for prefix in prefixes):
-            action_ok = any(marker in q for marker in markers)
-            break
-    if name == "checkout":
-        action_ok = any(marker in q for marker in ("checkout", "place", "buy", "order", "purchase"))
-        entity_ok = "cart" in q or "order" in q or "item" in q
-    elif not action_ok and phrase:
-        action_ok = any(
-            token in q for token in phrase.split()
-            if len(token) > 4
-        )
-    if name.startswith(("get_", "list_", "search_", "find_")):
-        # Read requests can identify the object colloquially ("that call",
-        # "my order") without repeating the schema's entity noun.
-        return bool(action_ok)
-    return bool(action_ok and entity_ok)
-
-
-def _query_satisfies_chain_capability(
-    *,
-    query: str,
-    tool_name: str,
-    domain: str,
-    difficulty: str,
-    tool_schemas: list[dict[str, Any]],
-    live_context: dict[str, Any],
-) -> bool:
-    """Check action intent and complete-level live-ID grounding for one round."""
-    if not _query_requires_hidden_capability(query, tool_name, domain):
-        return False
-
-    return _query_has_required_live_entity_grounding(
-        query=query,
-        tool_name=tool_name,
-        domain=domain,
-        difficulty=difficulty,
-        tool_schemas=tool_schemas,
-        live_context=live_context,
-    )
-
-
-def _query_has_required_live_entity_grounding(
-    *,
-    query: str,
-    tool_name: str,
-    domain: str,
-    difficulty: str,
-    tool_schemas: list[dict[str, Any]],
-    live_context: dict[str, Any],
-) -> bool:
-    """Enforce only PROVE-relevant live-ID grounding, independent of wording."""
-
-    schema = next(
-        (tool for tool in tool_schemas if tool.get("name") == tool_name),
-        {},
-    )
-    required = list(schema.get("input_schema", {}).get("required", []) or [])
-
-    # Detect entity-reference fields: _id suffix OR field names that match
-    # known entity types for this tool's domain (e.g., "from_account" in banking,
-    # "product_ids" in shopping, "invoice_id" cross-domain).
-    entity_types = _tool_relevant_entity_types(tool_name, domain)
-    entity_patterns: set[str] = set()
-    for et in entity_types:
-        entity_patterns.update({et, et + "s", et + "_id"})
-    requires_entity_ref = any(
-        str(field).endswith("_id")
-        or any(pattern in str(field).lower() for pattern in entity_patterns)
-        for field in required
-    )
-    if not requires_entity_ref:
-        return True  # tool has no entity-reference params → gate passes
-
-    if difficulty != "complete":
-        # Non-complete tasks: still verify basic intent (done above).
-        # Don't enforce live-ID grounding since these tasks may use
-        # vague entity references by design.
-        return True
-
-    live_entity_ids = (
-        live_context.get("qualified_entity_ids")
-        if "qualified_entity_ids" in live_context
-        else live_context.get("entity_ids")
-    ) or []
-    known_ids = [
-        str(item.get("id") or "")
-        for item in live_entity_ids
-        if isinstance(item, dict) and item.get("id")
-    ]
-    return any(entity_id in query for entity_id in known_ids)
-
-
 def _classify_scenario(
     server_name: str,
     oracle_calls: list[OracleCall],
@@ -3291,7 +2702,7 @@ def _classify_scenario(
     real_calls_only = [c for c in oracle_calls
                        if getattr(c, "action", "tool_call") == "tool_call"]
 
-    if terminal_action == "ask_clarification" and not real_calls_only:
+    if terminal_action == "ask_clarification":
         return "clarification_required"
 
     if any(not step.get("success", True) and step.get("tool_name") != "__reject__"
@@ -3649,9 +3060,9 @@ _CREATED_ENTITY_BY_TOOL: dict[str, set[str]] = {
     "create_subtask": {"subtask"},
     "time_track": {"time_entry"},
     "add_to_cart": {"cart_item"},
-    "add_to_wishlist": {"wishlist"},
     "checkout": {"order"},
     "create_order": {"order"},
+    "reorder": {"order"},
     "return_order": {"return"},
     "create_channel": {"channel"},
     "send_message": {"message"},
@@ -3774,7 +3185,7 @@ _DOMAIN_TOOL_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
         "add_review": {"product"},
         "get_reviews": {"product"},
         "add_to_wishlist": {"product"},
-        "remove_from_wishlist": {"wishlist"},
+        "remove_from_wishlist": {"product"},
     },
     "team_chat": {
         "get_channel": {"channel"},
@@ -3900,220 +3311,66 @@ def _enrich_restaurant_menus(
 
 
 DOMAIN_ENTITY_QUALITY_FILTERS: dict[str, dict[str, Callable[..., tuple[bool, str]]]] = {
-    "banking": {
-        "account": lambda r: (
-            float(r.get("balance", 0)) > 0 and not bool(r.get("frozen", False)),
-            (
-                "account frozen"
-                if r.get("frozen")
-                else "balance is zero"
-            ),
-        ),
-    },
-    "shopping": {
-        "product": lambda r: (
-            bool(r.get("stock", r.get("available", r.get("in_stock", True)))) if any(
-                k in r for k in ("stock", "available", "in_stock")
-            ) else True,
-            "product out of stock or unavailable",
-        ),
-    },
-    "food_delivery": {
-        "restaurant": lambda r: (
-            bool(r.get("menu", r.get("items"))),
-            "restaurant menu is empty",
-        ),
-    },
-}
-
-
-_PROVE_STATE_DEPENDENCY_EDGES: set[tuple[str, str, str]] = {
-    ("banking", "freeze_account", "unfreeze_account"),
-    ("calendar", "add_attendee", "remove_attendee"),
-    ("payments", "pay_invoice", "refund_invoice"),
-    ("shopping", "add_to_wishlist", "remove_from_wishlist"),
-    ("issue_tracker", "add_label", "remove_label"),
-    ("issue_tracker", "add_watcher", "remove_watcher"),
-    # issue_tracker: sprint state ops on the same issue
-    ("issue_tracker", "add_to_sprint", "remove_from_sprint"),
-    # issue_tracker: time_track creates time_entry state; get_time_report reads
-    # it but has no required entity input so the filter would drop the edge.
-    ("issue_tracker", "time_track", "get_time_report"),
-    # email: draft is a state precondition for send_email; send_email's
-    # required inputs are to/subject/body (no draft_id), so this is implicit.
-    ("email", "create_draft", "send_email"),
-    # shopping: coupon → cart flow. get_coupons outputs `code` needed by
-    # apply_coupon; apply_coupon establishes cart discount state needed by
-    # checkout. Neither pair matches the entity table since apply_coupon
-    # doesn't create a cart_item and checkout requires cart_item.
-    ("shopping", "get_coupons", "apply_coupon"),
-    ("shopping", "apply_coupon", "checkout"),
-    # filesystem: read→compute chains that the entity filter incorrectly prunes
-    # because computational tools (grep/sed/awk) have file entity requirements
-    # but the source_relevant computation doesn't propagate correctly in all paths
-    ("filesystem", "ls", "cat"),
-    ("filesystem", "find", "cat"),
-    ("filesystem", "cat", "grep"),
-    ("filesystem", "cat", "sed"),
-    ("filesystem", "cat", "awk"),
-    ("filesystem", "touch", "cat"),
-    ("filesystem", "cd", "ls"),
-    ("filesystem", "cd", "pwd"),
+    # Global entity predicates deliberately remain empty. Whether a zero-
+    # balance account, out-of-stock product, or menu-less restaurant is usable
+    # depends on the selected tool chain. Chain-specific handler facts are
+    # enforced by _entity_record_satisfies_chain; unknown fields pass through
+    # to live execution/replay.
 }
 
 
 _DOMAIN_TOOL_RELEVANT: dict[str, dict[str, set[str]]] = {
-    "calendar": {
-        "list_events": {"event"},
-        "search_events": {"event"},
-        "get_free_busy": {"event"},
-        "check_conflicts": {"event"},
-    },
-    "banking": {
-        "list_accounts": {"account"},
-        "list_transactions": {"account"},
-        "get_exchange_rate": {"account"},
-        "apply_loan": {"account"},
-    },
-    "payments": {
-        "get_invoice": {"invoice", "payment"},
-        "list_invoices": {"invoice", "payment"},
-        "list_webhooks": {"webhook"},
-    },
-    "email": {
-        "list_inbox": {"email"},
-        "search_emails": {"email"},
-        "list_threads": {"thread"},
-        "list_drafts": {"draft"},
-        "create_draft": {"email", "draft"},
-    },
-    "filesystem": {
-        "pwd": {"file"},
-        "ls": {"file"},
-        "find": {"file"},
-        "tree": {"file"},
-        "du": {"file"},
-        "df": {"file"},
-        "sort": {"file"},
-        "uniq": {"file"},
-        "cut": {"file"},
-        "sed": {"file"},
-        "awk": {"file"},
-        "split": {"file"},
-        "diff": {"file"},
-        "readlink": {"file"},
-    },
+    "calendar": {"list_events": {"event"}, "search_events": {"event"}, "get_free_busy": {"event"}, "check_conflicts": {"event"}},
+    "banking": {"list_accounts": {"account"}, "list_transactions": {"account"}, "get_exchange_rate": {"account"}, "apply_loan": {"account"}},
+    "payments": {"get_invoice": {"invoice", "payment"}, "list_invoices": {"invoice", "payment"}, "list_webhooks": {"webhook"}},
+    "email": {"list_inbox": {"email"}, "search_emails": {"email"}, "list_threads": {"thread"}, "list_drafts": {"draft"}, "create_draft": {"email", "draft"}},
+    "filesystem": {name: {"file"} for name in (
+        "pwd", "ls", "find", "tree", "du", "df", "sort", "uniq", "cut",
+        "sed", "awk", "split", "diff", "readlink",
+    )},
     "crm": {
-        "list_leads": {"lead"},
-        "list_contacts": {"contact"},
-        "list_deals": {"deal"},
-        "list_tasks": {"task"},
+        "list_leads": {"lead"}, "list_contacts": {"contact"},
+        "list_deals": {"deal"}, "list_tasks": {"task"},
         "search_contacts": {"contact"},
         "create_deal": {"lead", "contact", "deal"},
         "create_task": {"deal", "contact", "task"},
         "add_note": {"lead", "contact", "deal", "note"},
     },
-    "issue_tracker": {
-        "list_issues": {"issue"},
-        "search_issues": {"issue"},
-        "list_sprints": {"sprint"},
-    },
+    "issue_tracker": {"list_issues": {"issue"}, "search_issues": {"issue"}, "list_sprints": {"sprint"}},
     "shopping": {
-        "search_products": {"product"},
-        "list_categories": {"product"},
-        "get_coupons": {"product"},
-        "apply_coupon": {"cart_item"},
+        "search_products": {"product"}, "list_categories": {"product"},
+        "get_coupons": {"product"}, "apply_coupon": {"cart_item"},
         "get_cart": {"cart_item", "product"},
         "get_wishlist": {"wishlist", "product"},
     },
-    "team_chat": {
-        "list_channels": {"channel"},
-        "get_user_status": {"user"},
-        "search_messages": {"channel", "message"},
-    },
-    "food_delivery": {
-        "search_restaurants": {"restaurant"},
-        "list_orders": {"order"},
-    },
+    "team_chat": {"list_channels": {"channel"}, "get_user_status": {"user"}, "search_messages": {"channel", "message"}},
+    "food_delivery": {"search_restaurants": {"restaurant"}, "list_orders": {"order"}},
 }
 
 
 _DISCOVERY_TOOL_PREFIXES = (
-    "list_",
-    "search_",
-    "get_free_busy",
-    "check_conflicts",
-    "get_working_hours",
-    "change_timezone",
-    "export_calendar",
-    "get_exchange_rate",
-    "list_categories",
-    "get_coupons",
-    "apply_coupon",
-    "get_wishlist",
-    "get_cart",
-    "get_time_report",
-    "get_user_status",
-    "pwd",
-    "ls",
-    "cat",
-    "stat",
-    "head",
-    "tail",
-    "find",
-    "grep",
-    "tree",
-    "du",
-    "df",
-    "file_info",
-    "md5sum",
-    "sha256sum",
-    "wc",
-    "xxd",
-    "sort",
-    "uniq",
-    "cut",
-    "sed",
-    "awk",
-    "split",
-    "diff",
-    "readlink",
+    "list_", "search_", "get_free_busy", "check_conflicts",
+    "get_working_hours", "change_timezone", "export_calendar",
+    "get_exchange_rate", "list_categories", "get_coupons", "apply_coupon",
+    "get_wishlist", "get_cart", "get_time_report", "get_user_status",
+    "pwd", "ls", "cat", "stat", "head", "tail", "find", "grep",
+    "tree", "du", "df", "file_info", "md5sum", "sha256sum", "wc",
+    "xxd", "sort", "uniq", "cut", "sed", "awk", "split", "diff",
 )
 
 
 _ENTITY_ID_FIELD_TYPES: dict[str, str] = {
-    "event_id": "event",
-    "account_id": "account",
-    "from_account": "account",
-    "to_account": "account",
-    "invoice_id": "invoice",
-    "payment_id": "payment",
-    "webhook_id": "webhook",
-    "refund_id": "refund",
-    "dispute_id": "dispute",
-    "email_id": "email",
-    "thread_id": "thread",
-    "draft_id": "draft",
-    "filter_id": "filter",
-    "lead_id": "lead",
-    "contact_id": "contact",
-    "deal_id": "deal",
-    "task_id": "task",
-    "note_id": "note",
-    "issue_id": "issue",
-    "sprint_id": "sprint",
-    "subtask_id": "subtask",
-    "entry_id": "time_entry",
-    "restaurant_id": "restaurant",
-    "order_id": "order",
-    "return_id": "return",
-    "product_id": "product",
-    "channel_id": "channel",
-    "message_id": "message",
-    "dm_id": "dm",
-    "ticket_id": "ticket",
-    "transfer_id": "scheduled_transfer",
-    "scheduled_txn_id": "scheduled_transfer",
+    "event_id": "event", "account_id": "account", "from_account": "account",
+    "to_account": "account", "invoice_id": "invoice", "payment_id": "payment",
+    "webhook_id": "webhook", "refund_id": "refund", "dispute_id": "dispute",
+    "email_id": "email", "thread_id": "thread", "draft_id": "draft",
+    "filter_id": "filter", "lead_id": "lead", "contact_id": "contact",
+    "deal_id": "deal", "task_id": "task", "note_id": "note",
+    "issue_id": "issue", "sprint_id": "sprint", "subtask_id": "subtask",
+    "entry_id": "time_entry", "restaurant_id": "restaurant", "order_id": "order",
+    "return_id": "return", "product_id": "product", "channel_id": "channel",
+    "message_id": "message", "dm_id": "dm", "ticket_id": "ticket",
+    "transfer_id": "scheduled_transfer", "scheduled_txn_id": "scheduled_transfer",
 }
 
 
@@ -4342,8 +3599,6 @@ def _tool_existing_entity_requirements(tool_name: str, server_name: str = "") ->
     tool = tool_name.lower()
     server = server_name.lower()
 
-    if tool.startswith(_DISCOVERY_TOOL_PREFIXES):
-        return set()
     if server:
         domain_requirements = _DOMAIN_TOOL_REQUIREMENTS.get(server, {})
         if tool in domain_requirements:
@@ -4351,8 +3606,16 @@ def _tool_existing_entity_requirements(tool_name: str, server_name: str = "") ->
             created = set(_CREATED_ENTITY_BY_TOOL.get(tool, set()))
             if server == "filesystem" and tool in {"cp", "mv"}:
                 created.discard("file")
+            if server == "filesystem" and tool == "readlink":
+                created.discard("file")
+            # reorder consumes an existing order and creates a different order.
+            # Its input requirement must not be erased by the shared type.
+            if server == "food_delivery" and tool == "reorder":
+                created.discard("order")
             requirements.difference_update(created)
             return requirements
+    if tool.startswith(_DISCOVERY_TOOL_PREFIXES):
+        return set()
     if tool.startswith("create_") and tool not in {
         "create_task", "create_deal", "create_thread", "create_subtask", "create_order"
     }:
@@ -4441,6 +3704,11 @@ def _tool_existing_entity_requirements(tool_name: str, server_name: str = "") ->
     if server_name == "filesystem" and tool in {"cp", "mv"}:
         created.discard("file")
     requirements.difference_update(created)
+    # readlink returns a target path, but that output does not create the
+    # symlink node consumed by the handler. It always requires an existing
+    # filesystem entity whose record type is symlink.
+    if server_name == "filesystem" and tool == "readlink":
+        requirements.add("file")
     return requirements
 
 
@@ -4507,7 +3775,45 @@ def _chain_is_feasible(
     server_name: str,
     live_context: dict[str, Any],
 ) -> tuple[bool, str]:
-    created_types: set[str] = set()
+    entity_source = (
+        live_context.get("qualified_entity_ids")
+        if "qualified_entity_ids" in live_context
+        else live_context.get("entity_ids", [])
+    ) or []
+    record_source = (
+        live_context.get("qualified_entity_records")
+        if "qualified_entity_records" in live_context
+        else live_context.get("entity_records", [])
+    ) or []
+    records_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in record_source:
+        if not isinstance(item, dict):
+            continue
+        etype = str(item.get("type") or "")
+        eid = str(item.get("id") or "")
+        data = item.get("data")
+        if etype and eid:
+            records_by_key[(etype, eid)] = data if isinstance(data, dict) else {}
+
+    live_ids_by_type: dict[str, set[str]] = {}
+    for item in entity_source:
+        if isinstance(item, dict) and item.get("type") and item.get("id"):
+            etype = str(item["type"])
+            eid = str(item["id"])
+            if _entity_record_satisfies_chain(
+                server_name=server_name,
+                chain_seed=chain,
+                etype=etype,
+                record=records_by_key.get((etype, eid), {}),
+            ):
+                live_ids_by_type.setdefault(etype, set()).add(eid)
+    created_counts: dict[str, int] = {}
+    minimum_cardinality = {
+        ("banking", "transfer", "account"): 2,
+        ("banking", "schedule_transfer", "account"): 2,
+        ("filesystem", "join", "file"): 2,
+        ("shopping", "compare_products", "product"): 2,
+    }
     for idx, tool_name in enumerate(chain):
         tool = tool_name.lower()
         requirements = _tool_existing_entity_requirements(tool, server_name)
@@ -4515,181 +3821,33 @@ def _chain_is_feasible(
         # the required entities (probed via read-only discovery tools).
         # A chain can start with a mutating tool (e.g., update_event) as
         # long as the entity exists in the live state.
-        missing = [
-            etype for etype in sorted(requirements)
-            if not _live_context_has_entity_type(live_context, etype, created_types)
-        ]
+        missing = []
+        for etype in sorted(requirements):
+            required_count = minimum_cardinality.get((server_name, tool, etype), 1)
+            available_count = len(live_ids_by_type.get(etype, set())) + created_counts.get(etype, 0)
+            if available_count < required_count:
+                missing.append(f"{etype}({available_count}/{required_count})")
         if missing:
             return False, f"{tool} requires missing entity types {missing}"
-        created_types.update(_CREATED_ENTITY_BY_TOOL.get(tool, set()))
+        for etype in _CREATED_ENTITY_BY_TOOL.get(tool, set()):
+            created_counts[etype] = created_counts.get(etype, 0) + 1
     return True, "ok"
 
 
-def _break_graph_cycles(
-    graph: dict[str, dict],
-    deterministic: dict[str, dict[str, list[str]]] | None = None,
-) -> None:
-    """Remove edges that create cycles, making the graph a DAG.
-
-    LLM pairwise classification can introduce bidirectional edges
-    (e.g. ls↔cd, mark_read↔mark_unread) that form 2-cycles, and
-    longer chains that loop back.  This function detects and breaks
-    all cycles by removing the weakest edge from each.
-
-    Strategy:
-      1. For bidirectional pairs (A↔B): when *deterministic* is provided,
-         prefer keeping deterministic edges over non-deterministic ones.
-         When neither or both directions are deterministic, fall back to
-         keeping the direction from the node with *fewer* total outgoing
-         edges (spoke→hub is more plausible than hub→spoke).
-      2. For longer cycles, iteratively run Kahn's topological sort
-         and remove one back edge at a time.
-    """
-    # ── Step 1: break bidirectional pairs ──
-    # Collect all edges
-    edges: set[tuple[str, str]] = set()
-    for src, node in graph.items():
-        for rel in ("explicit", "implicit"):
-            for tgt in node.get(rel, []):
-                if tgt in graph:
-                    edges.add((src, tgt))
-
-    # Build deterministic edge set for bidirectional preference
-    det_edges: set[tuple[str, str]] = set()
-    if deterministic:
-        for src, edge_info in deterministic.items():
-            for tgt in edge_info.get("explicit", []):
-                if src in graph and tgt in graph:
-                    det_edges.add((src, tgt))
-            for tgt in edge_info.get("implicit", []):
-                if src in graph and tgt in graph:
-                    det_edges.add((src, tgt))
-
-    # Find bidirectional pairs
-    bidir_pairs: set[tuple[str, str]] = set()  # (a, b) with a < b
-    for a, b in edges:
-        if (b, a) in edges:
-            bidir_pairs.add((min(a, b), max(a, b)))
-
-    for a, b in bidir_pairs:
-        # Preference order:
-        # 1. One direction is deterministic → keep that direction
-        # 2. Both or neither deterministic → keep direction with fewer outgoing edges
-        a_to_b_det: bool = (a, b) in det_edges
-        b_to_a_det: bool = (b, a) in det_edges
-        out_a = sum(
-            len(graph[a].get(rel, [])) for rel in ("explicit", "implicit")
-        )
-        out_b = sum(
-            len(graph[b].get(rel, [])) for rel in ("explicit", "implicit")
-        )
-
-        if a_to_b_det and not b_to_a_det:
-            # Keep a → b (deterministic), remove b → a
-            _remove_edge(graph, b, a)
-        elif b_to_a_det and not a_to_b_det:
-            # Keep b → a (deterministic), remove a → b
-            _remove_edge(graph, a, b)
-        elif out_a <= out_b:
-            # Neither or both deterministic: keep a → b, remove b → a
-            _remove_edge(graph, b, a)
-        else:
-            # Keep b → a, remove a → b
-            _remove_edge(graph, a, b)
-
-    # ── Step 2: break longer cycles via Kahn's algorithm ──
-    for _ in range(20):  # safety limit
-        in_degree: dict[str, int] = {n: 0 for n in graph}
-        adj: dict[str, list[str]] = {n: [] for n in graph}
-        for src, node in graph.items():
-            for rel in ("explicit", "implicit"):
-                for tgt in node.get(rel, []):
-                    if tgt in in_degree:
-                        in_degree[tgt] += 1
-                        adj[src].append(tgt)
-
-        # Kahn's topological sort
-        queue = [n for n, d in in_degree.items() if d == 0]
-        visited = 0
-        while queue:
-            n = queue.pop(0)
-            visited += 1
-            for nb in adj[n]:
-                in_degree[nb] -= 1
-                if in_degree[nb] == 0:
-                    queue.append(nb)
-
-        if visited >= len(graph):
-            break  # DAG achieved
-
-        # Find a back edge in the remaining cycle
-        remaining = [n for n in graph if in_degree.get(n, 0) > 0]
-        for n in remaining:
-            for rel in ("implicit", "explicit"):  # prefer removing implicit
-                targets = list(graph[n].get(rel, []))
-                for tgt in targets:
-                    if tgt in remaining:
-                        _remove_edge(graph, n, tgt)
-                        break
-                else:
-                    continue
-                break
-            else:
-                continue
-            break
-
-
-def _remove_edge(graph: dict[str, dict], src: str, tgt: str) -> None:
-    """Remove a directed edge from src to tgt."""
-    for rel in ("explicit", "implicit"):
-        if tgt in graph.get(src, {}).get(rel, []):
-            graph[src][rel] = [x for x in graph[src][rel] if x != tgt]
-            return
-
-
 def _chain_respects_state_preconditions(server_name: str, chain: list[str]) -> bool:
-    if server_name == "shopping":
-        # cart_item state can be established by an explicit add_to_cart, or
-        # observed via readonly get_cart, or acted on by apply_coupon — any of
-        # these earlier in the chain means the cart is non-empty for
-        # subsequent cart-consuming ops.
-        cart_state_producers = {"add_to_cart", "get_cart", "apply_coupon"}
-        cart_tools = {"checkout", "update_cart_quantity", "remove_from_cart", "clear_cart"}
-        for cart_tool in cart_tools:
-            if cart_tool in chain:
-                target_idx = chain.index(cart_tool)
-                if not any(p in chain[:target_idx] for p in cart_state_producers):
-                    return False
-
     if server_name == "payments":
+        if (
+            "pay_invoice" in chain and "cancel_payment" in chain
+            and chain.index("pay_invoice") < chain.index("cancel_payment")
+        ):
+            # pay_invoice creates a settled payment; cancel_payment accepts
+            # pending payments only.
+            return False
         if "create_invoice" in chain and "refund_invoice" in chain:
             create_idx = chain.index("create_invoice")
             refund_idx = chain.index("refund_invoice")
             if create_idx < refund_idx and "pay_invoice" not in chain[create_idx + 1:refund_idx]:
                 return False
-        # cancel_payment is the reversal of an *initiated* payment, so it
-        # must appear *after* a pay_invoice (or list/get_invoice observing
-        # an already-paid invoice). It cannot appear before pay_invoice, nor
-        # right after create_invoice without any payment initiation.
-        if "cancel_payment" in chain:
-            cancel_idx = chain.index("cancel_payment")
-            pay_producers = {"pay_invoice"}
-            if not any(p in chain[:cancel_idx] for p in pay_producers):
-                # No pay_invoice earlier → the chain reads as observation-only
-                # for cancel_payment; require at least list_invoices or
-                # get_invoice earlier to plausibly reference an existing
-                # payment id.
-                observers = {"list_invoices", "get_invoice"}
-                if not any(o in chain[:cancel_idx] for o in observers):
-                    return False
-
-    if server_name == "crm":
-        if "complete_task" in chain:
-            complete_idx = chain.index("complete_task")
-            before = chain[:complete_idx]
-            if "create_task" not in before and "list_tasks" not in before:
-                return False
-
     if server_name == "team_chat":
         if "create_channel" in chain:
             channel_idx = chain.index("create_channel")
@@ -4700,14 +3858,17 @@ def _chain_respects_state_preconditions(server_name: str, chain: list[str]) -> b
                         return False
 
     if server_name == "food_delivery":
-        if "cancel_order" in chain:
-            cancel_idx = chain.index("cancel_order")
-            if "create_order" not in chain[:cancel_idx]:
-                return False
-        if "track_rider" in chain:
-            track_idx = chain.index("track_rider")
-            if "create_order" not in chain[:track_idx]:
-                return False
+        # Both creators return a newly placed order.  With unique tools in a
+        # dependency path, at most one update_order_status can follow, which
+        # can only advance placed -> confirmed.  The new order therefore
+        # cannot reach delivering/delivered for track_rider/rate_order.
+        for creator in ("create_order", "reorder"):
+            if creator not in chain:
+                continue
+            create_idx = chain.index(creator)
+            for target in ("track_rider", "rate_order"):
+                if target in chain and create_idx < chain.index(target):
+                    return False
         if "cancel_order" in chain:
             cancel_idx = chain.index("cancel_order")
             for status_tool in ("rate_order", "track_rider", "update_order_status"):
@@ -4736,9 +3897,19 @@ def _extract_chain_context(
     if not live_context or not chain_seed:
         return {}
 
+    tools = set(chain_seed)
     relevant_types: set[str] = set()
     for tool_name in chain_seed:
         relevant_types.update(_tool_relevant_entity_types(tool_name, server_name))
+    # When an earlier chain step creates the entity consumed downstream, the
+    # query must ask for that creation rather than grounding the downstream
+    # action on an unrelated pre-existing ID of the same type.
+    creator_supplied_types: set[str] = set()
+    for tool_name in chain_seed[:-1]:
+        creator_supplied_types.update(
+            _CREATED_ENTITY_BY_TOOL.get(tool_name.lower(), set())
+        )
+    relevant_types -= creator_supplied_types
     if server_name == "payments" and "cancel_payment" not in chain_seed:
         relevant_types.discard("payment")
 
@@ -4793,7 +3964,19 @@ def _extract_chain_context(
             continue
         seen_entity_keys.add(key)
         entity_ids.append({"id": eid, "type": etype})
-        entity_summaries.append(summaries_by_key.get(key, f"  {eid} ({etype})"))
+        summary = summaries_by_key.get(key, f"  {eid} ({etype})")
+        if server_name == "food_delivery" and etype == "order" and "update_order_status" in tools:
+            lifecycle = {
+                "placed": ["confirmed", "cancelled"],
+                "confirmed": ["preparing", "cancelled"],
+                "preparing": ["delivering"],
+                "delivering": ["delivered"],
+                "delivered": [],
+                "cancelled": [],
+            }
+            status = str(record.get("status", ""))
+            summary = f"{summary}; allowed_next_status={lifecycle.get(status, [])}"
+        entity_summaries.append(summary)
         entity_records.append({"id": eid, "type": etype, "data": record})
     return {
         "entity_ids": entity_ids[:30],  # cap to avoid prompt overflow
@@ -4822,7 +4005,7 @@ def _entity_record_satisfies_chain(
         return True
     if server_name == "payments" and etype == "invoice":
         status = str(record.get("status", ""))
-        if "cancel_payment" in tools and str(record.get("payment_status", "")) != "pending":
+        if "cancel_payment" in tools and "payment_status" in record and str(record["payment_status"]) != "pending":
             return False
         pay_before_refund = (
             "pay_invoice" in tools
@@ -4831,464 +4014,122 @@ def _entity_record_satisfies_chain(
         )
         if "pay_invoice" in tools and status in {"paid", "refunded", "partially_refunded"}:
             return False
-        if "refund_invoice" in tools and not pay_before_refund:
+        if "refund_invoice" in tools and not pay_before_refund and "status" in record:
             if status not in {"paid", "partially_refunded"}:
                 return False
+        if "dispute_invoice" in tools and "status" in record:
+            if status not in {"paid", "pending"}:
+                return False
     if server_name == "payments" and etype == "payment":
-        if "cancel_payment" in tools and str(record.get("status", "")) != "pending":
+        if "cancel_payment" in tools and "status" in record and str(record["status"]) != "pending":
             return False
     if server_name == "food_delivery" and etype == "order":
         status = str(record.get("status", ""))
-        update_before_track = (
-            "update_order_status" in tools
-            and "track_rider" in tools
-            and chain_seed.index("update_order_status") < chain_seed.index("track_rider")
-        )
-        if "rate_order" in tools and status != "delivered":
-            return False
-        if "track_rider" in tools and not update_before_track and status != "delivering":
-            return False
-        if "cancel_order" in tools and status not in {"placed", "confirmed"}:
-            return False
-        if "update_order_status" in tools and status not in {"placed", "confirmed", "preparing", "delivering"}:
-            return False
-        if "add_tip" in tools and bool(record.get("tip", 0)):
-            return False
+        # reorder consumes this existing order, then downstream order tools use
+        # the newly-created placed order.  Source attributes such as status/tip
+        # must not be applied to that new entity.
+        reorder_idx = chain_seed.index("reorder") if "reorder" in tools else -1
+        if status and reorder_idx < 0:
+            lifecycle = {
+                "placed": {"confirmed", "cancelled"},
+                "confirmed": {"preparing", "cancelled"},
+                "preparing": {"delivering"},
+                "delivering": {"delivered"},
+                "delivered": set(),
+                "cancelled": set(),
+            }
+            possible_statuses = {status}
+            for tool_name in chain_seed:
+                if tool_name == "update_order_status":
+                    possible_statuses = {
+                        next_status
+                        for current in possible_statuses
+                        for next_status in lifecycle.get(current, set())
+                    }
+                elif tool_name == "cancel_order":
+                    possible_statuses = (
+                        {"cancelled"}
+                        if possible_statuses & {"placed", "confirmed"}
+                        else set()
+                    )
+                elif tool_name == "track_rider":
+                    possible_statuses &= {"delivering"}
+                elif tool_name == "rate_order":
+                    possible_statuses &= {"delivered"}
+                if not possible_statuses:
+                    return False
+        if "add_tip" in tools:
+            add_tip_idx = chain_seed.index("add_tip")
+            if reorder_idx < 0 or add_tip_idx < reorder_idx:
+                if bool(record.get("tip", 0)):
+                    return False
     if server_name == "shopping" and etype == "order":
         status = str(record.get("status", ""))
         if "return_order" in tools and status in {"returning", "returned"}:
             return False
+    if server_name == "shopping" and etype == "product":
+        if any(t in tools for t in {"add_to_cart", "add_to_wishlist", "checkout"}):
+            for field in ("stock", "available", "in_stock"):
+                if field in record and not bool(record[field]):
+                    return False
+                if field in record:
+                    break
+    if server_name == "food_delivery" and etype == "restaurant":
+        if "create_order" in tools:
+            menu = record.get("menu", record.get("items"))
+            if ("menu" in record or "items" in record) and not menu:
+                return False
+    if server_name == "banking" and etype == "account":
+        frozen = bool(record.get("frozen", False))
+        unfreeze_after_freeze = (
+            "freeze_account" in tools and "unfreeze_account" in tools
+            and chain_seed.index("freeze_account") < chain_seed.index("unfreeze_account")
+        )
+        if "unfreeze_account" in tools and not unfreeze_after_freeze and "frozen" in record and not frozen:
+            return False
+        if any(t in tools for t in {"withdraw", "deposit", "transfer"}) and frozen:
+            return False
+        if any(t in tools for t in {"withdraw", "transfer", "wire_transfer", "bill_pay"}):
+            if "balance" in record and float(record.get("balance", 0)) <= 0:
+                return False
+    if server_name == "calendar" and etype == "event":
+        if "get_recurring_info" in tools and "recurrence" in record and not record.get("recurrence"):
+            return False
+        attendee_produced = "add_attendee" in tools
+        if any(t in tools for t in {"remove_attendee", "respond_to_event"}):
+            if not attendee_produced and "attendees" in record and not record.get("attendees"):
+                return False
+    if server_name == "filesystem" and "readlink" in tools:
+        if "type" in record and str(record["type"]) not in {"symlink", "link"}:
+            return False
+    if server_name == "filesystem" and "tar_extract" in tools and etype == "file":
+        if "type" in record and str(record["type"]) != "file":
+            return False
+    if server_name == "filesystem" and "join" in tools and etype == "file":
+        if "type" in record and str(record["type"]) not in {"file", "symlink", "link"}:
+            return False
+    if server_name == "issue_tracker" and etype == "issue":
+        if "remove_watcher" in tools and "add_watcher" not in tools:
+            if "watchers" in record and not record.get("watchers"):
+                return False
+        if "remove_label" in tools and "add_label" not in tools:
+            if "labels" in record and not record.get("labels"):
+                return False
+        if "remove_from_sprint" in tools and "add_to_sprint" not in tools:
+            if "sprint_id" in record and not record.get("sprint_id"):
+                return False
+        if "transition_issue" in tools and str(record.get("state", "")) in {"closed", "cancelled"}:
+            return False
+    if server_name == "email" and etype == "email":
+        if "remove_label" in tools and "labels" in record and not record.get("labels"):
+            return False
+        if "mark_read" in tools and "read" in record and bool(record["read"]):
+            return False
+        if "mark_unread" in tools and "read" in record and not bool(record["read"]):
+            return False
+        if "archive_email" in tools and "archived" in record and bool(record["archived"]):
+            return False
+    if server_name == "crm" and etype == "task":
+        if "complete_task" in tools and str(record.get("status", "")) == "completed":
+            return False
     return True
-
-
-def _deterministic_schema_edges(
-    server_tools: list[dict],
-    server_name: str,
-) -> dict[str, dict[str, list[str]]]:
-    """Schema-based deterministic dependency edges (PROVE §3.2 Step 1 pre-pass).
-
-    LLM pairwise classification can miss obvious read-before-write edges.
-    This function injects known dependencies deterministically, ensuring
-    critical chains (get_lead→convert_lead, get_cart→checkout, etc.) are
-    never lost.
-    """
-    graph: dict[str, dict[str, list[str]]] = {}
-    names = set(t["name"] for t in server_tools)
-
-    def _add_explicit(src: str, dst: str) -> None:
-        if src in names and dst in names and src != dst:
-            node = graph.setdefault(src, {"explicit": [], "implicit": []})
-            if dst not in node["explicit"]:
-                node["explicit"].append(dst)
-
-    # Universal read-before-write patterns: get_E / list_Es / search_Es → {update_E, delete_E, ...}
-    _WRITE_SUFFIXES = {
-        "_event": ["update_event", "delete_event", "cancel_event"],
-        "_order": ["cancel_order", "return_order", "reorder"],
-        "_account": ["transfer", "wire_transfer", "bill_pay", "withdraw"],
-        "_invoice": ["pay_invoice", "refund_invoice", "cancel_payment"],
-        "_product": ["add_to_cart"],
-        "_issue": ["transition_issue", "update_issue", "assign_issue"],
-        "_lead": ["convert_lead", "update_lead"],
-        "_deal": ["update_deal"],
-        "_channel": ["archive_channel", "send_message"],
-        "_email": ["reply_email", "forward_email", "archive_email"],
-        "_contact": ["update_contact", "delete_contact"],
-        "_message": ["react_message", "create_thread"],
-        "_task": ["complete_task"],
-    }
-    for t in server_tools:
-        tname = t["name"]
-        entity_name: str | None = None
-        for prefix in ("get_", "list_", "search_", "create_"):
-            if tname.startswith(prefix):
-                entity_name = tname[len(prefix):]
-                break
-        if entity_name is None:
-            continue
-        # Normalize plural forms: list_events→event, list_categories→category
-        normalized = entity_name
-        if entity_name.endswith("ies"):
-            normalized = entity_name[:-3] + "y"
-        elif entity_name.endswith("s") and not entity_name.endswith("ss"):
-            normalized = entity_name[:-1]
-        for suffix, targets in _WRITE_SUFFIXES.items():
-            entity_type = suffix[1:]  # strip leading "_"
-            if normalized == entity_type or entity_name == entity_type:
-                for wt in targets:
-                    # For create_* tools, skip self-referential edges like create_event→update_event
-                    # when the target starts with the same prefix
-                    if tname.startswith("create_") and wt.startswith("create_"):
-                        continue
-                    _add_explicit(tname, wt)
-                break
-
-    # Domain-specific compound edges.
-    #
-    # All edges here are derived from ground-truth input schemas (see
-    # /tmp/tools_schema.json). Each edge satisfies at least one of:
-    #   * explicit: source output contains an id that is a required input of target
-    #   * implicit: source establishes an entity/state that target requires
-    # Edges that would violate _apply_prove_dependency_definition_filter are
-    # not added here; state-only edges go into _PROVE_STATE_DEPENDENCY_EDGES.
-    _EDGES: dict[str, list[tuple[str, str]]] = {
-        "shopping": [
-            ("search_products", "get_product"),
-            ("search_products", "get_reviews"),
-            ("search_products", "add_review"),
-            ("search_products", "compare_products"),
-            ("search_products", "add_to_cart"),
-            ("search_products", "add_to_wishlist"),
-            ("get_product", "get_reviews"),
-            ("get_product", "add_review"),
-            ("get_product", "compare_products"),
-            ("get_product", "add_to_cart"),
-            ("get_product", "add_to_wishlist"),
-            ("get_cart", "checkout"),
-            ("get_cart", "clear_cart"),
-            ("get_cart", "remove_from_cart"),
-            ("get_cart", "update_cart_quantity"),
-            ("add_to_cart", "update_cart_quantity"),
-            ("add_to_cart", "remove_from_cart"),
-            ("add_to_cart", "checkout"),
-            ("checkout", "get_order"),
-            ("checkout", "track_order"),
-            ("checkout", "return_order"),
-            ("list_orders", "get_order"),
-            ("list_orders", "track_order"),
-            ("list_orders", "return_order"),
-            ("get_order", "track_order"),
-            ("get_order", "return_order"),
-            ("return_order", "get_return_status"),
-            ("get_wishlist", "remove_from_wishlist"),
-            # State-dependency edges (whitelisted in _PROVE_STATE_DEPENDENCY_EDGES):
-            # coupon → cart flow. get_coupons outputs `code` consumed by
-            # apply_coupon; apply_coupon establishes cart discount state that
-            # checkout depends on.
-            ("get_coupons", "apply_coupon"),
-            ("apply_coupon", "checkout"),
-        ],
-        "calendar": [
-            ("search_events", "get_event"),
-            ("search_events", "update_event"),
-            ("search_events", "delete_event"),
-            ("search_events", "add_attendee"),
-            ("search_events", "remove_attendee"),
-            ("search_events", "set_reminder"),
-            ("search_events", "respond_to_event"),
-            ("search_events", "get_recurring_info"),
-            ("list_events", "get_event"),
-            ("list_events", "get_recurring_info"),
-            ("get_event", "update_event"),
-            ("get_event", "delete_event"),
-            ("get_event", "add_attendee"),
-            ("get_event", "remove_attendee"),
-            ("get_event", "set_reminder"),
-            ("get_event", "respond_to_event"),
-            ("get_event", "get_recurring_info"),
-            ("create_event", "get_event"),
-            ("create_event", "update_event"),
-            ("create_event", "delete_event"),
-            ("create_event", "add_attendee"),
-            ("create_event", "set_reminder"),
-            ("create_event", "respond_to_event"),
-            ("create_recurring", "get_event"),
-            ("create_recurring", "get_recurring_info"),
-            ("create_recurring", "add_attendee"),
-            ("create_recurring", "set_reminder"),
-            ("create_recurring", "respond_to_event"),
-            ("create_recurring", "update_event"),
-            ("create_recurring", "delete_event"),
-            ("add_attendee", "remove_attendee"),
-        ],
-        "email": [
-            ("list_inbox", "get_email"),
-            ("list_inbox", "reply_email"),
-            ("list_inbox", "forward_email"),
-            ("list_inbox", "archive_email"),
-            ("list_inbox", "mark_read"),
-            ("list_inbox", "mark_unread"),
-            ("list_inbox", "add_label"),
-            ("list_inbox", "remove_label"),
-            ("list_inbox", "get_attachments"),
-            ("list_inbox", "move_to_thread"),
-            ("search_emails", "get_email"),
-            ("search_emails", "reply_email"),
-            ("search_emails", "forward_email"),
-            ("search_emails", "archive_email"),
-            ("search_emails", "mark_read"),
-            ("search_emails", "mark_unread"),
-            ("search_emails", "add_label"),
-            ("search_emails", "remove_label"),
-            ("search_emails", "get_attachments"),
-            ("search_emails", "get_thread"),
-            ("search_emails", "move_to_thread"),
-            ("get_email", "reply_email"),
-            ("get_email", "forward_email"),
-            ("get_email", "archive_email"),
-            ("get_email", "mark_read"),
-            ("get_email", "mark_unread"),
-            ("get_email", "add_label"),
-            ("get_email", "remove_label"),
-            ("get_email", "get_attachments"),
-            ("get_email", "move_to_thread"),
-            ("add_label", "remove_label"),
-            ("mark_unread", "mark_read"),
-            ("mark_read", "mark_unread"),
-            # State-dependency edge (whitelisted):
-            # draft is a precondition for send_email even though send_email's
-            # required schema args are to/subject/body (no draft_id).
-            ("create_draft", "send_email"),
-        ],
-        "crm": [
-            ("list_leads", "update_lead"),
-            ("list_leads", "convert_lead"),
-            ("list_leads", "delete_lead"),
-            ("list_leads", "add_note"),
-            ("list_deals", "update_deal"),
-            ("list_deals", "get_deal"),
-            ("list_deals", "add_note"),
-            ("list_deals", "create_task"),
-            ("list_tasks", "complete_task"),
-            ("get_deal", "update_deal"),
-            ("get_deal", "add_note"),
-            ("get_deal", "create_task"),
-            ("create_lead", "convert_lead"),
-            ("create_lead", "update_lead"),
-            ("create_lead", "add_note"),
-            ("create_contact", "add_note"),
-            ("create_contact", "create_deal"),
-            ("create_contact", "update_contact"),
-            ("create_contact", "delete_contact"),
-            ("create_deal", "add_note"),
-            ("create_deal", "update_deal"),
-            ("create_deal", "create_task"),
-            ("create_task", "complete_task"),
-            ("convert_lead", "create_deal"),
-            ("convert_lead", "add_note"),
-            ("convert_lead", "update_contact"),
-            ("convert_lead", "delete_contact"),
-        ],
-        "issue_tracker": [
-            ("search_issues", "get_issue"),
-            ("search_issues", "update_issue"),
-            ("search_issues", "assign_issue"),
-            ("search_issues", "transition_issue"),
-            ("search_issues", "comment_issue"),
-            ("search_issues", "add_label"),
-            ("search_issues", "remove_label"),
-            ("search_issues", "add_watcher"),
-            ("search_issues", "remove_watcher"),
-            ("search_issues", "add_to_sprint"),
-            ("search_issues", "remove_from_sprint"),
-            ("search_issues", "create_subtask"),
-            ("search_issues", "list_subtasks"),
-            ("search_issues", "time_track"),
-            ("search_issues", "set_milestone"),
-            ("list_issues", "get_issue"),
-            ("list_issues", "update_issue"),
-            ("list_issues", "assign_issue"),
-            ("list_issues", "transition_issue"),
-            ("list_issues", "comment_issue"),
-            ("list_issues", "add_label"),
-            ("list_issues", "add_watcher"),
-            ("list_issues", "add_to_sprint"),
-            ("list_issues", "create_subtask"),
-            ("list_issues", "list_subtasks"),
-            ("list_issues", "time_track"),
-            ("list_issues", "set_milestone"),
-            ("get_issue", "update_issue"),
-            ("get_issue", "assign_issue"),
-            ("get_issue", "transition_issue"),
-            ("get_issue", "comment_issue"),
-            ("get_issue", "add_label"),
-            ("get_issue", "add_watcher"),
-            ("get_issue", "add_to_sprint"),
-            ("get_issue", "create_subtask"),
-            ("get_issue", "list_subtasks"),
-            ("get_issue", "time_track"),
-            ("get_issue", "set_milestone"),
-            ("create_issue", "get_issue"),
-            ("create_issue", "assign_issue"),
-            ("create_issue", "transition_issue"),
-            ("create_issue", "comment_issue"),
-            ("create_issue", "add_label"),
-            ("create_issue", "add_watcher"),
-            ("create_issue", "add_to_sprint"),
-            ("create_issue", "create_subtask"),
-            ("create_issue", "list_subtasks"),
-            ("create_issue", "time_track"),
-            ("create_issue", "set_milestone"),
-            ("create_issue", "update_issue"),
-            ("create_subtask", "list_subtasks"),
-            ("list_sprints", "add_to_sprint"),
-            ("create_sprint", "add_to_sprint"),
-            # State-dependency edges (whitelisted):
-            # sprint membership state, and time-tracking state feeding reports.
-            ("add_to_sprint", "remove_from_sprint"),
-            ("time_track", "get_time_report"),
-        ],
-        "filesystem": [
-            # ls / find / tree → any readonly analyzer that needs a path
-            ("ls", "cat"), ("ls", "head"), ("ls", "tail"), ("ls", "wc"),
-            ("ls", "stat"), ("ls", "file_info"), ("ls", "md5sum"),
-            ("ls", "sha256sum"), ("ls", "xxd"), ("ls", "sort"), ("ls", "uniq"),
-            ("ls", "cut"), ("ls", "sed"), ("ls", "awk"), ("ls", "split"),
-            ("ls", "readlink"), ("ls", "chmod"), ("ls", "chown"),
-            ("ls", "mv"), ("ls", "cp"), ("ls", "rm"), ("ls", "cd"),
-            ("ls", "truncate"), ("ls", "tar_create"), ("ls", "zip"),
-            ("find", "cat"), ("find", "head"), ("find", "tail"), ("find", "wc"),
-            ("find", "stat"), ("find", "file_info"), ("find", "md5sum"),
-            ("find", "sha256sum"), ("find", "xxd"), ("find", "sort"),
-            ("find", "uniq"), ("find", "cut"), ("find", "sed"), ("find", "awk"),
-            ("find", "split"), ("find", "readlink"), ("find", "chmod"),
-            ("find", "chown"), ("find", "mv"), ("find", "cp"), ("find", "rm"),
-            ("find", "truncate"), ("find", "tar_create"), ("find", "zip"),
-            ("ls", "symlink"), ("find", "symlink"),
-            ("ls", "join"), ("find", "join"),
-            ("tree", "cat"), ("tree", "cd"), ("tree", "ls"), ("tree", "rm"),
-            ("tree", "du"),
-            # cd / pwd navigation
-            ("cd", "ls"), ("cd", "pwd"), ("cd", "find"), ("cd", "tree"),
-            # cat / head / tail / stat as read-followed-by-write on the same file
-            ("cat", "rm"), ("cat", "chmod"), ("cat", "chown"), ("cat", "mv"),
-            ("cat", "cp"), ("cat", "grep"), ("cat", "sed"), ("cat", "awk"),
-            ("cat", "wc"),
-            ("stat", "chmod"), ("stat", "chown"), ("stat", "rm"), ("stat", "mv"),
-            ("head", "wc"), ("tail", "wc"),
-            # writer → observer on the created path
-            ("touch", "cat"), ("touch", "head"), ("touch", "tail"),
-            ("touch", "wc"), ("touch", "stat"), ("touch", "file_info"),
-            ("touch", "chmod"), ("touch", "chown"), ("touch", "rm"),
-            ("touch", "truncate"), ("touch", "md5sum"), ("touch", "sha256sum"),
-            ("mkdir", "ls"), ("mkdir", "cd"), ("mkdir", "touch"),
-            ("mkdir", "chmod"), ("mkdir", "chown"), ("mkdir", "rm"),
-            ("mkdir", "cp"), ("mkdir", "mv"),
-            ("cp", "ls"), ("cp", "cat"), ("cp", "stat"), ("cp", "rm"),
-            ("cp", "md5sum"), ("cp", "sha256sum"), ("cp", "diff"),
-            ("mv", "ls"), ("mv", "cat"), ("mv", "stat"), ("mv", "rm"),
-            ("mv", "chmod"), ("mv", "chown"),
-            # archive lifecycle
-            ("tar_create", "tar_extract"), ("tar_create", "md5sum"),
-            ("tar_create", "sha256sum"), ("tar_create", "rm"),
-            ("tar_create", "stat"),
-            ("zip", "unzip"), ("zip", "md5sum"), ("zip", "sha256sum"),
-            ("zip", "rm"), ("zip", "stat"),
-            # compute pipeline
-            ("sort", "uniq"), ("sort", "head"), ("sort", "tail"), ("sort", "wc"),
-            ("split", "ls"), ("split", "cat"), ("split", "wc"),
-            ("readlink", "cat"), ("readlink", "stat"), ("readlink", "ls"),
-            # misc
-            ("du", "rm"),
-        ],
-        "banking": [
-            ("list_accounts", "get_account_info"),
-            ("list_accounts", "get_balance"),
-            ("list_accounts", "get_history"),
-            ("list_accounts", "get_statement"),
-            ("list_accounts", "verify_account"),
-            ("list_accounts", "deposit"),
-            ("list_accounts", "withdraw"),
-            ("list_accounts", "transfer"),
-            ("list_accounts", "wire_transfer"),
-            ("list_accounts", "bill_pay"),
-            ("list_accounts", "schedule_transfer"),
-            ("list_accounts", "freeze_account"),
-            ("list_accounts", "apply_loan"),
-            ("get_account_info", "get_balance"),
-            ("get_account_info", "get_history"),
-            ("get_account_info", "get_statement"),
-            ("get_account_info", "verify_account"),
-            ("get_account_info", "deposit"),
-            ("get_account_info", "withdraw"),
-            ("get_account_info", "transfer"),
-            ("get_account_info", "bill_pay"),
-            ("get_account_info", "freeze_account"),
-            ("get_balance", "withdraw"),
-            ("get_balance", "transfer"),
-            ("get_balance", "bill_pay"),
-            ("verify_account", "wire_transfer"),
-            ("verify_account", "transfer"),
-            ("schedule_transfer", "cancel_transfer"),
-            ("freeze_account", "unfreeze_account"),
-        ],
-        "payments": [
-            ("list_invoices", "get_invoice"),
-            ("list_invoices", "pay_invoice"),
-            ("list_invoices", "refund_invoice"),
-            ("list_invoices", "dispute_invoice"),
-            ("get_invoice", "pay_invoice"),
-            ("get_invoice", "refund_invoice"),
-            ("get_invoice", "dispute_invoice"),
-            ("create_invoice", "get_invoice"),
-            ("create_invoice", "pay_invoice"),
-            ("create_invoice", "refund_invoice"),
-            ("create_invoice", "dispute_invoice"),
-            ("pay_invoice", "refund_invoice"),
-            ("pay_invoice", "cancel_payment"),
-            ("list_webhooks", "delete_webhook"),
-            ("create_webhook", "delete_webhook"),
-        ],
-        "team_chat": [
-            ("list_channels", "get_channel"),
-            ("list_channels", "archive_channel"),
-            ("list_channels", "send_message"),
-            ("list_channels", "search_messages"),
-            ("get_channel", "send_message"),
-            ("get_channel", "archive_channel"),
-            ("create_channel", "get_channel"),
-            ("create_channel", "send_message"),
-            ("create_channel", "archive_channel"),
-            ("search_messages", "react_message"),
-            ("search_messages", "create_thread"),
-            ("send_message", "react_message"),
-            ("send_message", "create_thread"),
-            ("create_thread", "get_thread"),
-        ],
-        "food_delivery": [
-            ("search_restaurants", "get_restaurant"),
-            ("search_restaurants", "get_menu"),
-            ("search_restaurants", "filter_by_dietary"),
-            ("search_restaurants", "get_popular_items"),
-            ("search_restaurants", "create_order"),
-            ("list_restaurants", "get_restaurant"),
-            ("list_restaurants", "get_menu"),
-            ("list_restaurants", "create_order"),
-            ("get_restaurant", "get_menu"),
-            ("get_restaurant", "filter_by_dietary"),
-            ("get_restaurant", "get_popular_items"),
-            ("get_restaurant", "create_order"),
-            ("get_menu", "create_order"),
-            ("get_popular_items", "create_order"),
-            ("filter_by_dietary", "create_order"),
-            ("create_order", "get_order"),
-            ("create_order", "get_estimated_time"),
-            ("create_order", "track_rider"),
-            ("create_order", "cancel_order"),
-            ("create_order", "add_tip"),
-            ("create_order", "rate_order"),
-            ("create_order", "contact_support"),
-            ("create_order", "update_order_status"),
-            ("list_orders", "get_order"),
-            ("list_orders", "cancel_order"),
-            ("list_orders", "reorder"),
-            ("list_orders", "rate_order"),
-            ("list_orders", "contact_support"),
-            ("list_orders", "update_order_status"),
-            ("list_orders", "track_rider"),
-            ("list_orders", "get_estimated_time"),
-            ("list_orders", "add_tip"),
-            ("get_order", "cancel_order"),
-            ("get_order", "add_tip"),
-            ("get_order", "rate_order"),
-            ("get_order", "track_rider"),
-            ("get_order", "get_estimated_time"),
-            ("get_order", "reorder"),
-            ("get_order", "contact_support"),
-            ("get_order", "update_order_status"),
-        ],
-    }
-    for src, dst in _EDGES.get(server_name, []):
-        _add_explicit(src, dst)
-
-    return graph

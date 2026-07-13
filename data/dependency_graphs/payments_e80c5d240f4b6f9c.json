@@ -1,7 +1,8 @@
 {
-  "cache_version": 2,
+  "cache_version": 4,
+  "dependency_semantics_version": 9,
   "server_name": "payments",
-  "schema_hash": "37eb7974804e2c90",
+  "schema_hash": "e80c5d240f4b6f9c",
   "tool_names": [
     "cancel_payment",
     "create_invoice",
@@ -48,12 +49,17 @@
     },
     "list_invoices": {
       "explicit": [
-        "get_invoice"
+        "get_invoice",
+        "pay_invoice",
+        "refund_invoice",
+        "dispute_invoice"
       ],
       "implicit": []
     },
     "list_webhooks": {
-      "explicit": [],
+      "explicit": [
+        "delete_webhook"
+      ],
       "implicit": []
     },
     "pay_invoice": {
@@ -69,8 +75,7 @@
     }
   },
   "tool_count": 10,
-  "expected_pair_count": 45,
-  "classified_pair_count": 45,
-  "classification_complete": true,
-  "deterministic_augmentation": false
+  "expected_pair_count": 90,
+  "classified_pair_count": 90,
+  "classification_complete": true
 }

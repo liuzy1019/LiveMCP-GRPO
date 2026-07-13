@@ -1,7 +1,8 @@
 {
-  "cache_version": 2,
+  "cache_version": 4,
+  "dependency_semantics_version": 9,
   "server_name": "food_delivery",
-  "schema_hash": "a99a8ce2d9dd4ea3",
+  "schema_hash": "1771ad2fcbf6bf67",
   "tool_names": [
     "add_tip",
     "cancel_order",
@@ -46,10 +47,14 @@
         "reorder",
         "contact_support"
       ],
-      "implicit": []
+      "implicit": [
+        "list_orders"
+      ]
     },
     "filter_by_dietary": {
-      "explicit": [],
+      "explicit": [
+        "create_order"
+      ],
       "implicit": []
     },
     "get_estimated_time": {
@@ -65,7 +70,9 @@
       "implicit": []
     },
     "get_popular_items": {
-      "explicit": [],
+      "explicit": [
+        "create_order"
+      ],
       "implicit": []
     },
     "get_restaurant": {
@@ -74,6 +81,7 @@
     },
     "list_orders": {
       "explicit": [
+        "get_order",
         "update_order_status",
         "cancel_order",
         "get_estimated_time",
@@ -100,7 +108,15 @@
       "implicit": []
     },
     "reorder": {
-      "explicit": [],
+      "explicit": [
+        "update_order_status",
+        "cancel_order",
+        "get_estimated_time",
+        "track_rider",
+        "rate_order",
+        "add_tip",
+        "contact_support"
+      ],
       "implicit": []
     },
     "search_restaurants": {
@@ -119,12 +135,14 @@
     },
     "update_order_status": {
       "explicit": [],
-      "implicit": []
+      "implicit": [
+        "track_rider",
+        "rate_order"
+      ]
     }
   },
   "tool_count": 17,
-  "expected_pair_count": 136,
-  "classified_pair_count": 136,
-  "classification_complete": true,
-  "deterministic_augmentation": false
+  "expected_pair_count": 272,
+  "classified_pair_count": 272,
+  "classification_complete": true
 }

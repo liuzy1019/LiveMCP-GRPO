@@ -1,7 +1,8 @@
 {
-  "cache_version": 2,
+  "cache_version": 4,
+  "dependency_semantics_version": 9,
   "server_name": "calendar",
-  "schema_hash": "49362663223ba9c9",
+  "schema_hash": "74ae19ad1f3f76a2",
   "tool_names": [
     "add_attendee",
     "change_timezone",
@@ -38,17 +39,20 @@
     },
     "create_event": {
       "explicit": [
+        "get_event",
         "update_event",
         "delete_event",
         "add_attendee",
         "remove_attendee",
         "set_reminder",
-        "respond_to_event"
+        "respond_to_event",
+        "get_recurring_info"
       ],
       "implicit": []
     },
     "create_recurring": {
       "explicit": [
+        "get_event",
         "update_event",
         "delete_event",
         "add_attendee",
@@ -68,7 +72,11 @@
       "implicit": []
     },
     "get_event": {
-      "explicit": [],
+      "explicit": [
+        "set_reminder",
+        "respond_to_event",
+        "get_recurring_info"
+      ],
       "implicit": []
     },
     "get_free_busy": {
@@ -127,8 +135,7 @@
     }
   },
   "tool_count": 17,
-  "expected_pair_count": 136,
-  "classified_pair_count": 136,
-  "classification_complete": true,
-  "deterministic_augmentation": false
+  "expected_pair_count": 272,
+  "classified_pair_count": 272,
+  "classification_complete": true
 }

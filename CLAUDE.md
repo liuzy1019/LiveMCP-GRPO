@@ -2,15 +2,20 @@
 
 Design doc: `docs/OVAL-MCP.md`. Read it before making changes.
 Behavioral/data-contract changes are recorded in `docs/CHANGELOG.md`.
+Open engineering defects and performance issues are tracked in `docs/KNOWN_ISSUES.md`.
 
 ## Environment
 
 ### 当前可用环境
 
 ```bash
-conda activate arl          # Python 3.11.15, PyTorch 2.10.0+cu128
+export ARL_ENV=/mnt/data2/liuzhanyi/envs/arl
+conda activate "$ARL_ENV"   # 不使用 `conda activate arl`：本机名称索引仍指向已失效的 /mnt/data1 路径
+export PYTHON_BIN="$ARL_ENV/bin/python"
 nvidia-smi                  # 确认 GPU 可用（A10 ×8, 22GB/卡, Driver 570.195.03）
 ```
+
+当前环境事实（2026-07-11 已实测）：`$ARL_ENV/bin/python` 为 Python 3.11.15，PyTorch 2.10.0+cu128、vLLM 0.19.1、transformers 5.13.0、Ray 2.54.1 均可导入。`conda env list` 中名称 `arl` 仍关联 `/mnt/data1/zhanyiliu/liuzhanyi/anaconda3/envs/arl`，该路径不存在；在修复外部 Conda 索引前，项目命令必须使用上述绝对 prefix 或显式 `PYTHON_BIN`。
 
 关键版本：
 
@@ -70,7 +75,7 @@ TP 和实例数根据 `GPU_COUNT` 自动计算：
 系统 nvcc 过旧或不兼容，必须使用 conda 安装的 nvcc 12.8。flashinfer 需要 JIT 编译 sampling kernel，必须设置 `CUDA_HOME` 并补齐头文件/库：
 
 ```bash
-export CUDA_HOME=/mnt/data2/liuzhanyi/envs/arl
+export CUDA_HOME="$ARL_ENV"
 export PATH=$CUDA_HOME/bin:$PATH
 ```
 
@@ -94,9 +99,11 @@ export VLLM_USE_FLASHINFER_SAMPLER=0
 ### 环境安装步骤（从头构建）
 
 ```bash
-# 1. 创建 conda 环境
-conda create -n arl python=3.11 -y
-conda activate arl
+# 1. 按项目约定的绝对 prefix 创建 conda 环境
+export ARL_ENV=/mnt/data2/liuzhanyi/envs/arl
+conda create -p "$ARL_ENV" python=3.11 -y
+conda activate "$ARL_ENV"
+export PYTHON_BIN="$ARL_ENV/bin/python"
 
 # 2. 安装 PyTorch (cu128)
 pip install torch==2.10.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
@@ -129,25 +136,25 @@ python -c "import flashinfer; print(flashinfer.__version__)"
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Data Generation | ✅ Mechanism smoke | PROVE §3.2 Teacher mechanism verified on normal, missing-function, distractor+enum, and irrelevance paths; bulk yield remains unverified |
+| Data Generation | ⚠️ Gray validation | 20 train + 10 val 十域配额、Replay、Parquet/reward 回读通过；发现并修复一条多轮 reference 超过固定 action cap，需重跑质量验收 |
 | OVAL Agent Loop | ✅ | Single-call protocol + initial-state hash + final-state evidence |
 | OVAL Reward | ✅ | Multi-component programmatic: R_val + R_cov + R_eff + R_name + R_arg（论文 §3.3） |
 | GRPO Estimator | ✅ | Saturation skip + 2D stratified advantage |
 | GPU Auto-Adaptation | ✅ | `scripts/gpu_config.sh` — auto-detect GPU count/memory; TP/instance calculation in `generate_data.sh` |
-| Full Training Run | 🔄 | Teacher mechanism smoke 已跑通；正式批量数据与训练尚未启动 |
+| Full Training Run | 🔄 | 当前 20+10 产物生成于 action-budget 修复前，不作为正式训练集；正式批量数据与训练尚未启动 |
 
 ### Verified Pipeline
 
 ```
 Step 1 — Auto-Discovered Dependency Graph
-  n² pairwise LLM classification → directed graph → chains (len 2–5)
+  distinct ordered n(n-1) pairwise LLM classification → directed graph → simple chains (len 2–5)
 Step 2 — Live-State Sampling (Grounded Query Generation)
   Probe live MCP servers for real entities → inject sampling context into prompt
 Step 3 — State-Machine Orchestrator
   Teacher LLM (Gemma-4-31B-it) drives 5-state loop:
   query → LLM processing → tool execution → recovery → continuation
 Step 4 — Robustness Knobs
-  Distractor injection (40%) + enum stripping (30%) + irrelevance (5%) + missing func (20%)
+  Distractor injection (40%) + enum stripping (30%) + irrelevance (5%) + missing-function target 12.1%（由论文 corpus count 推导）
 Step 5 — Replay Validation & Deduplication
   Fresh reset replay (error rate < 30%) → provenance check → Jaccard 0.70 dedup
        ↓
@@ -183,7 +190,7 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 - Ray temp dir: short path (`/tmp/oval_ray`) to avoid AF_UNIX socket path > 107 bytes.
 - SFT cold-start code has been removed. Only GRPO route exists.
 - `success_criteria` value field is mixed-type (str/float/int), serialized as JSON string in parquet.
-- `OracleCall(action="clarification")` must be preserved in parquet; reward side sets `allowed_terminal=["ask_clarification"]`.
+- `OracleCall(action="ask_clarification")` 必须保留到 parquet；legacy `clarification` 仅在 reward 读回时兼容。
 
 ## Known Design Limitations
 
@@ -191,19 +198,21 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 
 本节只判断 Teacher 数据生成机制。只有从当前 checkout 实际生成、Replay、Parquet round-trip 并完成样本语义检查后，才能把该版本标记为可训练。
 
-2026-07-10 当前 checkout 已完成四条 Gemma-4-31B-it 真实 smoke：normal multi-turn、missing-function、distractor+enum stripping、irrelevance。四条均完成 Parquet round-trip，Replay error rate 为 0%；这证明机制路径可运行，不代表批量 yield、分布或所有 seed 的数据质量已经成立。
+2026-07-12 当前 checkout 已完成十域各 1 条真实生成探针和 Parquet/reward 读回，并完成一条 CRM 同 seed 定向重放；这证明机制路径可运行，不代表正式批量 yield、分布或所有 seed 的语义质量已经成立。
 
 | 步骤 | 对齐状态 | 说明 |
 |------|----------|------|
-| Step 1 — 依赖图构建 | 机制对齐 | 全量无序 pair 的 LLM 分类（含方向）→ chains len 2–5；严格 cache 必须记录并校验 pair 分类完整性 |
-| Step 2 — Live-State Sampling | 机制对齐 | 通过 readonly discovery tools 探针真实实体；context 绑定 session，chain-aligned context 注入 prompt |
+| Step 1 — 依赖图构建 | 机制对齐，非逐实现复现 | 论文写 `n²` 但未公开 self-pair/repeated-node 细节；本实现分类不同工具的有序 `n(n-1)` pair → simple chains len 2–5；严格 cache 校验完整性；不做论文外手工改图 |
+| Step 2 — Live-State Sampling | 机制对齐，过滤细节本地化 | 通过 readonly discovery tools 探针真实实体；context 绑定 session，chain-aligned context 注入 prompt。当前以 chain-specific handler 条件筛选，不实现论文举例的全局 supporting-data filter 表 |
 | Step 3 — 状态机 | 机制 smoke 已验证 | query → LLM 决策 → 执行 → recovery → continuation；真实 normal 两轮 chain 已完成 |
-| Step 4 — Robustness Knobs | 机制对齐 | distractor / enum stripping / missing function 在 Teacher 处理前固定，之后使用同一配置 Replay |
+| Step 4 — Robustness Knobs | 机制对齐 | robustness plan 在 Teacher 前固定；distractor / enum stripping / missing function 均作用于 Teacher candidate contract |
 | Step 5 — Replay + Dedup | 机制对齐 | fresh session、30% error 阈值、provenance check、Jaccard 0.70 |
+
+过滤边界以论文原文为准：公开 corpus hard gates 只有 fresh replay、sensitive-parameter provenance 与 tool-call sequence Jaccard 0.70。Exact source-chain coverage、词法 capability/query-tool 匹配和通用 mutation 规则均不作为 baseline hard gate。论文 continuation 的 2--3 turns 表示 conversation rounds；工程 action budget 必须能容纳全部 reference tool calls 及每轮 terminal，adaptive efficiency budget 仅用于 reward。
 
 ### Robustness 注入时机
 
-本实现按任务 seed 在 Teacher 处理前采样一次 robustness plan：distractor 加入 candidate set，enum 从 Teacher-visible schema 移除，missing function 在完整 chain/query 生成后从 Teacher schema、dependency hints 和执行层隐藏。同一 plan 贯穿 Teacher、Replay、Parquet 和 rollout，不在中途重新随机化。
+本实现按任务 seed 在 Teacher 处理前采样一次 robustness plan：distractor 在 Teacher 生成前加入 candidate set；enum 从 Teacher-visible schema 移除；missing function 在完整 chain/query 生成后从 Teacher schema、dependency hints 和执行层隐藏。同一 candidate contract 贯穿生成与 replay，plan 不在中途重新随机化。
 
 ### 其他已知限制
 
@@ -213,7 +222,7 @@ Config managed by `src/training/trainer_config.py` (PyTorch Lightning style), wi
 | Reward uses last observation as final state | Exact value verification may miss during consecutive tool_calls (low probability, has seen_ids fallback). |
 | Teacher validator is stricter than paper text | 除 well-formed JSON 外，首轮 terminal、unknown tool、non-dict arguments、missing-function tool call 也会触发 regeneration；这是本地数据契约，实验记录中必须与论文公开事实分开。 |
 | Dependency graph cache provenance | legacy cache 只有 schema hash 和 graph，不能证明全 pair 分类完整；严格 baseline 只接受带完整性元数据的新 cache。 |
-| Dependency pair batch size | 当前默认每次分类 12 个 pair；这是根据 Gemma-4-31B 实跑完整率设置的推理参数，不是论文公开超参，不改变全 pair 分类语义。 |
+| Dependency pair batch size | 当前默认每次分类 8 个 pair、最多 512 输出 tokens；这是本地推理参数，不是论文公开超参，不改变 distinct ordered pair 分类语义。 |
 | Oversample + recovery loop | LLM 生成存在 drop rate，当前 50% oversample + 最多 3 轮 recovery（不同 seed 偏移），保证最终产出满足目标数量。 |
 
 ## Common Commands
@@ -237,14 +246,13 @@ bash scripts/train_grpo.sh --gpus 0,1,2,3 --total-steps 300
 bash scripts/train_grpo.sh --wandb --wandb-project oval-mcp-grpo
 
 # ============ 验证 ============
-python scripts/validate_pipeline.py --live        # 端到端管线验证
+python scripts/validate_pipeline.py --stages 1,2  # cache/schema 静态验证
 python -m pytest tests/
 python -m compileall src scripts tests
 git diff --check
 
 # ============ 维护 ============
-python scripts/dependency_graph.py live --model ...       # 预计算/重建工具依赖图（live 模式）
-python scripts/dependency_graph.py rebuild --source ...  # 重建依赖图缓存（offline 模式）
+python scripts/dependency_graph.py --model ...       # 通过 LLM 预计算工具依赖图
 python scripts/inspect_prompts.py --train data/train.parquet  # 检查 prompt 内容
 python scripts/verify_entities.py                       # 实体验证
 python scripts/merge_rollout_shards.py                  # 合并 rollout 分片
