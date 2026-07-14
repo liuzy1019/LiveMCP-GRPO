@@ -141,6 +141,7 @@ class LLMClient:
         messages: list[dict[str, str]],
         temperature: float | None = None,
         max_tokens: int | None = None,
+        json_mode: bool = False,
     ) -> str:
         """Generate text from chat messages (applies chat template for local models)."""
         self._ensure_pipe()
@@ -164,6 +165,11 @@ class LLMClient:
         # extra_body; the SDK merges this dict into the JSON request body.
         # Do not send a literal {"extra_body": ...} in raw HTTP requests.
         create_kwargs: dict = {}
+        if json_mode:
+            # vLLM's OpenAI-compatible server supports the standard JSON
+            # response format. Semantics remain prompt-driven; this only keeps
+            # the Teacher action envelope machine-readable.
+            create_kwargs["response_format"] = {"type": "json_object"}
         if "qwen" in self.model_path.lower() or "Qwen" in self.model_path:
             create_kwargs["extra_body"] = {
                 "chat_template_kwargs": {"enable_thinking": False}
@@ -186,6 +192,7 @@ class LLMClient:
         raw = self.generate_chat(
             [{"role": "user", "content": prompt}],
             temperature,
+            json_mode=True,
         )
         return extract_json(raw)
 

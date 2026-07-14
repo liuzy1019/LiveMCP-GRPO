@@ -127,6 +127,51 @@ def _domain_quotas(target: int, domains: list[str]) -> dict[str, int]:
     }
 
 
+def _domain_deficit_report(
+    pool: pd.DataFrame,
+    count: int,
+    val_count: int,
+    domains: list[str],
+) -> dict[str, Any]:
+    train_quotas = _domain_quotas(count, domains)
+    val_quotas = _domain_quotas(val_count, domains)
+    available = {
+        domain: int(
+            pool["extra_info"].map(
+                lambda value: str(_as_extra(value).get("domain", "")) == domain
+            ).sum()
+        )
+        for domain in domains
+    }
+    required = {
+        domain: train_quotas[domain] + val_quotas[domain]
+        for domain in domains
+    }
+    return {
+        "pool_size": len(pool),
+        "required_total": count + val_count,
+        "available_by_domain": available,
+        "required_by_domain": required,
+        "deficits": {
+            domain: required[domain] - available[domain]
+            for domain in domains
+            if available[domain] < required[domain]
+        },
+    }
+
+
+def _write_deficit_report(path: Path | None, report: dict[str, Any]) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    temporary.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
 def _balanced_domain_split(
     pool: pd.DataFrame,
     count: int,
@@ -226,9 +271,20 @@ def _dedup_task_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
 
 
 def _row_tool_sequence(row: pd.Series) -> list[str]:
+    extra = _as_extra(row["extra_info"])
+    raw_sequence = extra.get("teacher_trace_tool_sequence", [])
+    if isinstance(raw_sequence, str):
+        try:
+            raw_sequence = json.loads(raw_sequence)
+        except (json.JSONDecodeError, TypeError):
+            raw_sequence = []
+    elif hasattr(raw_sequence, "tolist"):
+        raw_sequence = raw_sequence.tolist()
+    if isinstance(raw_sequence, (list, tuple)) and raw_sequence:
+        return [str(name) for name in raw_sequence]
     return [
         str(call.get("tool_name", ""))
-        for call in _oracle_calls(_as_extra(row["extra_info"]))
+        for call in _oracle_calls(extra)
         if call.get("action", "tool_call") == "tool_call"
     ]
 
@@ -261,6 +317,7 @@ def merge_shards(
     count: int,
     val_count: int,
     domains: list[str] | None = None,
+    deficits_output: Path | None = None,
 ) -> int:
     """Globally deduplicate candidates before final train/val truncation."""
     train_path = output_dir / "train.parquet"
@@ -283,6 +340,24 @@ def merge_shards(
     ).reset_index(drop=True)
     exact_removed = before_exact - len(pool)
     pool, jaccard_removed = _dedup_jaccard(pool, threshold=0.70)
+
+    if domains:
+        deficit_report = _domain_deficit_report(pool, count, val_count, domains)
+    else:
+        required = count + val_count
+        deficit_report = {
+            "pool_size": len(pool),
+            "required_total": required,
+            "available_by_domain": {},
+            "required_by_domain": {},
+            "deficits": {"__all__": required - len(pool)} if len(pool) < required else {},
+        }
+    deficit_report.update({
+        "task_id_removed": tid_removed,
+        "exact_removed": exact_removed,
+        "jaccard_removed": jaccard_removed,
+    })
+    _write_deficit_report(deficits_output, deficit_report)
 
     required = count + val_count
     if len(pool) < required:
@@ -323,6 +398,7 @@ def main() -> int:
     parser.add_argument("--count", type=int, required=True)
     parser.add_argument("--val-count", type=int, required=True)
     parser.add_argument("--domain", default="all")
+    parser.add_argument("--deficits-output")
     args = parser.parse_args()
 
     domains = (
@@ -336,6 +412,7 @@ def main() -> int:
     return merge_shards(
         Path(args.tmpdir), Path(args.output_dir), args.count, args.val_count,
         domains=domains,
+        deficits_output=Path(args.deficits_output) if args.deficits_output else None,
     )
 
 

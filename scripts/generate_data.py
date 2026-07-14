@@ -208,7 +208,11 @@ def generate_data(args: argparse.Namespace):
                     # During recovery, however, each request covers one
                     # deficient domain. A zero-yield domain must not prevent
                     # the remaining deficient domains from being attempted.
-                    if recovery_round == 0 or not _is_zero_yield_error(exc):
+                    if not _zero_yield_is_recoverable(
+                        exc,
+                        recovery_round=recovery_round,
+                        shard_mode=args.shard_mode,
+                    ):
                         raise
                     logger.exception(
                         f"Round {recovery_round + 1}: recovery request for "
@@ -449,6 +453,21 @@ def _is_zero_yield_error(exc: RuntimeError) -> bool:
     return str(exc).startswith("generate_many produced 0 tasks")
 
 
+def _zero_yield_is_recoverable(
+    exc: RuntimeError,
+    *,
+    recovery_round: int,
+    shard_mode: bool,
+) -> bool:
+    """Keep small shard quality rejections inside the existing recovery loop.
+
+    A monolithic initial zero-yield remains fatal because it usually indicates
+    that the Teacher or MCP path is unavailable.  A shard may request only one
+    candidate, so its first rejection is not evidence of a systemic outage.
+    """
+    return _is_zero_yield_error(exc) and (shard_mode or recovery_round > 0)
+
+
 def _task_scenario(task) -> str:
     explicit = task.metadata.get("scenario_type") if task.metadata else None
     if explicit:
@@ -503,6 +522,39 @@ def _task_fingerprint(task) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _required_round_oracle_calls(task, round_idx: int, round_calls: list) -> list:
+    """Project Teacher actions onto required workflow steps for RL labels.
+
+    The full live trace remains untouched on ``task.oracle_program`` and in the
+    audit log.  Only calls explicitly tagged by the state machine as an exact
+    no-progress repeat are omitted from the required workflow view.
+    """
+    histories = getattr(task, "execution_history_per_round", None) or []
+    history = histories[round_idx] if round_idx < len(histories) else []
+    history_cursor = 0
+    required = []
+    for call in round_calls:
+        if getattr(call, "action", "tool_call") != "tool_call":
+            required.append(call)
+            continue
+        matched = None
+        for index in range(history_cursor, len(history)):
+            event = history[index]
+            if not isinstance(event, dict) or not bool(event.get("success")):
+                continue
+            if (
+                str(event.get("tool_name") or "") == str(call.tool_name)
+                and dict(event.get("arguments") or {}) == dict(call.arguments or {})
+            ):
+                matched = event
+                history_cursor = index + 1
+                break
+        if matched is not None and matched.get("no_progress_warning"):
+            continue
+        required.append(call)
+    return required
+
+
 def _serialize_training_oracle(task) -> list[dict]:
     """Return tool calls plus exactly one terminal action for training.
 
@@ -536,7 +588,14 @@ def _serialize_training_oracle(task) -> list[dict]:
 
     raw_calls = []
     if task.oracle_program and task.oracle_program.calls:
-        for oc in task.oracle_program.calls:
+        source_calls = list(task.oracle_program.calls)
+        if getattr(task, "oracle_calls_per_round", None):
+            source_calls = []
+            for round_idx, round_calls in enumerate(task.oracle_calls_per_round):
+                source_calls.extend(
+                    _required_round_oracle_calls(task, round_idx, list(round_calls))
+                )
+        for oc in source_calls:
             raw_calls.append({
                 "tool_name": oc.tool_name,
                 "arguments": dict(oc.arguments) if oc.arguments else {},
@@ -591,9 +650,12 @@ def _build_round_contracts(task) -> list[dict]:
                 f"Task {task.task_id}: oracle round {round_idx} is empty; "
                 "a conversation round must contain a Teacher-emitted action"
             )
+        required_round_calls = _required_round_oracle_calls(
+            task, round_idx, list(round_calls),
+        )
         tools: list[str] = []
         terminal = "final_answer"
-        for oc in round_calls:
+        for oc in required_round_calls:
             action = getattr(oc, "action", "tool_call")
             if action == "tool_call":
                 tools.append(getattr(oc, "tool_name", ""))
@@ -1169,10 +1231,28 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         # task.visible_tools already contains the Teacher-visible candidate set.
         tools_text = _format_tools(visible_tools)
         date_line = f"\nToday's date: {reference_date}." if reference_date else ""
+        initial_action_context = (
+            task.sampling_context.get("initial_action_context", {})
+            if isinstance(task.sampling_context, dict) else {}
+        )
+        initial_entity_summaries = (
+            initial_action_context.get("entity_summaries", [])
+            if isinstance(initial_action_context, dict) else []
+        )
+        initial_entity_summaries = [
+            str(summary) for summary in initial_entity_summaries[:15]
+            if str(summary).strip()
+        ]
+        observable_context = ""
+        if initial_entity_summaries:
+            observable_context = (
+                "\n\n## Current Grounded Entities (Observable Context)\n"
+                + "\n".join(initial_entity_summaries)
+            )
 
         system_prompt = (
             f"You are an AI assistant for the following domain:\n{domain_desc}\n\n"
-            f"## Available Tools\n{tools_text}\n\n"
+            f"## Available Tools\n{tools_text}{observable_context}\n\n"
             f"## Response Format\n"
             f"Output exactly ONE action per turn using XML tags:\n\n"
             f"- <tool_call>{{\"name\": \"<tool_name>\", \"arguments\": {{...}}}}</tool_call>\n"
@@ -1186,7 +1266,8 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             f"## Rules\n"
             f"- Call ONE tool at a time. Wait for the result before the next action.\n"
             f"- Do not output hidden reasoning, chain-of-thought, or <think> tags.\n"
-            f"- Use ONLY entity IDs that appear in tool results. Never invent or guess IDs.{date_line}"
+            f"- Use entity IDs only when they appear in the user request or tool results. "
+            f"Never invent or guess IDs.{date_line}"
         )
 
         # One row always starts from reset(session_seed).  Teacher tool calls
@@ -1305,6 +1386,14 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "query_chain_supported": bool(
                 task.metadata.get("query_chain_supported", False)
             ),
+            # Preserve the completed Teacher conversation sequence for PROVE
+            # Jaccard dedup even when the required RL oracle omits an execution-
+            # tagged no-progress repeat.
+            "teacher_trace_tool_sequence": [
+                str(call.tool_name)
+                for call in (task.oracle_program.calls if task.oracle_program else [])
+                if getattr(call, "action", "tool_call") == "tool_call"
+            ],
             # Serialize oracle_calls as JSON so sparse heterogeneous argument
             # dicts round-trip through Parquet without struct unification.
             "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
@@ -1343,6 +1432,14 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "paper_replay_valid": task.metadata.get("paper_replay_valid", True),
             "project_outcome_valid": task.metadata.get("project_outcome_valid", True),
             "replay_error_rate": task.metadata.get("replay_error_rate", 0.0),
+            "replay_num_calls": int(task.metadata.get("replay_num_calls", 0)),
+            "replay_num_errors": int(task.metadata.get("replay_num_errors", 0)),
+            "teacher_attempt_count": int(
+                task.metadata.get("teacher_attempt_count", 0)
+            ),
+            "teacher_failed_attempt_count": int(
+                task.metadata.get("teacher_failed_attempt_count", 0)
+            ),
             "criteria_failed_count": task.metadata.get("criteria_failed", 0),
             "fsm_final_state": task.metadata.get("fsm_final_state", ""),
             "fsm_transitions": json.dumps(

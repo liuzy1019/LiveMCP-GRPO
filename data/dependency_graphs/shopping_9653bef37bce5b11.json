@@ -1,5 +1,5 @@
 {
-  "cache_version": 4,
+  "cache_version": 5,
   "dependency_semantics_version": 10,
   "server_name": "shopping",
   "schema_hash": "9653bef37bce5b11",
@@ -36,16 +36,16 @@
     "add_to_cart": {
       "explicit": [],
       "implicit": [
-        "update_cart_quantity",
-        "remove_from_cart",
-        "clear_cart",
         "apply_coupon",
-        "checkout"
+        "checkout",
+        "remove_from_cart",
+        "update_cart_quantity"
       ]
     },
     "add_to_wishlist": {
       "explicit": [],
       "implicit": [
+        "get_wishlist",
         "remove_from_wishlist"
       ]
     },
@@ -58,12 +58,10 @@
     "checkout": {
       "explicit": [
         "get_order",
-        "track_order",
-        "return_order"
+        "return_order",
+        "track_order"
       ],
-      "implicit": [
-        "list_orders"
-      ]
+      "implicit": []
     },
     "clear_cart": {
       "explicit": [],
@@ -74,7 +72,11 @@
       "implicit": []
     },
     "get_cart": {
-      "explicit": [],
+      "explicit": [
+        "get_product",
+        "get_reviews",
+        "remove_from_cart"
+      ],
       "implicit": []
     },
     "get_coupons": {
@@ -82,22 +84,19 @@
       "implicit": []
     },
     "get_order": {
-      "explicit": [],
+      "explicit": [
+        "get_product",
+        "get_reviews"
+      ],
       "implicit": []
     },
     "get_product": {
-      "explicit": [
-        "compare_products"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "get_recommendations": {
       "explicit": [
-        "add_to_cart",
-        "update_cart_quantity",
-        "remove_from_cart",
-        "get_reviews",
-        "add_to_wishlist"
+        "get_reviews"
       ],
       "implicit": []
     },
@@ -110,7 +109,9 @@
       "implicit": []
     },
     "get_wishlist": {
-      "explicit": [],
+      "explicit": [
+        "remove_from_wishlist"
+      ],
       "implicit": []
     },
     "list_categories": {
@@ -120,12 +121,8 @@
     "list_orders": {
       "explicit": [
         "get_order",
-        "track_order",
         "return_order",
-        "add_review",
-        "get_reviews",
-        "add_to_wishlist",
-        "remove_from_wishlist"
+        "track_order"
       ],
       "implicit": []
     },
@@ -138,23 +135,13 @@
       "implicit": []
     },
     "return_order": {
-      "explicit": [
-        "get_return_status"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "search_products": {
       "explicit": [
         "get_product",
-        "compare_products",
-        "get_recommendations",
-        "add_to_cart",
-        "update_cart_quantity",
-        "remove_from_cart",
-        "add_review",
-        "get_reviews",
-        "add_to_wishlist",
-        "remove_from_wishlist"
+        "update_cart_quantity"
       ],
       "implicit": []
     },
@@ -164,11 +151,2291 @@
     },
     "update_cart_quantity": {
       "explicit": [],
-      "implicit": [
-        "checkout"
-      ]
+      "implicit": []
     }
   },
+  "pair_classifications": [
+    {
+      "pair": [
+        "add_review",
+        "add_to_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "add_to_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "apply_coupon"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "checkout"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "add_to_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "apply_coupon"
+      ],
+      "source": "add_to_cart",
+      "target": "apply_coupon",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "checkout"
+      ],
+      "source": "add_to_cart",
+      "target": "checkout",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "remove_from_cart"
+      ],
+      "source": "add_to_cart",
+      "target": "remove_from_cart",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "update_cart_quantity"
+      ],
+      "source": "add_to_cart",
+      "target": "update_cart_quantity",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "apply_coupon"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "checkout"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_wishlist"
+      ],
+      "source": "add_to_wishlist",
+      "target": "get_wishlist",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "remove_from_wishlist"
+      ],
+      "source": "add_to_wishlist",
+      "target": "remove_from_wishlist",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "checkout"
+      ],
+      "source": "apply_coupon",
+      "target": "checkout",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_order"
+      ],
+      "source": "checkout",
+      "target": "get_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "return_order"
+      ],
+      "source": "checkout",
+      "target": "return_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "checkout",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "track_order"
+      ],
+      "source": "checkout",
+      "target": "track_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "checkout",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_product"
+      ],
+      "source": "get_cart",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_reviews"
+      ],
+      "source": "get_cart",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "remove_from_cart"
+      ],
+      "source": "get_cart",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_product"
+      ],
+      "source": "get_order",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_reviews"
+      ],
+      "source": "get_order",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "get_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_product",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_reviews"
+      ],
+      "source": "get_recommendations",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "remove_from_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "return_order"
+      ],
+      "source": "list_orders",
+      "target": "return_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "track_order"
+      ],
+      "source": "list_orders",
+      "target": "track_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "return_order",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "return_order",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "return_order",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_products",
+        "track_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_products",
+        "update_cart_quantity"
+      ],
+      "source": "search_products",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "track_order",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "teacher_model_id": "Gemma-4-31B-it",
+  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
   "tool_count": 23,
   "expected_pair_count": 253,
   "classified_pair_count": 253,

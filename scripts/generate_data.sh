@@ -110,6 +110,7 @@ mkdir -p logs
 
 # 主日志：tee 到 logs/
 MAIN_LOG="logs/${RUN_ID}_gen_${COUNT}.log"
+export LIVEMCP_TEACHER_TRACE_PATH="${LIVEMCP_TEACHER_TRACE_PATH:-logs/${RUN_ID}_teacher_trace.jsonl}"
 exec > >(tee -a "${MAIN_LOG}") 2>&1
 
 # ── GPU detection (via shared gpu_config.sh) ────────────────────────
@@ -249,6 +250,7 @@ if [[ "${DEPENDENCY_CACHE_PREWARM}" != "0" && "${DEPENDENCY_CACHE_PREWARM}" != "
 fi
 GENERATION_CLIENT_SEED_STRIDE="${GENERATION_CLIENT_SEED_STRIDE:-1000000}"
 GENERATION_MAX_RECOVERY_ROUNDS="${GENERATION_MAX_RECOVERY_ROUNDS:-6}"
+MERGE_TOPUP_ROUNDS="${MERGE_TOPUP_ROUNDS:-3}"
 if ! [[ "${GENERATION_MAX_RECOVERY_ROUNDS}" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: GENERATION_MAX_RECOVERY_ROUNDS must be >= 1, got ${GENERATION_MAX_RECOVERY_ROUNDS}" >&2
     exit 1
@@ -257,10 +259,90 @@ if ! [[ "${GENERATION_CLIENT_SEED_STRIDE}" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: GENERATION_CLIENT_SEED_STRIDE must be >= 1, got ${GENERATION_CLIENT_SEED_STRIDE}" >&2
     exit 1
 fi
+if ! [[ "${MERGE_TOPUP_ROUNDS}" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: MERGE_TOPUP_ROUNDS must be >= 0, got ${MERGE_TOPUP_ROUNDS}" >&2
+    exit 1
+fi
 if [ "${GENERATION_CLIENT_SEED_STRIDE}" -le 200000 ]; then
     echo "ERROR: GENERATION_CLIENT_SEED_STRIDE must exceed the 200000 recovery range, got ${GENERATION_CLIENT_SEED_STRIDE}" >&2
     exit 1
 fi
+
+merge_vllm_with_topups() {
+    local deficits_path="${TMPDIR_SHARD}/merge_deficits.json"
+    local topup_round=0
+    while ! "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
+        --tmpdir "${TMPDIR_SHARD}" \
+        --output-dir "${RUN_DIR}" \
+        --count "${COUNT}" \
+        --val-count "${VAL_COUNT}" \
+        --domain "${DOMAIN}" \
+        --deficits-output "${deficits_path}"; do
+        if [ "${topup_round}" -ge "${MERGE_TOPUP_ROUNDS}" ]; then
+            echo "ERROR: global merge still has deficits after ${topup_round} top-up round(s)" >&2
+            return 1
+        fi
+        topup_round=$((topup_round + 1))
+        local -a topup_deficits=()
+        mapfile -t topup_deficits < <("${PYTHON_BIN}" -c '
+import json, sys
+report = json.load(open(sys.argv[1], encoding="utf-8"))
+for domain, missing in sorted(report.get("deficits", {}).items()):
+    if domain != "__all__" and int(missing) > 0:
+        print(f"{domain}\t{int(missing)}")
+' "${deficits_path}")
+        if [ "${#topup_deficits[@]}" -eq 0 ]; then
+            echo "ERROR: merge failed but reported no domain-specific deficit" >&2
+            return 1
+        fi
+
+        echo "Top-up round ${topup_round}: ${#topup_deficits[@]} deficit domain(s)"
+        local -a topup_pids=()
+        local topup_index=0
+        local entry topup_domain missing extra topup_count topup_inst topup_port topup_seed topup_prefix
+        for entry in "${topup_deficits[@]}"; do
+            IFS=$'\t' read -r topup_domain missing <<< "${entry}"
+            extra=$(( (missing + 1) / 2 ))
+            if [ "${extra}" -lt 2 ]; then extra=2; fi
+            topup_count=$((missing + extra))
+            topup_inst=$((topup_index % NUM_INSTANCES))
+            topup_port=$((PORT_START + topup_inst))
+            topup_seed=$((SEED + (topup_round + 10) * GENERATION_CLIENT_SEED_STRIDE + topup_index * 10000))
+            topup_prefix="topup_${topup_round}_${topup_domain}"
+            echo "  [${topup_domain}] missing=${missing}, generating=${topup_count}, port=${topup_port}"
+            "${PYTHON_BIN}" scripts/generate_data.py \
+                --count "${topup_count}" \
+                --val-count 0 \
+                --seed "${topup_seed}" \
+                --domain "${topup_domain}" \
+                --model "${SERVED_MODEL}" \
+                --api-base "http://localhost:${topup_port}/v1" \
+                --suite "${SUITE}" \
+                --shard-mode \
+                --pool-oversample-pct 0 \
+                --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
+                --checkpoint-path "${TMPDIR_SHARD}/shard_${topup_prefix}_checkpoint.json" \
+                --output "${TMPDIR_SHARD}/shard_${topup_prefix}_train.parquet" \
+                --val-output "${TMPDIR_SHARD}/shard_${topup_prefix}_val.parquet" \
+                --log-file "${TMPDIR_SHARD}/shard_${topup_prefix}.log" \
+                > "${TMPDIR_SHARD}/shard_${topup_prefix}.stdout" 2>&1 &
+            topup_pids+=($!)
+            topup_index=$((topup_index + 1))
+        done
+        local topup_failed=0
+        local i
+        for i in "${!topup_pids[@]}"; do
+            wait "${topup_pids[$i]}" || {
+                echo "  [top-up $i] FAILED" >&2
+                topup_failed=$((topup_failed + 1))
+            }
+        done
+        if [ "${topup_failed}" -gt 0 ]; then
+            echo "ERROR: ${topup_failed}/${#topup_pids[@]} top-up processes failed" >&2
+            return 1
+        fi
+    done
+}
 
 # ═══════════════════════════════════════════════════════════════════
 # MODE 1: Local transformers — 1 process per GPU
@@ -305,6 +387,11 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
 
         echo "  [shard $i] GPU=${GPU_ID}, train=${SHARD_TRAIN}, val=${SHARD_VAL}, seed=${SHARD_SEED}"
 
+        if [ $((SHARD_TRAIN + SHARD_VAL)) -eq 0 ]; then
+            echo "  [shard $i] skipped (zero quota)"
+            continue
+        fi
+
         CUDA_VISIBLE_DEVICES="${GPU_ID}" "${PYTHON_BIN}" scripts/generate_data.py \
             --count "${SHARD_TRAIN}" \
             --val-count "${SHARD_VAL}" \
@@ -324,14 +411,15 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
     done
 
     echo ""
-    echo "Waiting for ${GPU_COUNT} processes..."
+    ACTIVE_SHARDS=${#PIDS[@]}
+    echo "Waiting for ${ACTIVE_SHARDS} active processes..."
     FAILED=0
     for i in "${!PIDS[@]}"; do
         wait "${PIDS[$i]}" || { echo "  [shard $i] FAILED" >&2; FAILED=$((FAILED + 1)); }
     done
 
     if [ "$FAILED" -gt 0 ]; then
-        echo "ERROR: ${FAILED}/${GPU_COUNT} shards failed" >&2
+        echo "ERROR: ${FAILED}/${ACTIVE_SHARDS} active shards failed" >&2
         exit 1
     fi
 
@@ -558,6 +646,11 @@ print(tp)
 
             echo "  Instance ${inst}/client ${client}: train=${SHARD_TRAIN}, val=${SHARD_VAL}, seed=${SHARD_SEED}"
 
+            if [ $((SHARD_TRAIN + SHARD_VAL)) -eq 0 ]; then
+                echo "  Instance ${inst}/client ${client}: skipped (zero quota)"
+                continue
+            fi
+
             "${PYTHON_BIN}" scripts/generate_data.py \
                 --count "${SHARD_TRAIN}" \
                 --val-count "${SHARD_VAL}" \
@@ -579,23 +672,19 @@ print(tp)
     done
 
     echo ""
-    echo "Waiting for ${TOTAL_GEN_CLIENTS} generation processes..."
+    ACTIVE_GEN_CLIENTS=${#GEN_PIDS[@]}
+    echo "Waiting for ${ACTIVE_GEN_CLIENTS} active generation processes..."
     FAILED=0
     for i in "${!GEN_PIDS[@]}"; do
         wait "${GEN_PIDS[$i]}" || { echo "  [Instance $i] FAILED" >&2; FAILED=$((FAILED + 1)); }
     done
 
     if [ "$FAILED" -gt 0 ]; then
-        echo "ERROR: ${FAILED}/${TOTAL_GEN_CLIENTS} generation processes failed" >&2
+        echo "ERROR: ${FAILED}/${ACTIVE_GEN_CLIENTS} active generation processes failed" >&2
         exit 1
     fi
 
-    "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
-        --tmpdir "${TMPDIR_SHARD}" \
-        --output-dir "${RUN_DIR}" \
-        --count "${COUNT}" \
-        --val-count "${VAL_COUNT}" \
-        --domain "${DOMAIN}"
+    merge_vllm_with_topups
     rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
 fi
 
@@ -630,6 +719,12 @@ for label, path in [('train', '${RUN_DIR}/train.parquet'), ('val', '${RUN_DIR}/v
             issues += 1
 
     if issues > 0:
+        continue
+
+    # A caller may explicitly request an empty split (for example
+    # --val-count 0 in a focused generation smoke).  The empty parquet schema
+    # was checked above; there is no row available for semantic spot-checks.
+    if df.empty:
         continue
 
     # Abstain scenarios (clarification_required, missing_function,

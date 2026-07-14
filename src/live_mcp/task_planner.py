@@ -21,9 +21,14 @@ Pipeline per task:
 from __future__ import annotations
 
 import copy
+import datetime as _datetime
+import fcntl
+import hashlib
 import json as _json
+import os
 import random
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 from loguru import logger
@@ -107,7 +112,7 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "place/cancel/track orders, rate meals, tip drivers. Requests: 'order sushi "
         "from that place on 14th st', 'where's my pad thai?', 'cancel the pizza before "
         "they start making it', 'reorder what I had last Friday'. Orders flow: "
-        "confirmed→preparing→in_transit→delivered."
+        "placed→confirmed→preparing→delivering→delivered (with cancellation only before preparing)."
     ),
 }
 
@@ -220,11 +225,15 @@ def _target_tool_requirement(
         {},
     )
     description = str(schema.get("description") or "").strip()
+    annotations = schema.get("annotations") or {}
+    readonly_note = ""
+    if annotations.get("readonly") is True and annotations.get("mutating") is False:
+        readonly_note = " This capability is read-only and does not modify server state."
     required = list(schema.get("input_schema", {}).get("required", []) or [])
     required_text = ", ".join(str(name) for name in required) or "none"
     return (
         f"Internal target capability: {tool_name}\n"
-        f"Capability description: {description or _chain_goal_phrase(tool_name)}\n"
+        f"Capability description: {description or _chain_goal_phrase(tool_name)}{readonly_note}\n"
         f"Required information fields: {required_text}"
     )
 
@@ -265,6 +274,19 @@ _REFERENCE_DATES: list[str] = [
     "Tuesday, October 13, 2026",
     "Saturday, December 5, 2026",
 ]
+
+
+def reference_date_for_seed(seed: int) -> str:
+    """Return the shared temporal anchor for generation and seeded state."""
+    return _REFERENCE_DATES[
+        (seed // len(_PERSONA_TEMPLATES)) % len(_REFERENCE_DATES)
+    ]
+
+
+def reference_datetime_for_seed(seed: int) -> _datetime.datetime:
+    return _datetime.datetime.strptime(
+        reference_date_for_seed(seed), "%A, %B %d, %Y",
+    )
 
 # ═══════════════════════════════════════════════════════════════════════
 # Turn-decay schedule (PROVE §3.2 Step 3.5:
@@ -365,10 +387,119 @@ class TaskPlanner:
     understanding of real state values, not from heuristic inference.
     """
 
+    # These stages all return one small JSON object.  The generic client
+    # default (1024 tokens) reserves far more decode KV than these contracts
+    # need and reduces vLLM batching headroom.  Keep conservative margins over
+    # the largest responses observed in full ten-domain traces.
+    STAGE_MAX_TOKENS: dict[str, int] = {
+        "query_generation": 256,
+        "action_decision": 384,
+        "continuation_generation": 256,
+        "clarification_generation": 192,
+        "recovery_decision": 384,
+    }
+
     def __init__(self, client: "LLMClient", domain: str, seed: int = 0):
         self.client = client
         self.domain = domain
+        self.seed = int(seed)
         self.domain_desc = DOMAIN_DESCRIPTIONS.get(domain, "")
+        trace_setting = os.environ.get("LIVEMCP_TEACHER_TRACE_PATH", "").strip()
+        self._trace_path: Path | None = None
+        if trace_setting:
+            project_root = Path(__file__).resolve().parents[2]
+            candidate = Path(trace_setting)
+            candidate = candidate if candidate.is_absolute() else project_root / candidate
+            candidate = candidate.resolve()
+            logs_root = (project_root / "logs").resolve()
+            try:
+                candidate.relative_to(logs_root)
+            except ValueError:
+                logger.warning(
+                    "Ignoring LIVEMCP_TEACHER_TRACE_PATH outside project logs/: {}",
+                    candidate,
+                )
+            else:
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                self._trace_path = candidate
+        self.trace_includes_state = (
+            self._trace_path is not None
+            and os.environ.get(
+                "LIVEMCP_TEACHER_TRACE_INCLUDE_STATE", "0",
+            ).strip().lower() in {"1", "true", "yes", "on"}
+        )
+
+    def _generate_chat(
+        self,
+        stage: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Call the Teacher and optionally persist the exact inference boundary."""
+        effective_max_tokens = (
+            max_tokens
+            if max_tokens is not None
+            else self.STAGE_MAX_TOKENS.get(stage)
+        )
+        raw = ""
+        error = ""
+        try:
+            kwargs: dict[str, Any] = {"temperature": temperature}
+            kwargs["json_mode"] = True
+            if effective_max_tokens is not None:
+                kwargs["max_tokens"] = effective_max_tokens
+            raw = self.client.generate_chat(messages, **kwargs)
+            return raw
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            if self._trace_path is not None:
+                serialized_messages = _json.dumps(
+                    messages, ensure_ascii=False, default=str,
+                )
+                self._append_trace_event({
+                    "timestamp": _datetime.datetime.now(
+                        _datetime.timezone.utc
+                    ).isoformat(),
+                    "domain": self.domain,
+                    "seed": self.seed,
+                    "stage": stage,
+                    "temperature": temperature,
+                    "max_tokens": effective_max_tokens,
+                    "messages": messages,
+                    "prompt_chars": len(serialized_messages),
+                    "prompt_sha256": hashlib.sha256(
+                        serialized_messages.encode("utf-8")
+                    ).hexdigest(),
+                    "raw_response": raw,
+                    "error": error,
+                })
+
+    def record_environment_event(self, stage: str, **payload: Any) -> None:
+        """Append parsed actions and real MCP feedback to the same audit trace."""
+        if self._trace_path is None:
+            return
+        self._append_trace_event({
+            "timestamp": _datetime.datetime.now(
+                _datetime.timezone.utc
+            ).isoformat(),
+            "domain": self.domain,
+            "seed": self.seed,
+            "stage": stage,
+            **payload,
+        })
+
+    def _append_trace_event(self, event: dict[str, Any]) -> None:
+        if self._trace_path is None:
+            return
+        with self._trace_path.open("a", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            handle.write(_json.dumps(event, ensure_ascii=False, default=str) + "\n")
+            handle.flush()
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     # ── Step 1: generate user query ──
 
@@ -412,7 +543,7 @@ class TaskPlanner:
             "They don't list steps, don't mention tool names, don't describe workflows. "
             "They just say their goal in 1-2 sentences max.\n\n"
             "BAD (AI-like): 'I need to search for events, then create a new one, then add attendees.'\n"
-            "GOOD (human-like): 'set up a meeting with Sarah next Tuesday at 2pm'\n\n"
+            "GOOD (human-like): 'set up my project sync next Tuesday at 2pm'\n\n"
             "BAD: 'First verify the account, then check the balance, then transfer funds.'\n"
             "GOOD: 'move $200 from savings to checking'"
         )
@@ -425,7 +556,11 @@ class TaskPlanner:
                 "Include all user-known information needed to complete the goal. "
                 "If you naturally reference an entity that already exists, copy its exact ID "
                 "from Current State. Do not substitute an existing ID for an entity that an "
-                "earlier capability in the dependency chain will create."
+                "earlier capability in the dependency chain will create. If an earlier discovery "
+                "capability intentionally hides IDs, use enough exact shown selector facts to "
+                "identify one candidate uniquely. A label such as 'savings', 'the invoice', or "
+                "'that email' is not complete when multiple shown candidates match; choose a "
+                "unique shown selector or return UNSAT."
             )
         else:
             grounding_line = (
@@ -451,6 +586,18 @@ class TaskPlanner:
                     f"- {_target_tool_requirement(tool_schemas, tool_name)}"
                     for tool_name in chain_seed
                 )
+                chain_fact_note = ""
+                if (
+                    self.domain == "team_chat"
+                    and "create_thread" in chain_seed
+                    and "react_message" in chain_seed
+                    and chain_seed.index("create_thread") < chain_seed.index("react_message")
+                ):
+                    chain_fact_note = (
+                        " Handler fact: a newly created thread starts with no replies. "
+                        "A requested reaction must therefore target the existing root "
+                        "message; do not request a reaction to a new thread reply."
+                    )
                 chain_goal_block = (
                     "\n## Complete Task Goal (internal synthesis guide)\n"
                     f"The grounded dependency chain is: {chain_seed}.\n"
@@ -481,6 +628,7 @@ class TaskPlanner:
                     "value in Current State; never leave such a field for the assistant "
                     "to invent (for example an amount, recipient, status, path, date, "
                     "quantity, or message body).\n"
+                    f"{chain_fact_note}\n"
                 )
 
         # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
@@ -491,7 +639,7 @@ class TaskPlanner:
         anti_halluc_block = ""
         if chain_context and chain_context.get("query_grounding_summaries"):
             summaries_text = "\n".join(
-                chain_context["query_grounding_summaries"][:15]
+                chain_context["query_grounding_summaries"][:30]
             )
             hidden_types = chain_context.get("opaque_id_hidden_types", [])
             if hidden_types:
@@ -501,6 +649,8 @@ class TaskPlanner:
                     f"Opaque IDs are intentionally hidden for these entity types: "
                     f"{hidden_types}. Refer to them only through the shown natural "
                     f"selectors (name, customer, status, category, amount, etc.). "
+                    f"When using a name or other selector, copy an exact shown value; "
+                    f"do not invent a person, customer, or resource that is absent. "
                     f"Do NOT invent an ID or copy an ID for another entity. The "
                     f"assistant must discover the exact ID with the earlier read/list/search "
                     f"capability in the sampled chain.\n"
@@ -539,11 +689,33 @@ Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
 Remember: state your GOAL, not the steps. One message, 1-2 sentences max.
 
 Return only:
-{{"user_query": "<the message or UNSAT>", "target_capability": "<sampled chain final capability>", "chain_supported": <true or false>}}
+{{"user_query": "<the message or UNSAT>", "target_capability": "<sampled chain final capability>", "chain_supported": <true or false>, "mutation_evidence": [{{"capability": "<state-changing chain capability>", "query_span": "<exact words from user_query that authorize it>"}}]}}
+
+For every state-changing capability in the sampled chain, mutation_evidence must
+contain one item. query_span must be copied verbatim from user_query and directly
+authorize that state change. One natural phrase may support multiple internal
+capabilities when it genuinely authorizes the combined outcome (for example,
+"buy it now" may authorize adding the item and checking out). Do not invent an
+evidence span for an operation the user did not request. Read-only capabilities
+must not appear in mutation_evidence.
 """
+        tools_by_name = {
+            str(tool.get("name") or ""): tool for tool in tool_schemas
+        }
+        expected_mutations = {
+            tool_name
+            for tool_name in chain_seed
+            if (
+                (tools_by_name.get(tool_name, {}).get("annotations") or {}).get(
+                    "mutating"
+                )
+                is True
+            )
+        }
         for attempt in range(3):
             try:
-                raw = self.client.generate_chat(
+                raw = self._generate_chat(
+                    "query_generation",
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
                     temperature=0.4 + 0.1 * attempt,
@@ -554,6 +726,7 @@ Return only:
                 query = data.get("user_query", "")
                 target_capability = str(data.get("target_capability", "")).strip()
                 chain_supported = data.get("chain_supported") is True
+                mutation_evidence = data.get("mutation_evidence", [])
                 expected_target = chain_seed[-1] if chain_seed else ""
                 if str(query).strip().upper() == "UNSAT":
                     logger.debug(
@@ -574,6 +747,35 @@ Return only:
                         f"the sampled chain for {self.domain}: chain={chain_seed}"
                     )
                     continue
+                if expected_mutations:
+                    if not isinstance(mutation_evidence, list):
+                        continue
+                    evidence_by_capability: dict[str, str] = {}
+                    for item in mutation_evidence:
+                        if not isinstance(item, dict):
+                            continue
+                        capability = str(item.get("capability") or "").strip()
+                        query_span = str(item.get("query_span") or "").strip()
+                        if capability and query_span:
+                            evidence_by_capability[capability] = query_span
+                    if set(evidence_by_capability) != expected_mutations:
+                        logger.debug(
+                            f"generate_query attempt {attempt + 1}/3 mutation "
+                            f"coverage mismatch for {self.domain}: expected="
+                            f"{sorted(expected_mutations)}, got="
+                            f"{sorted(evidence_by_capability)}"
+                        )
+                        continue
+                    normalized_query = " ".join(str(query).lower().split())
+                    if any(
+                        " ".join(span.lower().split()) not in normalized_query
+                        for span in evidence_by_capability.values()
+                    ):
+                        logger.debug(
+                            f"generate_query attempt {attempt + 1}/3 used mutation "
+                            f"evidence absent from query for {self.domain}"
+                        )
+                        continue
                 if query:
                     return GeneratedQuery(
                         user_query=str(query),
@@ -602,6 +804,7 @@ Return only:
         chain_seed: list[str] | None = None,
         chain_progress: int = 0,
         previous_response: str = "",
+        conversation_context: list[dict[str, Any]] | None = None,
     ) -> str:
         """Generate a follow-up user message from the user's perspective.
 
@@ -623,6 +826,7 @@ Return only:
         """
         state_text = _format_state_compact(grounded_state, max_entities=20)
         tools_text = _format_tools(tool_schemas)
+        conversation_text = _format_conversation_context(conversation_context)
 
         date_block = ""
         if reference_date:
@@ -641,11 +845,19 @@ Return only:
             "DO NOT mention tool names or internal steps.\n"
             "Keep it to 1-2 sentences. Be natural and direct.\n"
             "Do not introduce an unrelated new goal; continue the same task.\n"
+            "Do not ask for an outcome that Current State already shows as satisfied. "
+            "For example, do not request the same reminder, attendee, label, or field "
+            "value twice.\n"
             "Choose a request that is feasible for the entity's current status. "
             "For example, do not ask to cancel an already delivered order.\n"
             "Use the Available Tools descriptions as the authority for allowed "
             "statuses, resource types, exact amounts, and other preconditions. "
             "Never use one resource type's ID where another is required.\n"
+            "Across every difficulty level, if you refer to an existing resource "
+            "by ID, name, email, username, path, or another selector, copy an exact "
+            "value shown in Current State. Never invent a person or resource. "
+            "Missing or minimal difficulty may omit a required task detail, but "
+            "that omission never permits a fabricated entity.\n"
             "If you request a state-changing action, include user-decided required "
             "values when the difficulty is complete. For missing or minimal difficulty, "
             "it is acceptable to omit such a value so the assistant can clarify; never "
@@ -680,9 +892,12 @@ Return only:
 ## Available Tools and Preconditions
 {tools_text}
 
-## Your original request
+## Immediately preceding user request
 "{previous_query}"
 {response_block}
+
+## All Completed Conversation Rounds
+{conversation_text}
 
 ## Current State (real IDs and values you can reference)
 {state_text}
@@ -694,6 +909,10 @@ Ask for the next thing you need. Do NOT acknowledge or confirm what the assistan
 The follow-up MUST stay within the assistant capabilities listed above and
 continue this same domain conversation. Do not request an unavailable
 cross-domain capability.
+For every difficulty, any existing entity selector you mention (including an
+ID, name, email, username, or path) MUST be copied exactly from Current State.
+For missing or minimal difficulty, omit a task detail instead of inventing an
+entity or selector that is absent from Current State.
 For complete difficulty, if the target capability requires an existing entity,
 copy its exact ID from Current State into the message and include every concrete
 detail needed for the requested change. Select only an entity whose shown type,
@@ -706,7 +925,8 @@ Return only:
 """
         for attempt in range(3):
             try:
-                raw = self.client.generate_chat(
+                raw = self._generate_chat(
+                    "continuation_generation",
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
                     temperature=0.4 + 0.1 * attempt,
@@ -734,6 +954,7 @@ Return only:
         persona: str = "",
         reference_date: str = "",
         previous_response: str = "",
+        conversation_context: list[dict[str, Any]] | None = None,
     ) -> str:
         """Generate a user clarification question (PROVE §3.2 Step 3.5).
 
@@ -744,6 +965,8 @@ Return only:
         producing a genuine multi-round training sample.
         """
         state_text = _format_state_compact(grounded_state, max_entities=20)
+        tools_text = _format_tools(tool_schemas)
+        conversation_text = _format_conversation_context(conversation_context)
 
         date_block = ""
         if reference_date:
@@ -755,6 +978,9 @@ Return only:
             "Write a brief, natural clarification question the user might ask. "
             "This should sound like a real person asking for more details, NOT "
             "like a system prompt or a tool description.\n\n"
+            "Do not introduce a new goal. Stay in the same domain and clarify only "
+            "the immediately preceding request or response. Do not request any "
+            "capability that is absent from the Available Tools.\n\n"
             "DO NOT mention tool names, API calls, or technical implementation.\n"
             "Keep it to 1-2 sentences. Be natural.\n"
         )
@@ -768,19 +994,31 @@ Return only:
 ## Assistant reply you just received
 "{previous_response}"
 
+## All Completed Conversation Rounds
+{conversation_text}
+
+## What this assistant can help with
+{self.domain_desc}
+
+## Available Tools and Preconditions
+{tools_text}
+
 ## Current State
 {state_text}
 
 ## Task
 Write ONE short user clarification question. The user realized they need to provide
-more information or ask a follow-up detail question.
+more information or ask a follow-up detail question. The question must remain
+within the current domain and visible tools. Do not request an unavailable
+cross-domain capability or start a separate task.
 
 Return only:
 {{"user_query": "<the clarification question>"}}
 """
         for attempt in range(3):
             try:
-                raw = self.client.generate_chat(
+                raw = self._generate_chat(
+                    "clarification_generation",
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
                     temperature=0.5 + 0.1 * attempt,
@@ -809,6 +1047,7 @@ Return only:
         difficulty: str = "complete",
         reference_date: str = "",
         chain_context: dict[str, Any] | None = None,
+        conversation_context: list[dict[str, Any]] | None = None,
         blocked_tools: set[str] | None = None,
         missing_function: bool = False,
         allow_direct_answer: bool = False,
@@ -826,6 +1065,7 @@ Return only:
         """
         tools_text = _format_tools(tool_schemas)
         history_text = _format_history(execution_history)
+        conversation_text = _format_conversation_context(conversation_context)
         tool_names_set = {t["name"] for t in tool_schemas}  # for action auto-correction
 
         # Guard: tool names must not collide with reserved terminal actions.
@@ -908,7 +1148,7 @@ Return only:
         if chain_context and chain_context.get("entity_summaries"):
             summaries_text = "\n".join(chain_context["entity_summaries"][:15])
             anti_halluc_block = (
-                f"\n## Current Grounded Entities (use these exact IDs)\n"
+                f"\n## Current Grounded Entities (Observable Context)\n"
                 f"{summaries_text}\n\n"
                 f"⚠️ CRITICAL — ID Provenance Rule:\n"
                 f"- Entity IDs (event_id, account_id, invoice_id, order_id, etc.) "
@@ -933,8 +1173,11 @@ Return only:
             )
 
         system = (
-            "You are an AI assistant helping a user complete a task via tool calls. "
-            "Think about what the user needs, then take the best next step.\n"
+            "You are an agent acting in a live MCP environment. At each step, infer "
+            "the unresolved user outcome from the current conversation, inspect only "
+            "observable state and real tool feedback, then take exactly one next action. "
+            "Never treat a successful call as proof of completion when its observation "
+            "or state_changed field shows that the requested outcome is still unresolved.\n"
             "\n"
             "Output ONE JSON object per turn:\n"
             '- {"action": "tool_call", "tool_name": "<tool>", "arguments": {"<param>": <value>}}\n'
@@ -992,7 +1235,10 @@ Return only:
 ## User Task
 {user_query}
 
-## Execution History
+## Prior Conversation Rounds
+{conversation_text}
+
+## Real MCP Execution Events
 {history_text}
 {first_turn_hint}
 ## Your Turn
@@ -1000,7 +1246,8 @@ Output one JSON object:
 """
         for _retry in range(3):
             try:
-                raw = self.client.generate_chat(
+                raw = self._generate_chat(
+                    "action_decision",
                     [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
                     temperature=0.3 + 0.05 * _retry,
@@ -1077,12 +1324,20 @@ Output one JSON object:
                         )
                         continue
 
-                return ActionPlan(
+                plan = ActionPlan(
                     action=action,
                     tool_name=tool_name,
                     arguments=data.get("arguments", {}),
                     text=data.get("text", data.get("reason", data.get("question", ""))),
                 )
+                self.record_environment_event(
+                    "parsed_action",
+                    action=plan.action,
+                    tool_name=plan.tool_name,
+                    arguments=plan.arguments,
+                    text=plan.text,
+                )
+                return plan
             except Exception as e:
                 logger.debug(
                     f"decide_action attempt {_retry + 1}/3 failed for "
@@ -1149,7 +1404,8 @@ Choose ONE:
 Output ONLY the JSON, nothing else:
 """
         try:
-            raw = self.client.generate_chat(
+            raw = self._generate_chat(
+                "recovery_decision",
                 [{"role": "system", "content": system},
                  {"role": "user", "content": user}],
                 temperature=0.3,
@@ -1185,7 +1441,7 @@ _MUTATING_PREFIXES: tuple[str, ...] = (
     "convert_", "archive_", "mkdir", "touch", "mv", "cp",
     "chmod", "set_", "apply_",
     "cancel_", "refund_", "return_", "deposit", "withdraw",
-    "bill_pay", "rm", "sed", "unzip", "zip", "tar_",
+    "bill_pay", "rm", "unzip", "zip", "tar_",
     "freeze_", "unfreeze_", "dispute_", "verify_",
     "rate_order", "clear_cart", "reorder",
     "complete_task", "schedule_",
@@ -1236,6 +1492,49 @@ def derive_success_criteria(
     """
     criteria: list[dict[str, Any]] = []
 
+    def _append_nested_delta(
+        initial_value: Any,
+        final_value: Any,
+        path_parts: list[str],
+    ) -> None:
+        """Record verifiable leaf deltas, including newly-added nested maps."""
+        path = ".".join(path_parts)
+        if isinstance(initial_value, dict) and isinstance(final_value, dict):
+            for child_key in final_value.keys() - initial_value.keys():
+                _append_nested_delta(
+                    None, final_value[child_key], [*path_parts, str(child_key)],
+                )
+            for child_key in initial_value.keys() - final_value.keys():
+                criteria.append({
+                    "type": "state_absent", "server": domain,
+                    "path": f"{path}.{child_key}",
+                    "path_parts": [*path_parts, str(child_key)],
+                })
+            for child_key in initial_value.keys() & final_value.keys():
+                if initial_value[child_key] != final_value[child_key]:
+                    _append_nested_delta(
+                        initial_value[child_key], final_value[child_key],
+                        [*path_parts, str(child_key)],
+                    )
+            return
+        if final_value is None:
+            return
+        if isinstance(final_value, dict):
+            for child_key, child_value in final_value.items():
+                _append_nested_delta(
+                    None, child_value, [*path_parts, str(child_key)],
+                )
+            return
+        if isinstance(final_value, list) or isinstance(
+            final_value, (str, int, float, bool)
+        ):
+            criteria.append({
+                "type": "state_equals", "server": domain,
+                "path": path,
+                "path_parts": path_parts,
+                "value": final_value,
+            })
+
     # Entity count changes — verify new/removed entities
     for key in final_state:
         init_val = initial_state.get(key)
@@ -1284,36 +1583,7 @@ def derive_success_criteria(
                 ie = init_val[ck]
                 fe = final_val[ck]
                 if isinstance(ie, dict) and isinstance(fe, dict):
-                    for fk in fe:
-                        if fk in ie and ie[fk] != fe[fk] and fe[fk] is not None:
-                            if isinstance(fe[fk], (dict, list)):
-                                continue
-                            criteria.append({
-                                "type": "state_equals", "server": domain,
-                                "path": f"{key}.{ck}.{fk}",
-                                "path_parts": [key, ck, fk],
-                                "value": fe[fk],
-                            })
-                    # ── P3c: list-field changes (e.g. wishlist.append, watchers, labels) ──
-                    # Entity dicts may have list-type fields tracking ordered
-                    # collections.  Changes here are real state mutations that
-                    # must produce success_criteria to avoid reward-coverage gaps.
-                    for fk in fe:
-                        if fk not in ie:
-                            continue
-                        iv = ie[fk]
-                        fv = fe[fk]
-                        if not isinstance(iv, list) or not isinstance(fv, list):
-                            continue
-                        if iv == fv:
-                            continue
-                        # List content changed: verify final list equals expected
-                        criteria.append({
-                            "type": "state_equals", "server": domain,
-                            "path": f"{key}.{ck}.{fk}",
-                            "path_parts": [key, ck, fk],
-                            "value": fv,
-                        })
+                    _append_nested_delta(ie, fe, [str(key), str(ck)])
 
         # ── Top-level list changes (e.g. cart, wishlist in shopping) ──
         # derive_success_criteria previously only handled dict-type state fields,
@@ -1613,7 +1883,7 @@ def _domain_criteria(
                 "path": f"accounts.{acc_id}.balance",
                 "value": acc.get("balance", 0),
             })
-    if "add_to_cart" in tool_names and "cart" in final_state:
+    if "add_to_cart" in tool_names and final_state.get("cart"):
         criteria.append({"type": "cart_not_empty", "server": domain})
     if "create_order" in tool_names:
         for oid, order in final_state.get("orders", {}).items():
@@ -1691,6 +1961,8 @@ def replay_validate(
     success_criteria: list[dict[str, Any]] | None = None,
     max_error_rate: float = 0.30,
     blocked_tools: set[str] | None = None,
+    trace_recorder: Any = None,
+    trace_include_state: bool = False,
 ) -> tuple[bool, float, int, int, bool, int]:
     """Replay oracle trace against a fresh session to verify it's reproducible.
 
@@ -1717,6 +1989,22 @@ def replay_validate(
     criteria_failed = 0
     try:
         manager.discover_tools(session.session_id)
+        if callable(trace_recorder):
+            initial_state = manager.get_state(session.session_id)
+            initial_serialized = _json.dumps(
+                initial_state, sort_keys=True, ensure_ascii=True, default=str,
+            )
+            trace_recorder(
+                "replay_start",
+                session_id=session.session_id,
+                replay_seed=seed,
+                replay_domain=domain,
+                blocked_tools=sorted(blocked_tools or set()),
+                initial_state_hash=hashlib.sha256(
+                    initial_serialized.encode("utf-8")
+                ).hexdigest(),
+                initial_state=initial_state if trace_include_state else None,
+            )
         for idx, call in enumerate(oracle_calls):
             # Terminal actions are oracle contract metadata, not MCP calls.
             if call.action != "tool_call":
@@ -1729,6 +2017,25 @@ def replay_validate(
                 domain=getattr(call, "server_name", "") or domain,
             )
             num_calls += 1
+            if callable(trace_recorder):
+                trace_recorder(
+                    "replay_call",
+                    call_index=idx,
+                    tool_name=call.tool_name,
+                    arguments=dict(call.arguments),
+                    expected_success=getattr(call, "expected_success", None),
+                    success=bool(getattr(result, "success", False)),
+                    schema_valid=bool(getattr(result, "schema_valid", False)),
+                    execution_status=str(
+                        getattr(result, "execution_status", "FAILURE")
+                    ),
+                    state_changed=bool(getattr(result, "state_changed", False)),
+                    observation=getattr(result, "observation", None),
+                    error_type=str(getattr(result, "error_type", "") or ""),
+                    error_message=str(
+                        getattr(result, "error_message", "") or ""
+                    ),
+                )
             expected_success = getattr(call, "expected_success", None)
             if expected_success is False and result.success:
                 # Replay must preserve the Teacher attempt outcome. A call that
@@ -1790,6 +2097,26 @@ def replay_validate(
 
         error_rate = num_errors / num_calls if num_calls > 0 else float(num_errors > 0)
         passed = error_rate <= max_error_rate
+
+        if callable(trace_recorder):
+            replay_state = manager.get_state(session.session_id)
+            replay_serialized = _json.dumps(
+                replay_state, sort_keys=True, ensure_ascii=True, default=str,
+            )
+            trace_recorder(
+                "replay_result",
+                passed=passed,
+                error_rate=error_rate,
+                num_errors=num_errors,
+                num_calls=num_calls,
+                max_error_rate=max_error_rate,
+                criteria_ok=criteria_ok,
+                criteria_failed=criteria_failed,
+                final_state_hash=hashlib.sha256(
+                    replay_serialized.encode("utf-8")
+                ).hexdigest(),
+                final_state=replay_state if trace_include_state else None,
+            )
 
         return passed, error_rate, num_errors, num_calls, criteria_ok, criteria_failed
     finally:
@@ -1940,6 +2267,9 @@ def _format_tools(tool_schemas: list[dict[str, Any]], strip_enums: bool = False)
     for tool in tool_schemas:
         name = tool["name"]
         desc = tool.get("description", "")
+        annotations = tool.get("annotations") or {}
+        if annotations.get("readonly") is True and annotations.get("mutating") is False:
+            desc = f"{desc.rstrip()} Read-only: this tool does not modify server state.".strip()
         props = tool.get("input_schema", {}).get("properties", {})
         required = tool.get("input_schema", {}).get("required", [])
         args_parts = []
@@ -1950,7 +2280,9 @@ def _format_tools(tool_schemas: list[dict[str, Any]], strip_enums: bool = False)
             ptype = _schema_type_hint(info)
             enum_str = f": {', '.join(info['enum'])}" if "enum" in info else ""
             desc_part = f" ({ptype}{enum_str})" if ptype else ""
-            args_parts.append(f"{k}{req}{desc_part}")
+            param_desc = str(info.get("description") or "").strip()
+            desc_suffix = f" — {param_desc}" if param_desc else ""
+            args_parts.append(f"{k}{req}{desc_part}{desc_suffix}")
         args_str = ", ".join(args_parts)
         lines.append(f"  - {name}({args_str}): {desc}")
     return "\n".join(lines)
@@ -1968,11 +2300,21 @@ def _schema_type_hint(schema: dict[str, Any]) -> str:
         for name, child in properties.items():
             marker = "*" if name in required else ""
             child_hint = _schema_type_hint(child) if isinstance(child, dict) else ""
-            fields.append(f"{name}{marker}: {child_hint or 'any'}")
+            child_desc = str(child.get("description") or "").strip() if isinstance(child, dict) else ""
+            fields.append(
+                f"{name}{marker}: {child_hint or 'any'}"
+                + (f" [{child_desc}]" if child_desc else "")
+            )
         return "object{" + ", ".join(fields) + "}"
     constraints = []
+    if "enum" in schema:
+        constraints.append("enum=" + "|".join(str(item) for item in schema["enum"]))
     if "minimum" in schema:
         constraints.append(f"minimum={schema['minimum']}")
+    if "exclusiveMinimum" in schema:
+        constraints.append(f"exclusiveMinimum={schema['exclusiveMinimum']}")
+    if "maximum" in schema:
+        constraints.append(f"maximum={schema['maximum']}")
     if constraints:
         return f"{ptype}({', '.join(constraints)})"
     return ptype
@@ -1988,47 +2330,179 @@ def _format_state_compact(state: dict[str, Any], max_entities: int = 20) -> str:
         return "(empty state)"
 
     lines: list[str] = []
-    count = 0
+    groups: list[tuple[str, list[tuple[str, Any]]]] = []
     for entity_type, entities in sorted(state.items()):
-        if not isinstance(entities, dict):
-            continue
-        for entity_id, entity_data in sorted(entities.items()):
-            if count >= max_entities:
-                lines.append(f"... ({sum(len(v) if isinstance(v, dict) else 0 for v in state.values())} total entities, showing first {max_entities})")
-                return "\n".join(lines)
-            if isinstance(entity_data, dict):
+        if isinstance(entities, dict) and entities:
+            groups.append((entity_type, sorted(entities.items())))
+
+    # Round-robin over resource types.  A global first-N truncation made later
+    # types disappear completely (for example payments after invoices).
+    selected: list[tuple[str, str, Any]] = []
+    index = 0
+    while len(selected) < max_entities:
+        added = False
+        for entity_type, entities in groups:
+            if index < len(entities):
+                entity_id, entity_data = entities[index]
+                selected.append((entity_type, entity_id, entity_data))
+                added = True
+                if len(selected) >= max_entities:
+                    break
+        if not added:
+            break
+        index += 1
+
+    for entity_type, entity_id, entity_data in selected:
+        if isinstance(entity_data, dict):
                 # Extract key identity fields (expanded for all domains)
-                id_fields: list[str] = []
-                for fk in (
+            id_fields: list[str] = []
+            for fk in (
                     "name", "title", "subject", "status", "type",
                     "balance", "amount", "price", "quantity",
                     "date", "start_time", "end_time", "due_date",
                     "priority", "stage", "label", "category",
                     "sender", "recipient",
-                ):
-                    if fk in entity_data:
-                        val = entity_data[fk]
-                        if isinstance(val, str) and len(val) > 60:
-                            val = val[:57] + "..."
-                        id_fields.append(f"{fk}={val}")
+            ):
+                if fk in entity_data:
+                    val = entity_data[fk]
+                    if isinstance(val, str) and len(val) > 60:
+                        val = val[:57] + "..."
+                    id_fields.append(f"{fk}={val}")
                 # Also capture id-like fields
-                for fk, fv in entity_data.items():
-                    if fk.endswith("_id") or fk.endswith("_name"):
-                        id_fields.append(f"{fk}={fv}")
-                if entity_data.get("summary"):
-                    id_fields.append(f"facts={entity_data['summary']}")
-                summary = ", ".join(id_fields[:5])
-                lines.append(f"  {entity_type}/{entity_id}: {summary}" if summary else f"  {entity_type}/{entity_id}")
-            else:
-                lines.append(f"  {entity_type}/{entity_id}: {entity_data}")
-            count += 1
+            for fk, fv in entity_data.items():
+                if fk.endswith("_id") or fk.endswith("_name"):
+                    id_fields.append(f"{fk}={fv}")
+            if entity_data.get("summary"):
+                id_fields.append(f"facts={entity_data['summary']}")
+            summary = ", ".join(id_fields[:5])
+            lines.append(f"  {entity_type}/{entity_id}: {summary}" if summary else f"  {entity_type}/{entity_id}")
+        else:
+            lines.append(f"  {entity_type}/{entity_id}: {entity_data}")
+    total_entities = sum(len(entities) for _, entities in groups)
+    if total_entities > len(selected):
+        shown_by_type: dict[str, int] = {}
+        for entity_type, _, _ in selected:
+            shown_by_type[entity_type] = shown_by_type.get(entity_type, 0) + 1
+        distribution = ", ".join(
+            f"{entity_type}={shown_by_type.get(entity_type, 0)}/{len(entities)}"
+            for entity_type, entities in groups
+        )
+        lines.append(
+            f"... ({total_entities} total entities; stratified view: {distribution})"
+        )
     if not lines:
         return str(state)[:2000]
     return "\n".join(lines)
 
 
+_OBSERVATION_FACT_KEYS = (
+    "count", "total", "total_count", "next_cursor", "has_more", "partial",
+    "warning", "error", "message", "status", "state", "amount", "balance",
+    "remaining", "remaining_refundable", "name", "title", "subject", "type",
+)
+
+
+def _compact_observation(observation: Any, max_chars: int = 4000) -> str:
+    """Render an observation without losing its execution semantics.
+
+    Long results are projected to identity/state facts and carry explicit
+    truncation metadata.  This replaces the old raw ``[:500]`` prefix, which
+    hid result counts and most candidate IDs before the request reached vLLM.
+    """
+    original = _json.dumps(observation, ensure_ascii=False, default=str)
+
+    def compact(value: Any, depth: int = 0) -> Any:
+        if depth >= 5:
+            return {"_truncated_depth": True}
+        if isinstance(value, dict):
+            keys = list(value)
+            id_keys = [key for key in keys if key == "id" or key.endswith("_id")]
+            priority = list(dict.fromkeys([*id_keys, *_OBSERVATION_FACT_KEYS]))
+            chosen = [key for key in priority if key in value]
+            if len(keys) <= 12:
+                chosen.extend(key for key in keys if key not in chosen)
+            else:
+                chosen.extend(
+                    [key for key in keys if key not in chosen][:4]
+                )
+            result = {key: compact(value[key], depth + 1) for key in chosen}
+            if len(chosen) < len(keys):
+                result["_omitted_fields"] = len(keys) - len(chosen)
+            return result
+        if isinstance(value, list):
+            if len(value) <= 24:
+                return [compact(item, depth + 1) for item in value]
+            return [
+                *[compact(item, depth + 1) for item in value[:12]],
+                {"_omitted_items": len(value) - 24},
+                *[compact(item, depth + 1) for item in value[-12:]],
+            ]
+        if isinstance(value, str) and len(value) > 500:
+            return value[:240] + f"... [truncated {len(value) - 480} chars] ..." + value[-240:]
+        return value
+
+    projected = compact(observation)
+    rendered = _json.dumps(projected, ensure_ascii=False, default=str)
+    if len(rendered) <= max_chars:
+        if len(rendered) < len(original):
+            return _json.dumps({
+                "data": projected,
+                "_compacted": True,
+                "_original_chars": len(original),
+            }, ensure_ascii=False, default=str)
+        return rendered
+
+    facts: list[dict[str, Any]] = []
+
+    def collect(value: Any) -> None:
+        if len(facts) >= 48:
+            return
+        if isinstance(value, dict):
+            fact = {
+                key: child for key, child in value.items()
+                if (
+                    key == "id" or key.endswith("_id")
+                    or key in _OBSERVATION_FACT_KEYS
+                ) and not isinstance(child, (dict, list))
+            }
+            if fact:
+                facts.append(fact)
+            for child in value.values():
+                collect(child)
+        elif isinstance(value, list):
+            for child in value:
+                collect(child)
+
+    collect(observation)
+    envelope = {
+        "summary_facts": facts,
+        "_compacted": True,
+        "_original_chars": len(original),
+        "_fact_limit_reached": len(facts) >= 48,
+        "_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest()[:16],
+    }
+    return _json.dumps(envelope, ensure_ascii=False, default=str)
+
+
+def _format_conversation_context(context: list[dict[str, Any]] | None) -> str:
+    if not context:
+        return "(this is the first conversation round)"
+    lines: list[str] = []
+    for item in context:
+        round_idx = item.get("round_idx", "?")
+        query = str(item.get("user_query") or "").strip()
+        response = str(item.get("assistant_response") or "").strip()
+        terminal = str(item.get("terminal_action") or "").strip()
+        lines.append(f"Round {round_idx} user: {query or '(missing)'}")
+        lines.append(
+            f"Round {round_idx} assistant ({terminal or 'response'}): "
+            f"{response or '(no visible text)'}"
+        )
+    return "\n".join(lines)
+
+
 def _format_history(history: list[dict[str, Any]]) -> str:
-    """Format execution history for the LLM prompt."""
+    """Format loss-aware MCP execution events for the next Agent decision."""
     if not history:
         return "(no actions yet — this is the first turn)"
     lines = []
@@ -2037,13 +2511,23 @@ def _format_history(history: list[dict[str, Any]]) -> str:
         args = _json.dumps(entry.get("arguments", {}), ensure_ascii=False)
         obs = entry.get("observation")
         success = entry.get("success", True)
+        outcome = str(entry.get("execution_status") or ("SUCCESS" if success else "FAILURE"))
+        state_changed = entry.get("state_changed")
         lines.append(
             f"Step {i}: {tool}({args}) → "
-            f"{'OK' if success else 'FAILED'}"
+            f"{outcome}"
+            + (f"; state_changed={bool(state_changed)}" if state_changed is not None else "")
         )
-        if isinstance(obs, dict):
-            obs_str = _json.dumps(obs, ensure_ascii=False, default=str)
-            lines.append(f"  Result: {obs_str[:500]}")
-        elif obs:
-            lines.append(f"  Result: {str(obs)[:500]}")
+        error_type = str(entry.get("error_type") or "").strip()
+        error_message = str(entry.get("error_message") or "").strip()
+        if error_type or error_message:
+            lines.append(
+                f"  Error: {error_type or 'execution_error'}"
+                + (f": {error_message}" if error_message else "")
+            )
+        loop_warning = str(entry.get("no_progress_warning") or "").strip()
+        if loop_warning:
+            lines.append(f"  No-progress warning: {loop_warning}")
+        if obs is not None:
+            lines.append(f"  Observation: {_compact_observation(obs)}")
     return "\n".join(lines)

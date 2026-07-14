@@ -1,0 +1,588 @@
+{
+  "cache_version": 5,
+  "dependency_semantics_version": 10,
+  "server_name": "team_chat",
+  "schema_hash": "2a2977ccd7f29a20",
+  "tool_names": [
+    "archive_channel",
+    "create_channel",
+    "create_thread",
+    "get_channel",
+    "get_thread",
+    "get_user_status",
+    "list_channels",
+    "react_message",
+    "search_messages",
+    "send_dm",
+    "send_message"
+  ],
+  "graph": {
+    "archive_channel": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_channel": {
+      "explicit": [
+        "create_thread",
+        "get_channel",
+        "react_message",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "create_thread": {
+      "explicit": [
+        "get_thread",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "get_channel": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_thread": {
+      "explicit": [
+        "react_message"
+      ],
+      "implicit": []
+    },
+    "get_user_status": {
+      "explicit": [
+        "send_dm"
+      ],
+      "implicit": []
+    },
+    "list_channels": {
+      "explicit": [
+        "react_message",
+        "search_messages",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "react_message": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_messages": {
+      "explicit": [
+        "send_dm",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "send_dm": {
+      "explicit": [],
+      "implicit": []
+    },
+    "send_message": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "archive_channel",
+        "create_channel"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "create_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_channel"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "create_thread"
+      ],
+      "source": "create_channel",
+      "target": "create_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_channel"
+      ],
+      "source": "create_channel",
+      "target": "get_channel",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "react_message"
+      ],
+      "source": "create_channel",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "send_message"
+      ],
+      "source": "create_channel",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_channel"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_thread"
+      ],
+      "source": "create_thread",
+      "target": "get_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "send_message"
+      ],
+      "source": "create_thread",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "react_message"
+      ],
+      "source": "get_thread",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "send_dm"
+      ],
+      "source": "get_user_status",
+      "target": "send_dm",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "react_message"
+      ],
+      "source": "list_channels",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "search_messages"
+      ],
+      "source": "list_channels",
+      "target": "search_messages",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "send_message"
+      ],
+      "source": "list_channels",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "react_message",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "react_message",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "react_message",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_messages",
+        "send_dm"
+      ],
+      "source": "search_messages",
+      "target": "send_dm",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "search_messages",
+        "send_message"
+      ],
+      "source": "search_messages",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "send_dm",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "teacher_model_id": "Gemma-4-31B-it",
+  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "tool_count": 11,
+  "expected_pair_count": 55,
+  "classified_pair_count": 55,
+  "classification_complete": true
+}

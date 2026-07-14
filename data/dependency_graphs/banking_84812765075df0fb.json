@@ -1,5 +1,5 @@
 {
-  "cache_version": 4,
+  "cache_version": 5,
   "dependency_semantics_version": 10,
   "server_name": "banking",
   "schema_hash": "84812765075df0fb",
@@ -67,28 +67,22 @@
     },
     "list_accounts": {
       "explicit": [
-        "get_account_info",
-        "get_balance",
-        "get_history",
-        "get_statement",
-        "transfer",
-        "wire_transfer",
-        "deposit",
-        "withdraw",
         "bill_pay",
+        "get_account_info",
         "schedule_transfer",
-        "freeze_account",
+        "transfer",
         "unfreeze_account",
         "verify_account",
-        "apply_loan"
+        "wire_transfer",
+        "withdraw"
       ],
       "implicit": []
     },
     "schedule_transfer": {
-      "explicit": [
+      "explicit": [],
+      "implicit": [
         "cancel_transfer"
-      ],
-      "implicit": []
+      ]
     },
     "transfer": {
       "explicit": [],
@@ -97,8 +91,9 @@
     "unfreeze_account": {
       "explicit": [],
       "implicit": [
-        "withdraw",
-        "bill_pay"
+        "bill_pay",
+        "wire_transfer",
+        "withdraw"
       ]
     },
     "verify_account": {
@@ -114,6 +109,1235 @@
       "implicit": []
     }
   },
+  "pair_classifications": [
+    {
+      "pair": [
+        "apply_loan",
+        "bill_pay"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "cancel_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "deposit"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "freeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_loan",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "cancel_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "deposit"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "freeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "list_accounts"
+      ],
+      "source": "list_accounts",
+      "target": "bill_pay",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "unfreeze_account"
+      ],
+      "source": "unfreeze_account",
+      "target": "bill_pay",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "deposit"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "freeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "schedule_transfer"
+      ],
+      "source": "schedule_transfer",
+      "target": "cancel_transfer",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "freeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "unfreeze_account"
+      ],
+      "source": "freeze_account",
+      "target": "unfreeze_account",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "list_accounts"
+      ],
+      "source": "list_accounts",
+      "target": "get_account_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "schedule_transfer"
+      ],
+      "source": "list_accounts",
+      "target": "schedule_transfer",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "transfer"
+      ],
+      "source": "list_accounts",
+      "target": "transfer",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "unfreeze_account"
+      ],
+      "source": "list_accounts",
+      "target": "unfreeze_account",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "verify_account"
+      ],
+      "source": "list_accounts",
+      "target": "verify_account",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "wire_transfer"
+      ],
+      "source": "list_accounts",
+      "target": "wire_transfer",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "withdraw"
+      ],
+      "source": "list_accounts",
+      "target": "withdraw",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "schedule_transfer",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "schedule_transfer",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "schedule_transfer",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "schedule_transfer",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "schedule_transfer",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "transfer",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "transfer",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "transfer",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "transfer",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "unfreeze_account",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "unfreeze_account",
+        "wire_transfer"
+      ],
+      "source": "unfreeze_account",
+      "target": "wire_transfer",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "unfreeze_account",
+        "withdraw"
+      ],
+      "source": "unfreeze_account",
+      "target": "withdraw",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "verify_account",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "verify_account",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "wire_transfer",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "teacher_model_id": "Gemma-4-31B-it",
+  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
   "tool_count": 17,
   "expected_pair_count": 136,
   "classified_pair_count": 136,

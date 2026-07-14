@@ -30,7 +30,7 @@ from typing import Any
 
 from loguru import logger
 
-from src.live_mcp.config import SuiteConfig
+from src.live_mcp.config import SuiteConfig, project_root
 from src.live_mcp.executor import LiveMCPExecutor
 from src.live_mcp.manager import LiveMCPManager
 from src.live_mcp.types import LiveTask, OracleCall, OracleProgram, to_plain
@@ -127,6 +127,54 @@ class RobustnessPlan:
         )
 
 
+def _missing_function_original_round_should_abort(
+    missing_function: bool,
+    round_idx: int,
+    oracle_calls: list[Any],
+) -> bool:
+    """Reject a missing-function candidate completed without initial abstention."""
+    if not missing_function or round_idx != 0:
+        return False
+    return not any(
+        getattr(call, "action", "tool_call")
+        in ("ask_clarification", "report_error")
+        for call in oracle_calls
+    )
+
+
+def _missing_function_has_nonprefix_mutation(
+    missing_function: bool,
+    oracle_calls: list[Any],
+    source_chain_seed: list[str] | None,
+    hidden_tool: str,
+    tool_schemas: list[dict[str, Any]],
+) -> bool:
+    """Detect an unfinished mutating workaround before clarification/abstention.
+
+    Visible mutations from the dependency-chain prefix remain legal.  A
+    successful mutation outside that prefix followed by abstention is not a
+    completed alternative workflow and must not become required RL ground truth.
+    """
+    if not missing_function or not hidden_tool or not source_chain_seed:
+        return False
+    try:
+        hidden_index = source_chain_seed.index(hidden_tool)
+    except ValueError:
+        return False
+    allowed_prefix = set(source_chain_seed[:hidden_index])
+    schemas_by_name = {
+        str(schema.get("name") or ""): schema for schema in tool_schemas
+    }
+    for call in oracle_calls:
+        if getattr(call, "action", "tool_call") != "tool_call":
+            continue
+        tool_name = str(getattr(call, "tool_name", "") or "")
+        annotations = schemas_by_name.get(tool_name, {}).get("annotations") or {}
+        if annotations.get("mutating") is True and tool_name not in allowed_prefix:
+            return True
+    return False
+
+
 def _strip_enums_from_schemas(tools: list[dict]) -> list[dict]:
     """Return new list of tool dicts with enum values removed from input_schema."""
     def _strip(value: Any) -> Any:
@@ -195,11 +243,13 @@ class TaskOrchestrator:
     # is unsafe: the cache is invalidated on session change and force-refreshed
     # after in-session writes. K only bounds reuse inside an unchanged session.
     SAMPLING_CONTEXT_REFRESH_K: int = 10
-    DEPENDENCY_CACHE_VERSION: int = 4
+    DEPENDENCY_CACHE_VERSION: int = 5
     DEPENDENCY_SEMANTICS_VERSION: int = 10
     DEPENDENCY_PAIR_BATCH_SIZE: int = 8
     DEPENDENCY_CLASSIFICATION_MAX_TOKENS: int = 512
     DEPENDENCY_FAILURE_RETRY_SECONDS: float = 60.0
+    # Tests may override this root explicitly; production remains checkout-anchored.
+    DEPENDENCY_CACHE_ROOT: Path | None = None
 
     def __init__(
         self,
@@ -212,10 +262,13 @@ class TaskOrchestrator:
         self.manager = manager
         self.executor = executor
         self.client = client
-        self._domain_graphs: dict[str, dict] = {}     # cached dependency graphs per domain
-        self._domain_chains: dict[str, list] = {}     # cached length-2 to length-5 chains
+        # In-process artifacts must use the same schema/classifier identity as
+        # the on-disk cache.  A domain-only key can silently retain old chains
+        # after a live MCP schema or Teacher model changes.
+        self._domain_graphs: dict[tuple[str, str, str], dict] = {}
+        self._domain_chains: dict[tuple[str, str, str], list] = {}
         self._dependency_graph_lock = threading.RLock()
-        self._dependency_graph_failures: dict[tuple[str, str], tuple[float, str]] = {}
+        self._dependency_graph_failures: dict[tuple[str, str, str], tuple[float, str]] = {}
         # PROVE §3.2 Step 2: sampling context cache per domain.
         # Each entry: {"context": dict, "call_count": int, "session_id": str}
         self._sampling_context_cache: dict[str, dict] = {}
@@ -233,6 +286,66 @@ class TaskOrchestrator:
                 progress += 1
         return progress
 
+    def _record_round_trace(
+        self,
+        *,
+        teacher: Any,
+        session_id: str,
+        server_name: str,
+        round_idx: int,
+        phase: str,
+        current_query: str,
+        visible_tools: list[dict[str, Any]],
+        public_context: dict[str, Any],
+        oracle_calls: list[Any] | None = None,
+    ) -> None:
+        """Record the round boundary and optional true state for audit only.
+
+        The debug state is never returned to the Teacher and never enters the
+        oracle/reward path.  It is captured only when the already opt-in Teacher
+        trace also enables ``LIVEMCP_TEACHER_TRACE_INCLUDE_STATE``.
+        """
+        recorder = getattr(teacher, "record_environment_event", None)
+        if not callable(recorder):
+            return
+        recorder(
+            "round_boundary",
+            phase=phase,
+            round_idx=round_idx,
+            current_query=current_query,
+            visible_tool_names=[
+                str(tool.get("name") or "") for tool in visible_tools
+            ],
+            public_context=public_context,
+            oracle_calls=[
+                {
+                    "action": getattr(call, "action", "tool_call"),
+                    "tool_name": getattr(call, "tool_name", ""),
+                    "arguments": dict(getattr(call, "arguments", {}) or {}),
+                }
+                for call in (oracle_calls or [])
+            ],
+        )
+        if not bool(getattr(teacher, "trace_includes_state", False)):
+            return
+        try:
+            state_envelope = self.manager.get_state(session_id, server_name)
+            state = state_envelope.get(server_name, state_envelope)
+            recorder(
+                "entity_state_snapshot",
+                phase=phase,
+                round_idx=round_idx,
+                state_hash=_stable_state_hash(state),
+                state=state,
+            )
+        except Exception as exc:
+            recorder(
+                "entity_state_snapshot",
+                phase=phase,
+                round_idx=round_idx,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+
     def _run_turn_loop(
         self,
         teacher,
@@ -249,6 +362,7 @@ class TaskOrchestrator:
         blocked_tools: set[str] | None = None,
         missing_function_contract: bool = False,
         prior_execution_history: list[dict[str, Any]] | None = None,
+        conversation_context: list[dict[str, Any]] | None = None,
         allow_direct_answer: bool = False,
         fsm: ConversationFSM | None = None,
     ) -> tuple[list, list[dict], list[Any], set[str], list[OracleCall], list[Any]]:
@@ -296,18 +410,30 @@ class TaskOrchestrator:
                     return str(schema.get("_server_name") or server_name)
             return server_name
 
-        # A continuation round must see the real prior execution history. The
-        # marker is only a defensive fallback for legacy callers that do not
-        # provide it; it prevents first-turn prompting without pretending the
-        # previous tool observations are available.
-        if round_idx > 0 and not prior_history:
-            prior_history.append({
-                "tool_name": "__prior_round__",
-                "arguments": {},
-                "observation": {},
-                "success": True,
-                "execution_status": "SUCCESS",
-            })
+        def _trace(stage: str, **payload: Any) -> None:
+            recorder = getattr(teacher, "record_environment_event", None)
+            if callable(recorder):
+                recorder(stage, **payload)
+
+        def _execution_event(
+            name: str,
+            arguments: dict[str, Any],
+            result: Any,
+        ) -> dict[str, Any]:
+            """Normalize the real MCP result consumed by the next Agent step."""
+            return {
+                "round_idx": round_idx,
+                "tool_name": name,
+                "arguments": dict(arguments),
+                "observation": getattr(result, "observation", None),
+                "success": bool(getattr(result, "success", False)),
+                "execution_status": str(
+                    getattr(result, "execution_status", "FAILURE")
+                ),
+                "state_changed": bool(getattr(result, "state_changed", False)),
+                "error_type": str(getattr(result, "error_type", "") or ""),
+                "error_message": str(getattr(result, "error_message", "") or ""),
+            }
 
         def _add_oracle(call: OracleCall) -> bool:
             """Append the state-machine oracle without intra-trace pruning."""
@@ -336,6 +462,7 @@ class TaskOrchestrator:
                     difficulty=difficulty,
                     reference_date=reference_date,
                     chain_context=chain_context,
+                    conversation_context=conversation_context,
                     blocked_tools=blocked_tools,
                     missing_function=missing_function_contract,
                     allow_direct_answer=allow_direct_answer,
@@ -348,6 +475,10 @@ class TaskOrchestrator:
                 break
 
             if action.action == "ask_clarification":
+                _trace(
+                    "terminal_action", round_idx=round_idx,
+                    action="ask_clarification", text=action.text,
+                )
                 if fsm is not None:
                     fsm.transition(
                         FSMStateGroup.RESPONSE,
@@ -363,6 +494,10 @@ class TaskOrchestrator:
                 break
 
             if action.action in ("final_answer", "report_error"):
+                _trace(
+                    "terminal_action", round_idx=round_idx,
+                    action=action.action, text=action.text,
+                )
                 if fsm is not None:
                     fsm.transition(
                         FSMStateGroup.RESPONSE,
@@ -399,12 +534,19 @@ class TaskOrchestrator:
                 }
                 _record_attempt(tool_name, action.arguments, blocked_observation, False, _owner_domain(tool_name))
                 execution_history.append({
+                    "round_idx": round_idx,
                     "tool_name": tool_name,
                     "arguments": dict(action.arguments),
                     "observation": blocked_observation,
                     "success": False,
                     "execution_status": "BLOCKED",
+                    "state_changed": False,
+                    "error_type": "TOOL_BLOCKED",
+                    "error_message": blocked_observation["error"],
                 })
+                _trace(
+                    "mcp_feedback", **execution_history[-1],
+                )
                 if fsm is not None:
                     fsm.transition(
                         FSMStateGroup.RESPONSE,
@@ -434,6 +576,10 @@ class TaskOrchestrator:
             _record_attempt(
                 tool_name, action.arguments, result.observation, result.success, execution_domain,
             )
+            _trace(
+                "mcp_feedback",
+                **_execution_event(tool_name, dict(action.arguments), result),
+            )
 
             if fsm is not None:
                 fsm.transition(
@@ -449,13 +595,9 @@ class TaskOrchestrator:
                     f"{server_name} (error_type={result.error_type}, "
                     f"msg={result.error_message[:80]})"
                 )
-                execution_history.append({
-                    "tool_name": tool_name,
-                    "arguments": dict(action.arguments),
-                    "observation": result.observation,
-                    "success": False,
-                    "execution_status": result.execution_status,
-                })
+                execution_history.append(
+                    _execution_event(tool_name, dict(action.arguments), result)
+                )
 
                 # If this is the first tool call and it failed, don't give up
                 # immediately — let the LLM try again with a different approach.
@@ -472,11 +614,21 @@ class TaskOrchestrator:
                 recovery = teacher.decide_recovery(
                     last_tool_name=tool_name,
                     last_arguments=dict(action.arguments),
-                    error_observation={"error": str(result.observation)},
+                    error_observation={
+                        "error_type": str(result.error_type or "EXECUTION_ERROR"),
+                        "error_message": str(result.error_message or ""),
+                        "observation": result.observation,
+                    },
                     tool_schemas=server_tools,
                     execution_history=prior_history + execution_history,
                 )
                 rec_action = recovery.get("action", "give_up")
+                _trace(
+                    "parsed_recovery",
+                    round_idx=round_idx,
+                    failed_tool=tool_name,
+                    recovery=recovery,
+                )
 
                 if rec_action == "give_up":
                     reason = str(
@@ -495,6 +647,10 @@ class TaskOrchestrator:
                         action="report_error",
                     ))
                     oracle_observations.append({})
+                    _trace(
+                        "terminal_action", round_idx=round_idx,
+                        action="report_error", text=reason,
+                    )
                     break
                 elif rec_action in ("retry", "retry_same"):
                     corrected = recovery.get("corrected_args", dict(action.arguments))
@@ -513,13 +669,12 @@ class TaskOrchestrator:
                         tool_name, corrected, retry_result.observation,
                         retry_result.success, execution_domain,
                     )
-                    execution_history.append({
-                        "tool_name": tool_name,
-                        "arguments": corrected,
-                        "observation": retry_result.observation if retry_result.observation is not None else {},
-                        "success": bool(retry_result.success),
-                        "execution_status": retry_result.execution_status,
-                    })
+                    execution_history.append(
+                        _execution_event(tool_name, corrected, retry_result)
+                    )
+                    _trace(
+                        "mcp_feedback", recovery="retry", **execution_history[-1],
+                    )
                     if fsm is not None:
                         fsm.transition(
                             FSMStateGroup.RESPONSE,
@@ -556,13 +711,13 @@ class TaskOrchestrator:
                             alt_tool, recovery.get("arguments", {}), alt_result.observation,
                             alt_result.success, alt_domain,
                         )
-                        execution_history.append({
-                            "tool_name": alt_tool,
-                            "arguments": recovery.get("arguments", {}),
-                            "observation": alt_result.observation if alt_result.observation is not None else {},
-                            "success": bool(alt_result.success),
-                            "execution_status": alt_result.execution_status,
-                        })
+                        execution_history.append(_execution_event(
+                            alt_tool, recovery.get("arguments", {}), alt_result,
+                        ))
+                        _trace(
+                            "mcp_feedback", recovery="alternative",
+                            **execution_history[-1],
+                        )
                         if fsm is not None:
                             fsm.transition(
                                 FSMStateGroup.RESPONSE,
@@ -595,13 +750,48 @@ class TaskOrchestrator:
             # PROVE exposes PARTIAL_SUCCESS as a distinct execution outcome.
             # It is not a recovery failure, but the next Teacher decision sees
             # the exact outcome in execution_history instead of a folded SUCCESS.
-            execution_history.append({
-                "tool_name": tool_name,
-                "arguments": dict(action.arguments),
-                "observation": result.observation if result.observation is not None else {},
-                "success": True,
-                "execution_status": result.execution_status,
-            })
+            execution_history.append(
+                _execution_event(tool_name, dict(action.arguments), result)
+            )
+            current_event = execution_history[-1]
+            if not bool(current_event.get("state_changed")):
+                current_signature = json.dumps(
+                    {
+                        "tool_name": tool_name,
+                        "arguments": action.arguments,
+                        "observation": result.observation,
+                        "execution_status": result.execution_status,
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                    default=str,
+                )
+                repeated = any(
+                    json.dumps(
+                        {
+                            "tool_name": prior.get("tool_name"),
+                            "arguments": prior.get("arguments", {}),
+                            "observation": prior.get("observation"),
+                            "execution_status": prior.get("execution_status"),
+                        },
+                        sort_keys=True,
+                        ensure_ascii=False,
+                        default=str,
+                    ) == current_signature
+                    for prior in execution_history[:-1]
+                )
+                if repeated:
+                    current_event["no_progress_warning"] = (
+                        "This exact tool call already returned the same outcome "
+                        "without changing state. Do not repeat it again; choose a "
+                        "different action or emit a legal terminal response."
+                    )
+                    _trace(
+                        "no_progress_detected",
+                        round_idx=round_idx,
+                        tool_name=tool_name,
+                        arguments=dict(action.arguments),
+                    )
 
             if _add_oracle(OracleCall(
                 tool_name=tool_name,
@@ -674,7 +864,7 @@ class TaskOrchestrator:
         from src.live_mcp.task_planner import (
             TaskPlanner, derive_success_criteria, derive_progress_predicates,
             replay_validate,
-            _PERSONA_TEMPLATES, _REFERENCE_DATES, ContinuationPolicy,
+            _PERSONA_TEMPLATES, reference_date_for_seed, ContinuationPolicy,
             provenance_check, _is_mutating_tool,
         )
         from src.live_mcp.types import ToolCall
@@ -683,17 +873,17 @@ class TaskOrchestrator:
 
         # ── Sample diversity injectors (PROVE §4) ──
         persona = _PERSONA_TEMPLATES[seed % len(_PERSONA_TEMPLATES)]
-        reference_date = _REFERENCE_DATES[(seed // len(_PERSONA_TEMPLATES)) % len(_REFERENCE_DATES)]
+        reference_date = reference_date_for_seed(seed)
 
         # ── Sample dependency chain seed (PROVE §6 step 2) ──
         # PROVE §3.2 Step 2 guard: defer chain selection until live state is
         # available so we can filter out chains whose first step has no entity.
 
         # ── Conversation-level continuation ──
-        # The dependency chain is one atomic user goal. Continuation is useful
-        # only while that goal remains incomplete; forcing another user turn
-        # after the chain is complete leaves no capability to bind the new
-        # query to and produces unrelated or unsupported requests.
+        # The dependency chain is one atomic initial user goal and is not split
+        # into later turns. PROVE continuation samples a related follow-up from
+        # refreshed live state after that round; it does not bind the new user
+        # request to another hidden dependency-chain node.
 
         # ── Defensive initialisation (all variables reused after the retry loop).
         # Candidate-level regeneration is intentionally one-shot by default.
@@ -756,6 +946,11 @@ class TaskOrchestrator:
             teacher = TaskPlanner(self.client, server_name, seed=local_seed)
             conversation_fsm = ConversationFSM()
 
+            def _trace_generation(stage: str, **payload: Any) -> None:
+                recorder = getattr(teacher, "record_environment_event", None)
+                if callable(recorder):
+                    recorder(stage, **payload)
+
             session = self.manager.create_session(seed=local_seed)
             session_id = session.session_id
             all_tools = self.manager.discover_tools(session_id)
@@ -784,6 +979,26 @@ class TaskOrchestrator:
             # (for feasibility), pick hidden_tool from chain_seed later, then
             # rebuild teacher_visible_tools without the hidden tool.
             teacher_visible_tools = _build_teacher_visible_tools(server_tools, plan)
+            query_teacher_visible_tools = list(teacher_visible_tools)
+            _trace_generation(
+                "generation_setup",
+                retry_attempt=retry_attempt,
+                session_id=session_id,
+                server_name=server_name,
+                difficulty=difficulty,
+                robustness_plan={
+                    "inject_distractors": plan.inject_distractors,
+                    "distractor_tool_names": [
+                        str(tool.get("name") or "")
+                        for tool in plan.distractor_tools
+                    ],
+                    "strip_enums": plan.strip_enums,
+                    "missing_function": plan.missing_function,
+                    "irrelevance": plan.irrelevance,
+                },
+                clean_server_tools=server_tools,
+                query_candidate_tools=query_teacher_visible_tools,
+            )
 
             try:
                 grounded_state = self.manager.get_state(session_id)
@@ -862,13 +1077,40 @@ class TaskOrchestrator:
                 query_grounding_state = _live_context_to_prompt_state(
                     query_visible_context
                 )
+                _trace_generation(
+                    "dependency_chain_selection",
+                    all_chain_count=len(all_chains),
+                    feasible_chain_count=len(feasible_chains),
+                    selected_chain=source_chain_seed or [],
+                    dependency_hints=dep_hints,
+                )
+                _trace_generation(
+                    "live_state_sampling",
+                    session_id=session_id,
+                    initial_state_hash=_stable_state_hash(initial_state_snapshot),
+                    initial_state=(
+                        initial_state_snapshot
+                        if bool(getattr(teacher, "trace_includes_state", False))
+                        else None
+                    ),
+                    live_sampling_context=_compact_sampling_context(
+                        live_sampling_context
+                    ),
+                    query_chain_context=query_chain_context,
+                    query_grounding_state=query_grounding_state,
+                )
                 # PROVE Step 1/3: the complete 2--5 step dependency chain seeds
                 # one grounded task.  Continuation is a later interaction
                 # mechanism; it must not be used to turn individual chain nodes
                 # into separate user requests.
                 query_generation_chain = source_chain_seed
                 generated_query = teacher.generate_query(
-                    tool_schemas=server_tools,
+                    # Robustness is sampled before Teacher processing. At this
+                    # point missing_function has not selected its hidden tool,
+                    # so the complete capability remains available for query
+                    # synthesis while distractors/enum stripping are already
+                    # reflected in the visible contract.
+                    tool_schemas=teacher_visible_tools,
                     grounded_state=query_grounding_state,
                     difficulty=difficulty,
                     rng=local_rng,
@@ -907,6 +1149,21 @@ class TaskOrchestrator:
                         chain_seed = None
                         chain_context = {}
 
+                _trace_generation(
+                    "action_candidate_contract",
+                    query_candidate_tool_names=[
+                        str(tool.get("name") or "")
+                        for tool in query_teacher_visible_tools
+                    ],
+                    action_candidate_tools=teacher_visible_tools,
+                    hidden_tools=sorted(blocked_tools_set or set()),
+                    enum_stripped=plan.strip_enums,
+                    distractor_tool_names=[
+                        str(tool.get("name") or "")
+                        for tool in plan.distractor_tools
+                    ],
+                )
+
                 # Accumulators across conversation rounds (PROVE CONTINUATION)
                 # (re-assigned each retry; types declared before the loop)
                 all_oracle_calls = []
@@ -924,6 +1181,14 @@ class TaskOrchestrator:
 
                 current_query = user_query
                 previous_assistant_response = ""
+                completed_conversation_context: list[dict[str, Any]] = []
+                # Preserve exactly the compact public entity view consumed by
+                # the first Action Teacher turn.  Training serialization uses
+                # this same view so the Policy is not asked to reproduce an
+                # oracle from less information than the Teacher had.
+                initial_action_entity_summaries = list(
+                    query_chain_context.get("query_grounding_summaries", [])
+                )[:15]
 
                 logger.debug(
                     f"CONTINUATION: {server_name} task {task_id} "
@@ -934,12 +1199,14 @@ class TaskOrchestrator:
                 round_idx = 0
                 decision = "follow_up"  # dummy, overwritten on round_idx==0 path below
                 while True:
-                    # PROVE exposes sampled state to query generation.  The action
-                    # planner receives the resulting user query, schemas, and real
-                    # execution history; giving it sampler-private IDs would bypass
-                    # discovery tools.  IDs must come from the user message or a
-                    # prior tool observation.
-                    round_action_context: dict[str, Any] = {}
+                    # The Action Teacher receives the same public facts used to
+                    # formulate the current query, but never sampler-private IDs.
+                    # The sampled chain itself remains hidden.
+                    round_action_context: dict[str, Any] = {
+                        "entity_summaries": list(
+                            query_chain_context.get("query_grounding_summaries", [])
+                        )
+                    }
                     if round_idx > 0:
                         followup_live_context = self._get_live_sampling_context(
                             session_id=session_id,
@@ -957,6 +1224,7 @@ class TaskOrchestrator:
                                 persona=persona,
                                 reference_date=reference_date,
                                 previous_response=previous_assistant_response,
+                                conversation_context=completed_conversation_context,
                             )
                         else:
                             current_query = teacher.generate_followup(
@@ -970,13 +1238,28 @@ class TaskOrchestrator:
                                 chain_seed=None,
                                 chain_progress=0,
                                 previous_response=previous_assistant_response,
+                                conversation_context=completed_conversation_context,
                             )
                         conversation_queries.append(current_query)
+                        round_action_context = _teacher_public_action_context(
+                            followup_live_context, current_query,
+                        )
                     else:
                         # round_idx == 0: first round, no decision yet
                         decision = "follow_up"  # dummy for the first iteration
 
                     max_calls_r = 0
+
+                    self._record_round_trace(
+                        teacher=teacher,
+                        session_id=session_id,
+                        server_name=server_name,
+                        round_idx=round_idx,
+                        phase="input",
+                        current_query=current_query,
+                        visible_tools=teacher_visible_tools,
+                        public_context=round_action_context,
+                    )
 
                     (
                         round_ocs,
@@ -1000,8 +1283,20 @@ class TaskOrchestrator:
                         blocked_tools=blocked_tools_set,
                         missing_function_contract=plan.missing_function,
                         prior_execution_history=all_execution_history,
+                        conversation_context=completed_conversation_context,
                         allow_direct_answer=(round_idx > 0 and decision == "clarification"),
                         fsm=conversation_fsm,
+                    )
+                    self._record_round_trace(
+                        teacher=teacher,
+                        session_id=session_id,
+                        server_name=server_name,
+                        round_idx=round_idx,
+                        phase="output",
+                        current_query=current_query,
+                        visible_tools=teacher_visible_tools,
+                        public_context=round_action_context,
+                        oracle_calls=round_ocs,
                     )
 
                     if round_idx == 0:
@@ -1058,6 +1353,30 @@ class TaskOrchestrator:
                             or terminal_args.get("question")
                             or ""
                         )
+                        completed_conversation_context.append({
+                            "round_idx": round_idx,
+                            "user_query": current_query,
+                            "assistant_response": previous_assistant_response,
+                            "terminal_action": getattr(
+                                round_terminals[-1], "action", "final_answer"
+                            ),
+                        })
+
+                    # The hidden capability is selected from the initial
+                    # sampled chain.  If the original request already reaches
+                    # final_answer, this candidate did not actually exercise
+                    # the missing-function variant.  Fail the candidate here;
+                    # do not let an unrelated later continuation manufacture
+                    # the required abstention terminal.
+                    if _missing_function_original_round_should_abort(
+                        plan.missing_function, round_idx, filtered_round_ocs,
+                    ):
+                        logger.debug(
+                            f"Missing-function original round completed without "
+                            f"clarification/abstention for {server_name} task "
+                            f"{task_id}; rejecting candidate before continuation."
+                        )
+                        break
 
                     # ask_clarification / report_error break the conversation
                     # immediately — they indicate the Teacher cannot proceed further
@@ -1086,6 +1405,12 @@ class TaskOrchestrator:
                         round_idx, local_rng,
                     )
                     if decision == "end":
+                        conversation_fsm.transition(
+                            FSMStateGroup.CONTINUATION,
+                            "continuation_selected",
+                            decision="end",
+                            round_idx=round_idx,
+                        )
                         break
                     conversation_fsm.transition(
                         FSMStateGroup.QUERY,
@@ -1104,6 +1429,20 @@ class TaskOrchestrator:
                 ]
                 if plan.missing_function:
                     if not _abstain_now:
+                        self.manager.close_session(session_id)
+                        continue
+                    if _missing_function_has_nonprefix_mutation(
+                        True,
+                        all_oracle_calls,
+                        source_chain_seed,
+                        plan.hidden_tool,
+                        server_tools,
+                    ):
+                        logger.debug(
+                            f"Missing-function candidate for {server_name} left a "
+                            "successful mutation outside the visible source-chain "
+                            "prefix before abstaining; retrying the candidate"
+                        )
                         self.manager.close_session(session_id)
                         continue
                 elif not _real_now and not (difficulty == "missing" and _clar_now):
@@ -1183,6 +1522,14 @@ class TaskOrchestrator:
                     domain=server_name,
                     success_criteria=success_criteria,
                     blocked_tools=blocked_tools_set,
+                    trace_recorder=(
+                        getattr(teacher, "record_environment_event", None)
+                        if getattr(teacher, "_trace_path", None) is not None
+                        else None
+                    ),
+                    trace_include_state=bool(
+                        getattr(teacher, "trace_includes_state", False)
+                    ),
                 )
                 if not valid:
                     if retry_attempt + 1 < max_task_attempts:
@@ -1213,6 +1560,12 @@ class TaskOrchestrator:
                     aligned_observations=all_attempt_observations,
                     user_queries=conversation_queries,
                     call_round_indices=all_attempt_round_indices,
+                )
+                _trace_generation(
+                    "provenance_result",
+                    passed=prov_ok,
+                    violation_count=len(prov_violations),
+                    violations=prov_violations,
                 )
                 if not prov_ok:
                     if retry_attempt + 1 < max_task_attempts:
@@ -1272,6 +1625,25 @@ class TaskOrchestrator:
 
                 # ── Success ──
                 final_teacher_visible_tools = teacher_visible_tools
+                _trace_generation(
+                    "task_acceptance",
+                    task_id=task_id,
+                    accepted=True,
+                    scenario_type=scenario_type,
+                    source_chain_seed=source_chain_seed or [],
+                    realized_chain_seed=realized_chain_seed,
+                    oracle_calls=[to_plain(call) for call in all_oracle_calls],
+                    success_criteria=success_criteria,
+                    replay={
+                        "passed": valid,
+                        "error_rate": error_rate,
+                        "num_errors": num_errors,
+                        "num_calls": num_calls,
+                        "criteria_ok": criteria_ok,
+                        "criteria_failed": criteria_failed,
+                    },
+                    provenance_passed=prov_ok,
+                )
                 generation_succeeded = True
                 break
 
@@ -1331,6 +1703,9 @@ class TaskOrchestrator:
                 "source": "live_readonly_probe",
                 "chain_context": chain_context,
                 "live_sampling_context": _compact_sampling_context(live_sampling_context),
+                "initial_action_context": {
+                    "entity_summaries": initial_action_entity_summaries,
+                },
             },
         )
         # Preserve the same candidate contract used by the Teacher. Distractors
@@ -1899,37 +2274,6 @@ class TaskOrchestrator:
             return None
 
     @staticmethod
-    def _fallback_irrelevant_query(server_name: str, rng: random.Random) -> str:
-        """Fallback templates when LLM teacher fails to generate."""
-        templates = [
-            "What's the weather like today?",
-            "Tell me a fun fact about space.",
-            "Can you recommend a good book to read?",
-            "What's the latest news?",
-            "How do I cook pasta?",
-            "What's your favorite color?",
-            "Can you solve this math problem: 42 * 17?",
-            "Tell me a joke.",
-            "What movies are playing near me?",
-            "Can you translate 'hello' to French?",
-            "What's the capital of Bhutan?",
-            "How many calories in an apple?",
-            "Explain quantum computing in simple terms.",
-            "What are the rules of chess?",
-            "How do I change a flat tire?",
-            "What's the population of Tokyo?",
-            "Can you summarize the plot of Hamlet?",
-            "What causes the Northern Lights?",
-            "How do plants make energy from sunlight?",
-            "What's the difference between HTTP and HTTPS?",
-            "Who painted the Mona Lisa?",
-            "How far is the moon from Earth?",
-            "What's the best way to learn a new language?",
-            "Can you explain how blockchain works?",
-        ]
-        return rng.choice(templates)
-
-    @staticmethod
     def _pick_difficulty(seed: int, difficulty_mix: dict[str, float]) -> str:
         if not difficulty_mix:
             return "complete"
@@ -1968,14 +2312,80 @@ class TaskOrchestrator:
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
     @staticmethod
-    def _graph_cache_path(server_name: str, schema_hash: str) -> Path:
-        return Path("data/dependency_graphs") / f"{server_name}_{schema_hash}.json"
+    def _dependency_classifier_system_prompt() -> str:
+        """Return the exact Step-1 classifier contract included in cache provenance."""
+        return (
+            "You are analyzing tool dependencies for an MCP server. "
+            "For each unordered tool pair {A, B}, decide whether a dependency "
+            "exists and, if so, choose its source and target:\n"
+            '- "explicit": source produces output that is a REQUIRED INPUT of target '
+            "(e.g., source returns an entity ID that target needs as a parameter).\n"
+            '- "implicit": source must execute BEFORE target to establish state, '
+            "but source's output is not a direct input to target.\n"
+            '- "none": neither listed direction is a required dependency.\n\n'
+            "Classification rules:\n"
+            "- If A creates/returns something that B's required parameters "
+            "reference, mark explicit.\n"
+            "- Mark implicit only when source establishes live server state that target "
+            "cannot succeed without, such as create_draft → send_draft, "
+            "add_to_cart → checkout, or schedule_transfer → cancel_transfer.\n"
+            "- If B can succeed with the same arguments and pre-existing server state "
+            "without running A first, classify A → B as none. Mere topical relevance, "
+            "a useful recommendation, or a common workflow order is none.\n"
+            "- A read-only A is not an implicit dependency merely because its result is "
+            "helpful. It is explicit only when B requires a value produced by A.\n"
+            "- Prefer explicit over implicit when both could apply.\n"
+            "- Only mark implicit if there is a genuine required state dependency."
+        )
+
+    def _classifier_contract_payload(self) -> dict[str, Any]:
+        model_id = str(getattr(self.client, "model_path", "unknown"))
+        prompt = self._dependency_classifier_system_prompt()
+        return {
+            "teacher_model_id": model_id,
+            "classifier_prompt_sha256": hashlib.sha256(
+                prompt.encode("utf-8")
+            ).hexdigest(),
+            "dependency_semantics_version": self.DEPENDENCY_SEMANTICS_VERSION,
+        }
+
+    def _classifier_contract_hash(self) -> str:
+        raw = json.dumps(
+            self._classifier_contract_payload(),
+            sort_keys=True,
+            ensure_ascii=True,
+        )
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+    @classmethod
+    def _graph_cache_path(cls, server_name: str, schema_hash: str) -> Path:
+        # Anchor project artifacts to the checkout, independent of process cwd.
+        root = cls.DEPENDENCY_CACHE_ROOT or (
+            project_root() / "data" / "dependency_graphs"
+        )
+        return root / f"{server_name}_{schema_hash}.json"
+
+    def _dependency_cache_key(
+        self,
+        server_name: str,
+        server_tools: list[dict] | None = None,
+    ) -> tuple[str, str, str]:
+        tools = (
+            server_tools
+            if server_tools is not None
+            else self.manager.registry.server_tools(server_name)
+        )
+        return (
+            server_name,
+            self._tool_schema_hash(tools, server_name),
+            self._classifier_contract_hash(),
+        )
 
     @staticmethod
     @contextmanager
     def _graph_cache_file_lock(cache_path: Path):
         """Serialize one domain/schema cache build across Python processes."""
-        lock_path = cache_path.with_name(f"{cache_path.name}.lock")
+        lock_path = cache_path.parent / ".locks" / f"{cache_path.name}.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with lock_path.open("a+", encoding="utf-8") as lock_file:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
@@ -1998,9 +2408,10 @@ class TaskOrchestrator:
             expected_tool_set = set(expected_tool_names)
             if set(graph.keys()) != expected_tool_set:
                 return False
-        for edges in graph.values():
+        for source_name, edges in graph.items():
             if not isinstance(edges, dict):
                 return False
+            relation_targets: dict[str, list[str]] = {}
             for relation in ("explicit", "implicit"):
                 targets = edges.get(relation)
                 if not isinstance(targets, list):
@@ -2009,6 +2420,11 @@ class TaskOrchestrator:
                     return False
                 if expected_tool_set is not None and any(t not in expected_tool_set for t in targets):
                     return False
+                if source_name in targets:
+                    return False
+                relation_targets[relation] = targets
+            if set(relation_targets["explicit"]) & set(relation_targets["implicit"]):
+                return False
         return True
 
     @staticmethod
@@ -2036,10 +2452,189 @@ class TaskOrchestrator:
                         target_list.append(target)
             explicit_set = set(explicit)
             normalized[tool_name] = {
-                "explicit": explicit,
-                "implicit": [target for target in implicit if target not in explicit_set],
+                "explicit": sorted(explicit),
+                "implicit": sorted(
+                    target for target in implicit if target not in explicit_set
+                ),
             }
         return normalized
+
+    @staticmethod
+    def _expected_dependency_pairs(
+        expected_tool_names: list[str],
+    ) -> set[tuple[str, str]]:
+        names = sorted(expected_tool_names)
+        return {
+            (names[i], names[j])
+            for i in range(len(names))
+            for j in range(i + 1, len(names))
+        }
+
+    @classmethod
+    def _validate_pair_classifications(
+        cls,
+        pair_classifications: Any,
+        expected_tool_names: list[str],
+    ) -> list[dict[str, Any]] | None:
+        """Validate and canonicalize the complete C(n,2) classification ledger."""
+        if not isinstance(pair_classifications, list):
+            return None
+        expected_pairs = cls._expected_dependency_pairs(expected_tool_names)
+        seen: dict[tuple[str, str], dict[str, Any]] = {}
+        for entry in pair_classifications:
+            if not isinstance(entry, dict):
+                return None
+            raw_pair = entry.get("pair")
+            if (
+                not isinstance(raw_pair, list)
+                or len(raw_pair) != 2
+                or not all(isinstance(name, str) for name in raw_pair)
+            ):
+                return None
+            pair = tuple(sorted(raw_pair))
+            if pair not in expected_pairs or pair in seen:
+                return None
+            relation = str(entry.get("relation", "")).strip().lower()
+            if relation not in ("explicit", "implicit", "none"):
+                return None
+            source = str(entry.get("source") or "").strip()
+            target = str(entry.get("target") or "").strip()
+            if relation == "none":
+                if source or target:
+                    return None
+            elif (
+                source == target
+                or {source, target} != set(pair)
+            ):
+                return None
+            seen[pair] = {
+                "pair": list(pair),
+                "source": source,
+                "target": target,
+                "relation": relation,
+            }
+        if set(seen) != expected_pairs:
+            return None
+        return [seen[pair] for pair in sorted(seen)]
+
+    @staticmethod
+    def _pair_classification_contract_issue(
+        entry: dict[str, Any],
+        tools_by_name: dict[str, dict],
+        server_name: str = "",
+    ) -> str | None:
+        """Return a deterministic contradiction with the classifier contract."""
+        relation = entry.get("relation")
+        if relation == "none":
+            return None
+        source = tools_by_name.get(str(entry.get("source") or ""), {})
+        target = tools_by_name.get(str(entry.get("target") or ""), {})
+        if relation == "explicit":
+            required = (target.get("input_schema") or {}).get("required") or []
+            if not required:
+                return "explicit target has no required input"
+            # PROVE defines an explicit edge as source output supplying a
+            # required target input.  When the live domain contract tells us
+            # both resource types, reject only a direct contradiction and let
+            # the Teacher retry this pair; do not rewrite the relation.
+            domain = server_name or str(
+                source.get("_server_name") or target.get("_server_name") or ""
+            )
+            source_name = str(entry.get("source") or "")
+            created_types = set(
+                _DOMAIN_TOOL_OUTPUT_ENTITY_TYPES.get(domain, {}).get(
+                    source_name,
+                    _CREATED_ENTITY_BY_TOOL.get(source_name, set()),
+                )
+            )
+            required_types = set(
+                _DOMAIN_TOOL_REQUIREMENTS.get(domain, {}).get(
+                    str(entry.get("target") or ""), set()
+                )
+            )
+            if (
+                created_types
+                and required_types
+                and created_types.isdisjoint(required_types)
+            ):
+                return (
+                    "explicit source output entity types "
+                    f"{sorted(created_types)} cannot satisfy target entity types "
+                    f"{sorted(required_types)}"
+                )
+        if relation == "implicit":
+            annotations = source.get("annotations") or {}
+            if annotations.get("readonly") is True or annotations.get("mutating") is False:
+                return "implicit source is explicitly readonly/non-mutating"
+        return None
+
+    @classmethod
+    def _pair_classification_contract_issues(
+        cls,
+        pair_classifications: list[dict[str, Any]],
+        server_tools: list[dict],
+        server_name: str = "",
+    ) -> list[dict[str, Any]]:
+        tools_by_name = {
+            str(tool.get("name") or ""): tool for tool in server_tools
+        }
+        issues: list[dict[str, Any]] = []
+        for entry in pair_classifications:
+            reason = cls._pair_classification_contract_issue(
+                entry, tools_by_name, server_name,
+            )
+            if reason is not None:
+                issues.append({"pair": list(entry["pair"]), "reason": reason})
+        return issues
+
+    @classmethod
+    def _graph_from_pair_classifications(
+        cls,
+        pair_classifications: list[dict[str, Any]],
+        expected_tool_names: list[str],
+    ) -> dict[str, dict[str, list[str]]]:
+        graph = {
+            name: {"explicit": [], "implicit": []}
+            for name in sorted(expected_tool_names)
+        }
+        for entry in pair_classifications:
+            relation = entry["relation"]
+            if relation == "none":
+                continue
+            graph[entry["source"]][relation].append(entry["target"])
+        return cls._normalize_cached_graph(graph, sorted(expected_tool_names))
+
+    @classmethod
+    def _pair_classifications_from_graph(
+        cls,
+        graph: dict,
+        expected_tool_names: list[str],
+    ) -> list[dict[str, Any]]:
+        """Reconstruct a v5 ledger from a trusted complete v4 graph."""
+        normalized = cls._normalize_cached_graph(graph, sorted(expected_tool_names))
+        entries: list[dict[str, Any]] = []
+        for pair in sorted(cls._expected_dependency_pairs(expected_tool_names)):
+            directed: list[tuple[str, str, str]] = []
+            for source, target in (pair, (pair[1], pair[0])):
+                for relation in ("explicit", "implicit"):
+                    if target in normalized[source][relation]:
+                        directed.append((source, target, relation))
+            if len(directed) > 1:
+                raise ValueError(
+                    f"Dependency graph has multiple directed relations for pair {pair}: {directed}"
+                )
+            if directed:
+                source, target, relation = directed[0]
+            else:
+                source = target = ""
+                relation = "none"
+            entries.append({
+                "pair": list(pair),
+                "source": source,
+                "target": target,
+                "relation": relation,
+            })
+        return entries
 
     def _maybe_load_cached_graph(
         self,
@@ -2057,6 +2652,18 @@ class TaskOrchestrator:
             expected_tool_names = sorted(t.get("name", "") for t in server_tools)
             cached_tool_names = payload.get("tool_names") if isinstance(payload, dict) else None
             expected_pair_count = len(expected_tool_names) * (len(expected_tool_names) - 1) // 2
+            pair_classifications = self._validate_pair_classifications(
+                payload.get("pair_classifications") if isinstance(payload, dict) else None,
+                expected_tool_names,
+            )
+            derived_graph = (
+                self._graph_from_pair_classifications(
+                    pair_classifications, expected_tool_names,
+                )
+                if pair_classifications is not None
+                else None
+            )
+            classifier_contract = self._classifier_contract_payload()
             classification_complete = bool(
                 isinstance(payload, dict)
                 and payload.get("cache_version") == self.DEPENDENCY_CACHE_VERSION
@@ -2065,19 +2672,56 @@ class TaskOrchestrator:
                 and payload.get("classification_complete") is True
                 and payload.get("expected_pair_count") == expected_pair_count
                 and payload.get("classified_pair_count") == expected_pair_count
+                and pair_classifications is not None
+                and len(pair_classifications) == expected_pair_count
             )
-            if isinstance(graph, dict) and cached_tool_names == expected_tool_names:
-                graph = self._normalize_cached_graph(graph, expected_tool_names)
-            if (
+            cache_contract_matches = bool(
                 isinstance(payload, dict)
                 and payload.get("schema_hash") == schema_hash
                 and payload.get("server_name") == server_name
+                and payload.get("classifier_contract_hash")
+                    == self._classifier_contract_hash()
+                and payload.get("teacher_model_id")
+                    == classifier_contract["teacher_model_id"]
+                and payload.get("classifier_prompt_sha256")
+                    == classifier_contract["classifier_prompt_sha256"]
                 and cached_tool_names == expected_tool_names
+                and payload.get("tool_count") == len(expected_tool_names)
                 and classification_complete
                 and self._valid_cached_graph(graph, expected_tool_names)
-            ):
+                and graph == derived_graph
+            )
+            semantic_issues = (
+                self._pair_classification_contract_issues(
+                    pair_classifications, server_tools, server_name,
+                )
+                if cache_contract_matches and pair_classifications is not None
+                else []
+            )
+            repair_key = (server_name, schema_hash)
+            repairs = getattr(self, "_dependency_graph_repairs", None)
+            if repairs is None:
+                repairs = {}
+                self._dependency_graph_repairs = repairs
+            if cache_contract_matches and not semantic_issues:
+                repairs.pop(repair_key, None)
                 logger.info(f"Loaded dependency graph cache: {cache_path}")
                 return graph
+            if cache_contract_matches and semantic_issues:
+                invalid_pairs = {
+                    tuple(issue["pair"]) for issue in semantic_issues
+                }
+                repairs[repair_key] = [
+                    entry for entry in pair_classifications
+                    if tuple(entry["pair"]) not in invalid_pairs
+                ]
+                logger.warning(
+                    f"Dependency graph cache {cache_path} contains "
+                    f"{len(semantic_issues)} relation-contract violation(s); "
+                    "only those pairs will be reclassified"
+                )
+                return None
+            repairs.pop(repair_key, None)
             logger.warning(
                 f"Ignoring legacy/incomplete dependency graph cache: {cache_path}; "
                 f"a complete pairwise LLM classification is required"
@@ -2092,16 +2736,44 @@ class TaskOrchestrator:
         schema_hash: str,
         server_tools: list[dict],
         graph: dict,
+        pair_classifications: list[dict[str, Any]],
     ) -> None:
         """Persist PROVE's per-environment graph cache keyed by tool schema."""
         expected_tool_names = sorted(t.get("name", "") for t in server_tools)
-        graph = self._normalize_cached_graph(graph, expected_tool_names)
-        # Preserve the complete normalized pairwise LLM classification.
-        if not self._valid_cached_graph(graph, expected_tool_names):
+        pair_classifications = self._validate_pair_classifications(
+            pair_classifications, expected_tool_names,
+        )
+        if pair_classifications is None:
+            logger.warning(f"Skipping incomplete dependency pair ledger for {server_name}")
+            return
+        semantic_issues = self._pair_classification_contract_issues(
+            pair_classifications, server_tools, server_name,
+        )
+        if semantic_issues:
+            logger.warning(
+                f"Skipping dependency graph cache for {server_name}: "
+                f"{len(semantic_issues)} relation-contract violation(s)"
+            )
+            return
+        derived_graph = self._graph_from_pair_classifications(
+            pair_classifications, expected_tool_names,
+        )
+        normalized_input_graph = self._normalize_cached_graph(
+            graph, expected_tool_names,
+        )
+        # The ledger is authoritative. Refuse a graph that does not exactly
+        # match it instead of silently normalizing corruption during load.
+        if (
+            not self._valid_cached_graph(graph, expected_tool_names)
+            or normalized_input_graph != derived_graph
+        ):
             logger.warning(f"Skipping invalid dependency graph cache for {server_name}")
             return
+        graph = derived_graph
         cache_path = self._graph_cache_path(server_name, schema_hash)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
+        classifier_contract = self._classifier_contract_payload()
+        expected_pair_count = len(pair_classifications)
         payload = {
             "cache_version": self.DEPENDENCY_CACHE_VERSION,
             "dependency_semantics_version": self.DEPENDENCY_SEMANTICS_VERSION,
@@ -2109,9 +2781,12 @@ class TaskOrchestrator:
             "schema_hash": schema_hash,
             "tool_names": expected_tool_names,
             "graph": graph,
+            "pair_classifications": pair_classifications,
+            "classifier_contract_hash": self._classifier_contract_hash(),
+            **classifier_contract,
             "tool_count": len(expected_tool_names),
-            "expected_pair_count": len(expected_tool_names) * (len(expected_tool_names) - 1) // 2,
-            "classified_pair_count": len(expected_tool_names) * (len(expected_tool_names) - 1) // 2,
+            "expected_pair_count": expected_pair_count,
+            "classified_pair_count": expected_pair_count,
             "classification_complete": True,
         }
         serialized = json.dumps(payload, indent=2, ensure_ascii=False)
@@ -2163,7 +2838,8 @@ class TaskOrchestrator:
             if cached is not None:
                 return cached
 
-            failure_key = (server_name, schema_hash)
+            classifier_contract_hash = self._classifier_contract_hash()
+            failure_key = (server_name, schema_hash, classifier_contract_hash)
             failures = getattr(self, "_dependency_graph_failures", None)
             if failures is None:
                 failures = {}
@@ -2191,8 +2867,14 @@ class TaskOrchestrator:
                 if cached is not None:
                     return cached
 
-                graph = self._classify_edges_llm(server_tools, server_name)
-                if graph is None:
+                repair_key = (server_name, schema_hash)
+                initial_classifications = getattr(
+                    self, "_dependency_graph_repairs", {},
+                ).get(repair_key)
+                classification = self._classify_edges_llm(
+                    server_tools, server_name, initial_classifications,
+                )
+                if classification is None:
                     failure_message = (
                         f"Pairwise dependency classification incomplete for {server_name}; "
                         f"refusing incomplete graph"
@@ -2200,9 +2882,12 @@ class TaskOrchestrator:
                     failures[failure_key] = (time.monotonic(), failure_message)
                     raise RuntimeError(failure_message)
 
+                graph, pair_classifications = classification
                 self._save_cached_graph(
                     server_name, schema_hash, server_tools, graph,
+                    pair_classifications,
                 )
+                getattr(self, "_dependency_graph_repairs", {}).pop(repair_key, None)
                 return graph
         finally:
             self.manager.close_session(session.session_id)
@@ -2211,7 +2896,8 @@ class TaskOrchestrator:
         self,
         server_tools: list[dict],
         server_name: str,
-    ) -> dict | None:
+        initial_classifications: list[dict[str, Any]] | None = None,
+    ) -> tuple[dict, list[dict[str, Any]]] | None:
         """PROVE §3.2 Step 1: LLM-based pairwise tool relationship classification.
 
         Sends each unordered C(n,2) tool pair to the LLM once. The LLM selects
@@ -2221,7 +2907,7 @@ class TaskOrchestrator:
         Returns a graph dict with the same structure as _probe_dependency_graph,
         or None if LLM classification fails.
         """
-        tool_names = [t["name"] for t in server_tools]
+        tool_names = sorted(t["name"] for t in server_tools)
         n = len(tool_names)
         if n < 2:
             return None
@@ -2265,8 +2951,11 @@ class TaskOrchestrator:
         # This remains PROVE-style pairwise LLM classification over all C(n,2)
         # pairs; each request carries only the schemas for its batch.
         BATCH_SIZE = self.DEPENDENCY_PAIR_BATCH_SIZE
-        all_classifications: dict[str, str] = {}  # "A → B" → "explicit"|"implicit"
+        directed_classifications: dict[
+            tuple[str, str], tuple[str, str, str]
+        ] = {}
         classified_pairs: set = set()
+        rejection_reasons: dict[tuple[str, str], str] = {}
 
         all_pair_keys: set[tuple[str, str]] = set(pairs)
         expected_pair_count = len(all_pair_keys)
@@ -2279,6 +2968,28 @@ class TaskOrchestrator:
                 if tool_order[a_name] < tool_order[b_name]
                 else (b_name, a_name)
             )
+
+        tools_by_name = {
+            str(tool.get("name") or ""): tool for tool in server_tools
+        }
+
+        for entry in initial_classifications or []:
+            raw_pair = entry.get("pair")
+            if not isinstance(raw_pair, list) or len(raw_pair) != 2:
+                continue
+            pair_key = tuple(sorted(str(name) for name in raw_pair))
+            if pair_key not in all_pair_keys:
+                continue
+            if self._pair_classification_contract_issue(
+                entry, tools_by_name, server_name,
+            ):
+                continue
+            relation = entry.get("relation")
+            classified_pairs.add(pair_key)
+            if relation != "none":
+                directed_classifications[pair_key] = (
+                    str(entry["source"]), str(entry["target"]), str(relation),
+                )
 
         def _consume_classifications(
             data: Any,
@@ -2329,36 +3040,32 @@ class TaskOrchestrator:
                     continue
                 if source == target or _canonical_pair(source, target) != pair_key:
                     continue
+                candidate = {
+                    "pair": list(pair_key),
+                    "source": source,
+                    "target": target,
+                    "relation": relation,
+                }
+                issue = self._pair_classification_contract_issue(
+                    candidate, tools_by_name, server_name,
+                )
+                if issue is not None:
+                    rejection_reasons[pair_key] = issue
+                    logger.debug(
+                        f"_classify_edges_llm rejected {pair_key} for "
+                        f"{server_name}: {issue}"
+                    )
+                    continue
                 classified_pairs.add(pair_key)
-                all_classifications[f"{source} → {target}"] = relation
+                directed_classifications[pair_key] = (source, target, relation)
 
         for batch_start in range(0, len(pairs), BATCH_SIZE):
             batch_pairs = pairs[batch_start:batch_start + BATCH_SIZE]
             valid_batch_pairs = set(batch_pairs)
+            if valid_batch_pairs <= classified_pairs:
+                continue
 
-            system = (
-                "You are analyzing tool dependencies for an MCP server. "
-                "For each unordered tool pair {A, B}, decide whether a dependency "
-                "exists and, if so, choose its source and target:\n"
-                '- "explicit": source produces output that is a REQUIRED INPUT of target '
-                "(e.g., source returns an entity ID that target needs as a parameter).\n"
-                '- "implicit": source must execute BEFORE target to establish state, '
-                "but source's output is not a direct input to target.\n"
-                '- "none": neither listed direction is a required dependency.\n\n'
-                "Classification rules:\n"
-                "- If A creates/returns something that B's required parameters "
-                "reference, mark explicit.\n"
-                "- Mark implicit only when source establishes live server state that target "
-                "cannot succeed without, such as create_draft → send_draft, "
-                "add_to_cart → checkout, or schedule_transfer → cancel_transfer.\n"
-                "- If B can succeed with the same arguments and pre-existing server state "
-                "without running A first, classify A → B as none. Mere topical relevance, "
-                "a useful recommendation, or a common workflow order is none.\n"
-                "- A read-only A is not an implicit dependency merely because its result is "
-                "helpful. It is explicit only when B requires a value produced by A.\n"
-                "- Prefer explicit over implicit when both could apply.\n"
-                "- Only mark implicit if there is a genuine required state dependency."
-            )
+            system = self._dependency_classifier_system_prompt()
             batch_complete = False
             for batch_attempt in range(BATCH_RETRIES + 1):
                 # Ask only for pairs that are still missing. Re-sending the full
@@ -2380,6 +3087,21 @@ class TaskOrchestrator:
                     f"{i + 1}. {a_name} → {b_name}"
                     for i, (a_name, b_name) in enumerate(pending_pairs)
                 )
+                retry_feedback = "\n".join(
+                    f"- {a_name} → {b_name}: previous response rejected because {reason}."
+                    for (a_name, b_name), reason in (
+                        (pair, rejection_reasons[pair])
+                        for pair in pending_pairs
+                        if pair in rejection_reasons
+                    )
+                )
+                retry_section = (
+                    "\n\n## Contract Feedback\n"
+                    f"{retry_feedback}\n"
+                    "Reclassify these pairs under the definitions above; do not repeat "
+                    "the rejected relation/direction."
+                    if retry_feedback else ""
+                )
                 user = (
                     f"## Server: {server_name}\n\n"
                     f"## Tools\n{pending_tools_text}\n\n"
@@ -2387,7 +3109,7 @@ class TaskOrchestrator:
                     f"Classify every listed pair exactly once. The displayed A → B "
                     f"only identifies the pair; for explicit/implicit you may return "
                     f"either A as source and B as target or the reverse direction. "
-                    f"Do not omit any pair.\n\n"
+                    f"Do not omit any pair.{retry_section}\n\n"
                     f"## Output Format\n"
                     f'{{"classifications": [\n'
                     f'  {{"pair": "tool_a → tool_b", "source": "tool_a", "target": "tool_b", "relation": "explicit"}},\n'
@@ -2437,33 +3159,37 @@ class TaskOrchestrator:
             )
             return None
 
-        # Build graph from classifications
-        graph: dict[str, dict] = {}
-        for t in server_tools:
-            graph[t["name"]] = {"explicit": [], "implicit": []}
-
-        for pair_key, relation in all_classifications.items():
-            parts = pair_key.split(" → ")
-            if len(parts) == 2:
-                a_name, b_name = parts
-                if a_name in graph and b_name in graph:
-                    if relation == "explicit":
-                        graph[a_name]["explicit"].append(b_name)
-                    elif relation == "implicit":
-                        graph[a_name]["implicit"].append(b_name)
+        pair_classifications: list[dict[str, Any]] = []
+        for pair_key in sorted(all_pair_keys):
+            directed = directed_classifications.get(pair_key)
+            if directed is None:
+                source = target = ""
+                relation = "none"
+            else:
+                source, target, relation = directed
+            pair_classifications.append({
+                "pair": list(pair_key),
+                "source": source,
+                "target": target,
+                "relation": relation,
+            })
+        graph = self._graph_from_pair_classifications(
+            pair_classifications, tool_names,
+        )
 
         # Return the complete pairwise LLM classification. Build/load preserves
         # these LLM edges; handler facts are applied only when candidate chains
         # are checked against live state and execution.
-        return graph
+        return graph, pair_classifications
 
     def _extract_dependency_chains(self, server_name: str) -> list[list[str]]:
         """PROVE §6 step 2: extract length-2 to length-5 tool chains from dependency graph.
 
         Depth-first search through the dependency graph to find all valid tool chains.
         """
-        graph = self._domain_graphs.get(server_name) or self._probe_dependency_graph(server_name)
-        self._domain_graphs[server_name] = graph
+        cache_key = self._dependency_cache_key(server_name)
+        graph = self._domain_graphs.get(cache_key) or self._probe_dependency_graph(server_name)
+        self._domain_graphs[cache_key] = graph
         if not graph:
             return []
 
@@ -2507,9 +3233,10 @@ class TaskOrchestrator:
     def _get_chains(self, server_name: str) -> list[list[str]]:
         """Return cached dependency chains for *server_name*, extracting if needed."""
         with self._dependency_graph_lock:
-            if server_name not in self._domain_chains:
-                self._domain_chains[server_name] = self._extract_dependency_chains(server_name)
-            return self._domain_chains[server_name]
+            cache_key = self._dependency_cache_key(server_name)
+            if cache_key not in self._domain_chains:
+                self._domain_chains[cache_key] = self._extract_dependency_chains(server_name)
+            return self._domain_chains[cache_key]
 
     def _probe_live_sampling_context(
         self,
@@ -2531,6 +3258,7 @@ class TaskOrchestrator:
         entity_summaries: list[str] = []
         entity_records: list[dict[str, Any]] = []
         seen: set[tuple[str, str]] = set()
+        entity_index: dict[tuple[str, str], int] = {}
         probe_results: list[dict[str, Any]] = []
 
         def add_entity(eid: str, etype: str, edata: dict[str, Any] | None = None) -> None:
@@ -2538,8 +3266,24 @@ class TaskOrchestrator:
                 return
             key = (etype, eid)
             if key in seen:
+                # A broad discovery tool may reveal an opaque ID before a
+                # dedicated lookup returns its descriptive fields. Preserve
+                # identity deduplication but enrich the existing record so the
+                # Query Teacher receives the most complete MCP-observed facts.
+                if isinstance(edata, dict):
+                    idx = entity_index[key]
+                    existing = entity_records[idx].get("data")
+                    merged = {
+                        **(existing if isinstance(existing, dict) else {}),
+                        **edata,
+                    }
+                    entity_records[idx]["data"] = merged
+                    entity_summaries[idx] = _format_entity_summary(
+                        eid, etype, merged,
+                    )
                 return
             seen.add(key)
+            entity_index[key] = len(entity_ids)
             entity_ids.append({"id": eid, "type": etype})
             entity_summaries.append(_format_entity_summary(eid, etype, edata))
             entity_records.append({
@@ -2731,10 +3475,11 @@ class TaskOrchestrator:
     def _get_graph_hints(self, server_name: str) -> str:
         """Return cached dependency hints for *server_name*, probing if needed."""
         with self._dependency_graph_lock:
-            if server_name not in self._domain_graphs:
+            cache_key = self._dependency_cache_key(server_name)
+            if cache_key not in self._domain_graphs:
                 graph = self._probe_dependency_graph(server_name)
-                self._domain_graphs[server_name] = graph
-            return _format_graph_hints(self._domain_graphs[server_name])
+                self._domain_graphs[cache_key] = graph
+            return _format_graph_hints(self._domain_graphs[cache_key])
 
     def _get_live_sampling_context(
         self,
@@ -2935,12 +3680,14 @@ def _classify_scenario(
     Detection rules (ordered, first match wins):
       1. clarification_required: terminal is ask_clarification, zero real calls
       2. tool_error_recovery:   any non-reject execution failure in history
-      3. unsafe_temptation:     oracle trace has delete+create duplicate pattern
+      3. no_tool_or_abstention: report_error with zero successful tool calls
+      4. partial_completion_or_abstention: report_error after a successful prefix
+      5. unsafe_temptation:     oracle trace has delete+create duplicate pattern
                                 on the same entity type (true unsafe shortcut)
-      4. missing_dependency:    2+ step oracle where a later tool needs an entity
+      6. missing_dependency:    2+ step oracle where a later tool needs an entity
                                 that should have been produced by an earlier step
                                 but its predecessor is absent
-      5. normal_safe_success:   everything else
+      7. normal_safe_success:   everything else
     """
     real_calls_only = [c for c in oracle_calls
                        if getattr(c, "action", "tool_call") == "tool_call"]
@@ -2951,6 +3698,15 @@ def _classify_scenario(
     if any(not step.get("success", True) and step.get("tool_name") != "__reject__"
            for step in execution_history):
         return "tool_error_recovery"
+
+    # PROVE permits graceful give-up without first manufacturing a failed tool
+    # call.  Such a terminal is valid, but it is not a normal successful task.
+    if terminal_action == "report_error":
+        return (
+            "partial_completion_or_abstention"
+            if real_calls_only
+            else "no_tool_or_abstention"
+        )
 
     if not real_calls_only:
         return "normal_safe_success"
@@ -3055,18 +3811,18 @@ def _detect_missing_dependency(
     )
 
     for i, call in enumerate(oracle_calls):
-        # Step 0 may use entity IDs from task context (user query / initial
-        # state snapshot).  Only skip the dependency check when the arguments
-        # actually contain entity IDs — empty-arg single-step write tools are
-        # genuine missing dependencies.
-        if i == 0 and len(oracle_calls) > 1 and _oracle_target_ids([call]):
-            continue
-
         tool_name = call.tool_name.lower()
         if not any(tool_name.startswith(prefix) for prefix in write_prefixes):
             continue
 
         requirements = _tool_existing_entity_requirements(tool_name, server_name)
+        # An existing entity can be bound directly by a grounded user selector
+        # or by an earlier observation.  A non-empty selector on the current
+        # call therefore satisfies that entity requirement regardless of the
+        # call's position in a multi-round trace.  The old step-0-only shortcut
+        # mislabeled later calls such as create_thread(message_id, channel_id)
+        # even when the handler accepted both existing IDs during fresh replay.
+        requirements.difference_update(_bound_entity_types(call.arguments or {}))
         if not requirements:
             continue
 
@@ -3087,15 +3843,35 @@ def _detect_missing_dependency(
     return False
 
 
-def _has_entity_keyword(name: str) -> bool:
-    """Check if tool name contains any known entity keyword."""
-    for et in ("event", "order", "account", "email", "invoice",
-                "issue", "lead", "deal", "product", "restaurant",
-                "channel", "message", "file", "contact", "payment",
-                "menu", "cart", "transfer", "transaction"):
-        if et in name:
-            return True
-    return False
+def _bound_entity_types(arguments: dict[str, Any]) -> set[str]:
+    """Return existing-entity types directly selected by call arguments."""
+    bound: set[str] = set()
+    aliases = {
+        "assignee_id": "user",
+        "assignee": "user",
+        "user_id": "user",
+        "member_id": "user",
+        "owner_id": "user",
+        "recipient": "user",
+        "from_account": "account",
+        "to_account": "account",
+        "source": "file",
+        "destination": "file",
+        "path": "file",
+    }
+    for raw_key, value in arguments.items():
+        if not isinstance(value, str) or not value.strip():
+            continue
+        key = str(raw_key).lower()
+        if key in aliases:
+            bound.add(aliases[key])
+            continue
+        if key.endswith("_id"):
+            entity = key[:-3]
+            if entity:
+                bound.add(entity)
+    return bound
+
 
 # ── Tool-to-conceptual-entity override ──
 # Some tools operate on entities whose name cannot be extracted from the tool
@@ -3312,6 +4088,23 @@ _CREATED_ENTITY_BY_TOOL: dict[str, set[str]] = {
     "create_thread": {"thread"},
     "send_dm": {"dm"},
     "contact_support": {"ticket"},
+}
+
+# Conservative typed output/reference contracts used only to detect a direct
+# contradiction in an LLM-classified explicit edge.  These include foreign-key
+# IDs returned by the source, not just the entity it creates.  Missing entries
+# fall back to _CREATED_ENTITY_BY_TOOL and therefore never invent output facts.
+_DOMAIN_TOOL_OUTPUT_ENTITY_TYPES: dict[str, dict[str, set[str]]] = {
+    "email": {
+        "create_draft": {"draft"},
+        "create_filter": {"filter"},
+    },
+    "issue_tracker": {
+        "create_subtask": {"subtask", "issue", "user"},
+    },
+    "team_chat": {
+        "create_thread": {"thread", "channel", "message"},
+    },
 }
 
 
@@ -3579,7 +4372,7 @@ _DOMAIN_TOOL_RELEVANT: dict[str, dict[str, set[str]]] = {
         "create_task": {"deal", "contact", "task"},
         "add_note": {"lead", "contact", "deal", "note"},
     },
-    "issue_tracker": {"list_issues": {"issue"}, "search_issues": {"issue"}, "list_sprints": {"sprint"}},
+    "issue_tracker": {"list_issues": {"issue"}, "search_issues": {"issue"}, "list_sprints": {"sprint"}, "list_members": {"user"}, "create_subtask": {"issue", "user"}},
     "shopping": {
         "search_products": {"product"}, "list_categories": {"product"},
         "get_coupons": {"product"}, "apply_coupon": {"cart_item"},
@@ -3588,6 +4381,53 @@ _DOMAIN_TOOL_RELEVANT: dict[str, dict[str, set[str]]] = {
     },
     "team_chat": {"list_channels": {"channel"}, "get_user_status": {"user"}, "search_messages": {"channel", "message"}},
     "food_delivery": {"search_restaurants": {"restaurant"}, "list_orders": {"order"}},
+}
+
+
+# Entity types whose full record is directly returned by a readonly discovery
+# tool. Other IDs in the same record are foreign-key references and must not be
+# enriched with the source record's fields. For example, list_deals returns a
+# deal record containing contact_id; that ID establishes contact identity but
+# the deal's name/amount/stage are not contact facts.
+_DOMAIN_PROBE_PRIMARY_ENTITY_TYPES: dict[str, dict[str, set[str]]] = {
+    "calendar": {
+        "list_events": {"event"}, "search_events": {"event"},
+        "get_free_busy": {"event"}, "check_conflicts": {"event"},
+    },
+    "banking": {"list_accounts": {"account"}},
+    "payments": {
+        "list_invoices": {"invoice"}, "list_webhooks": {"webhook"},
+    },
+    "email": {
+        "list_inbox": {"email"}, "search_emails": {"email"},
+        "list_threads": {"thread"}, "list_drafts": {"draft"},
+    },
+    "filesystem": {
+        name: {"file"} for name in (
+            "pwd", "ls", "find", "tree", "du", "df", "sort", "uniq",
+            "cut", "sed", "awk", "split", "diff", "readlink",
+        )
+    },
+    "crm": {
+        "list_leads": {"lead"}, "list_contacts": {"contact"},
+        "list_deals": {"deal"}, "list_tasks": {"task"},
+        "search_contacts": {"contact"},
+    },
+    "issue_tracker": {
+        "list_issues": {"issue"}, "search_issues": {"issue"},
+        "list_sprints": {"sprint"}, "list_members": {"user"},
+    },
+    "shopping": {
+        "search_products": {"product"}, "get_cart": {"cart_item"},
+        "get_wishlist": {"wishlist"},
+    },
+    "team_chat": {
+        "list_channels": {"channel"}, "get_user_status": {"user"},
+        "search_messages": {"message"},
+    },
+    "food_delivery": {
+        "search_restaurants": {"restaurant"}, "list_orders": {"order"},
+    },
 }
 
 
@@ -3613,6 +4453,7 @@ _ENTITY_ID_FIELD_TYPES: dict[str, str] = {
     "entry_id": "time_entry", "restaurant_id": "restaurant", "order_id": "order",
     "return_id": "return", "product_id": "product", "channel_id": "channel",
     "message_id": "message", "dm_id": "dm", "ticket_id": "ticket",
+    "user_id": "user",
     "transfer_id": "scheduled_transfer", "scheduled_txn_id": "scheduled_transfer",
 }
 
@@ -3672,12 +4513,20 @@ def _format_entity_summary(
     if isinstance(edata, dict):
         for fk in ("name", "title", "subject", "owner", "status", "type",
                    "balance", "amount", "price", "stage", "priority",
-                   "author", "content", "timestamp", "sender", "recipient",
-                   "cuisine", "rating", "total", "member_count"):
+                   "author", "content", "timestamp", "created_at", "updated_at",
+                   "sender", "recipient", "channel_id", "thread_id",
+                   "root_message_id", "restaurant_id", "invoice_id", "payment_id",
+                   "lead_id", "contact_id", "frozen", "stock", "quantity",
+                   "currency", "due_date", "cuisine", "rating", "total",
+                   "member_count", "start_time", "end_time", "location",
+                   "reminders", "recurrence", "attendees", "labels", "watchers",
+                   "members"):
             if fk in edata:
                 val = edata[fk]
                 if isinstance(val, str) and len(val) > 40:
                     val = val[:37] + "..."
+                elif isinstance(val, list) and len(val) > 8:
+                    val = [*val[:8], f"... ({len(val) - 8} more)"]
                 key_fields[fk] = val
     if key_fields:
         return f"  {eid} ({etype}): {key_fields}"
@@ -3692,6 +4541,12 @@ def _extract_probe_entities(
     tool_name: str,
 ) -> None:
     if isinstance(obj, dict):
+        primary_types = _DOMAIN_PROBE_PRIMARY_ENTITY_TYPES.get(
+            server_name, {},
+        ).get(
+            tool_name,
+            _DOMAIN_TOOL_RELEVANT.get(server_name, {}).get(tool_name, set()),
+        )
         if server_name == "payments":
             payment_id = obj.get("payment_id")
             if isinstance(payment_id, str) and payment_id:
@@ -3728,7 +4583,7 @@ def _extract_probe_entities(
         for field, etype in _ENTITY_ID_FIELD_TYPES.items():
             value = obj.get(field)
             if isinstance(value, str) and value:
-                add_entity(value, etype, obj)
+                add_entity(value, etype, obj if etype in primary_types else None)
 
         if server_name == "shopping" and tool_name == "get_cart":
             for item in obj.get("cart") or []:
@@ -3748,7 +4603,9 @@ def _extract_probe_entities(
             for field in ("assignee", "user", "author"):
                 value = obj.get(field)
                 if isinstance(value, str) and value:
-                    add_entity(value, "user", obj)
+                    add_entity(
+                        value, "user", obj if "user" in primary_types else None,
+                    )
             for watcher in obj.get("watchers") or []:
                 if isinstance(watcher, str) and watcher:
                     add_entity(watcher, "user", None)
@@ -3756,7 +4613,11 @@ def _extract_probe_entities(
         if server_name == "email":
             thread_id = obj.get("thread_id")
             if isinstance(thread_id, str) and thread_id:
-                add_entity(thread_id, "thread", obj)
+                add_entity(
+                    thread_id,
+                    "thread",
+                    obj if "thread" in primary_types else None,
+                )
 
         for value in obj.values():
             if isinstance(value, (dict, list)):
@@ -3785,6 +4646,56 @@ def _compact_sampling_context(live_context: dict[str, Any]) -> dict[str, Any]:
         "entity_types": list(live_context.get("entity_types", [])),
         "probe_results": list(live_context.get("probe_results", [])),
     }
+
+
+def _teacher_public_action_context(
+    live_context: dict[str, Any],
+    current_query: str,
+) -> dict[str, Any]:
+    """Expose refreshed state facts without leaking sampler-private IDs.
+
+    IDs already present in the current user message remain visible. Other
+    opaque IDs are replaced consistently while selector/status/value facts are
+    retained. IDs learned later through MCP observations enter execution
+    history naturally and do not depend on this sampler view.
+    """
+    summaries = [str(item) for item in live_context.get("entity_summaries", [])]
+    entity_ids = [
+        item for item in live_context.get("entity_ids", [])
+        if isinstance(item, dict) and item.get("id")
+    ]
+    query = str(current_query or "")
+    paired: list[tuple[dict[str, Any], str]] = list(zip(entity_ids, summaries))
+    grouped: dict[str, list[tuple[dict[str, Any], str]]] = {}
+    for item, summary in paired:
+        grouped.setdefault(str(item.get("type") or "entity"), []).append(
+            (item, summary)
+        )
+    stratified: list[tuple[dict[str, Any], str]] = []
+    offset = 0
+    while len(stratified) < 50:
+        added = False
+        for entity_type in sorted(grouped):
+            items = grouped[entity_type]
+            if offset < len(items):
+                stratified.append(items[offset])
+                added = True
+        if not added:
+            break
+        offset += 1
+
+    rendered: list[str] = []
+    for _, summary in stratified:
+        public_summary = summary
+        for item in entity_ids:
+            entity_id = str(item.get("id"))
+            if entity_id and entity_id not in query:
+                entity_type = str(item.get("type") or "entity")
+                public_summary = public_summary.replace(
+                    entity_id, f"<hidden-{entity_type}-id>"
+                )
+        rendered.append(public_summary)
+    return {"entity_summaries": rendered[:50]}
 
 
 def _live_context_to_prompt_state(live_context: dict[str, Any]) -> dict[str, Any]:
@@ -3821,21 +4732,6 @@ def _live_context_to_prompt_state(live_context: dict[str, Any]) -> dict[str, Any
             "summary": summary,
         }
     return prompt_state
-
-
-def _live_context_has_entity_type(
-    live_context: dict[str, Any] | None,
-    entity_type: str,
-    created_types: set[str] | None = None,
-) -> bool:
-    if created_types and entity_type in created_types:
-        return True
-    if not live_context:
-        return False
-    return any(
-        isinstance(item, dict) and item.get("type") == entity_type
-        for item in live_context.get("entity_ids", [])
-    )
 
 
 def _tool_existing_entity_requirements(tool_name: str, server_name: str = "") -> set[str]:
@@ -3999,18 +4895,6 @@ def _tool_relevant_entity_types(tool_name: str, server_name: str = "") -> set[st
     if "message" in tool or tool in {"create_thread", "react_message"}:
         relevant.add("message")
     return relevant
-
-
-def _is_observable_chain_start(tool_name: str) -> bool:
-    tool = tool_name.lower()
-    if tool.startswith((
-        "list_", "search_", "filter_", "get_", "find_", "lookup_", "check_",
-        "view_", "browse_", "read_",
-    )):
-        return True
-    if tool in {"pwd", "ls", "tree", "cat", "stat", "head", "tail", "df", "find"}:
-        return True
-    return False
 
 
 def _chain_is_feasible(
@@ -4267,6 +5151,7 @@ def _extract_chain_context(
             selector_fields: dict[str, Any] = {}
             for field_name in (
                 "name", "title", "subject", "customer", "owner", "status",
+                "type", "frozen",
                 "amount", "currency", "due_date", "category", "balance",
                 "price", "quantity", "stage", "priority",
             ):
@@ -4436,5 +5321,8 @@ def _entity_record_satisfies_chain(
             return False
     if server_name == "crm" and etype == "task":
         if "complete_task" in tools and str(record.get("status", "")) == "completed":
+            return False
+    if server_name == "team_chat" and etype == "channel":
+        if "send_message" in tools and bool(record.get("archived", False)):
             return False
     return True

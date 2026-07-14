@@ -18,11 +18,11 @@ TOOLS = [
     {"name": "get_popular_items", "description": "Get most-ordered items from a restaurant.", "input_schema": {"type": "object", "properties": {"restaurant_id": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["restaurant_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "create_order", "description": "Place a food delivery order.", "input_schema": {"type": "object", "properties": {"restaurant_id": {"type": "string"}, "items": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "quantity": {"type": "integer", "minimum": 1}}, "required": ["name", "quantity"], "additionalProperties": False}}, "delivery_address": {"type": "string"}, "special_instructions": {"type": "string"}}, "required": ["restaurant_id", "items", "delivery_address"]}, "annotations": {"mutating": True}},
     {"name": "get_order", "description": "Get order details and current status.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "list_orders", "description": "List orders by status.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "update_order_status", "description": "Advance order to next lifecycle stage.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "status": {"type": "string"}}, "required": ["order_id", "status"]}, "annotations": {"mutating": True}},
+    {"name": "list_orders", "description": "List orders, optionally filtering by an exact order status: placed, confirmed, preparing, delivering, delivered, or cancelled.", "input_schema": {"type": "object", "properties": {"status": {"type": "string", "enum": ["placed", "confirmed", "preparing", "delivering", "delivered", "cancelled"], "description": "Optional exact order status; in_transit is not a valid status."}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
+    {"name": "update_order_status", "description": "Advance an order using the exact lifecycle transitions: placed→confirmed or cancelled; confirmed→preparing or cancelled; preparing→delivering; delivering→delivered. Other transitions are invalid.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "status": {"type": "string", "enum": ["confirmed", "preparing", "delivering", "delivered", "cancelled"], "description": "Exact next status allowed by the current order status and lifecycle transition map."}}, "required": ["order_id", "status"]}, "annotations": {"mutating": True}},
     {"name": "cancel_order", "description": "Cancel an order (only before preparing).", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "reason": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"mutating": True}},
     {"name": "get_estimated_time", "description": "Get estimated delivery time for an order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "track_rider", "description": "Track delivery rider location.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"readonly": True, "mutating": False}},
+    {"name": "track_rider", "description": "Track the assigned delivery rider. The order must currently be in delivering status.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string", "description": "Existing order_id whose current status is delivering."}}, "required": ["order_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "rate_order", "description": "Rate a delivered order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "rating": {"type": "integer"}, "review": {"type": "string"}}, "required": ["order_id", "rating"]}, "annotations": {"mutating": True}},
     {"name": "add_tip", "description": "Add a tip to an order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "amount": {"type": "number"}}, "required": ["order_id", "amount"]}, "annotations": {"mutating": True}},
     {"name": "reorder", "description": "Re-order from a past order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "delivery_address": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"mutating": True}},
@@ -85,7 +85,8 @@ class FoodDeliveryServer(StatefulToolServer):
             total += menu_map[name]["price"] * qty
         oid = f"ord_{state['next_order_num']:04d}"; state["next_order_num"] += 1
         delivery_fee = r.get("delivery_fee", 2.99)
-        order = {"order_id": oid, "restaurant_id": rid, "restaurant_name": r["name"], "items": items, "delivery_address": arguments["delivery_address"], "special_instructions": arguments.get("special_instructions", ""), "subtotal": total, "delivery_fee": delivery_fee, "tip": 0.0, "total": round(total + delivery_fee, 2), "status": "placed", "rating": None, "created_at": "2026-06-24T21:40:00"}
+        created_at = f"{state.get('current_date', '2026-06-24')}T21:40:00"
+        order = {"order_id": oid, "restaurant_id": rid, "restaurant_name": r["name"], "items": items, "delivery_address": arguments["delivery_address"], "special_instructions": arguments.get("special_instructions", ""), "subtotal": total, "delivery_fee": delivery_fee, "tip": 0.0, "total": round(total + delivery_fee, 2), "status": "placed", "rating": None, "created_at": created_at}
         state["orders"][oid] = order
         return _result(True, {"order": order}, None, "", True)
 
@@ -146,7 +147,8 @@ class FoodDeliveryServer(StatefulToolServer):
     def contact_support(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); order = self._order(state, arguments["order_id"]); issue = arguments["issue_type"]
         tid = f"ticket_{state['next_ticket_num']:04d}"; state["next_ticket_num"] += 1
-        ticket = {"ticket_id": tid, "order_id": order["order_id"], "issue_type": issue, "description": arguments["description"], "status": "open", "created_at": "2026-06-24T21:40:00"}
+        created_at = f"{state.get('current_date', '2026-06-24')}T21:40:00"
+        ticket = {"ticket_id": tid, "order_id": order["order_id"], "issue_type": issue, "description": arguments["description"], "status": "open", "created_at": created_at}
         state.setdefault("support_tickets", []).append(ticket)
         return _result(True, {"ticket": ticket}, None, "", True)
 

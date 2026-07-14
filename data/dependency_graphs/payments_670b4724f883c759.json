@@ -1,5 +1,5 @@
 {
-  "cache_version": 4,
+  "cache_version": 5,
   "dependency_semantics_version": 10,
   "server_name": "payments",
   "schema_hash": "670b4724f883c759",
@@ -22,10 +22,10 @@
     },
     "create_invoice": {
       "explicit": [
+        "dispute_invoice",
         "get_invoice",
         "pay_invoice",
-        "refund_invoice",
-        "dispute_invoice"
+        "refund_invoice"
       ],
       "implicit": []
     },
@@ -50,15 +50,12 @@
     "list_invoices": {
       "explicit": [
         "pay_invoice",
-        "refund_invoice",
-        "dispute_invoice"
+        "refund_invoice"
       ],
       "implicit": []
     },
     "list_webhooks": {
-      "explicit": [
-        "delete_webhook"
-      ],
+      "explicit": [],
       "implicit": []
     },
     "pay_invoice": {
@@ -66,8 +63,7 @@
         "cancel_payment"
       ],
       "implicit": [
-        "refund_invoice",
-        "dispute_invoice"
+        "refund_invoice"
       ]
     },
     "refund_invoice": {
@@ -75,6 +71,416 @@
       "implicit": []
     }
   },
+  "pair_classifications": [
+    {
+      "pair": [
+        "cancel_payment",
+        "create_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "create_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "delete_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "dispute_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "get_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "pay_invoice"
+      ],
+      "source": "pay_invoice",
+      "target": "cancel_payment",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "create_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "delete_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "dispute_invoice"
+      ],
+      "source": "create_invoice",
+      "target": "dispute_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "get_invoice"
+      ],
+      "source": "create_invoice",
+      "target": "get_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "pay_invoice"
+      ],
+      "source": "create_invoice",
+      "target": "pay_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "refund_invoice"
+      ],
+      "source": "create_invoice",
+      "target": "refund_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "delete_webhook"
+      ],
+      "source": "create_webhook",
+      "target": "delete_webhook",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "dispute_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "get_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "dispute_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "get_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "get_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "pay_invoice"
+      ],
+      "source": "list_invoices",
+      "target": "pay_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "refund_invoice"
+      ],
+      "source": "list_invoices",
+      "target": "refund_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_webhooks",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_webhooks",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "source": "pay_invoice",
+      "target": "refund_invoice",
+      "relation": "implicit"
+    }
+  ],
+  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "teacher_model_id": "Gemma-4-31B-it",
+  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
   "tool_count": 10,
   "expected_pair_count": 45,
   "classified_pair_count": 45,

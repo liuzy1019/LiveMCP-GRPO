@@ -1,108 +1,110 @@
 {
   "cache_version": 5,
   "dependency_semantics_version": 10,
-  "server_name": "email",
-  "schema_hash": "891c98cab0324d14",
+  "server_name": "food_delivery",
+  "schema_hash": "774f2fdb4be4d197",
   "tool_names": [
-    "add_label",
-    "archive_email",
-    "create_draft",
-    "create_filter",
-    "forward_email",
-    "get_attachments",
-    "get_email",
-    "get_thread",
-    "list_filters",
-    "list_inbox",
-    "mark_read",
-    "mark_unread",
-    "move_to_thread",
-    "remove_label",
-    "reply_email",
-    "search_emails",
-    "send_email"
+    "add_tip",
+    "cancel_order",
+    "contact_support",
+    "create_order",
+    "filter_by_dietary",
+    "get_estimated_time",
+    "get_menu",
+    "get_order",
+    "get_popular_items",
+    "get_restaurant",
+    "list_orders",
+    "list_restaurants",
+    "rate_order",
+    "reorder",
+    "search_restaurants",
+    "track_rider",
+    "update_order_status"
   ],
   "graph": {
-    "add_label": {
+    "add_tip": {
       "explicit": [],
       "implicit": []
     },
-    "archive_email": {
+    "cancel_order": {
       "explicit": [],
       "implicit": []
     },
-    "create_draft": {
+    "contact_support": {
       "explicit": [],
       "implicit": []
     },
-    "create_filter": {
-      "explicit": [],
-      "implicit": []
-    },
-    "forward_email": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_attachments": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_email": {
+    "create_order": {
       "explicit": [
-        "get_thread"
+        "add_tip",
+        "get_estimated_time",
+        "get_order",
+        "rate_order",
+        "reorder",
+        "track_rider",
+        "update_order_status"
       ],
       "implicit": []
     },
-    "get_thread": {
+    "filter_by_dietary": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_estimated_time": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_menu": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_popular_items": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_restaurant": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_orders": {
       "explicit": [
-        "mark_read",
-        "mark_unread",
-        "move_to_thread",
-        "remove_label",
-        "reply_email",
-        "send_email"
+        "rate_order",
+        "reorder",
+        "track_rider",
+        "update_order_status"
       ],
       "implicit": []
     },
-    "list_filters": {
-      "explicit": [],
-      "implicit": []
-    },
-    "list_inbox": {
+    "list_restaurants": {
       "explicit": [
-        "mark_read",
-        "mark_unread",
-        "move_to_thread",
-        "remove_label",
-        "reply_email"
+        "filter_by_dietary"
       ],
       "implicit": []
     },
-    "mark_read": {
+    "rate_order": {
       "explicit": [],
       "implicit": []
     },
-    "mark_unread": {
+    "reorder": {
       "explicit": [],
       "implicit": []
     },
-    "move_to_thread": {
+    "search_restaurants": {
+      "explicit": [
+        "filter_by_dietary"
+      ],
+      "implicit": []
+    },
+    "track_rider": {
       "explicit": [],
       "implicit": []
     },
-    "remove_label": {
-      "explicit": [],
-      "implicit": []
-    },
-    "reply_email": {
-      "explicit": [],
-      "implicit": []
-    },
-    "search_emails": {
-      "explicit": [],
-      "implicit": []
-    },
-    "send_email": {
+    "update_order_status": {
       "explicit": [],
       "implicit": []
     }
@@ -110,8 +112,8 @@
   "pair_classifications": [
     {
       "pair": [
-        "add_label",
-        "archive_email"
+        "add_tip",
+        "cancel_order"
       ],
       "source": "",
       "target": "",
@@ -119,8 +121,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "create_draft"
+        "add_tip",
+        "contact_support"
       ],
       "source": "",
       "target": "",
@@ -128,728 +130,17 @@
     },
     {
       "pair": [
-        "add_label",
-        "create_filter"
+        "add_tip",
+        "create_order"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "forward_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "create_draft"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "create_filter"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "forward_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "create_filter"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "forward_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "forward_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_email",
-        "get_thread"
-      ],
-      "source": "get_email",
-      "target": "get_thread",
+      "source": "create_order",
+      "target": "add_tip",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_email",
-        "list_filters"
+        "add_tip",
+        "filter_by_dietary"
       ],
       "source": "",
       "target": "",
@@ -857,8 +148,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "list_inbox"
+        "add_tip",
+        "get_estimated_time"
       ],
       "source": "",
       "target": "",
@@ -866,8 +157,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "mark_read"
+        "add_tip",
+        "get_menu"
       ],
       "source": "",
       "target": "",
@@ -875,8 +166,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "mark_unread"
+        "add_tip",
+        "get_order"
       ],
       "source": "",
       "target": "",
@@ -884,8 +175,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "move_to_thread"
+        "add_tip",
+        "get_popular_items"
       ],
       "source": "",
       "target": "",
@@ -893,8 +184,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "remove_label"
+        "add_tip",
+        "get_restaurant"
       ],
       "source": "",
       "target": "",
@@ -902,8 +193,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "reply_email"
+        "add_tip",
+        "list_orders"
       ],
       "source": "",
       "target": "",
@@ -911,8 +202,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "search_emails"
+        "add_tip",
+        "list_restaurants"
       ],
       "source": "",
       "target": "",
@@ -920,8 +211,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "send_email"
+        "add_tip",
+        "rate_order"
       ],
       "source": "",
       "target": "",
@@ -929,8 +220,8 @@
     },
     {
       "pair": [
-        "get_thread",
-        "list_filters"
+        "add_tip",
+        "reorder"
       ],
       "source": "",
       "target": "",
@@ -938,8 +229,8 @@
     },
     {
       "pair": [
-        "get_thread",
-        "list_inbox"
+        "add_tip",
+        "search_restaurants"
       ],
       "source": "",
       "target": "",
@@ -947,71 +238,404 @@
     },
     {
       "pair": [
-        "get_thread",
-        "mark_read"
+        "add_tip",
+        "track_rider"
       ],
-      "source": "get_thread",
-      "target": "mark_read",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "contact_support"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "create_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "filter_by_dietary"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_estimated_time"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "create_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "filter_by_dietary"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_estimated_time"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "filter_by_dietary"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_estimated_time"
+      ],
+      "source": "create_order",
+      "target": "get_estimated_time",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "mark_unread"
+        "create_order",
+        "get_menu"
       ],
-      "source": "get_thread",
-      "target": "mark_unread",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_order"
+      ],
+      "source": "create_order",
+      "target": "get_order",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "move_to_thread"
+        "create_order",
+        "get_popular_items"
       ],
-      "source": "get_thread",
-      "target": "move_to_thread",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "rate_order"
+      ],
+      "source": "create_order",
+      "target": "rate_order",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "remove_label"
+        "create_order",
+        "reorder"
       ],
-      "source": "get_thread",
-      "target": "remove_label",
+      "source": "create_order",
+      "target": "reorder",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "reply_email"
+        "create_order",
+        "search_restaurants"
       ],
-      "source": "get_thread",
-      "target": "reply_email",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "track_rider"
+      ],
+      "source": "create_order",
+      "target": "track_rider",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "search_emails"
+        "create_order",
+        "update_order_status"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_thread",
-        "send_email"
-      ],
-      "source": "get_thread",
-      "target": "send_email",
+      "source": "create_order",
+      "target": "update_order_status",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_filters",
-        "list_inbox"
+        "filter_by_dietary",
+        "get_estimated_time"
       ],
       "source": "",
       "target": "",
@@ -1019,8 +643,8 @@
     },
     {
       "pair": [
-        "list_filters",
-        "mark_read"
+        "filter_by_dietary",
+        "get_menu"
       ],
       "source": "",
       "target": "",
@@ -1028,8 +652,8 @@
     },
     {
       "pair": [
-        "list_filters",
-        "mark_unread"
+        "filter_by_dietary",
+        "get_order"
       ],
       "source": "",
       "target": "",
@@ -1037,8 +661,8 @@
     },
     {
       "pair": [
-        "list_filters",
-        "move_to_thread"
+        "filter_by_dietary",
+        "get_popular_items"
       ],
       "source": "",
       "target": "",
@@ -1046,8 +670,8 @@
     },
     {
       "pair": [
-        "list_filters",
-        "remove_label"
+        "filter_by_dietary",
+        "get_restaurant"
       ],
       "source": "",
       "target": "",
@@ -1055,8 +679,8 @@
     },
     {
       "pair": [
-        "list_filters",
-        "reply_email"
+        "filter_by_dietary",
+        "list_orders"
       ],
       "source": "",
       "target": "",
@@ -1064,71 +688,521 @@
     },
     {
       "pair": [
-        "list_filters",
-        "search_emails"
+        "filter_by_dietary",
+        "list_restaurants"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_inbox",
-        "mark_read"
-      ],
-      "source": "list_inbox",
-      "target": "mark_read",
+      "source": "list_restaurants",
+      "target": "filter_by_dietary",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "mark_unread"
+        "filter_by_dietary",
+        "rate_order"
       ],
-      "source": "list_inbox",
-      "target": "mark_unread",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "search_restaurants"
+      ],
+      "source": "search_restaurants",
+      "target": "filter_by_dietary",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "move_to_thread"
+        "filter_by_dietary",
+        "track_rider"
       ],
-      "source": "list_inbox",
-      "target": "move_to_thread",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "rate_order"
+      ],
+      "source": "list_orders",
+      "target": "rate_order",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "remove_label"
+        "list_orders",
+        "reorder"
       ],
-      "source": "list_inbox",
-      "target": "remove_label",
+      "source": "list_orders",
+      "target": "reorder",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "reply_email"
+        "list_orders",
+        "search_restaurants"
       ],
-      "source": "list_inbox",
-      "target": "reply_email",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "track_rider"
+      ],
+      "source": "list_orders",
+      "target": "track_rider",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "search_emails"
+        "list_orders",
+        "update_order_status"
+      ],
+      "source": "list_orders",
+      "target": "update_order_status",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "rate_order"
       ],
       "source": "",
       "target": "",
@@ -1136,8 +1210,8 @@
     },
     {
       "pair": [
-        "list_inbox",
-        "send_email"
+        "list_restaurants",
+        "reorder"
       ],
       "source": "",
       "target": "",
@@ -1145,8 +1219,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "mark_unread"
+        "list_restaurants",
+        "search_restaurants"
       ],
       "source": "",
       "target": "",
@@ -1154,8 +1228,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "move_to_thread"
+        "list_restaurants",
+        "track_rider"
       ],
       "source": "",
       "target": "",
@@ -1163,8 +1237,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "remove_label"
+        "list_restaurants",
+        "update_order_status"
       ],
       "source": "",
       "target": "",
@@ -1172,8 +1246,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "reply_email"
+        "rate_order",
+        "reorder"
       ],
       "source": "",
       "target": "",
@@ -1181,8 +1255,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "search_emails"
+        "rate_order",
+        "search_restaurants"
       ],
       "source": "",
       "target": "",
@@ -1190,8 +1264,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "send_email"
+        "rate_order",
+        "track_rider"
       ],
       "source": "",
       "target": "",
@@ -1199,8 +1273,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "move_to_thread"
+        "rate_order",
+        "update_order_status"
       ],
       "source": "",
       "target": "",
@@ -1208,8 +1282,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "remove_label"
+        "reorder",
+        "search_restaurants"
       ],
       "source": "",
       "target": "",
@@ -1217,8 +1291,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "reply_email"
+        "reorder",
+        "track_rider"
       ],
       "source": "",
       "target": "",
@@ -1226,8 +1300,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "search_emails"
+        "reorder",
+        "update_order_status"
       ],
       "source": "",
       "target": "",
@@ -1235,8 +1309,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "send_email"
+        "search_restaurants",
+        "track_rider"
       ],
       "source": "",
       "target": "",
@@ -1244,8 +1318,8 @@
     },
     {
       "pair": [
-        "move_to_thread",
-        "remove_label"
+        "search_restaurants",
+        "update_order_status"
       ],
       "source": "",
       "target": "",
@@ -1253,80 +1327,8 @@
     },
     {
       "pair": [
-        "move_to_thread",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "move_to_thread",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "move_to_thread",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "remove_label",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "remove_label",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "remove_label",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "reply_email",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "reply_email",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "search_emails",
-        "send_email"
+        "track_rider",
+        "update_order_status"
       ],
       "source": "",
       "target": "",

@@ -1,4 +1,4 @@
-"""Stateful issue tracker — 20 tools (PROVE-aligned).
+"""Stateful issue tracker — 21 tools (PROVE-aligned).
 Workflow transitions: open→in_progress→in_review→resolved→closed.
 Features: sprints, labels, watchers, subtasks, time tracking, milestones.
 """
@@ -13,19 +13,20 @@ TOOLS = [
     {"name": "create_issue", "description": "Create a new issue.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}, "labels": {"type": "array"}}, "required": ["title"]}, "annotations": {"mutating": True}},
     {"name": "get_issue", "description": "Get full issue details.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}}, "required": ["issue_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "list_issues", "description": "List issues with filters.", "input_schema": {"type": "object", "properties": {"state": {"type": "string"}, "assignee": {"type": "string"}, "priority": {"type": "string"}, "sprint_id": {"type": "string"}, "label": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "update_issue", "description": "Update issue fields (title, description, priority).", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "fields": {"type": "object"}}, "required": ["issue_id", "fields"]}, "annotations": {"mutating": True}},
-    {"name": "assign_issue", "description": "Assign issue to a team member.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "assignee": {"type": "string"}}, "required": ["issue_id", "assignee"]}, "annotations": {"mutating": True}},
+    {"name": "list_members", "description": "List assignable team members and their stable user IDs.", "input_schema": {"type": "object", "properties": {"name": {"type": "string", "description": "Optional case-insensitive member name filter."}, "role": {"type": "string", "description": "Optional exact role filter."}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
+    {"name": "update_issue", "description": "Update issue fields (title, description, priority). Use transition_issue to change workflow state.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "fields": {"type": "object", "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "priority": {"type": "string"}}, "additionalProperties": False, "minProperties": 1}}, "required": ["issue_id", "fields"], "additionalProperties": False}, "annotations": {"mutating": True}},
+    {"name": "assign_issue", "description": "Assign issue to a team member using a user_id returned by list_members.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "assignee": {"type": "string", "description": "Stable member user_id returned by list_members (for example usr_0001), not a display name."}}, "required": ["issue_id", "assignee"]}, "annotations": {"mutating": True}},
     {"name": "transition_issue", "description": "Transition issue to a new workflow state. Valid states: open, in_progress, in_review, resolved, closed, blocked, cancelled. Transitions: open→in_progress/cancelled, in_progress→in_review/blocked, in_review→resolved/in_progress, resolved→closed/in_progress, blocked→in_progress/cancelled.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "state": {"type": "string", "enum": ["open", "in_progress", "in_review", "resolved", "closed", "blocked", "cancelled"]}, "comment": {"type": "string"}}, "required": ["issue_id", "state"]}, "annotations": {"mutating": True}},
     {"name": "comment_issue", "description": "Add a comment to an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "body": {"type": "string"}}, "required": ["issue_id", "body"]}, "annotations": {"mutating": True}},
     {"name": "add_label", "description": "Add a label to an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "label": {"type": "string"}}, "required": ["issue_id", "label"]}, "annotations": {"mutating": True}},
     {"name": "remove_label", "description": "Remove a label from an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "label": {"type": "string"}}, "required": ["issue_id", "label"]}, "annotations": {"mutating": True}},
-    {"name": "add_watcher", "description": "Add a watcher to an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "user": {"type": "string"}}, "required": ["issue_id", "user"]}, "annotations": {"mutating": True}},
-    {"name": "remove_watcher", "description": "Remove a watcher from an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "user": {"type": "string"}}, "required": ["issue_id", "user"]}, "annotations": {"mutating": True}},
+    {"name": "add_watcher", "description": "Add a watcher using a user_id returned by list_members.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "user": {"type": "string", "description": "Stable member user_id returned by list_members, not a display name."}}, "required": ["issue_id", "user"]}, "annotations": {"mutating": True}},
+    {"name": "remove_watcher", "description": "Remove a watcher using a user_id returned by list_members.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "user": {"type": "string", "description": "Stable member user_id returned by list_members, not a display name."}}, "required": ["issue_id", "user"]}, "annotations": {"mutating": True}},
     {"name": "create_sprint", "description": "Create a new sprint.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "start_date": {"type": "string"}, "end_date": {"type": "string"}, "goal": {"type": "string"}}, "required": ["name", "start_date", "end_date"]}, "annotations": {"mutating": True}},
     {"name": "list_sprints", "description": "List sprints by status.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "add_to_sprint", "description": "Add an issue to a sprint.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "sprint_id": {"type": "string"}}, "required": ["issue_id", "sprint_id"]}, "annotations": {"mutating": True}},
     {"name": "remove_from_sprint", "description": "Remove an issue from a sprint.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}}, "required": ["issue_id"]}, "annotations": {"mutating": True}},
-    {"name": "create_subtask", "description": "Create a subtask under an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "title": {"type": "string"}, "assignee": {"type": "string"}}, "required": ["issue_id", "title"]}, "annotations": {"mutating": True}},
+    {"name": "create_subtask", "description": "Create a subtask under an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "title": {"type": "string"}, "assignee": {"type": "string", "description": "Optional stable member user_id returned by list_members, not a display name."}}, "required": ["issue_id", "title"]}, "annotations": {"mutating": True}},
     {"name": "list_subtasks", "description": "List subtasks for an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}}, "required": ["issue_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "time_track", "description": "Log time spent on an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "hours": {"type": "number"}, "description": {"type": "string"}}, "required": ["issue_id", "hours"]}, "annotations": {"mutating": True}},
     {"name": "get_time_report", "description": "Get time tracking report for issues/sprints.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "sprint_id": {"type": "string"}, "assignee": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
@@ -58,6 +59,15 @@ class IssueTrackerServer(StatefulToolServer):
         if arguments.get("sprint_id"): issues = [i for i in issues if i.get("sprint_id") == arguments["sprint_id"]]
         if arguments.get("label"): issues = [i for i in issues if arguments["label"] in i.get("labels", [])]
         return _result(True, {"issues": issues, "count": len(issues)}, None, "", False)
+
+    def list_members(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        members = list(self._state(session_id)["members"].values())
+        if arguments.get("name"):
+            needle = str(arguments["name"]).casefold()
+            members = [m for m in members if needle in str(m.get("name", "")).casefold()]
+        if arguments.get("role"):
+            members = [m for m in members if m.get("role") == arguments["role"]]
+        return _result(True, {"members": members, "count": len(members)}, None, "", False)
 
     def update_issue(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         issue = self._iss(self._state(session_id), arguments["issue_id"])

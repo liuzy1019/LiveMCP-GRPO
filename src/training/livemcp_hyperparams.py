@@ -77,8 +77,6 @@ class LiveMCPHyperparams:
     w_eff: float = 0.15
     w_name: float = 0.2
     w_arg: float = 0.1
-    w_struct: float = 0.6
-    w_exec: float = 0.4
     alpha_eff: float = 0.5   # PROVE §4.1: α = 0.5
     beta_budget: float = 0.5  # PROVE §4.1: β = 0.5
 
@@ -151,7 +149,7 @@ class LiveMCPHyperparams:
             "Safety": ["lambda_safe_default", "alpha_lambda", "lambda_epsilon", "lambda_safe_max", "k_stall", "tau_unsafe_stall"],
             "Advantage": ["beta", "min_stratum_size", "min_group_std"],
             "LATA": ["lata_mode"],
-            "TaskReward": ["w_val", "w_cov", "w_eff", "w_name", "w_arg", "w_struct", "w_exec", "alpha_eff", "beta_budget"],
+            "TaskReward": ["w_val", "w_cov", "w_eff", "w_name", "w_arg", "alpha_eff", "beta_budget"],
             "P_process": ["p_max"],
             "Loop": ["suite_path", "domains"],
             "Train": ["keep_lambda", "precheck", "ray_tmpdir"],

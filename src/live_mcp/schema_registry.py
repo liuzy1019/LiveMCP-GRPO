@@ -140,22 +140,19 @@ class SchemaRegistry:
         if not isinstance(arguments, dict):
             return SchemaValidationResult(valid=False, type_errors=["arguments must be object"])
         input_schema = schema.get("input_schema") or schema.get("parameters") or {}
-        properties = input_schema.get("properties", {})
-        required = input_schema.get("required", [])
-        missing = [key for key in required if key not in arguments]
-        unexpected = [key for key in arguments if key not in properties]
+        missing: list[str] = []
+        unexpected: list[str] = []
         type_errors: list[str] = []
         enum_errors: list[str] = []
-        for key, value in arguments.items():
-            prop = properties.get(key)
-            if not isinstance(prop, dict):
-                continue
-            expected_type = prop.get("type")
-            if expected_type and not _type_matches(value, expected_type):
-                type_errors.append(key)
-            enum_values = prop.get("enum")
-            if enum_values is not None and value not in enum_values:
-                enum_errors.append(key)
+        _validate_schema_value(
+            input_schema,
+            arguments,
+            path="",
+            missing=missing,
+            unexpected=unexpected,
+            type_errors=type_errors,
+            enum_errors=enum_errors,
+        )
         return SchemaValidationResult(
             valid=not (missing or unexpected or type_errors or enum_errors),
             missing_required=missing,
@@ -163,6 +160,91 @@ class SchemaRegistry:
             type_errors=type_errors,
             enum_errors=enum_errors,
         )
+
+
+def _validate_schema_value(
+    schema: dict[str, Any],
+    value: Any,
+    *,
+    path: str,
+    missing: list[str],
+    unexpected: list[str],
+    type_errors: list[str],
+    enum_errors: list[str],
+) -> None:
+    """Validate the JSON-schema subset exposed by the local MCP tools.
+
+    The previous validator stopped at top-level objects, allowing unsupported
+    mutation fields to reach handlers and be silently ignored.  This recursive
+    subset intentionally covers only constraints used by this repository; it
+    is not presented as a general JSON Schema implementation.
+    """
+    expected_type = schema.get("type")
+    label = path or "arguments"
+    if expected_type and not _type_matches(value, expected_type):
+        type_errors.append(f"{label}: expected {expected_type}")
+        return
+
+    enum_values = schema.get("enum")
+    if enum_values is not None and value not in enum_values:
+        enum_errors.append(f"{label}: {value!r} not in {enum_values!r}")
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if "minimum" in schema and value < schema["minimum"]:
+            type_errors.append(f"{label}: must be >= {schema['minimum']}")
+        if "exclusiveMinimum" in schema and value <= schema["exclusiveMinimum"]:
+            type_errors.append(f"{label}: must be > {schema['exclusiveMinimum']}")
+        if "maximum" in schema and value > schema["maximum"]:
+            type_errors.append(f"{label}: must be <= {schema['maximum']}")
+
+    if isinstance(value, dict):
+        properties = schema.get("properties") or {}
+        required = schema.get("required") or []
+        if "minProperties" in schema and len(value) < schema["minProperties"]:
+            type_errors.append(
+                f"{label}: requires at least {schema['minProperties']} field(s)"
+            )
+        for key in required:
+            if key not in value:
+                missing.append(f"{path}.{key}" if path else str(key))
+        # Tool argument objects have always rejected unknown top-level keys.
+        # Nested free-form objects remain open unless their schema explicitly
+        # closes them with additionalProperties=false.
+        allow_extra = schema.get("additionalProperties", path != "")
+        for key, child in value.items():
+            child_path = f"{path}.{key}" if path else str(key)
+            child_schema = properties.get(key)
+            if not isinstance(child_schema, dict):
+                if allow_extra is False:
+                    unexpected.append(child_path)
+                continue
+            _validate_schema_value(
+                child_schema,
+                child,
+                path=child_path,
+                missing=missing,
+                unexpected=unexpected,
+                type_errors=type_errors,
+                enum_errors=enum_errors,
+            )
+
+    if isinstance(value, list):
+        if "minItems" in schema and len(value) < schema["minItems"]:
+            type_errors.append(f"{label}: requires at least {schema['minItems']} item(s)")
+        if "maxItems" in schema and len(value) > schema["maxItems"]:
+            type_errors.append(f"{label}: allows at most {schema['maxItems']} item(s)")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, child in enumerate(value):
+                _validate_schema_value(
+                    item_schema,
+                    child,
+                    path=f"{path}[{index}]" if path else f"[{index}]",
+                    missing=missing,
+                    unexpected=unexpected,
+                    type_errors=type_errors,
+                    enum_errors=enum_errors,
+                )
 
 
 def _validate_args(schema: dict[str, Any], arguments: dict[str, Any]) -> bool:

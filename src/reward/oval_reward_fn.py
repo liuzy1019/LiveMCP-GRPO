@@ -59,8 +59,6 @@ def _get_cfg():
         w_eff: float = 0.15
         w_name: float = 0.2
         w_arg: float = 0.1
-        w_struct: float = 0.6
-        w_exec: float = 0.4
         alpha_eff: float = 0.5   # PROVE §4.1: α = 0.5
         beta_budget: float = 0.5  # PROVE §4.1: β = 0.5
     return _FallbackCfg()
@@ -87,8 +85,6 @@ _task_reward = TaskReward(weights={
     "w_eff": _cfg.w_eff,
     "w_name": _cfg.w_name,
     "w_arg": _cfg.w_arg,
-    "w_struct": _cfg.w_struct,
-    "w_exec": _cfg.w_exec,
     "alpha_eff": _cfg.alpha_eff,
     "beta_budget": _cfg.beta_budget,
 })

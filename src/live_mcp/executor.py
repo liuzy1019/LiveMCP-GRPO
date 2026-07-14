@@ -218,11 +218,15 @@ def _is_partial_observation(observation: Any, tool_name: str = "") -> bool:
         return False
 
     # Determine if this is a read/discovery tool (list_/search_/get_/find_/check_)
-    is_read_tool = bool(tool_name) and any(
-        tool_name.lower().startswith(p)
+    lowered_tool = tool_name.lower()
+    is_read_tool = bool(tool_name) and (
+        lowered_tool in {"find", "grep", "tree", "du", "df", "pwd"}
+        or any(
+        lowered_tool.startswith(p)
         for p in ("list_", "search_", "get_", "find_", "check_", "lookup_",
                   "view_", "browse_", "ls", "cat", "stat", "head", "tail",
                   "get_cart", "get_wishlist", "get_coupons")
+        )
     )
 
     if isinstance(observation, list):

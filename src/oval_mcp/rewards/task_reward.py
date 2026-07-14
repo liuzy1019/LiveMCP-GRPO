@@ -26,9 +26,6 @@ DEFAULT_WEIGHTS = {
     "w_eff": 0.15,
     "w_name": 0.2,
     "w_arg": 0.1,
-    # w_struct / w_exec 已废弃，保留仅为向后兼容，不再使用
-    "w_struct": 0.6,
-    "w_exec": 0.4,
     "alpha_eff": 0.5,
     "beta_budget": 0.5,
 }
@@ -44,15 +41,10 @@ class TaskRewardResult:
     r_name_exists: float = 0.0    # level-1: function name 在 schema 中存在
     r_args_present: float = 0.0   # level-2: 必需参数存在且类型兼容
     r_execution: float = 0.0      # level-3: live 执行成功
-    # 向后兼容别名（等于 r_name_exists + r_args_present 的均值）
-    r_structural: float = 0.0
     r_coverage: float = 0.0
     r_name: float = 0.0
     r_arg: float = 0.0
     r_efficiency: float = 0.0
-    # r_positive / z_pos 已废弃（PROVE eq.5 直接加权求和，无归一化）
-    r_positive: float = 0.0
-    z_pos: float = 1.0
 
     # Diagnostics
     n_model_calls: int = 0
@@ -68,7 +60,6 @@ class TaskRewardResult:
             "r_validity": self.r_validity,
             "r_name_exists": self.r_name_exists,
             "r_args_present": self.r_args_present,
-            "r_structural": self.r_structural,
             "r_execution": self.r_execution,
             "r_coverage": self.r_coverage,
             "r_name": self.r_name,
@@ -150,8 +141,6 @@ class TaskReward:
         result.r_name_exists = r_name_exists
         result.r_args_present = r_args_present
         result.r_execution = r_execution
-        # 向后兼容：r_structural = 前两级均值
-        result.r_structural = (r_name_exists + r_args_present) / 2.0
         result.r_validity = (r_name_exists + r_args_present + r_execution) / 3.0
 
         # Terminal-action whitelist enforcement.
@@ -212,16 +201,6 @@ class TaskReward:
         #   R_task = w_val*R_val + w_cov*R_cov + w_eff*R_eff + w_name*R_name + w_arg*R_arg
         # Max ≈ 1.3 (R_eff=0) or 1.45 (R_eff=1, impossible in practice).
         # GRPO uses group-relative advantage so absolute scale is irrelevant.
-        # r_positive / z_pos kept for backward-compat logging only.
-        result.r_positive = (
-            self.w["w_val"] * result.r_validity
-            + self.w["w_cov"] * result.r_coverage
-            + self.w["w_name"] * result.r_name
-            + self.w["w_arg"] * result.r_arg
-        )
-        result.z_pos = (
-            self.w["w_val"] + self.w["w_cov"] + self.w["w_name"] + self.w["w_arg"]
-        )
         result.r_task = (
             self.w["w_val"] * result.r_validity
             + self.w["w_cov"] * result.r_coverage
@@ -264,15 +243,6 @@ class TaskReward:
             l2 = e.schema_valid if l1 else False
             args_ok += int(bool(l2))
         return name_ok / n, args_ok / n
-
-    def _compute_structural_validity(
-        self,
-        tool_events: list,
-        task: dict[str, Any],
-    ) -> float:
-        """向后兼容接口：返回前两级均值（已被 _compute_structural_validity_3level 取代）。"""
-        r1, r2 = self._compute_structural_validity_3level(tool_events, task)
-        return (r1 + r2) / 2.0
 
     def _compute_execution_validity(
         self,

@@ -9,14 +9,14 @@ from src.live_mcp.server_base import StatefulToolServer, _result, serve
 
 TOOLS = [
     {"name": "create_lead", "description": "Create a new lead.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "company": {"type": "string"}, "source": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}}, "required": ["name", "company"]}, "annotations": {"mutating": True}},
-    {"name": "update_lead", "description": "Update lead fields.", "input_schema": {"type": "object", "properties": {"lead_id": {"type": "string"}, "fields": {"type": "object"}}, "required": ["lead_id", "fields"]}, "annotations": {"mutating": True}},
+    {"name": "update_lead", "description": "Update an existing lead's profile or pipeline status. Use convert_lead for the converted status.", "input_schema": {"type": "object", "properties": {"lead_id": {"type": "string"}, "fields": {"type": "object", "properties": {"name": {"type": "string"}, "company": {"type": "string"}, "source": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "status": {"type": "string", "enum": ["new", "contacted", "qualified", "lost"], "description": "Pipeline status; converted is only produced by convert_lead."}}, "additionalProperties": False, "minProperties": 1}}, "required": ["lead_id", "fields"], "additionalProperties": False}, "annotations": {"mutating": True}},
     {"name": "convert_lead", "description": "Convert a lead into a contact.", "input_schema": {"type": "object", "properties": {"lead_id": {"type": "string"}}, "required": ["lead_id"]}, "annotations": {"mutating": True}},
     {"name": "delete_lead", "description": "Delete a lead (only if not converted).", "input_schema": {"type": "object", "properties": {"lead_id": {"type": "string"}}, "required": ["lead_id"]}, "annotations": {"mutating": True}},
     {"name": "list_leads", "description": "List leads by status, source, or company.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "source": {"type": "string"}, "company": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "create_contact", "description": "Create a contact directly.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "company": {"type": "string"}}, "required": ["name", "email"]}, "annotations": {"mutating": True}},
-    {"name": "update_contact", "description": "Update contact fields.", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}, "fields": {"type": "object"}}, "required": ["contact_id", "fields"]}, "annotations": {"mutating": True}},
+    {"name": "update_contact", "description": "Update an existing contact's name, email, phone, or company.", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}, "fields": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "company": {"type": "string"}}, "additionalProperties": False, "minProperties": 1}}, "required": ["contact_id", "fields"], "additionalProperties": False}, "annotations": {"mutating": True}},
     {"name": "delete_contact", "description": "Delete a contact (fails if referenced by deals).", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}}, "required": ["contact_id"]}, "annotations": {"mutating": True}},
-    {"name": "create_deal", "description": "Create a deal linked to contact/lead.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "amount": {"type": "number"}, "contact_id": {"type": "string"}, "lead_id": {"type": "string"}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}}, "required": ["name", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "create_deal", "description": "Create a deal linked to an existing contact or lead. The amount must be greater than zero.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive deal amount; must be greater than zero."}, "contact_id": {"type": "string", "description": "Optional existing contact_id."}, "lead_id": {"type": "string", "description": "Optional existing lead_id."}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}}, "required": ["name", "amount"]}, "annotations": {"mutating": True}},
     {"name": "update_deal", "description": "Update deal stage or amount.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}, "amount": {"type": "number"}}, "required": ["deal_id"]}, "annotations": {"mutating": True}},
     {"name": "list_deals", "description": "List deals by stage/contact/lead.", "input_schema": {"type": "object", "properties": {"stage": {"type": "string"}, "contact_id": {"type": "string"}, "lead_id": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_deal", "description": "Get full deal details with linked contact/lead.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}}, "required": ["deal_id"]}, "annotations": {"readonly": True, "mutating": False}},
@@ -43,8 +43,14 @@ class CRMServer(StatefulToolServer):
         state = self._state(session_id); lead = state["leads"].get(arguments["lead_id"])
         if not lead: raise KeyError(f"lead not found: {arguments['lead_id']}")
         changed = False
+        allowed = {"name", "company", "source", "email", "phone", "status"}
+        unsupported = sorted(set(arguments["fields"]) - allowed)
+        if unsupported:
+            raise KeyError(f"unsupported lead field(s): {', '.join(unsupported)}")
+        if arguments["fields"].get("status") == "converted":
+            raise KeyError("use convert_lead to convert a lead")
         for k, v in arguments["fields"].items():
-            if k in ("name", "company", "source", "email", "phone") and lead.get(k) != v:
+            if k in allowed and lead.get(k) != v:
                 lead[k] = v
                 changed = True
         return _result(True, {"lead": lead}, None, "", changed)
@@ -85,8 +91,12 @@ class CRMServer(StatefulToolServer):
         state = self._state(session_id); contact = state["contacts"].get(arguments["contact_id"])
         if not contact: raise KeyError(f"contact not found: {arguments['contact_id']}")
         changed = False
+        allowed = {"name", "email", "phone", "company"}
+        unsupported = sorted(set(arguments["fields"]) - allowed)
+        if unsupported:
+            raise KeyError(f"unsupported contact field(s): {', '.join(unsupported)}")
         for k, v in arguments["fields"].items():
-            if k in ("name", "email", "phone", "company") and contact.get(k) != v:
+            if k in allowed and contact.get(k) != v:
                 contact[k] = v
                 changed = True
         return _result(True, {"contact": contact}, None, "", changed)

@@ -8,6 +8,7 @@ space of real entity IDs.  The original 4-entity pools were too small for GRPO.
 from __future__ import annotations
 
 import copy
+import datetime as _datetime
 import random
 from typing import Any
 
@@ -590,7 +591,17 @@ def _team_chat_state(seed: int) -> dict[str, Any]:
 
 
 def _food_delivery_state(seed: int) -> dict[str, Any]:
+    # Query generation and state seeding must share one temporal anchor.
+    # Keep the import local so the generic seeder remains lightweight.
+    from src.live_mcp.task_planner import reference_datetime_for_seed
+
     rng = random.Random(seed)
+    reference_dt = reference_datetime_for_seed(seed)
+    days_since_friday = (reference_dt.weekday() - 4) % 7
+    if days_since_friday == 0:
+        days_since_friday = 7
+    previous_friday = reference_dt - _datetime.timedelta(days=days_since_friday)
+    recent_order = reference_dt - _datetime.timedelta(days=2)
     restaurant_templates = [
         ("rest_001", "Pizza Palace", "Italian", 4.5, 2.99,
          [("Margherita Pizza", 12.99, ["vegetarian"]),
@@ -650,14 +661,19 @@ def _food_delivery_state(seed: int) -> dict[str, Any]:
                      "delivery_address": "123 Main St", "subtotal": 25.98,
                      "delivery_fee": 2.99, "tip": 3.00, "total": 31.97,
                      "status": "delivered", "rating": None,
-                     "created_at": "2026-06-20T18:00:00"},
+                     "created_at": previous_friday.replace(
+                         hour=18, minute=0, second=0, microsecond=0,
+                     ).isoformat()},
         order_2: {"order_id": order_2, "restaurant_id": restaurant_ids[1],
                      "restaurant_name": "Sushi Express",
                      "items": [{"name": "California Roll", "quantity": 1}],
                      "delivery_address": "456 Oak Ave", "subtotal": 10.99,
                      "delivery_fee": 3.99, "tip": 0, "total": 14.98,
                      "status": "preparing", "rating": None,
-                     "created_at": "2026-06-21T12:30:00"},
+                     "created_at": recent_order.replace(
+                         hour=12, minute=30, second=0, microsecond=0,
+                     ).isoformat()},
     }
     return {"restaurants": restaurants, "orders": orders, "support_tickets": [],
+            "current_date": reference_dt.date().isoformat(),
             "next_order_num": 3, "next_ticket_num": 1}
