@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+from src.live_mcp.tool_semantics import build_tool_semantics
 
 
 class DomainAdapter(ABC):
@@ -21,6 +22,13 @@ class DomainAdapter(ABC):
     """
 
     domain_name: str
+
+    def register_tool_schemas(self, tools: list[dict[str, Any]]) -> None:
+        """Bind formal operations from live annotations and reviewed writes."""
+        contracts = build_tool_semantics(self.domain_name, tools)
+        self._schema_operations = {
+            name: contract.operation for name, contract in contracts.items()
+        }
 
     @abstractmethod
     def normalize_event(
@@ -101,43 +109,15 @@ class DomainAdapter(ABC):
         default_target_type: str,
         state_changed: bool = False,
     ) -> tuple[str, str]:
-        """Classify every discovered tool, including tools absent from TOOL_MAP.
-
-        Explicit per-domain mappings win.  Naming conventions plus the live
-        state_changed bit provide a complete fallback for the 188-tool surface.
-        """
+        """Resolve one tool through the registered executable schema."""
         explicit = getattr(self, "TOOL_MAP", {}).get(tool_name)
-        if explicit:
-            return explicit
-        name = tool_name.lower()
-        query_prefixes = (
-            "get_", "list_", "search_", "check_", "find_", "read_",
-            "show_", "compare_", "track_", "export_",
+        schema_operation = getattr(self, "_schema_operations", {}).get(tool_name)
+        if schema_operation:
+            target_type = explicit[1] if explicit else default_target_type
+            return schema_operation, target_type
+        raise ValueError(
+            f"unregistered tool contract: {self.domain_name}.{tool_name}"
         )
-        delete_prefixes = (
-            "delete_", "remove_", "cancel_", "clear_", "archive_", "rm",
-        )
-        create_prefixes = (
-            "create_", "add_", "send_", "reply_", "forward_", "mkdir",
-            "touch", "cp", "zip", "tar_create",
-        )
-        update_prefixes = (
-            "update_", "set_", "change_", "edit_", "assign_", "apply_",
-            "move_", "mark_", "react_", "respond_", "transition_", "mv",
-            "chmod", "chown", "sed", "truncate", "transfer", "wire_transfer",
-            "bill_pay", "pay_", "convert_", "complete_", "rate_", "reorder",
-        )
-        if name.startswith(query_prefixes):
-            operation = "query"
-        elif name.startswith(delete_prefixes):
-            operation = "delete"
-        elif name.startswith(create_prefixes):
-            operation = "create"
-        elif name.startswith(update_prefixes):
-            operation = "update"
-        else:
-            operation = "update" if state_changed else "query"
-        return operation, default_target_type
 
     @staticmethod
     def generic_target_id(
@@ -1026,27 +1006,34 @@ def get_adapter(domain_name: str) -> DomainAdapter:
     """Get or create a domain adapter by name."""
     if domain_name not in _ADAPTERS:
         if domain_name == "calendar":
-            _ADAPTERS[domain_name] = CalendarAdapter()
+            adapter = CalendarAdapter()
         elif domain_name == "shopping":
-            _ADAPTERS[domain_name] = ShoppingAdapter()
+            adapter = ShoppingAdapter()
         elif domain_name == "banking":
-            _ADAPTERS[domain_name] = BankingAdapter()
+            adapter = BankingAdapter()
         elif domain_name == "email":
-            _ADAPTERS[domain_name] = EmailAdapter()
+            adapter = EmailAdapter()
         elif domain_name == "filesystem":
-            _ADAPTERS[domain_name] = FilesystemAdapter()
+            adapter = FilesystemAdapter()
         elif domain_name == "payments":
-            _ADAPTERS[domain_name] = PaymentsAdapter()
+            adapter = PaymentsAdapter()
         elif domain_name == "crm":
-            _ADAPTERS[domain_name] = CRMAdapter()
+            adapter = CRMAdapter()
         elif domain_name == "issue_tracker":
-            _ADAPTERS[domain_name] = IssueTrackerAdapter()
+            adapter = IssueTrackerAdapter()
         elif domain_name == "team_chat":
-            _ADAPTERS[domain_name] = TeamChatAdapter()
+            adapter = TeamChatAdapter()
         elif domain_name == "food_delivery":
-            _ADAPTERS[domain_name] = FoodDeliveryAdapter()
+            adapter = FoodDeliveryAdapter()
         else:
             raise ValueError(f"unknown domain: {domain_name}")
+        import importlib
+
+        tools = list(importlib.import_module(
+            f"src.live_mcp.servers.{domain_name}.server"
+        ).TOOLS)
+        adapter.register_tool_schemas(tools)
+        _ADAPTERS[domain_name] = adapter
     return _ADAPTERS[domain_name]
 
 

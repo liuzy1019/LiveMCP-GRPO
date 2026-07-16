@@ -1,8 +1,8 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
+  "dependency_semantics_version": 11,
   "server_name": "issue_tracker",
-  "schema_hash": "e4d825cf93f23a23",
+  "schema_hash": "fea4fe62ec3aa9c7",
   "tool_names": [
     "add_label",
     "add_to_sprint",
@@ -29,21 +29,15 @@
   "graph": {
     "add_label": {
       "explicit": [],
-      "implicit": [
-        "remove_label"
-      ]
+      "implicit": []
     },
     "add_to_sprint": {
       "explicit": [],
-      "implicit": [
-        "remove_from_sprint"
-      ]
+      "implicit": []
     },
     "add_watcher": {
       "explicit": [],
-      "implicit": [
-        "remove_watcher"
-      ]
+      "implicit": []
     },
     "assign_issue": {
       "explicit": [],
@@ -69,9 +63,7 @@
         "transition_issue",
         "update_issue"
       ],
-      "implicit": [
-        "assign_issue"
-      ]
+      "implicit": []
     },
     "create_sprint": {
       "explicit": [
@@ -103,6 +95,7 @@
     },
     "list_issues": {
       "explicit": [
+        "add_to_sprint",
         "list_subtasks",
         "remove_from_sprint",
         "remove_label",
@@ -294,9 +287,9 @@
         "add_label",
         "remove_label"
       ],
-      "source": "add_label",
-      "target": "remove_label",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -420,9 +413,9 @@
         "add_to_sprint",
         "list_issues"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_issues",
+      "target": "add_to_sprint",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -456,9 +449,9 @@
         "add_to_sprint",
         "remove_from_sprint"
       ],
-      "source": "add_to_sprint",
-      "target": "remove_from_sprint",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -636,9 +629,9 @@
         "add_watcher",
         "remove_watcher"
       ],
-      "source": "add_watcher",
-      "target": "remove_watcher",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -690,9 +683,9 @@
         "assign_issue",
         "create_issue"
       ],
-      "source": "create_issue",
-      "target": "assign_issue",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2054,9 +2047,9 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
   "tool_count": 21,
   "expected_pair_count": 210,
   "classified_pair_count": 210,

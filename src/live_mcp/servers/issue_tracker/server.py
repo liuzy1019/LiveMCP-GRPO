@@ -4,6 +4,7 @@ Features: sprints, labels, watchers, subtasks, time tracking, milestones.
 """
 
 from __future__ import annotations
+from datetime import date
 from typing import Any
 from src.live_mcp.server_base import StatefulToolServer, _result, serve
 
@@ -28,7 +29,7 @@ TOOLS = [
     {"name": "remove_from_sprint", "description": "Remove an issue from a sprint.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}}, "required": ["issue_id"]}, "annotations": {"mutating": True}},
     {"name": "create_subtask", "description": "Create a subtask under an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "title": {"type": "string"}, "assignee": {"type": "string", "description": "Optional stable member user_id returned by list_members, not a display name."}}, "required": ["issue_id", "title"]}, "annotations": {"mutating": True}},
     {"name": "list_subtasks", "description": "List subtasks for an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}}, "required": ["issue_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "time_track", "description": "Log time spent on an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "hours": {"type": "number"}, "description": {"type": "string"}}, "required": ["issue_id", "hours"]}, "annotations": {"mutating": True}},
+    {"name": "time_track", "description": "Log a positive number of hours spent on an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "hours": {"type": "number", "exclusiveMinimum": 0, "description": "Positive number of hours."}, "description": {"type": "string"}}, "required": ["issue_id", "hours"]}, "annotations": {"mutating": True}},
     {"name": "get_time_report", "description": "Get time tracking report for issues/sprints.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "sprint_id": {"type": "string"}, "assignee": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "set_milestone", "description": "Set a milestone on an issue.", "input_schema": {"type": "object", "properties": {"issue_id": {"type": "string"}, "milestone": {"type": "string"}}, "required": ["issue_id", "milestone"]}, "annotations": {"mutating": True}},
 ]
@@ -44,7 +45,7 @@ class IssueTrackerServer(StatefulToolServer):
 
     def create_issue(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); iid = f"iss_{state['next_issue_num']:04d}"; state["next_issue_num"] += 1
-        issue = {"issue_id": iid, "title": arguments["title"], "description": arguments.get("description", ""), "priority": arguments.get("priority", "medium"), "labels": arguments.get("labels", []), "state": "open", "assignee": None, "watchers": [], "sprint_id": None, "milestone": None, "comments": [], "created_at": "2026-06-24"}
+        issue = {"issue_id": iid, "title": arguments["title"], "description": arguments.get("description", ""), "priority": arguments.get("priority", "medium"), "labels": arguments.get("labels", []), "state": "open", "assignee": None, "watchers": [], "sprint_id": None, "milestone": None, "comments": [], "created_at": state["current_date"]}
         state["issues"][iid] = issue
         return _result(True, {"issue": issue}, None, "", True)
 
@@ -94,12 +95,13 @@ class IssueTrackerServer(StatefulToolServer):
         if new_state in ("in_review", "resolved", "closed") and issue["assignee"] is None: raise KeyError("cannot transition unassigned issue")
         issue["state"] = new_state
         if arguments.get("comment"): issue["comments"].append({"author": "system", "body": arguments["comment"]})
-        issue["comments"].append({"author": "system", "body": f"State changed: {old_state} -> {new_state}", "timestamp": "2026-06-24"})
+        issue["comments"].append({"author": "system", "body": f"State changed: {old_state} -> {new_state}", "timestamp": state["current_date"]})
         return _result(True, {"issue": issue}, None, "", True)
 
     def comment_issue(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        issue = self._iss(self._state(session_id), arguments["issue_id"])
-        issue["comments"].append({"author": "user", "body": arguments["body"], "timestamp": "2026-06-24"})
+        state = self._state(session_id)
+        issue = self._iss(state, arguments["issue_id"])
+        issue["comments"].append({"author": "user", "body": arguments["body"], "timestamp": state["current_date"]})
         return _result(True, {"issue": issue}, None, "", True)
 
     def add_label(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -133,7 +135,12 @@ class IssueTrackerServer(StatefulToolServer):
         return _result(True, {"issue_id": issue["issue_id"], "watchers": issue["watchers"]}, None, "", True)
 
     def create_sprint(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if arguments["start_date"] > arguments["end_date"]:
+        try:
+            start_date = date.fromisoformat(arguments["start_date"])
+            end_date = date.fromisoformat(arguments["end_date"])
+        except ValueError as exc:
+            raise KeyError("start_date and end_date must be ISO YYYY-MM-DD") from exc
+        if start_date > end_date:
             raise KeyError("start_date must be before or equal to end_date")
         state = self._state(session_id); sid = f"spr_{state['next_sprint_num']:04d}"; state["next_sprint_num"] += 1
         sprint = {"sprint_id": sid, "name": arguments["name"], "start_date": arguments["start_date"], "end_date": arguments["end_date"], "goal": arguments.get("goal", ""), "status": "active", "issues": []}
@@ -190,7 +197,7 @@ class IssueTrackerServer(StatefulToolServer):
     def time_track(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); iid = arguments["issue_id"]; self._iss(state, iid); hours = float(arguments["hours"])
         if hours <= 0: raise KeyError("hours must be positive")
-        entry = {"entry_id": f"time_{state['next_time_entry_num']:04d}", "issue_id": iid, "hours": hours, "description": arguments.get("description", ""), "date": "2026-06-24", "user": "current_user"}
+        entry = {"entry_id": f"time_{state['next_time_entry_num']:04d}", "issue_id": iid, "hours": hours, "description": arguments.get("description", ""), "date": state["current_date"], "user": "current_user"}
         state.setdefault("time_entries", []).append(entry); state["next_time_entry_num"] += 1
         return _result(True, {"time_entry": entry}, None, "", True)
 

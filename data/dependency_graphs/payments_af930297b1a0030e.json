@@ -1,8 +1,8 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
+  "dependency_semantics_version": 11,
   "server_name": "payments",
-  "schema_hash": "670b4724f883c759",
+  "schema_hash": "af930297b1a0030e",
   "tool_names": [
     "cancel_payment",
     "create_invoice",
@@ -59,9 +59,7 @@
       "implicit": []
     },
     "pay_invoice": {
-      "explicit": [
-        "cancel_payment"
-      ],
+      "explicit": [],
       "implicit": [
         "refund_invoice"
       ]
@@ -140,9 +138,9 @@
         "cancel_payment",
         "pay_invoice"
       ],
-      "source": "pay_invoice",
-      "target": "cancel_payment",
-      "relation": "explicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -478,9 +476,9 @@
       "relation": "implicit"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
   "tool_count": 10,
   "expected_pair_count": 45,
   "classified_pair_count": 45,

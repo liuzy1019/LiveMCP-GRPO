@@ -2,8 +2,8 @@
 """OVAL-MCP GRPO 训练入口。
 
 用法:
-    OVAL_BETA=0.25 python src/training/run_grpo.py \\
-        actor_rollout_ref.model.path=models/Qwen3-4B \\
+    OVAL_REWARD_PROFILE=oval_full python src/training/run_grpo.py \\
+        actor_rollout_ref.model.path=models/Qwen/Qwen3-4B \\
         ...
 """
 
@@ -15,34 +15,53 @@ from loguru import logger
 
 # 确保项目在路径中
 PROJECT_DIR = str(Path(__file__).resolve().parent.parent.parent)
-if PROJECT_DIR not in sys.path:
-    sys.path.insert(0, PROJECT_DIR)
-sys.path.insert(0, os.path.join(PROJECT_DIR, "verl"))
+VENDORED_VERL_DIR = os.path.join(PROJECT_DIR, "verl")
+for path in (PROJECT_DIR, VENDORED_VERL_DIR):
+    while path in sys.path:
+        sys.path.remove(path)
+# Project modules must win over the vendored repository's generic packages
+# (notably both repositories contain a top-level ``scripts`` package).
+sys.path.insert(0, PROJECT_DIR)
+sys.path.insert(1, VENDORED_VERL_DIR)
 
 
-def _maybe_run_pre_check(hp) -> None:
-    """E4 启动前：先跑通用长度预检（默认开启），再跑 LiveMCP 专属的
-    3:3:3 group 完整性（precheck=True 才跑，离线校验代价高）。"""
+def _bind_profile_estimator(profile: str, argv: list[str]) -> str:
+    """Bind the Hydra estimator to the declared training profile."""
+    expected = "grpo" if profile == "prove_baseline" else "livemcp_grpo"
+    prefix = "algorithm.adv_estimator="
+    normalized = [arg.lstrip("+") for arg in argv]
+    values = [arg[len(prefix):] for arg in normalized if arg.startswith(prefix)]
+    if len(set(values)) > 1:
+        raise ValueError(f"conflicting advantage estimator overrides: {values}")
+    if values and values[0] != expected:
+        raise ValueError(
+            f"reward profile {profile!r} requires adv_estimator={expected!r}, "
+            f"got {values[0]!r}"
+        )
+    if not values:
+        argv.append(f"{prefix}{expected}")
+    return expected
+
+
+def _validate_verl_runtime() -> None:
+    """Fail early when the vendored verl checkout is not installed completely."""
+    try:
+        import verl.trainer.main_ppo  # noqa: F401
+    except Exception as exc:
+        raise RuntimeError(
+            "vendored verl runtime is incomplete in the active Python environment; "
+            "install it with that interpreter via `python -m pip install -e ./verl` "
+            f"before training (original error: {exc})"
+        ) from exc
+
+
+def _run_length_precheck() -> None:
+    """Run the production prompt-length preflight before verl starts."""
     from src.training.length_check import (
-        assert_e4_group_integrity,
         maybe_run_length_check,
-        parse_data_args_from_argv,
     )
 
-    # 长度预检默认开启，由 length_check 自己处理 LIVEMCP_SKIP_LENGTH_CHECK
     maybe_run_length_check(sys.argv[1:])
-
-    if not hp.precheck:
-        return
-    args = parse_data_args_from_argv(sys.argv[1:])
-    train = args.get("train_files")
-    val = args.get("val_files")
-    model_path = args.get("model_path")
-    limit = args.get("max_prompt_length", 10240)
-    if train and model_path:
-        assert_e4_group_integrity(train, model_path, limit, "train")
-    if val and model_path:
-        assert_e4_group_integrity(val, model_path, limit, "val")
 
 
 def main() -> None:
@@ -50,42 +69,53 @@ def main() -> None:
     from src.training.livemcp_hyperparams import LiveMCPHyperparams
     hp = LiveMCPHyperparams.from_env()
     hp.export_env()
+    estimator_name = _bind_profile_estimator(hp.reward_profile, sys.argv)
+    _validate_verl_runtime()
     logger.info("LiveMCP 超参配置:\n" + hp.summary())
+    from src.oval_mcp.training.lambda_state import LambdaState, DEFAULT_STATE_PATH
     # 将配置保存到 LambdaState 路径相邻位置，供 wandb 等外部工具读取
     config_dump_path = os.path.join(
         os.path.dirname(DEFAULT_STATE_PATH),
         "livemcp_config.json",
     )
-    try:
-        import json as _json
-        os.makedirs(os.path.dirname(config_dump_path), exist_ok=True)
-        with open(config_dump_path, "w") as f:
-            _json.dump(hp.to_dict(), f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+    import json as _json
+    os.makedirs(os.path.dirname(config_dump_path), exist_ok=True)
+    with open(config_dump_path, "w") as f:
+        _json.dump(hp.to_dict(), f, indent=2, ensure_ascii=False)
 
-    beta = hp.beta
-    logger.info(f"OVAL-MCP GRPO 训练入口 | beta={beta}")
+    logger.info(f"OVAL-MCP GRPO 训练入口 | adv_estimator={estimator_name}")
 
-    # 训练前可选：模拟 verl 的 prompt 过滤，验证 group 完整性
-    if hp.precheck:
-        _maybe_run_pre_check(hp)
+    # Prompt-length preflight always executes unless explicitly skipped.
+    _run_length_precheck()
 
     # 注册 agent loop（必须在 verl 启动前 import）
     from src.agent_loop.livemcp_oval_loop import LiveMCPOvalLoop  # noqa: F401
     logger.info("Agent loop LiveMCPOvalLoop 已注册")
 
-    # 注册 livemcp_grpo estimator + patch verl 传递 non_tensor_batch
-    # 主进程注册一次，便于 fail-fast；ray actor 内还需重新注册（见下面 LiveMCPTaskRunner）
-    from src.training.register_estimator import register_livemcp_estimator
-    register_livemcp_estimator()
+    # Only the OVAL extension needs the custom estimator and non-tensor bridge.
+    # Strict PROVE baseline uses verl's standard GRPO implementation unchanged.
+    if estimator_name == "livemcp_grpo":
+        from src.training.register_estimator import register_livemcp_estimator
+        if not register_livemcp_estimator():
+            raise RuntimeError(
+                "LiveMCP estimator registration failed; aborting before Ray startup"
+            )
 
     # ── 初始化 LambdaState（lambda_safe file-backed 共享状态） ──
-    from src.oval_mcp.training.lambda_state import LambdaState, DEFAULT_STATE_PATH
     # 每次训练从干净状态开始（OVAL_KEEP_LAMBDA=1 保留上次状态）
-    if not hp.keep_lambda and os.path.exists(DEFAULT_STATE_PATH):
+    if (
+        hp.reward_profile == "prove_baseline" or not hp.keep_lambda
+    ) and os.path.exists(DEFAULT_STATE_PATH):
         LambdaState.reset(DEFAULT_STATE_PATH)
-    lambda_state = LambdaState.load_or_default()
+    if hp.reward_profile == "prove_baseline" or not hp.keep_lambda:
+        lambda_state = LambdaState.load_or_default(
+            lambda_safe=hp.lambda_safe_default,
+            alpha_lambda=hp.alpha_lambda,
+            epsilon=hp.lambda_epsilon,
+            lambda_safe_max=hp.lambda_safe_max,
+        )
+    else:
+        lambda_state = LambdaState.load_or_default()
     lambda_state.save()
     logger.info(f"lambda_safe 初始化: {lambda_state.lambda_safe} (path={DEFAULT_STATE_PATH})")
 

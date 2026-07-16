@@ -1,108 +1,116 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
-  "server_name": "email",
-  "schema_hash": "891c98cab0324d14",
+  "dependency_semantics_version": 11,
+  "server_name": "banking",
+  "schema_hash": "da76cd1f1d86ea07",
   "tool_names": [
-    "add_label",
-    "archive_email",
-    "create_draft",
-    "create_filter",
-    "forward_email",
-    "get_attachments",
-    "get_email",
-    "get_thread",
-    "list_filters",
-    "list_inbox",
-    "mark_read",
-    "mark_unread",
-    "move_to_thread",
-    "remove_label",
-    "reply_email",
-    "search_emails",
-    "send_email"
+    "apply_loan",
+    "bill_pay",
+    "cancel_transfer",
+    "deposit",
+    "freeze_account",
+    "get_account_info",
+    "get_balance",
+    "get_exchange_rate",
+    "get_history",
+    "get_statement",
+    "list_accounts",
+    "list_scheduled_transfers",
+    "schedule_transfer",
+    "transfer",
+    "unfreeze_account",
+    "verify_account",
+    "wire_transfer",
+    "withdraw"
   ],
   "graph": {
-    "add_label": {
+    "apply_loan": {
       "explicit": [],
       "implicit": []
     },
-    "archive_email": {
+    "bill_pay": {
       "explicit": [],
       "implicit": []
     },
-    "create_draft": {
+    "cancel_transfer": {
       "explicit": [],
       "implicit": []
     },
-    "create_filter": {
+    "deposit": {
       "explicit": [],
       "implicit": []
     },
-    "forward_email": {
+    "freeze_account": {
+      "explicit": [],
+      "implicit": [
+        "unfreeze_account"
+      ]
+    },
+    "get_account_info": {
       "explicit": [],
       "implicit": []
     },
-    "get_attachments": {
+    "get_balance": {
       "explicit": [],
       "implicit": []
     },
-    "get_email": {
+    "get_exchange_rate": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_history": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_statement": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_accounts": {
       "explicit": [
-        "get_thread"
+        "apply_loan",
+        "bill_pay",
+        "get_account_info",
+        "schedule_transfer",
+        "transfer",
+        "unfreeze_account",
+        "verify_account",
+        "wire_transfer",
+        "withdraw"
       ],
       "implicit": []
     },
-    "get_thread": {
+    "list_scheduled_transfers": {
       "explicit": [
-        "mark_read",
-        "mark_unread",
-        "move_to_thread",
-        "remove_label",
-        "reply_email",
-        "send_email"
+        "cancel_transfer"
       ],
       "implicit": []
     },
-    "list_filters": {
+    "schedule_transfer": {
       "explicit": [],
       "implicit": []
     },
-    "list_inbox": {
-      "explicit": [
-        "mark_read",
-        "mark_unread",
-        "move_to_thread",
-        "remove_label",
-        "reply_email"
-      ],
-      "implicit": []
-    },
-    "mark_read": {
+    "transfer": {
       "explicit": [],
       "implicit": []
     },
-    "mark_unread": {
+    "unfreeze_account": {
+      "explicit": [],
+      "implicit": [
+        "bill_pay",
+        "wire_transfer",
+        "withdraw"
+      ]
+    },
+    "verify_account": {
       "explicit": [],
       "implicit": []
     },
-    "move_to_thread": {
+    "wire_transfer": {
       "explicit": [],
       "implicit": []
     },
-    "remove_label": {
-      "explicit": [],
-      "implicit": []
-    },
-    "reply_email": {
-      "explicit": [],
-      "implicit": []
-    },
-    "search_emails": {
-      "explicit": [],
-      "implicit": []
-    },
-    "send_email": {
+    "withdraw": {
       "explicit": [],
       "implicit": []
     }
@@ -110,8 +118,8 @@
   "pair_classifications": [
     {
       "pair": [
-        "add_label",
-        "archive_email"
+        "apply_loan",
+        "bill_pay"
       ],
       "source": "",
       "target": "",
@@ -119,8 +127,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "create_draft"
+        "apply_loan",
+        "cancel_transfer"
       ],
       "source": "",
       "target": "",
@@ -128,8 +136,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "create_filter"
+        "apply_loan",
+        "deposit"
       ],
       "source": "",
       "target": "",
@@ -137,8 +145,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "forward_email"
+        "apply_loan",
+        "freeze_account"
       ],
       "source": "",
       "target": "",
@@ -146,8 +154,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "get_attachments"
+        "apply_loan",
+        "get_account_info"
       ],
       "source": "",
       "target": "",
@@ -155,8 +163,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "get_email"
+        "apply_loan",
+        "get_balance"
       ],
       "source": "",
       "target": "",
@@ -164,8 +172,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "get_thread"
+        "apply_loan",
+        "get_exchange_rate"
       ],
       "source": "",
       "target": "",
@@ -173,8 +181,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "list_filters"
+        "apply_loan",
+        "get_history"
       ],
       "source": "",
       "target": "",
@@ -182,8 +190,8 @@
     },
     {
       "pair": [
-        "add_label",
-        "list_inbox"
+        "apply_loan",
+        "get_statement"
       ],
       "source": "",
       "target": "",
@@ -191,665 +199,17 @@
     },
     {
       "pair": [
-        "add_label",
-        "mark_read"
+        "apply_loan",
+        "list_accounts"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_label",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "create_draft"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "create_filter"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "forward_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "archive_email",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "create_filter"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "forward_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_draft",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "forward_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_filter",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "get_attachments"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "forward_email",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "get_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "get_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "list_filters"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "list_inbox"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_attachments",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_email",
-        "get_thread"
-      ],
-      "source": "get_email",
-      "target": "get_thread",
+      "source": "list_accounts",
+      "target": "apply_loan",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_email",
-        "list_filters"
+        "apply_loan",
+        "list_scheduled_transfers"
       ],
       "source": "",
       "target": "",
@@ -857,8 +217,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "list_inbox"
+        "apply_loan",
+        "schedule_transfer"
       ],
       "source": "",
       "target": "",
@@ -866,8 +226,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "mark_read"
+        "apply_loan",
+        "transfer"
       ],
       "source": "",
       "target": "",
@@ -875,8 +235,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "mark_unread"
+        "apply_loan",
+        "unfreeze_account"
       ],
       "source": "",
       "target": "",
@@ -884,8 +244,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "move_to_thread"
+        "apply_loan",
+        "verify_account"
       ],
       "source": "",
       "target": "",
@@ -893,8 +253,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "remove_label"
+        "apply_loan",
+        "wire_transfer"
       ],
       "source": "",
       "target": "",
@@ -902,8 +262,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "reply_email"
+        "apply_loan",
+        "withdraw"
       ],
       "source": "",
       "target": "",
@@ -911,8 +271,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "search_emails"
+        "bill_pay",
+        "cancel_transfer"
       ],
       "source": "",
       "target": "",
@@ -920,8 +280,8 @@
     },
     {
       "pair": [
-        "get_email",
-        "send_email"
+        "bill_pay",
+        "deposit"
       ],
       "source": "",
       "target": "",
@@ -929,8 +289,8 @@
     },
     {
       "pair": [
-        "get_thread",
-        "list_filters"
+        "bill_pay",
+        "freeze_account"
       ],
       "source": "",
       "target": "",
@@ -938,8 +298,8 @@
     },
     {
       "pair": [
-        "get_thread",
-        "list_inbox"
+        "bill_pay",
+        "get_account_info"
       ],
       "source": "",
       "target": "",
@@ -947,188 +307,1007 @@
     },
     {
       "pair": [
-        "get_thread",
-        "mark_read"
+        "bill_pay",
+        "get_balance"
       ],
-      "source": "get_thread",
-      "target": "mark_read",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "list_accounts"
+      ],
+      "source": "list_accounts",
+      "target": "bill_pay",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "mark_unread"
+        "bill_pay",
+        "list_scheduled_transfers"
       ],
-      "source": "get_thread",
-      "target": "mark_unread",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "unfreeze_account"
+      ],
+      "source": "unfreeze_account",
+      "target": "bill_pay",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "bill_pay",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "deposit"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "freeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "list_scheduled_transfers"
+      ],
+      "source": "list_scheduled_transfers",
+      "target": "cancel_transfer",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "move_to_thread"
+        "cancel_transfer",
+        "schedule_transfer"
       ],
-      "source": "get_thread",
-      "target": "move_to_thread",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_transfer",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "freeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "list_scheduled_transfers"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "deposit",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_account_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "list_scheduled_transfers"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "unfreeze_account"
+      ],
+      "source": "freeze_account",
+      "target": "unfreeze_account",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "freeze_account",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_balance"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "list_accounts"
+      ],
+      "source": "list_accounts",
+      "target": "get_account_info",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "remove_label"
+        "get_account_info",
+        "list_scheduled_transfers"
       ],
-      "source": "get_thread",
-      "target": "remove_label",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_account_info",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "get_exchange_rate"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "list_scheduled_transfers"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_balance",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "get_history"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "list_scheduled_transfers"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_exchange_rate",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "get_statement"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "list_scheduled_transfers"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_history",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "list_accounts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "list_scheduled_transfers"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "schedule_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "unfreeze_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "verify_account"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "wire_transfer"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_statement",
+        "withdraw"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "list_scheduled_transfers"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_accounts",
+        "schedule_transfer"
+      ],
+      "source": "list_accounts",
+      "target": "schedule_transfer",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "reply_email"
+        "list_accounts",
+        "transfer"
       ],
-      "source": "get_thread",
-      "target": "reply_email",
+      "source": "list_accounts",
+      "target": "transfer",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_thread",
-        "search_emails"
+        "list_accounts",
+        "unfreeze_account"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_thread",
-        "send_email"
-      ],
-      "source": "get_thread",
-      "target": "send_email",
+      "source": "list_accounts",
+      "target": "unfreeze_account",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_filters",
-        "list_inbox"
+        "list_accounts",
+        "verify_account"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "mark_read"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "mark_unread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "move_to_thread"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "remove_label"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "reply_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_filters",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_inbox",
-        "mark_read"
-      ],
-      "source": "list_inbox",
-      "target": "mark_read",
+      "source": "list_accounts",
+      "target": "verify_account",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "mark_unread"
+        "list_accounts",
+        "wire_transfer"
       ],
-      "source": "list_inbox",
-      "target": "mark_unread",
+      "source": "list_accounts",
+      "target": "wire_transfer",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "move_to_thread"
+        "list_accounts",
+        "withdraw"
       ],
-      "source": "list_inbox",
-      "target": "move_to_thread",
+      "source": "list_accounts",
+      "target": "withdraw",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_inbox",
-        "remove_label"
-      ],
-      "source": "list_inbox",
-      "target": "remove_label",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "list_inbox",
-        "reply_email"
-      ],
-      "source": "list_inbox",
-      "target": "reply_email",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "list_inbox",
-        "search_emails"
+        "list_scheduled_transfers",
+        "schedule_transfer"
       ],
       "source": "",
       "target": "",
@@ -1136,8 +1315,8 @@
     },
     {
       "pair": [
-        "list_inbox",
-        "send_email"
+        "list_scheduled_transfers",
+        "transfer"
       ],
       "source": "",
       "target": "",
@@ -1145,8 +1324,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "mark_unread"
+        "list_scheduled_transfers",
+        "unfreeze_account"
       ],
       "source": "",
       "target": "",
@@ -1154,8 +1333,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "move_to_thread"
+        "list_scheduled_transfers",
+        "verify_account"
       ],
       "source": "",
       "target": "",
@@ -1163,8 +1342,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "remove_label"
+        "list_scheduled_transfers",
+        "wire_transfer"
       ],
       "source": "",
       "target": "",
@@ -1172,8 +1351,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "reply_email"
+        "list_scheduled_transfers",
+        "withdraw"
       ],
       "source": "",
       "target": "",
@@ -1181,8 +1360,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "search_emails"
+        "schedule_transfer",
+        "transfer"
       ],
       "source": "",
       "target": "",
@@ -1190,8 +1369,8 @@
     },
     {
       "pair": [
-        "mark_read",
-        "send_email"
+        "schedule_transfer",
+        "unfreeze_account"
       ],
       "source": "",
       "target": "",
@@ -1199,8 +1378,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "move_to_thread"
+        "schedule_transfer",
+        "verify_account"
       ],
       "source": "",
       "target": "",
@@ -1208,8 +1387,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "remove_label"
+        "schedule_transfer",
+        "wire_transfer"
       ],
       "source": "",
       "target": "",
@@ -1217,8 +1396,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "reply_email"
+        "schedule_transfer",
+        "withdraw"
       ],
       "source": "",
       "target": "",
@@ -1226,8 +1405,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "search_emails"
+        "transfer",
+        "unfreeze_account"
       ],
       "source": "",
       "target": "",
@@ -1235,8 +1414,8 @@
     },
     {
       "pair": [
-        "mark_unread",
-        "send_email"
+        "transfer",
+        "verify_account"
       ],
       "source": "",
       "target": "",
@@ -1244,8 +1423,8 @@
     },
     {
       "pair": [
-        "move_to_thread",
-        "remove_label"
+        "transfer",
+        "wire_transfer"
       ],
       "source": "",
       "target": "",
@@ -1253,8 +1432,8 @@
     },
     {
       "pair": [
-        "move_to_thread",
-        "reply_email"
+        "transfer",
+        "withdraw"
       ],
       "source": "",
       "target": "",
@@ -1262,8 +1441,8 @@
     },
     {
       "pair": [
-        "move_to_thread",
-        "search_emails"
+        "unfreeze_account",
+        "verify_account"
       ],
       "source": "",
       "target": "",
@@ -1271,8 +1450,26 @@
     },
     {
       "pair": [
-        "move_to_thread",
-        "send_email"
+        "unfreeze_account",
+        "wire_transfer"
+      ],
+      "source": "unfreeze_account",
+      "target": "wire_transfer",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "unfreeze_account",
+        "withdraw"
+      ],
+      "source": "unfreeze_account",
+      "target": "withdraw",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "verify_account",
+        "wire_transfer"
       ],
       "source": "",
       "target": "",
@@ -1280,8 +1477,8 @@
     },
     {
       "pair": [
-        "remove_label",
-        "reply_email"
+        "verify_account",
+        "withdraw"
       ],
       "source": "",
       "target": "",
@@ -1289,55 +1486,19 @@
     },
     {
       "pair": [
-        "remove_label",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "remove_label",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "reply_email",
-        "search_emails"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "reply_email",
-        "send_email"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "search_emails",
-        "send_email"
+        "wire_transfer",
+        "withdraw"
       ],
       "source": "",
       "target": "",
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
-  "tool_count": 17,
-  "expected_pair_count": 136,
-  "classified_pair_count": 136,
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "tool_count": 18,
+  "expected_pair_count": 153,
+  "classified_pair_count": 153,
   "classification_complete": true
 }

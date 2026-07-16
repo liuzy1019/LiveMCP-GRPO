@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -12,16 +12,10 @@ import yaml
 @dataclass
 class ServerConfig:
     name: str
-    type: str
     enabled: bool
     command: dict[str, Any]
     transport: dict[str, Any]
     session: dict[str, Any]
-    tools: dict[str, Any]
-    sampler: dict[str, Any] = field(default_factory=dict)
-    reward_profile: str = ""
-    dependency_graph: dict[str, Any] = field(default_factory=dict)
-    query_templates: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -30,10 +24,6 @@ class SuiteConfig:
     servers: list[ServerConfig]
     rollout: dict[str, Any]
     reward: dict[str, Any]
-    trace: dict[str, Any]
-    environment: dict[str, Any] = field(default_factory=lambda: {"backend": "replay"})
-    live: dict[str, Any] = field(default_factory=dict)
-    replay: dict[str, Any] = field(default_factory=dict)
 
 
 def project_root() -> Path:
@@ -70,8 +60,4 @@ def load_suite_config(path: str | Path, root: Path | None = None) -> SuiteConfig
         servers=servers,
         rollout=data.get("rollout", {}),
         reward=data.get("reward", {}),
-        trace=data.get("trace", {}),
-        environment=data.get("environment", {"backend": "replay"}),
-        live=data.get("live", {}),
-        replay=data.get("replay", {}),
     )

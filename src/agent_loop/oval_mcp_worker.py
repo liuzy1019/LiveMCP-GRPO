@@ -30,7 +30,7 @@ class OvalMCPWorkerContext:
     """每个 verl rollout worker 的 live MCP + audit 上下文。
 
     Usage:
-        ctx = OvalMCPWorkerContext(suite_path="configs/live_mcp/suite_mvp.yaml")
+        ctx = OvalMCPWorkerContext(suite_path="configs/live_mcp/ten_domain_suite.yaml")
         ctx.start()
         try:
             session = ctx.create_session(seed=42)
@@ -41,7 +41,7 @@ class OvalMCPWorkerContext:
 
     def __init__(
         self,
-        suite_path: str = "configs/live_mcp/suite_mvp.yaml",
+        suite_path: str = "configs/live_mcp/ten_domain_suite.yaml",
         domains: list[str] | None = None,
     ):
         self.suite_config = load_suite_config(suite_path)
@@ -64,6 +64,9 @@ class OvalMCPWorkerContext:
         for domain in self.domains:
             if domain in self.manager.server_names:
                 adapter = get_adapter(domain)
+                adapter.register_tool_schemas(
+                    self.manager.registry.server_tools(domain)
+                )
                 self._audit_wrappers[domain] = AuditWrapper(
                     self.executor,
                     self.manager,
@@ -84,7 +87,13 @@ class OvalMCPWorkerContext:
     def create_session(self, seed: int = 42) -> str:
         """创建隔离 session，返回 session_id。"""
         session = self.manager.create_session(seed=seed)
-        self.manager.discover_tools(session.session_id)
+        try:
+            self.manager.discover_tools(session.session_id)
+        except Exception:
+            # Session creation is one transaction from the rollout's point of
+            # view: a session without a discovered schema is not usable.
+            self.manager.close_session(session.session_id)
+            raise
         return session.session_id
 
     def close_session(self, session_id: str) -> None:
@@ -120,20 +129,29 @@ class OvalMCPWorkerContext:
 
         # Capture pre-state BEFORE execution (required for state diff)
         pre_state = None
+        state_evidence_errors: list[str] = []
+        pre_state_status = "available"
         try:
             pre_state = self.manager.get_state(session_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            pre_state_status = "error"
+            state_evidence_errors.append(
+                f"pre_state:{type(exc).__name__}:{exc}"
+            )
 
         # Execute via LiveMCPExecutor — pass blocked_tools for missing_function tasks, domain for cross-domain disambiguation
         exec_result = self.executor.execute(session_id, tool_call, blocked_tools=blocked_tools, domain=domain)
 
         # Capture post-state AFTER execution
         post_state = None
+        post_state_status = "available"
         try:
             post_state = self.manager.get_state(session_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            post_state_status = "error"
+            state_evidence_errors.append(
+                f"post_state:{type(exc).__name__}:{exc}"
+            )
 
         # Record event with proper pre/post state
         event = audit.audit_step_with_state(
@@ -148,6 +166,9 @@ class OvalMCPWorkerContext:
         actual_domain = (exec_result.metadata or {}).get("server_name")
         if actual_domain and actual_domain != domain:
             event.forbidden_transition = "cross_domain_distractor_call"
+        event.pre_state_status = pre_state_status
+        event.post_state_status = post_state_status
+        event.state_evidence_errors = state_evidence_errors
 
         return event, exec_result
 
@@ -190,18 +211,4 @@ class OvalMCPWorkerContext:
 
         用于传递给 verl reward function（通过 extra_fields）。
         """
-        return [event.to_dict() if hasattr(event, "to_dict") else _event_to_dict(event) for event in events]
-
-
-def _event_to_dict(event: AuditEvent) -> dict[str, Any]:
-    """将 AuditEvent 转为可序列化 dict（fallback，主路径走 event.to_dict()）。"""
-    return {
-        "step": event.step,
-        "operation": event.operation,
-        "target_type": event.target_type,
-        "target_id": event.target_id,
-        "tool_name": event.tool_name,
-        "execution_success": event.execution_success,
-        "error_message": event.error_message,
-        "session_id": event.session_id,
-    }
+        return [event.to_dict() for event in events]

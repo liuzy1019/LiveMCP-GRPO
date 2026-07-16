@@ -77,20 +77,11 @@ def _call_sequence(task: LiveTask) -> list[str]:
     ignored to match PROVE's sequence-level Jaccard deduplication.
     """
     calls = task.oracle_program.calls
+    primary_domain = str(task.target_servers[0]) if task.target_servers else ""
     sigs: list[str] = []
     for call in calls:
-        tool_name: str = ""
-
-        if isinstance(call, dict):
-            # metadata fallback: plain dict format from to_plain()
-            tool_name = call.get("tool_name", "")
-        else:
-            # native OracleCall dataclass
-            tool_name = call.tool_name
-
-        action = call.get("action", "tool_call") if isinstance(call, dict) else getattr(call, "action", "tool_call")
-        if action != "tool_call":
+        if call.action != "tool_call":
             continue
-
-        sigs.append(tool_name)
+        owner = str(getattr(call, "server_name", "") or primary_domain)
+        sigs.append(f"{owner}::{call.tool_name}")
     return sigs

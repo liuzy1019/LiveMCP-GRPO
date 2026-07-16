@@ -1,4 +1,4 @@
-"""Shared dataclasses for the Live MCP MVP."""
+"""Shared dataclasses for the LiveMCP environment."""
 
 from __future__ import annotations
 
@@ -126,4 +126,15 @@ def live_task_from_dict(data: dict[str, Any]) -> LiveTask:
             f"live_task_from_dict: missing required fields: {sorted(missing)}"
         )
     payload["oracle_program"] = oracle_program_from_dict(payload["oracle_program"])
+    # Checkpoints persist nested dataclasses as plain dictionaries.  The main
+    # oracle is restored above; per-round oracle calls must follow the same
+    # contract because generation/reward code consumes both views as
+    # ``OracleCall`` objects after a resume.
+    payload["oracle_calls_per_round"] = [
+        [
+            call if isinstance(call, OracleCall) else OracleCall(**call)
+            for call in round_calls
+        ]
+        for round_calls in payload.get("oracle_calls_per_round", [])
+    ]
     return LiveTask(**payload)

@@ -1,4 +1,4 @@
-"""Deterministic state seeders for MVP servers.
+"""Deterministic state seeders for the ten-domain LiveMCP environment.
 
 PROVE §3.2 Step 2: each domain must produce 20+ entities with seed-driven
 variations so that teacher trajectories reference a diverse, non-memorizable
@@ -11,6 +11,13 @@ import copy
 import datetime as _datetime
 import random
 from typing import Any
+
+
+def _reference_datetime(seed: int) -> _datetime.datetime:
+    """Use the same temporal anchor as Teacher and Policy prompts."""
+    from src.live_mcp.task_planner import reference_datetime_for_seed
+
+    return reference_datetime_for_seed(seed)
 
 
 class StateSeeder:
@@ -199,15 +206,14 @@ _ISSUE_TEMPLATES: list[tuple[str, str, str, str, str, str, str | None]] = [
 def _seed_scoped_id(prefix: str, seed: int, idx: int, width: int = 3) -> str:
     """Generate a seed-scoped entity ID that varies across seeds.
 
-    PROVE §3.2: different seeds must produce disjoint ID namespaces to prevent
-    the GRPO model from memorising a fixed set of entity IDs.  Uses a
-    multiplicative hash of the seed to produce a short hex scope.
+    Different non-negative seeds produce disjoint ID namespaces.  The seed is
+    encoded directly; a truncated hash would make collisions inevitable.
 
-    Example: _seed_scoped_id("evt", 42, 0) -> "evt_aa3_001"
-             _seed_scoped_id("evt", 137, 0) -> "evt_1f7_001"
+    Example: _seed_scoped_id("evt", 42, 0) -> "evt_s42_001"
     """
-    scope = (seed * 2654435761) % 4096  # Knuth multiplicative hash, 12 bits → 3 hex digits
-    return f"{prefix}_{scope:03x}_{idx + 1:0{width}d}"
+    if seed < 0:
+        raise ValueError("seed must be non-negative")
+    return f"{prefix}_s{seed}_{idx + 1:0{width}d}"
 
 
 def _sample_entities(
@@ -236,10 +242,13 @@ def _sample_entities(
 
 
 def _calendar_state(seed: int) -> dict[str, Any]:
+    # Calendar entities and the Teacher/Policy temporal anchor must describe
+    # the same world. A fixed June fixture made prompts such as "today" refer
+    # to November while grounded events still lived in June.
     rng = random.Random(seed)
     events: dict[str, dict[str, Any]] = {}
     selected = _sample_entities(rng, _CALENDAR_EVENT_TEMPLATES, target_count=20, id_prefix="evt")
-    base_date = 22  # June 22-30 range
+    reference_date = _reference_datetime(seed).date()
     attendee_pool = ["alex@example.com", "sam@example.com", "charlie@example.com",
                      "dana@example.com", "bob@example.com"]
     for idx, entry in enumerate(selected):
@@ -248,7 +257,7 @@ def _calendar_state(seed: int) -> dict[str, Any]:
         else:
             title, lead, desc = entry[1:4]
             location = f"Room {100 + idx}"
-        day = min(base_date + (idx % 9), 30)
+        event_date = reference_date + _datetime.timedelta(days=(idx % 9) - 4)
         hour = 9 + (idx + rng.randint(0, 3)) % 6
         # PROVE §3.2: seed-scoped ID prevents GRPO from memorising a fixed
         # evt_001..evt_016 namespace across seeds.  Different seeds produce
@@ -256,18 +265,19 @@ def _calendar_state(seed: int) -> dict[str, Any]:
         eid = _seed_scoped_id("evt", seed, idx, width=3)
         events[eid] = {
             "event_id": eid, "title": title,
-            "start_time": f"2026-06-{day:02d}T{hour:02d}:00",
-            "end_time": f"2026-06-{day:02d}T{hour + 1:02d}:00",
+            "start_time": f"{event_date.isoformat()}T{hour:02d}:00",
+            "end_time": f"{event_date.isoformat()}T{hour + 1:02d}:00",
             "description": desc, "location": location,
             "attendees": rng.sample(attendee_pool, k=1 + idx % 3),
             "reminders": [], "recurrence": None,
         }
     return {"events": events, "next_event_num": len(events) + 1,
-            "timezone": "America/New_York"}
+            "timezone": "America/New_York", "current_date": reference_date.isoformat()}
 
 
 def _shopping_state(seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    reference_date = _reference_datetime(seed).date()
     selected = _sample_entities(rng, _SHOPPING_PRODUCT_TEMPLATES, target_count=20, id_prefix="prd")
     products = {}
     product_ids: list[str] = []
@@ -291,15 +301,21 @@ def _shopping_state(seed: int) -> dict[str, Any]:
     ]
     orders = {
         order_1: {"order_id": order_1, "items": order_1_items, "product_ids": product_ids[:2],
-                  "total": round(sum(i["quantity"] * i["unit_price"] for i in order_1_items), 2), "status": "shipped", "created_at": "2026-06-18"},
+                  "total": round(sum(i["quantity"] * i["unit_price"] for i in order_1_items), 2), "status": "shipped", "created_at": (reference_date - _datetime.timedelta(days=4)).isoformat()},
         order_2: {"order_id": order_2, "items": order_2_items, "product_ids": product_ids[2:3],
-                  "total": round(sum(i["quantity"] * i["unit_price"] for i in order_2_items), 2), "status": "pending", "created_at": "2026-06-22"},
+                  "total": round(sum(i["quantity"] * i["unit_price"] for i in order_2_items), 2), "status": "pending", "created_at": (reference_date - _datetime.timedelta(days=1)).isoformat()},
     }
+    # Seed a removable target.  Otherwise add -> remove constructs a transient
+    # setup mutation whose net result is indistinguishable from the start.
+    wishlist = list(product_ids[:2])
     return {"products": products, "cart": [], "orders": orders,
-            "next_order_num": 3, "reviews": {}, "wishlist": []}
+            "next_order_num": 3, "reviews": {}, "wishlist": wishlist,
+            "current_date": reference_date.isoformat()}
 
 
 def _banking_state(seed: int) -> dict[str, Any]:
+    from src.live_mcp.task_planner import reference_datetime_for_seed
+
     rng = random.Random(seed)
     selected = _sample_entities(rng, _BANKING_ACCOUNT_TEMPLATES, target_count=20, id_prefix="acc")
     accounts = {}
@@ -314,12 +330,28 @@ def _banking_state(seed: int) -> dict[str, Any]:
             "currency": "USD", "type": atype, "frozen": is_frozen,
             "opened_date": opened,
         }
+    current_date = reference_datetime_for_seed(seed).date()
+    account_ids = list(accounts)
+    scheduled_id = _seed_scoped_id("sched", seed, 0, width=3)
+    scheduled_transfers = {
+        scheduled_id: {
+            "scheduled_txn_id": scheduled_id,
+            "from_account": account_ids[0],
+            "to_account": account_ids[1],
+            "amount": 25.0,
+            "execute_date": (current_date + _datetime.timedelta(days=7)).isoformat(),
+            "status": "scheduled",
+        },
+    }
     return {"accounts": accounts, "transactions": [], "freeze_log": [],
-            "next_txn_num": 1, "scheduled_transfers": {}, "loans": {}}
+            "current_date": current_date.isoformat(),
+            "next_txn_num": 1, "scheduled_transfers": scheduled_transfers,
+            "loans": {}}
 
 
 def _email_state(seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    reference_date = _reference_datetime(seed).date()
     sender_pool = ["boss@example.com", "alice@example.com", "charlie@example.com",
                    "dana@example.com", "hr@example.com", "client@acme.com",
                    "support@vendor.io", "no-reply@saaplatform.com"]
@@ -342,9 +374,13 @@ def _email_state(seed: int) -> dict[str, Any]:
             "cc": "", "sender": sender,
             "subject": subj,
             "body": f"This is regarding {subj.lower()}. Please review at your earliest convenience.",
-            "labels": rng.choice(labels_pool),
+            # Copy mutable templates per entity.  Sharing a pool list makes an
+            # add_label call mutate unrelated emails and corrupt state-delta
+            # success criteria.
+            "labels": list(rng.choice(labels_pool)),
             "thread_id": _seed_scoped_id("thd", seed, idx // 3, width=3),
-            "status": "received", "date": f"2026-06-{20 + idx % 8:02d}",
+            "status": "received",
+            "date": (reference_date - _datetime.timedelta(days=idx % 8)).isoformat(),
             "read": rng.random() < 0.5,
             "attachments": [],
         }
@@ -353,11 +389,12 @@ def _email_state(seed: int) -> dict[str, Any]:
         threads.setdefault(tid, []).append(eid)
     return {"emails": emails, "drafts": {}, "threads": threads,
             "inbox_order": inbox, "next_email_num": 13, "next_thread_num": len(threads) + 1,
-            "filters": {}}
+            "filters": {}, "current_date": reference_date.isoformat()}
 
 
 def _filesystem_state(seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    reference_date = _reference_datetime(seed).date()
     # Filesystem benefits more from structural diversity than pure entity count.
     fs: dict[str, dict[str, Any]] = {
         "/": {"type": "dir", "content": "", "permissions": "755", "owner": "root"},
@@ -400,27 +437,34 @@ def _filesystem_state(seed: int) -> dict[str, Any]:
             "content": "-----BEGIN CERTIFICATE-----\nMIID...\n-----END CERTIFICATE-----",
             "permissions": "600", "owner": "root"},
     }
-    return {"fs": fs, "cwd": "/home/user", "umask": "022"}
+    session_path = f"/home/user/session_{seed}.txt"
+    fs[session_path] = {
+        "type": "file",
+        "content": f"session={seed}\nnonce={rng.getrandbits(64):016x}",
+        "permissions": rng.choice(["600", "640", "644"]),
+        "owner": "user",
+    }
+    return {"fs": fs, "cwd": "/home/user", "umask": "022",
+            "current_date": reference_date.isoformat()}
 
 
 def _payments_state(seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    reference_date = _reference_datetime(seed).date()
     selected = _sample_entities(rng, _PAYMENTS_INVOICE_TEMPLATES, target_count=20, id_prefix="inv")
     invoices = {}
-    due_dates = ["2026-07-15", "2026-07-20", "2026-06-30", "2026-08-01",
-                 "2026-07-10", "2026-08-15", "2026-07-05", "2026-07-25"]
-    created_dates = ["2026-06-01", "2026-06-05", "2026-06-10", "2026-06-15",
-                     "2026-06-20", "2026-06-25"]
     for idx, (_iid, customer, amount, currency, desc, status) in enumerate(selected):
         iid = _seed_scoped_id("inv", seed, idx, width=4)
         pay_id = _seed_scoped_id("pay", seed, idx, width=4) if status == "paid" else None
+        due_offset = -(idx % 20 + 1) if status == "overdue" else idx % 20 + 1
+        due_date = reference_date + _datetime.timedelta(days=due_offset)
         invoices[iid] = {
             "invoice_id": iid, "customer": customer, "amount": round(amount + rng.randint(-50, 50), 2),
             "currency": currency, "description": desc, "status": status,
             "payment_id": pay_id,
             "refund_id": None,
-            "due_date": due_dates[idx % len(due_dates)],
-            "created_at": created_dates[idx % len(created_dates)],
+            "due_date": due_date.isoformat(),
+            "created_at": (due_date - _datetime.timedelta(days=30)).isoformat(),
         }
     payments = {}
     pending_payment_assigned = False
@@ -431,6 +475,9 @@ def _payments_state(seed: int) -> dict[str, Any]:
         if not pending_payment_assigned:
             status = "pending"
             pending_payment_assigned = True
+            # Invoice and payment lifecycle must agree: a payment that has not
+            # settled cannot make its invoice refundable as "paid".
+            inv["status"] = "pending"
         payments[inv["payment_id"]] = {
             "payment_id": inv["payment_id"],
             "invoice_id": iid,
@@ -438,15 +485,26 @@ def _payments_state(seed: int) -> dict[str, Any]:
             "method": "wire",
             "status": status,
         }
+    webhook_id = _seed_scoped_id("wh", seed, 0, width=3)
+    webhooks = {
+        webhook_id: {
+            "webhook_id": webhook_id,
+            "url": "https://example.com/hooks/payments",
+            "events": ["invoice.paid", "invoice.refunded"],
+            "active": True,
+        },
+    }
     return {"invoices": invoices,
             "payments": payments,
-            "refunds": {}, "webhooks": {}, "disputes": {},
+            "refunds": {}, "webhooks": webhooks, "disputes": {},
             "next_inv_num": len(invoices) + 1, "next_pay_num": len(payments) + 1,
-            "next_ref_num": 1, "next_wh_num": 1}
+            "next_ref_num": 1, "next_wh_num": 2,
+            "current_date": reference_date.isoformat()}
 
 
 def _crm_state(seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    reference_date = _reference_datetime(seed).date()
     leads_selected = _sample_entities(rng, _CRM_LEAD_TEMPLATES, target_count=20, id_prefix="lead")
     leads = {}
     statuses = ["new", "contacted", "qualified", "converted"]
@@ -484,16 +542,18 @@ def _crm_state(seed: int) -> dict[str, Any]:
             "amount": round(damount + rng.randint(-5000, 5000), 2),
             "stage": dstage, "contact_id": None,
             "lead_id": lid_candidate,
-            "created_at": f"2026-06-{10 + idx * 5:02d}",
+            "created_at": (reference_date - _datetime.timedelta(days=idx * 5 + 1)).isoformat(),
         }
     return {"leads": leads, "contacts": contacts, "deals": deals,
             "tasks": {}, "notes": {},
             "next_lead_num": len(leads) + 1, "next_contact_num": 1,
-            "next_deal_num": len(deals) + 1, "next_task_num": 1, "next_note_num": 1}
+            "next_deal_num": len(deals) + 1, "next_task_num": 1, "next_note_num": 1,
+            "current_date": reference_date.isoformat()}
 
 
 def _issue_tracker_state(seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    reference_date = _reference_datetime(seed).date()
     member_configs = [
         ("alice", "Alice", "developer"),
         ("bob", "Bob", "senior developer"),
@@ -520,7 +580,6 @@ def _issue_tracker_state(seed: int) -> dict[str, Any]:
         iid = _seed_scoped_id("iss", seed, idx, width=4)
         issue_ids.append(iid)
         sprint_id = _seed_scoped_id("spr", seed, 0, width=4) if idx < 6 else None
-        created_day = min(18 + idx % 8, 30)
         issues[iid] = {
             "issue_id": iid, "title": title, "description": desc,
             "priority": priority, "labels": [labels_str],
@@ -530,23 +589,26 @@ def _issue_tracker_state(seed: int) -> dict[str, Any]:
             "sprint_id": sprint_id,
             "milestone": "v2.5" if idx < 6 else None,
             "comments": [],
-            "created_at": f"2026-06-{created_day:02d}",
+            "created_at": (reference_date - _datetime.timedelta(days=idx % 8 + 1)).isoformat(),
         }
     sprint_id = _seed_scoped_id("spr", seed, 0, width=4)
     sprints = {
         sprint_id: {"sprint_id": sprint_id, "name": "Sprint 24",
-                     "start_date": "2026-06-15", "end_date": "2026-06-29",
+                     "start_date": (reference_date - _datetime.timedelta(days=7)).isoformat(),
+                     "end_date": (reference_date + _datetime.timedelta(days=7)).isoformat(),
                      "goal": "Bug fixes and feature work", "status": "active",
                      "issues": issue_ids[:6]},
     }
     return {"issues": issues, "members": members, "sprints": sprints,
             "subtasks": {}, "time_entries": [],
             "next_issue_num": len(issues) + 1, "next_sprint_num": 2,
-            "next_subtask_num": 1, "next_time_entry_num": 1}
+            "next_subtask_num": 1, "next_time_entry_num": 1,
+            "current_date": reference_date.isoformat()}
 
 
 def _team_chat_state(seed: int) -> dict[str, Any]:
     rng = random.Random(seed)
+    reference_date = _reference_datetime(seed).date()
     channel_configs = [
         ("ch_general", "general", "General discussion",
          ["alice", "bob", "charlie"], False,
@@ -577,8 +639,13 @@ def _team_chat_state(seed: int) -> dict[str, Any]:
             messages.append({
                 "message_id": mid, "channel_id": cid,
                 "content": content, "author": author, "thread_id": None,
-                "reactions": rng.choice(reactions_pool),
-                "timestamp": f"2026-06-{20 + msg_num % 5:02d}T{9 + msg_num % 8:02d}:00:00",
+                # Reactions are mutated in place by add_reaction; each message
+                # therefore needs an independent list even when seeded alike.
+                "reactions": list(rng.choice(reactions_pool)),
+                "timestamp": (
+                    f"{(reference_date - _datetime.timedelta(days=msg_num % 5)).isoformat()}"
+                    f"T{9 + msg_num % 8:02d}:00:00"
+                ),
             })
             msg_num += 1
         channels[cid] = {
@@ -587,16 +654,15 @@ def _team_chat_state(seed: int) -> dict[str, Any]:
         }
     return {"channels": channels, "threads": {}, "dms": [],
             "next_msg_num": msg_num, "next_thread_num": 1,
-            "next_ch_num": len(channels) + 1}
+            "next_ch_num": len(channels) + 1,
+            "current_date": reference_date.isoformat()}
 
 
 def _food_delivery_state(seed: int) -> dict[str, Any]:
     # Query generation and state seeding must share one temporal anchor.
     # Keep the import local so the generic seeder remains lightweight.
-    from src.live_mcp.task_planner import reference_datetime_for_seed
-
     rng = random.Random(seed)
-    reference_dt = reference_datetime_for_seed(seed)
+    reference_dt = _reference_datetime(seed)
     days_since_friday = (reference_dt.weekday() - 4) % 7
     if days_since_friday == 0:
         days_since_friday = 7

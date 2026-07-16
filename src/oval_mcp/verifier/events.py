@@ -40,9 +40,12 @@ class AuditEvent:
     event_id: str
     session_id: str
     step: int
+    # Conversation round whose user query authorized this action.  This is
+    # distinct from ``step`` because one round can contain multiple tool calls.
+    round_idx: int = 0
 
     # action classification
-    action_type: str  # tool_call | final_answer | ask_clarification | report_error
+    action_type: str = ""  # tool_call | final_answer | ask_clarification | report_error
     tool_name: str = ""
     tool_arguments: dict[str, Any] = field(default_factory=dict)
     terminal_action: str | None = None  # null for tool_call, text for terminal
@@ -74,6 +77,12 @@ class AuditEvent:
     state_changed: bool = False
     latency_ms: int = 0
 
+    # Infrastructure evidence is explicit.  Missing snapshots must never be
+    # indistinguishable from a valid no-op transition.
+    pre_state_status: str = "available"
+    post_state_status: str = "available"
+    state_evidence_errors: list[str] = field(default_factory=list)
+
     provenance: str = "audit_wrapper"
 
     def to_dict(self) -> dict[str, Any]:
@@ -81,6 +90,7 @@ class AuditEvent:
             "event_id": self.event_id,
             "session_id": self.session_id,
             "step": self.step,
+            "round_idx": self.round_idx,
             "action_type": self.action_type,
             "tool_name": self.tool_name,
             "terminal_action": self.terminal_action,
@@ -105,6 +115,9 @@ class AuditEvent:
             "observation": self.observation,
             "error_type": self.error_type,
             "latency_ms": self.latency_ms,
+            "pre_state_status": self.pre_state_status,
+            "post_state_status": self.post_state_status,
+            "state_evidence_errors": self.state_evidence_errors,
             "provenance": self.provenance,
         }
         return result

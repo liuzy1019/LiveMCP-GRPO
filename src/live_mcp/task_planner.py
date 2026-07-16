@@ -33,6 +33,11 @@ from typing import Any, TYPE_CHECKING
 
 from loguru import logger
 
+from src.live_mcp.observation import (
+    DEFAULT_TEACHER_OBSERVATION_CHARS,
+    project_observation,
+)
+from src.live_mcp.tool_semantics import is_mutating_tool
 from src.live_mcp.types import OracleCall
 from src.utils import extract_json as _extract_json
 
@@ -40,6 +45,13 @@ if TYPE_CHECKING:
     from src.live_mcp.llm_client import LLMClient
     from src.live_mcp.manager import LiveMCPManager
     from src.live_mcp.executor import LiveMCPExecutor
+
+
+# Mutations whose effects are confined to the current MCP execution context,
+# rather than a user-visible business/resource outcome. They remain mutating
+# for execution/state tracking, but do not require a separate authorization
+# span in the synthesized user request.
+_SESSION_INTERNAL_MUTATIONS: frozenset[str] = frozenset({"cd"})
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -300,8 +312,8 @@ def reference_datetime_for_seed(seed: int) -> _datetime.datetime:
 #       (tool_call attempts + retries + terminal), unrelated to PROVE §3.2
 #       Step 3.5.  It only bounds the state-machine's inner loop so it
 #       terminates on stuck LLMs.  RL rollout uses a verified per-row action
-#       budget for generated data; the configured max is only a legacy/default
-#       fallback and is unrelated to PROVE §3.2 conversation rounds.
+#       budget for generated data; the configured max is only a runtime default
+#       and is unrelated to PROVE §3.2 conversation rounds.
 # ═══════════════════════════════════════════════════════════════════════
 
 class ContinuationPolicy:
@@ -399,10 +411,17 @@ class TaskPlanner:
         "recovery_decision": 384,
     }
 
-    def __init__(self, client: "LLMClient", domain: str, seed: int = 0):
+    def __init__(
+        self,
+        client: "LLMClient",
+        domain: str,
+        seed: int = 0,
+        max_observation_chars: int = DEFAULT_TEACHER_OBSERVATION_CHARS,
+    ):
         self.client = client
         self.domain = domain
         self.seed = int(seed)
+        self.max_observation_chars = max(256, int(max_observation_chars))
         self.domain_desc = DOMAIN_DESCRIPTIONS.get(domain, "")
         trace_setting = os.environ.get("LIVEMCP_TEACHER_TRACE_PATH", "").strip()
         self._trace_path: Path | None = None
@@ -436,6 +455,7 @@ class TaskPlanner:
         *,
         temperature: float,
         max_tokens: int | None = None,
+        json_mode: bool = True,
     ) -> str:
         """Call the Teacher and optionally persist the exact inference boundary."""
         effective_max_tokens = (
@@ -447,7 +467,7 @@ class TaskPlanner:
         error = ""
         try:
             kwargs: dict[str, Any] = {"temperature": temperature}
-            kwargs["json_mode"] = True
+            kwargs["json_mode"] = json_mode
             if effective_max_tokens is not None:
                 kwargs["max_tokens"] = effective_max_tokens
             raw = self.client.generate_chat(messages, **kwargs)
@@ -534,7 +554,11 @@ class TaskPlanner:
         # Date context
         date_block = ""
         if reference_date:
-            date_block = f"\n## Reference Date\nToday is {reference_date}. Use relative dates when appropriate.\n"
+            date_block = (
+                f"\n## Reference Date\nToday is {reference_date}. Use relative "
+                "dates when appropriate, but keep every relative date, stated "
+                "weekday, and recurrence rule calendar-consistent.\n"
+            )
 
         system = (
             "You are role-playing as a real person messaging their AI assistant. "
@@ -617,12 +641,16 @@ class TaskPlanner:
                     "whose shown status and numeric facts satisfy the target capability. "
                     "For a state-dependent amount, use the exact shown amount or remaining "
                     "allowance; do not invent a convenient value. "
-                    "Read-only earlier items may be internal prerequisites. Every "
-                    "write/update/delete/send/pay or other state-changing item MUST "
-                    "be explicitly requested in this same message; a dependency edge "
-                    "does not grant permission for its side effect. Do not mention tool "
-                    "names, a workflow, or split chain nodes into future requests. For "
-                    "each state change, state the concrete change that authorizes it. "
+                    "Read-only earlier items may be internal prerequisites. A dependency "
+                    "edge does not itself grant permission for an unrelated side effect: "
+                    "state the final user-visible outcome naturally, and mention an earlier "
+                    "state change only when it is genuinely part of that same requested "
+                    "outcome. If the final outcome cannot be requested without an unrelated "
+                    "mutation, return UNSAT instead of listing internal workflow steps. "
+                    "Do not mention tool names or split chain nodes into future requests. "
+                    "Session-internal navigation such as changing the current working "
+                    "directory may remain implicit only when it is an earlier execution "
+                    "detail rather than the final requested outcome. "
                     "Every required field that controls a state change MUST have a "
                     "concrete user-authorized value in the message or an unambiguous "
                     "value in Current State; never leave such a field for the assistant "
@@ -689,29 +717,27 @@ Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
 Remember: state your GOAL, not the steps. One message, 1-2 sentences max.
 
 Return only:
-{{"user_query": "<the message or UNSAT>", "target_capability": "<sampled chain final capability>", "chain_supported": <true or false>, "mutation_evidence": [{{"capability": "<state-changing chain capability>", "query_span": "<exact words from user_query that authorize it>"}}]}}
+{{"user_query": "<the message or UNSAT>", "target_capability": "<sampled chain final capability>", "chain_supported": <true or false>, "mutation_evidence": [{{"capability": "<final state-changing target capability>", "query_span": "<exact words from user_query that authorize it>"}}]}}
 
-For every state-changing capability in the sampled chain, mutation_evidence must
-contain one item. query_span must be copied verbatim from user_query and directly
-authorize that state change. One natural phrase may support multiple internal
-capabilities when it genuinely authorizes the combined outcome (for example,
-"buy it now" may authorize adding the item and checking out). Do not invent an
-evidence span for an operation the user did not request. Read-only capabilities
-must not appear in mutation_evidence.
+If the final requested capability changes user-visible state, mutation_evidence
+must contain an item for that final capability. Internal dependency-chain
+mutations are not separate user goals and do not require one item per node.
+If cd is the final requested capability, it still needs evidence. query_span must
+be copied verbatim from user_query and directly authorize the stated goal. Do not
+invent an evidence span for an operation the user did not request. Read-only
+capabilities must not appear in mutation_evidence.
 """
         tools_by_name = {
             str(tool.get("name") or ""): tool for tool in tool_schemas
         }
-        expected_mutations = {
-            tool_name
-            for tool_name in chain_seed
-            if (
-                (tools_by_name.get(tool_name, {}).get("annotations") or {}).get(
-                    "mutating"
-                )
-                is True
+        target_tool = chain_seed[-1] if chain_seed else ""
+        target_is_mutating = (
+            (tools_by_name.get(target_tool, {}).get("annotations") or {}).get(
+                "mutating"
             )
-        }
+            is True
+        )
+        expected_mutations = {target_tool} if target_tool and target_is_mutating else set()
         for attempt in range(3):
             try:
                 raw = self._generate_chat(
@@ -733,7 +759,12 @@ must not appear in mutation_evidence.
                         f"generate_query attempt {attempt + 1}/3 reported UNSAT "
                         f"for {self.domain} chain={chain_seed}"
                     )
-                    continue
+                    # UNSAT is a structured judgment about this fixed
+                    # chain/state pair. Retrying the identical prompt with a
+                    # higher temperature cannot make the sampled task
+                    # satisfiable; let pool-level oversampling choose a fresh
+                    # seed and dependency chain instead.
+                    break
                 if expected_target and target_capability != expected_target:
                     logger.debug(
                         f"generate_query attempt {attempt + 1}/3 target mismatch "
@@ -758,10 +789,10 @@ must not appear in mutation_evidence.
                         query_span = str(item.get("query_span") or "").strip()
                         if capability and query_span:
                             evidence_by_capability[capability] = query_span
-                    if set(evidence_by_capability) != expected_mutations:
+                    if not expected_mutations.issubset(evidence_by_capability):
                         logger.debug(
                             f"generate_query attempt {attempt + 1}/3 mutation "
-                            f"coverage mismatch for {self.domain}: expected="
+                            f"target coverage mismatch for {self.domain}: expected="
                             f"{sorted(expected_mutations)}, got="
                             f"{sorted(evidence_by_capability)}"
                         )
@@ -844,7 +875,13 @@ must not appear in mutation_evidence.
             "Just state your next request directly.\n"
             "DO NOT mention tool names or internal steps.\n"
             "Keep it to 1-2 sentences. Be natural and direct.\n"
-            "Do not introduce an unrelated new goal; continue the same task.\n"
+            "Do not introduce an unrelated new goal; continue the same task. "
+            "Staying in the same domain is NOT enough: the next request must reuse "
+            "the same transaction, an exact entity, or a concrete result from the "
+            "immediately preceding round. For example, after clearing log files, "
+            "switching to finding shell scripts is unrelated and forbidden. If the "
+            "previous goal is complete, ask for a detail, adjustment, reversal, or "
+            "next action on its exact entity/result instead of starting a new task.\n"
             "Do not ask for an outcome that Current State already shows as satisfied. "
             "For example, do not request the same reminder, attendee, label, or field "
             "value twice.\n"
@@ -1064,7 +1101,10 @@ Return only:
         chain_context: live-probed entities used to ground ID arguments.
         """
         tools_text = _format_tools(tool_schemas)
-        history_text = _format_history(execution_history)
+        history_text = _format_history(
+            execution_history,
+            max_chars=self.max_observation_chars,
+        )
         conversation_text = _format_conversation_context(conversation_context)
         tool_names_set = {t["name"] for t in tool_schemas}  # for action auto-correction
 
@@ -1193,6 +1233,12 @@ Return only:
             "- Use final_answer only after the current user request is actually complete. "
             "A successful read or partial side effect is not completion when a requested "
             "outcome remains undone.\n"
+            "- If the response asks the user to choose, identify, confirm, or provide "
+            "anything, use ask_clarification. final_answer must not end by requesting "
+            "new user input.\n"
+            "- For a mutating call, state_changed=true proves the call changed the "
+            "recorded state. Do not later claim that the changed condition was already "
+            "true before that call unless an earlier observation explicitly proves it.\n"
             "- On failure, retry with corrected parameters or an alternative tool only "
             "when it preserves the same user-requested outcome. Do not substitute a "
             "different business action (for example, disputing an invoice when the user "
@@ -1291,6 +1337,15 @@ Output one JSON object:
                             f"{self.domain}, retrying (attempt {_retry + 1}/3)."
                         )
                         continue
+                    if (
+                        action == "final_answer"
+                        and terminal_text.rstrip().endswith(("?", "？"))
+                    ):
+                        logger.debug(
+                            f"decide_action rejected question-shaped final_answer "
+                            f"for {self.domain}; retrying as a terminal format error."
+                        )
+                        continue
                 elif action in tool_names_set:
                     # Model used a tool name as the action type (e.g.,
                     # {"action": "cd", "arguments": {...}} instead of
@@ -1368,7 +1423,10 @@ Output one JSON object:
           - {"action": "give_up", "reason": "..."}             — unrecoverable
         """
         tools_text = _format_tools(tool_schemas)
-        history_text = _format_history(execution_history[-4:])  # last 4 steps
+        history_text = _format_history(
+            execution_history[-4:],
+            max_chars=self.max_observation_chars,
+        )  # last 4 steps
 
         # Intermittent errors → plain retry, don't ask LLM
         if isinstance(error_observation, dict) and error_observation.get("retry"):
@@ -1429,30 +1487,6 @@ Output ONLY the JSON, nothing else:
 # Success criteria derivation (from state delta)
 # ═══════════════════════════════════════════════════════════════════════
 
-# ── Centralized mutating-tool definitions (PROVE §3.2) ──
-# Single source of truth for "does this tool change live server state?"
-# Replaces three independent hand-maintained prefix lists that had drifted
-# apart across derive_progress_predicates, replay_validate, and
-# _validate_task_training_contract.
-
-_MUTATING_PREFIXES: tuple[str, ...] = (
-    "create_", "update_", "delete_", "remove_", "add_",
-    "send_", "transfer", "pay_", "checkout", "transition_",
-    "convert_", "archive_", "mkdir", "touch", "mv", "cp",
-    "chmod", "set_", "apply_",
-    "cancel_", "refund_", "return_", "deposit", "withdraw",
-    "bill_pay", "rm", "unzip", "zip", "tar_",
-    "freeze_", "unfreeze_", "dispute_", "verify_",
-    "rate_order", "clear_cart", "reorder",
-    "complete_task", "schedule_",
-    "mark_read", "mark_unread", "change_",
-    "forward_", "chown", "wire_", "assign_",
-    "comment_", "time_track", "respond_", "react_",
-    "contact_",
-    # Domain-specific compound names that don't start with a prefix:
-    "move_to_thread", "cd", "umask", "symlink", "split", "truncate",
-)
-
 # Tools that perform writes without observable state changes in the
 # tracked state machine (e.g. network side-effects: send email, send DM).
 # These legitimately produce empty success_criteria even though they
@@ -1461,22 +1495,6 @@ _SELF_CONTAINED_WRITE_TOOLS: frozenset[str] = frozenset({
     "send_email", "send_message", "send_dm", "reply_email",
     "forward_email",
 })
-
-
-def _is_mutating_tool(tool_name: str) -> bool:
-    """Return True if *tool_name* mutates live server state.
-
-    Uses a unified prefix set + domain-specific exceptions, keeping
-    derive_progress_predicates, replay_validate and the training
-    contract in sync.
-    """
-    name_lower = tool_name.lower()
-    if name_lower in _SELF_CONTAINED_WRITE_TOOLS:
-        return True
-    for prefix in _MUTATING_PREFIXES:
-        if name_lower.startswith(prefix):
-            return True
-    return False
 
 
 def derive_success_criteria(
@@ -1501,14 +1519,22 @@ def derive_success_criteria(
         path = ".".join(path_parts)
         if isinstance(initial_value, dict) and isinstance(final_value, dict):
             for child_key in final_value.keys() - initial_value.keys():
+                child_path = [*path_parts, str(child_key)]
+                if isinstance(final_value[child_key], dict):
+                    criteria.append({
+                        "type": "state_exists", "server": domain,
+                        "path": ".".join(child_path),
+                        "path_parts": child_path,
+                    })
                 _append_nested_delta(
-                    None, final_value[child_key], [*path_parts, str(child_key)],
+                    None, final_value[child_key], child_path,
                 )
             for child_key in initial_value.keys() - final_value.keys():
+                child_path = [*path_parts, str(child_key)]
                 criteria.append({
                     "type": "state_absent", "server": domain,
-                    "path": f"{path}.{child_key}",
-                    "path_parts": [*path_parts, str(child_key)],
+                    "path": ".".join(child_path),
+                    "path_parts": child_path,
                 })
             for child_key in initial_value.keys() & final_value.keys():
                 if initial_value[child_key] != final_value[child_key]:
@@ -1518,6 +1544,10 @@ def derive_success_criteria(
                     )
             return
         if final_value is None:
+            criteria.append({
+                "type": "state_equals", "server": domain,
+                "path": path, "path_parts": path_parts, "value": None,
+            })
             return
         if isinstance(final_value, dict):
             for child_key, child_value in final_value.items():
@@ -1535,69 +1565,9 @@ def derive_success_criteria(
                 "value": final_value,
             })
 
-    # Entity count changes — verify new/removed entities
-    for key in final_state:
-        init_val = initial_state.get(key)
-        final_val = final_state.get(key)
-        if isinstance(init_val, dict) and isinstance(final_val, dict):
-            init_keys = set(init_val.keys())
-            final_keys = set(final_val.keys())
-            for nk in (final_keys - init_keys):
-                criteria.append({
-                    "type": "state_exists", "server": domain,
-                    "path": f"{key}.{nk}",
-                    "path_parts": [key, nk],
-                })
-                entity = final_val[nk]
-                if isinstance(entity, dict):
-                    # PROVE: verify all scalar fields of newly created entities,
-                    # not just a hardcoded 4-field whitelist that misses
-                    # domain-specific fields like "phase", "priority", "amount".
-                    for ek, ev in entity.items():
-                        if ev is None:
-                            continue
-                        if isinstance(ev, (dict, list)):
-                            continue
-                        if not isinstance(ev, (str, int, float, bool)):
-                            continue
-                        criteria.append({
-                            "type": "state_equals", "server": domain,
-                            "path": f"{key}.{nk}.{ek}",
-                            "path_parts": [key, nk, ek],
-                            "value": ev,
-                        })
-            for rk in (init_keys - final_keys):
-                criteria.append({
-                    "type": "state_absent", "server": domain,
-                    "path": f"{key}.{rk}",
-                    "path_parts": [key, rk],
-                })
-
-    # Value changes on existing entities
-    for key in final_state:
-        init_val = initial_state.get(key)
-        final_val = final_state.get(key)
-        if isinstance(init_val, dict) and isinstance(final_val, dict):
-            common = set(init_val.keys()) & set(final_val.keys())
-            for ck in common:
-                ie = init_val[ck]
-                fe = final_val[ck]
-                if isinstance(ie, dict) and isinstance(fe, dict):
-                    _append_nested_delta(ie, fe, [str(key), str(ck)])
-
-        # ── Top-level list changes (e.g. cart, wishlist in shopping) ──
-        # derive_success_criteria previously only handled dict-type state fields,
-        # missing list-type fields like shopping.cart and shopping.wishlist.
-        # For lists, a simple equality check covers the full diff.
-        elif isinstance(final_val, list):
-            init_is_list = isinstance(init_val, list)
-            if not init_is_list or init_val != final_val:
-                criteria.append({
-                    "type": "state_equals", "server": domain,
-                    "path": key,
-                    "path_parts": [key],
-                    "value": final_val,
-                })
+    # One recursive tree walk handles top-level scalars, containers, additions,
+    # removals and explicit None values with the same semantics.
+    _append_nested_delta(initial_state, final_state, [])
 
     # Domain-specific semantic criteria
     tool_names = [c.tool_name for c in oracle_calls if c.action == "tool_call"]
@@ -1631,108 +1601,12 @@ def derive_success_criteria(
     return deduped
 
 
-def _tool_entity(name: str, domain: str = "") -> str:
-    """Extract entity type from tool name.
-
-    Mirrors orchestrator._tool_entity.  Defined locally to avoid circular import.
-    Keep the override map in sync with orchestrator._TOOL_ENTITY_OVERRIDE.
-    """
-    _ov: dict[str, str] = {
-        "checkout": "order", "get_cart": "order", "clear_cart": "order",
-        "add_to_cart": "order", "remove_from_cart": "order",
-        "update_cart_quantity": "order",
-        "rate_order": "order", "return_order": "order", "reorder": "order",
-        "apply_coupon": "order",
-        "get_balance": "account", "transfer": "account",
-        "wire_transfer": "account", "deposit": "account", "withdraw": "account",
-        "apply_loan": "account", "bill_pay": "account",
-        "get_history": "account", "get_statement": "account",
-        "pay_invoice": "invoice", "get_invoice": "invoice",
-        "refund_invoice": "invoice", "cancel_payment": "payment",
-        "get_payment": "invoice",
-        "add_to_wishlist": "wishlist",
-        "move_to_thread": "email", "list_inbox": "email",
-        "get_thread": "email", "get_attachments": "email",
-        "mark_read": "email", "mark_unread": "email",
-        "add_label": "email", "remove_label": "email",
-        "chmod": "file", "chown": "file", "cp": "file", "rm": "file", "mv": "file",
-        "mkdir": "file", "touch": "file",
-    }
-    _domain_ov: dict[str, dict[str, str]] = {
-        "banking": {
-            "schedule_transfer": "scheduled_transfer",
-            "cancel_transfer": "scheduled_transfer",
-        },
-        "issue_tracker": {
-            "add_label": "issue",
-            "remove_label": "issue",
-            "add_watcher": "issue",
-            "remove_watcher": "issue",
-            "set_milestone": "issue",
-            "time_track": "issue",
-            "add_to_sprint": "issue",
-            "remove_from_sprint": "issue",
-            "create_subtask": "issue",
-        },
-        "team_chat": {
-            "get_thread": "thread",
-            "get_user_status": "user",
-            "send_dm": "user",
-        },
-        "calendar": {
-            "add_attendee": "event",
-            "remove_attendee": "event",
-            "set_reminder": "event",
-            "create_recurring": "event",
-        },
-        "food_delivery": {
-            "get_menu": "restaurant",
-            "filter_by_dietary": "restaurant",
-            "get_popular_items": "restaurant",
-            "add_tip": "order",
-            "contact_support": "order",
-            "rate_order": "order",
-        },
-        "filesystem": {
-            "ls": "file",
-            "cat": "file",
-            "stat": "file",
-            "head": "file",
-            "tail": "file",
-            "find": "file",
-            "grep": "file",
-            "tree": "file",
-            "pwd": "file",
-            "du": "file",
-            "df": "file",
-        },
-    }
-    tool = name.lower()
-    server = domain.lower()
-    if server and tool in _domain_ov.get(server, {}):
-        return _domain_ov[server][tool]
-    if tool in _ov:
-        return _ov[tool]
-    for et in ("event", "order", "account", "email", "invoice",
-                "issue", "lead", "deal", "product", "restaurant",
-                "channel", "message", "file", "contact", "payment",
-                "menu", "cart", "transfer", "transaction"):
-        if et in name:
-            return et
-    return name.split("_")[-1] if "_" in name else name
-
-
-def _tool_required_entities(name: str, domain: str = "") -> set[str]:
-    try:
-        from src.live_mcp.orchestrator import _tool_existing_entity_requirements
-        return set(_tool_existing_entity_requirements(name, domain))
-    except Exception:
-        return set()
-
-
 def derive_progress_predicates(
     oracle_calls: list[OracleCall],
     domain: str,
+    *,
+    entity_resolver,
+    requirements_resolver,
 ) -> list[dict[str, Any]]:
     """Derive step-level progress predicates from the oracle trace.
 
@@ -1762,7 +1636,7 @@ def derive_progress_predicates(
 
     for i, call in enumerate(real_calls):
         is_read = any(call.tool_name.lower().startswith(p) for p in read_prefixes)
-        entity = _tool_entity(call.tool_name, domain)
+        entity = entity_resolver(call.tool_name, domain)
         if is_read and entity not in resolved_entities:
             resolved_entities.add(entity)
             predicates.append({
@@ -1774,8 +1648,8 @@ def derive_progress_predicates(
 
     # Step 2: completed_required_transition for mutation calls
     for i, call in enumerate(real_calls):
-        if _is_mutating_tool(call.tool_name):
-            entity = _tool_entity(call.tool_name, domain)
+        if is_mutating_tool(call.tool_name, domain):
+            entity = entity_resolver(call.tool_name, domain)
             # Extract target entity ID from arguments
             target = ""
             for key, val in (call.arguments or {}).items():
@@ -1802,12 +1676,14 @@ def derive_progress_predicates(
         curr = real_calls[i]
         prev_is_read = any(prev.tool_name.lower().startswith(p) for p in read_prefixes_dep)
         prev_is_creator = any(prev.tool_name.lower().startswith(p) for p in creator_prefixes_dep)
-        curr_is_mutate = _is_mutating_tool(curr.tool_name)
+        curr_is_mutate = is_mutating_tool(curr.tool_name, domain)
         if not ((prev_is_read or prev_is_creator) and curr_is_mutate):
             continue
-        prev_entity = _tool_entity(prev.tool_name, domain)
-        curr_entity = _tool_entity(curr.tool_name, domain)
-        curr_required_entities = _tool_required_entities(curr.tool_name, domain)
+        prev_entity = entity_resolver(prev.tool_name, domain)
+        curr_entity = entity_resolver(curr.tool_name, domain)
+        curr_required_entities = set(
+            requirements_resolver(curr.tool_name, domain)
+        )
         acceptable_entities = set(curr_required_entities) | {curr_entity}
         # A dependency edge is satisfied when a read resolves an entity that
         # the subsequent mutation consumes.  The mutation's primary output
@@ -1854,10 +1730,8 @@ def _domain_criteria(
     """Domain-specific success criteria from tool semantics.
 
     Only emits state_equals for entities whose value differs from
-    initial_state — never for untouched entities (which would otherwise
-    flood the criteria list and systematically deflate r_coverage when
-    the verifier cannot reconstruct the full final state from the
-    last observation).
+    initial_state. Untouched entities are not outcomes of this trajectory and
+    therefore do not belong in replay postconditions.
     """
     criteria: list[dict[str, Any]] = []
 
@@ -1883,8 +1757,6 @@ def _domain_criteria(
                 "path": f"accounts.{acc_id}.balance",
                 "value": acc.get("balance", 0),
             })
-    if "add_to_cart" in tool_names and final_state.get("cart"):
-        criteria.append({"type": "cart_not_empty", "server": domain})
     if "create_order" in tool_names:
         for oid, order in final_state.get("orders", {}).items():
             if not _changed("orders", oid, "status"):
@@ -1922,29 +1794,10 @@ def _domain_criteria(
                 "path": f"issues.{iss_id}.state",
                 "value": issue.get("state", "open"),
             })
-    if "send_email" in tool_names:
-        criteria.append({
-            "type": "email_count_gte", "server": domain,
-            "value": len(final_state.get("emails", {})),
-        })
-    if any(t in tool_names for t in ("write_file", "create_file", "mkdir")):
-        init_fs = (initial_state.get("fs") or {}) if isinstance(initial_state.get("fs"), dict) else {}
-        for path in final_state.get("fs", {}):
-            if path in init_fs:
-                continue  # only assert newly created paths
-            criteria.append({"type": "file_exists", "server": domain, "path": path})
-    if "send_message" in tool_names:
-        for ch_id, ch in final_state.get("channels", {}).items():
-            init_ch = (initial_state.get("channels") or {}).get(ch_id) or {}
-            init_count = len(init_ch.get("messages", [])) if isinstance(init_ch, dict) else 0
-            final_count = len(ch.get("messages", []))
-            if final_count == init_count:
-                continue
-            criteria.append({
-                "type": "state_equals", "server": domain,
-                "path": f"channels.{ch_id}.messages_count",
-                "value": final_count,
-            })
+    # Generic state deltas already emit exact path/value criteria for cart,
+    # newly-created email/file entities, and channel message lists.  Do not add
+    # pathless/count-only aliases here: they cannot be attributed to a concrete
+    # mutation field and would reward the same state transition twice.
     return criteria
 
 
@@ -1987,6 +1840,7 @@ def replay_validate(
     num_calls = 0
     criteria_ok = True
     criteria_failed = 0
+    replay_consistent = True
     try:
         manager.discover_tools(session.session_id)
         if callable(trace_recorder):
@@ -2042,7 +1896,20 @@ def replay_validate(
                 # failed during synthesis but succeeds after reset can mutate
                 # state and no longer represents the completed conversation.
                 num_errors += 1
-                continue
+                replay_consistent = False
+                if callable(trace_recorder):
+                    trace_recorder(
+                        "replay_outcome_mismatch",
+                        call_index=idx,
+                        tool_name=call.tool_name,
+                        expected_success=False,
+                        actual_success=True,
+                        state_changed=bool(getattr(result, "state_changed", False)),
+                    )
+                # Later calls would observe a state that the Teacher trajectory
+                # never produced.  Stop instead of allowing the paper's 30%
+                # schema/execution threshold to absorb a different trajectory.
+                break
             if not result.success or not result.schema_valid:
                 # Count only schema/execution errors, not empty-result responses.
                 # PROVE: "We count only schema-level and execution errors
@@ -2084,7 +1951,7 @@ def replay_validate(
             tool_call_count = sum(1 for c in oracle_calls if c.action == "tool_call")
             if tool_call_count > 0:
                 has_mutating = any(
-                    _is_mutating_tool(c.tool_name)
+                    is_mutating_tool(c.tool_name, domain)
                     for c in oracle_calls if c.action == "tool_call"
                 )
                 if has_mutating:
@@ -2096,7 +1963,7 @@ def replay_validate(
                     )
 
         error_rate = num_errors / num_calls if num_calls > 0 else float(num_errors > 0)
-        passed = error_rate <= max_error_rate
+        passed = replay_consistent and error_rate <= max_error_rate
 
         if callable(trace_recorder):
             replay_state = manager.get_state(session.session_id)
@@ -2112,6 +1979,7 @@ def replay_validate(
                 max_error_rate=max_error_rate,
                 criteria_ok=criteria_ok,
                 criteria_failed=criteria_failed,
+                replay_consistent=replay_consistent,
                 final_state_hash=hashlib.sha256(
                     replay_serialized.encode("utf-8")
                 ).hexdigest(),
@@ -2150,6 +2018,8 @@ def provenance_check(
     oracle_calls: list[OracleCall],
     user_query: str,
     aligned_observations: list[dict[str, Any]],
+    tool_schemas: list[dict[str, Any]],
+    domain: str,
     user_queries: list[str] | None = None,
     call_round_indices: list[int] | None = None,
 ) -> tuple[bool, list[dict[str, Any]]]:
@@ -2171,6 +2041,37 @@ def provenance_check(
           [{"param": str, "value": str, "tool": str, "reason": str}, ...]
     """
     violations: list[dict[str, Any]] = []
+    from src.live_mcp.tool_semantics import build_tool_semantics
+
+    contracts = build_tool_semantics(domain, tool_schemas)
+
+    def _traceable(value: Any, sources: list[str]) -> bool:
+        values = value if isinstance(value, list) else [value]
+        for item in values:
+            if item is None or item == "":
+                continue
+            item_text = str(item).strip()
+            if not item_text:
+                continue
+            if any(item_text.casefold() in source.casefold() for source in sources):
+                continue
+            if isinstance(item, (int, float)) and not isinstance(item, bool):
+                import re
+                numeric_match = False
+                for source in sources:
+                    for token in re.findall(r"(?<![\w.])-?\d+(?:\.\d+)?", source):
+                        try:
+                            if float(token) == float(item):
+                                numeric_match = True
+                                break
+                        except ValueError:
+                            continue
+                    if numeric_match:
+                        break
+                if numeric_match:
+                    continue
+            return False
+        return True
 
     queries = list(user_queries or [user_query])
     if not queries:
@@ -2196,11 +2097,23 @@ def provenance_check(
             traceable_values.append(queries[latest_query_round])
         if call.action != "tool_call":
             continue
+        contract = contracts.get(call.tool_name)
+        if contract is None:
+            violations.append({
+                "param": "", "value": "", "tool": call.tool_name,
+                "call_index": idx,
+                "reason": "Tool schema unavailable for provenance validation",
+            })
+            continue
+        sensitive_fields = set(contract.sensitive_params)
         for param_name, param_value in call.arguments.items():
             param_lower = param_name.lower()
 
             # Check if this parameter looks sensitive
-            is_sensitive = any(p in param_lower for p in _SENSITIVE_PARAM_PATTERNS)
+            is_sensitive = (
+                param_name in sensitive_fields
+                or any(p in param_lower for p in _SENSITIVE_PARAM_PATTERNS)
+            )
             is_security = any(p in param_lower for p in _SECURITY_RELEVANT_PARAMS)
 
             if not is_sensitive and not is_security:
@@ -2218,7 +2131,7 @@ def provenance_check(
 
             # Check if this value appears in any traceable source observed
             # STRICTLY BEFORE this call (no future leak).
-            traceable = any(param_str in src for src in traceable_values)
+            traceable = _traceable(param_value, traceable_values)
 
             if not traceable:
                 if is_sensitive:
@@ -2395,95 +2308,6 @@ def _format_state_compact(state: dict[str, Any], max_entities: int = 20) -> str:
     return "\n".join(lines)
 
 
-_OBSERVATION_FACT_KEYS = (
-    "count", "total", "total_count", "next_cursor", "has_more", "partial",
-    "warning", "error", "message", "status", "state", "amount", "balance",
-    "remaining", "remaining_refundable", "name", "title", "subject", "type",
-)
-
-
-def _compact_observation(observation: Any, max_chars: int = 4000) -> str:
-    """Render an observation without losing its execution semantics.
-
-    Long results are projected to identity/state facts and carry explicit
-    truncation metadata.  This replaces the old raw ``[:500]`` prefix, which
-    hid result counts and most candidate IDs before the request reached vLLM.
-    """
-    original = _json.dumps(observation, ensure_ascii=False, default=str)
-
-    def compact(value: Any, depth: int = 0) -> Any:
-        if depth >= 5:
-            return {"_truncated_depth": True}
-        if isinstance(value, dict):
-            keys = list(value)
-            id_keys = [key for key in keys if key == "id" or key.endswith("_id")]
-            priority = list(dict.fromkeys([*id_keys, *_OBSERVATION_FACT_KEYS]))
-            chosen = [key for key in priority if key in value]
-            if len(keys) <= 12:
-                chosen.extend(key for key in keys if key not in chosen)
-            else:
-                chosen.extend(
-                    [key for key in keys if key not in chosen][:4]
-                )
-            result = {key: compact(value[key], depth + 1) for key in chosen}
-            if len(chosen) < len(keys):
-                result["_omitted_fields"] = len(keys) - len(chosen)
-            return result
-        if isinstance(value, list):
-            if len(value) <= 24:
-                return [compact(item, depth + 1) for item in value]
-            return [
-                *[compact(item, depth + 1) for item in value[:12]],
-                {"_omitted_items": len(value) - 24},
-                *[compact(item, depth + 1) for item in value[-12:]],
-            ]
-        if isinstance(value, str) and len(value) > 500:
-            return value[:240] + f"... [truncated {len(value) - 480} chars] ..." + value[-240:]
-        return value
-
-    projected = compact(observation)
-    rendered = _json.dumps(projected, ensure_ascii=False, default=str)
-    if len(rendered) <= max_chars:
-        if len(rendered) < len(original):
-            return _json.dumps({
-                "data": projected,
-                "_compacted": True,
-                "_original_chars": len(original),
-            }, ensure_ascii=False, default=str)
-        return rendered
-
-    facts: list[dict[str, Any]] = []
-
-    def collect(value: Any) -> None:
-        if len(facts) >= 48:
-            return
-        if isinstance(value, dict):
-            fact = {
-                key: child for key, child in value.items()
-                if (
-                    key == "id" or key.endswith("_id")
-                    or key in _OBSERVATION_FACT_KEYS
-                ) and not isinstance(child, (dict, list))
-            }
-            if fact:
-                facts.append(fact)
-            for child in value.values():
-                collect(child)
-        elif isinstance(value, list):
-            for child in value:
-                collect(child)
-
-    collect(observation)
-    envelope = {
-        "summary_facts": facts,
-        "_compacted": True,
-        "_original_chars": len(original),
-        "_fact_limit_reached": len(facts) >= 48,
-        "_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest()[:16],
-    }
-    return _json.dumps(envelope, ensure_ascii=False, default=str)
-
-
 def _format_conversation_context(context: list[dict[str, Any]] | None) -> str:
     if not context:
         return "(this is the first conversation round)"
@@ -2501,7 +2325,11 @@ def _format_conversation_context(context: list[dict[str, Any]] | None) -> str:
     return "\n".join(lines)
 
 
-def _format_history(history: list[dict[str, Any]]) -> str:
+def _format_history(
+    history: list[dict[str, Any]],
+    *,
+    max_chars: int = DEFAULT_TEACHER_OBSERVATION_CHARS,
+) -> str:
     """Format loss-aware MCP execution events for the next Agent decision."""
     if not history:
         return "(no actions yet — this is the first turn)"
@@ -2509,17 +2337,25 @@ def _format_history(history: list[dict[str, Any]]) -> str:
     for i, entry in enumerate(history, 1):
         tool = entry.get("tool_name", "?")
         args = _json.dumps(entry.get("arguments", {}), ensure_ascii=False)
-        obs = entry.get("observation")
         success = entry.get("success", True)
         outcome = str(entry.get("execution_status") or ("SUCCESS" if success else "FAILURE"))
         state_changed = entry.get("state_changed")
+        envelope = {
+            "success": bool(success),
+            "execution_status": outcome,
+            "error_type": entry.get("error_type"),
+            "error_message": str(entry.get("error_message") or ""),
+            "state_changed": bool(state_changed),
+            "schema_valid": bool(entry.get("schema_valid", False)),
+            "observation": entry.get("observation"),
+        }
         lines.append(
             f"Step {i}: {tool}({args}) → "
             f"{outcome}"
             + (f"; state_changed={bool(state_changed)}" if state_changed is not None else "")
         )
-        error_type = str(entry.get("error_type") or "").strip()
-        error_message = str(entry.get("error_message") or "").strip()
+        error_type = str(envelope["error_type"] or "").strip()
+        error_message = envelope["error_message"].strip()
         if error_type or error_message:
             lines.append(
                 f"  Error: {error_type or 'execution_error'}"
@@ -2528,6 +2364,8 @@ def _format_history(history: list[dict[str, Any]]) -> str:
         loop_warning = str(entry.get("no_progress_warning") or "").strip()
         if loop_warning:
             lines.append(f"  No-progress warning: {loop_warning}")
-        if obs is not None:
-            lines.append(f"  Observation: {_compact_observation(obs)}")
+        lines.append(
+            "  Result envelope: "
+            f"{project_observation(envelope, max_chars=max_chars)}"
+        )
     return "\n".join(lines)

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import re
 import multiprocessing as mp
 from typing import Any
@@ -25,6 +26,37 @@ from typing import Any
 from loguru import logger
 
 from src.utils import extract_json, strip_think_tags
+
+
+_CONTEXT_LENGTH_ERROR_RE = re.compile(
+    r"maximum context length is\s+(?P<context>\d+)\s+tokens.*?"
+    r"requested\s+(?P<output>\d+)\s+output tokens.*?"
+    r"prompt contains at least\s+(?P<input>\d+)\s+input tokens",
+    re.IGNORECASE | re.DOTALL,
+)
+_MIN_CONTEXT_RETRY_TOKENS = 64
+
+
+def _remaining_context_output_budget(
+    error: BaseException,
+    requested_max_tokens: int,
+) -> int | None:
+    """Return a safe one-shot decode budget for an explicit context error.
+
+    vLLM reports the configured context window and tokenized input size in its
+    400 response.  Preserve the complete Teacher input and shrink only the
+    requested JSON decode budget.  Very small residual windows remain a hard
+    failure because a truncated action envelope is not useful training data.
+    """
+    match = _CONTEXT_LENGTH_ERROR_RE.search(str(error))
+    if match is None:
+        return None
+    context_tokens = int(match.group("context"))
+    input_tokens = int(match.group("input"))
+    remaining = context_tokens - input_tokens
+    if not (_MIN_CONTEXT_RETRY_TOKENS <= remaining < requested_max_tokens):
+        return None
+    return remaining
 
 # Lazy imports to avoid hard dependency on model packages
 _HAS_TRANSFORMERS = False
@@ -47,10 +79,10 @@ class LLMClient:
 
     Usage:
         # Single-GPU local
-        client = LLMClient(mode="local", model_path="models/Qwen3-4B", device=0)
+        client = LLMClient(mode="local", model_path="models/Qwen/Qwen3-4B", device=0)
 
         # Multi-GPU with device_map="auto" (model parallelism for large models)
-        client = LLMClient(mode="local", model_path="models/Qwen3-32B")
+        client = LLMClient(mode="local", model_path="models/Qwen/Qwen3-32B")
 
         # vLLM / OpenAI-compatible server
         client = LLMClient(mode="openai", model_path="Qwen3-4B",
@@ -60,7 +92,7 @@ class LLMClient:
     def __init__(
         self,
         mode: str = "local",
-        model_path: str = "models/Qwen3-4B",
+        model_path: str = "models/Qwen/Qwen3-4B",
         api_base: str | None = None,
         api_key: str = "not-needed",
         temperature: float = 0.7,
@@ -82,6 +114,7 @@ class LLMClient:
         self._pipe = None
         self._tokenizer = None
         self._client = None
+        self._local_lock = threading.RLock()
 
         # Resolve device_map for local mode
         if device is not None:
@@ -96,6 +129,20 @@ class LLMClient:
             self._device_map = "auto"
 
     def _ensure_pipe(self):
+        if self.mode == "local" and self._pipe is None:
+            with self._local_lock:
+                if self._pipe is not None:
+                    return
+                self._load_local_pipeline()
+        elif self.mode == "openai" and self._client is None:
+            from openai import OpenAI
+            self._client = OpenAI(
+                base_url=self.api_base,
+                api_key=self.api_key,
+                timeout=self.timeout_s,
+            )
+
+    def _load_local_pipeline(self):
         if self.mode == "local" and self._pipe is None:
             if not _HAS_TRANSFORMERS:
                 raise ImportError(
@@ -115,13 +162,6 @@ class LLMClient:
                 self.model_path, trust_remote_code=True,
             )
             logger.info("Model loaded")
-        elif self.mode == "openai" and self._client is None:
-            from openai import OpenAI
-            self._client = OpenAI(
-                base_url=self.api_base,
-                api_key=self.api_key,
-                timeout=self.timeout_s,
-            )
 
     def generate(
         self,
@@ -156,7 +196,8 @@ class LLMClient:
                 )
             else:
                 prompt = "\n".join(m["content"] for m in messages)
-            return self._generate_local(prompt, temp, mt)
+            with self._local_lock:
+                return self._generate_local(prompt, temp, mt)
 
         # OpenAI mode: pass messages directly.
         # For Qwen3 models, request non-thinking mode.  Some serving stacks may
@@ -174,13 +215,28 @@ class LLMClient:
             create_kwargs["extra_body"] = {
                 "chat_template_kwargs": {"enable_thinking": False}
             }
-        response = self._client.chat.completions.create(
-            model=self.model_path,
-            messages=messages,
-            temperature=temp,
-            max_tokens=mt,
+        request_kwargs = {
+            "model": self.model_path,
+            "messages": messages,
+            "temperature": temp,
+            "max_tokens": mt,
             **create_kwargs,
-        )
+        }
+        try:
+            response = self._client.chat.completions.create(**request_kwargs)
+        except Exception as error:
+            adjusted_max_tokens = _remaining_context_output_budget(error, mt)
+            if adjusted_max_tokens is None:
+                raise
+            logger.warning(
+                "Teacher request reached the model context boundary; "
+                "preserving the full input and retrying once with max_tokens={} "
+                "instead of {}",
+                adjusted_max_tokens,
+                mt,
+            )
+            request_kwargs["max_tokens"] = adjusted_max_tokens
+            response = self._client.chat.completions.create(**request_kwargs)
         return response.choices[0].message.content or ""
 
     def generate_json(
@@ -220,7 +276,7 @@ class LLMClientPool:
 
     Usage:
         pool = LLMClientPool(
-            model_path="models/Qwen3-8B",
+            model_path="models/Qwen/Qwen3-8B",
             gpu_ids=[0, 1, 2, 3],   # or "auto" to use CUDA_VISIBLE_DEVICES
         )
         results = pool.generate_batch(prompts=["prompt1", "prompt2", ...])

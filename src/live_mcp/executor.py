@@ -104,6 +104,11 @@ class LiveMCPExecutor:
         try:
             response = self.manager.call_tool(server_name, session_id, canonical, tool_call.arguments)
         except TransportError as exc:
+            if exc.error_type == errors.TIMEOUT:
+                self.manager.quarantine_session(
+                    session_id,
+                    f"unknown commit after {server_name}::{canonical} timeout",
+                )
             return self._result(
                 tool_call,
                 canonical,
@@ -129,7 +134,10 @@ class LiveMCPExecutor:
             str(response.get("error_message") or ""),
             True,
             bool(response.get("state_changed")),
-            metadata={"server_name": server_name},
+            metadata={
+                "server_name": server_name,
+                "state_delta_paths": list(response.get("state_delta_paths") or []),
+            },
         )
 
     def execute_many(

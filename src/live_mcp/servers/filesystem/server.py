@@ -16,8 +16,8 @@ TOOLS = [
     {"name": "pwd", "description": "Print working directory.", "input_schema": {"type": "object", "properties": {}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     # File read (5)
     {"name": "cat", "description": "Read file content.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "head", "description": "Show first N lines of a file.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "lines": {"type": "integer"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "tail", "description": "Show last N lines of a file.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "lines": {"type": "integer"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
+    {"name": "head", "description": "Show first N lines of a file.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "lines": {"type": "integer", "minimum": 1}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
+    {"name": "tail", "description": "Show last N lines of a file.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "lines": {"type": "integer", "minimum": 1}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "wc", "description": "Count lines, words, chars in a file.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "stat", "description": "Show file/directory metadata.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
     # File search (3)
@@ -41,10 +41,10 @@ TOOLS = [
     {"name": "symlink", "description": "Create a symbolic link.", "input_schema": {"type": "object", "properties": {"target": {"type": "string"}, "link_path": {"type": "string"}}, "required": ["target", "link_path"]}, "annotations": {"mutating": True}},
     {"name": "readlink", "description": "Read a symbolic link's target.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
     # Archives (4)
-    {"name": "tar_create", "description": "Create a tar archive.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "paths": {"type": "array"}}, "required": ["archive", "paths"]}, "annotations": {"mutating": True}},
-    {"name": "tar_extract", "description": "Extract a tar archive.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "target_dir": {"type": "string"}}, "required": ["archive"]}, "annotations": {"mutating": True}},
-    {"name": "zip", "description": "Create a zip archive.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "paths": {"type": "array"}}, "required": ["archive", "paths"]}, "annotations": {"mutating": True}},
-    {"name": "unzip", "description": "Extract a zip archive.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "target_dir": {"type": "string"}}, "required": ["archive"]}, "annotations": {"mutating": True}},
+    {"name": "tar_create", "description": "Create a tar archive from existing files or directories.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}, "minItems": 1}}, "required": ["archive", "paths"], "additionalProperties": False}, "annotations": {"mutating": True}},
+    {"name": "tar_extract", "description": "Extract a tar archive into an existing directory.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "target_dir": {"type": "string"}}, "required": ["archive"], "additionalProperties": False}, "annotations": {"mutating": True}},
+    {"name": "zip", "description": "Create a zip archive from existing files or directories.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "paths": {"type": "array", "items": {"type": "string"}, "minItems": 1}}, "required": ["archive", "paths"], "additionalProperties": False}, "annotations": {"mutating": True}},
+    {"name": "unzip", "description": "Extract a zip archive into an existing directory.", "input_schema": {"type": "object", "properties": {"archive": {"type": "string"}, "target_dir": {"type": "string"}}, "required": ["archive"], "additionalProperties": False}, "annotations": {"mutating": True}},
     # Text processing (6)
     {"name": "diff", "description": "Compare two files.", "input_schema": {"type": "object", "properties": {"file1": {"type": "string"}, "file2": {"type": "string"}}, "required": ["file1", "file2"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "sort", "description": "Sort lines of a file.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "reverse": {"type": "boolean"}, "unique": {"type": "boolean"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
@@ -58,8 +58,8 @@ TOOLS = [
     {"name": "file_info", "description": "Determine file type (text/binary/image).", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "xxd", "description": "Hex dump of a file.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["path"]}, "annotations": {"readonly": True, "mutating": False}},
     # Utilities (3)
-    {"name": "truncate", "description": "Shrink or extend file to specified size.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "size": {"type": "integer"}}, "required": ["path", "size"]}, "annotations": {"mutating": True}},
-    {"name": "split", "description": "Split a file into pieces.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "lines_per_file": {"type": "integer"}}, "required": ["path"]}, "annotations": {"mutating": True}},
+    {"name": "truncate", "description": "Shrink or extend file to a non-negative size.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "size": {"type": "integer", "minimum": 0}}, "required": ["path", "size"]}, "annotations": {"mutating": True}},
+    {"name": "split", "description": "Split a file into pieces using a positive line count.", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}, "lines_per_file": {"type": "integer", "minimum": 1}}, "required": ["path"]}, "annotations": {"mutating": True}},
     {"name": "join", "description": "Join lines of two files on a common field.", "input_schema": {"type": "object", "properties": {"file1": {"type": "string"}, "file2": {"type": "string"}, "field": {"type": "integer"}}, "required": ["file1", "file2"]}, "annotations": {"readonly": True, "mutating": False}},
 ]
 
@@ -92,6 +92,10 @@ class FilesystemServer(StatefulToolServer):
     def _is_protected(self, path: str) -> bool:
         return path == "/protected" or path.startswith(self._protected_prefix)
 
+    @staticmethod
+    def _at_or_below(path: str, root: str) -> bool:
+        return path == root or path.startswith(root.rstrip("/") + "/")
+
     def _ensure_parent_dir(self, state: dict[str, Any], path: str) -> str:
         parent = self._parent(path)
         if parent not in state["fs"] or state["fs"][parent]["type"] != "dir":
@@ -111,7 +115,8 @@ class FilesystemServer(StatefulToolServer):
     def cd(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); path = self._resolve(session_id, arguments["path"])
         if path not in state["fs"] or state["fs"][path]["type"] != "dir": raise KeyError(f"not a directory: {arguments['path']}")
-        state["cwd"] = path; return _result(True, {"cwd": path}, None, "", True)
+        changed = state["cwd"] != path
+        state["cwd"] = path; return _result(True, {"cwd": path}, None, "", changed)
 
     def pwd(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return _result(True, {"cwd": self._state(session_id)["cwd"]}, None, "", False)
@@ -140,8 +145,9 @@ class FilesystemServer(StatefulToolServer):
         content = node.get("content", ""); return _result(True, {"lines": len(content.split("\n")), "words": len(content.split()), "chars": len(content)}, None, "", False)
 
     def stat(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        state = self._state(session_id)
         node = self._node(session_id, arguments["path"]); p = self._resolve(session_id, arguments["path"])
-        return _result(True, {"path": p, "type": node["type"], "permissions": node["permissions"], "owner": node.get("owner", "unknown"), "size": len(node.get("content", "")), "modified": "2026-06-24T21:40:00"}, None, "", False)
+        return _result(True, {"path": p, "type": node["type"], "permissions": node["permissions"], "owner": node.get("owner", "unknown"), "size": len(node.get("content", "")), "modified": f"{state['current_date']}T21:40:00"}, None, "", False)
 
     # Search
     def find(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -149,7 +155,7 @@ class FilesystemServer(StatefulToolServer):
         pattern = arguments.get("pattern", "*"); ftype = arguments.get("type")
         results = []
         for p, n in state["fs"].items():
-            if not p.startswith(path): continue
+            if not self._at_or_below(p, path): continue
             name = p.split("/")[-1]
             if pattern != "*":
                 import fnmatch
@@ -164,7 +170,7 @@ class FilesystemServer(StatefulToolServer):
         for p, n in state["fs"].items():
             if n["type"] != "file": continue
             if not recursive and p != path: continue
-            if recursive and not p.startswith(path): continue
+            if recursive and not self._at_or_below(p, path): continue
             content = n.get("content", "")
             for i, line in enumerate(content.split("\n"), 1):
                 if pattern in line: results.append({"file": p, "line": i, "content": line.strip()[:200]})
@@ -227,6 +233,8 @@ class FilesystemServer(StatefulToolServer):
             moved.append((child, dst + child[len(src):], state["fs"].pop(child)))
         for _old, new, child_node in moved:
             state["fs"][new] = child_node
+        if self._at_or_below(state["cwd"], src):
+            state["cwd"] = dst + state["cwd"][len(src):]
         return _result(True, {"source": src, "target": dst}, None, "", True)
 
     def cp(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -272,6 +280,9 @@ class FilesystemServer(StatefulToolServer):
                         all_descendants.extend(grandchildren)
                         stack.extend(grandchildren)
                 for k in reversed(all_descendants): state["fs"].pop(k, None)
+        if self._at_or_below(state["cwd"], path):
+            parent = path.rsplit("/", 1)[0] or "/"
+            state["cwd"] = parent if parent in state["fs"] else "/"
         state["fs"].pop(path, None); return _result(True, {"path": path, "deleted": True}, None, "", True)
 
     # Permissions
@@ -300,7 +311,7 @@ class FilesystemServer(StatefulToolServer):
     # Disk usage
     def du(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); path = self._resolve(session_id, arguments.get("path") or ".")
-        total = sum(len(n.get("content", "")) for p, n in state["fs"].items() if p.startswith(path))
+        total = sum(len(n.get("content", "")) for p, n in state["fs"].items() if self._at_or_below(p, path))
         return _result(True, {"path": path, "bytes": total}, None, "", False)
 
     def df(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -323,25 +334,74 @@ class FilesystemServer(StatefulToolServer):
         if node["type"] != "symlink": raise KeyError("not a symlink")
         return _result(True, {"path": self._resolve(session_id, arguments["path"]), "target": node.get("target", "")}, None, "", False)
 
-    # Archives (simulated)
+    # Archives
     def tar_create(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); archive = self._resolve(session_id, arguments["archive"]); paths = arguments["paths"]
         if self._is_protected(archive): raise KeyError("cannot create archive in protected paths")
         self._ensure_parent_dir(state, archive)
-        content_parts = []
+        if archive in state["fs"]: raise KeyError(f"archive already exists: {archive}")
+        if not paths: raise KeyError("paths must be non-empty")
+        entries: dict[str, dict[str, Any]] = {}
         for p in paths:
-            rp = self._resolve(session_id, p); node = state["fs"].get(rp)
+            rp = self._resolve(session_id, p)
             if self._is_protected(rp): raise KeyError("cannot archive protected paths")
-            if node: content_parts.append(f"[{rp}] {node.get('content', '')[:200]}")
-        state["fs"][archive] = {"type": "file", "content": "\n---\n".join(content_parts), "permissions": "644", "owner": "user"}
-        return _result(True, {"archive": archive, "files_count": len(paths)}, None, "", True)
+            node = state["fs"].get(rp)
+            if node is None: raise KeyError(f"archive input not found: {rp}")
+            prefix = rp.rstrip("/") + "/"
+            selected = [
+                candidate for candidate in state["fs"]
+                if candidate == rp or candidate.startswith(prefix)
+            ]
+            base_parent = posixpath.dirname(rp)
+            for candidate in sorted(selected):
+                relative = posixpath.relpath(candidate, base_parent)
+                if relative in entries:
+                    raise KeyError(f"duplicate archive entry: {relative}")
+                entries[relative] = copy.deepcopy(state["fs"][candidate])
+        state["fs"][archive] = {
+            "type": "file",
+            "content": "",
+            "permissions": "644",
+            "owner": "user",
+            "archive_format": "tar",
+            "archive_entries": entries,
+        }
+        return _result(True, {"archive": archive, "files_count": len(entries)}, None, "", True)
 
     def tar_extract(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); archive = self._resolve(session_id, arguments["archive"])
-        if archive not in state["fs"]: raise KeyError(f"archive not found: {archive}")
+        archive_node = state["fs"].get(archive)
+        if archive_node is None: raise KeyError(f"archive not found: {archive}")
+        entries = archive_node.get("archive_entries")
+        if archive_node.get("type") != "file" or not isinstance(entries, dict):
+            raise KeyError(f"not a supported archive: {archive}")
         target_dir = self._resolve(session_id, arguments.get("target_dir", "."))
         if self._is_protected(target_dir): raise KeyError("cannot extract into protected paths")
-        return _result(True, {"archive": archive, "extracted_to": target_dir, "message": "extraction simulated"}, None, "", False)
+        target_node = state["fs"].get(target_dir)
+        if target_node is None or target_node.get("type") != "dir":
+            raise KeyError(f"target directory not found: {target_dir}")
+        extracted: list[str] = []
+        changed = False
+        for relative, node in entries.items():
+            if not isinstance(relative, str) or relative.startswith("/"):
+                raise KeyError(f"unsafe archive entry: {relative!r}")
+            destination = posixpath.normpath(posixpath.join(target_dir, relative))
+            target_prefix = target_dir.rstrip("/") + "/"
+            if destination != target_dir and not destination.startswith(target_prefix):
+                raise KeyError(f"unsafe archive entry: {relative!r}")
+            if self._is_protected(destination):
+                raise KeyError("cannot extract into protected paths")
+            if state["fs"].get(destination) != node:
+                state["fs"][destination] = copy.deepcopy(node)
+                changed = True
+            extracted.append(destination)
+        return _result(
+            True,
+            {"archive": archive, "extracted_to": target_dir, "extracted_paths": extracted},
+            None,
+            "",
+            changed,
+        )
 
     def zip(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return self.tar_create(session_id, arguments)
@@ -357,6 +417,7 @@ class FilesystemServer(StatefulToolServer):
         diffs = []
         for i, (l1, l2) in enumerate(zip(c1, c2)):
             if l1 != l2: diffs.append({"line": i + 1, "left": l1, "right": l2})
+        for i in range(len(c2), len(c1)): diffs.append({"line": i + 1, "left": c1[i], "right": "<missing>"})
         for i in range(len(c1), len(c2)): diffs.append({"line": i + 1, "left": "<missing>", "right": c2[i]})
         return _result(True, {"differences": diffs, "count": len(diffs)}, None, "", False)
 
@@ -481,13 +542,15 @@ class FilesystemServer(StatefulToolServer):
         state = self._state(session_id); path = self._resolve(session_id, arguments["path"]); lines_per = int(arguments.get("lines_per_file", 100))
         if self._is_protected(path): raise KeyError("cannot split protected paths")
         if lines_per <= 0: raise KeyError("lines_per_file must be positive")
-        node = self._node(session_id, path); lines = node.get("content", "").split("\n"); created = []
+        node = self._node(session_id, path); lines = node.get("content", "").split("\n"); created = []; changed = False
         if node["type"] != "file": raise KeyError("not a file")
         for i in range(0, len(lines), lines_per):
             chunk_path = f"{path}.part{i // lines_per + 1:02d}"
-            state["fs"][chunk_path] = {"type": "file", "content": "\n".join(lines[i:i + lines_per]), "permissions": "644", "owner": "user"}
+            chunk = {"type": "file", "content": "\n".join(lines[i:i + lines_per]), "permissions": "644", "owner": "user"}
+            changed = changed or state["fs"].get(chunk_path) != chunk
+            state["fs"][chunk_path] = chunk
             created.append(chunk_path)
-        return _result(True, {"source": path, "parts": created, "count": len(created)}, None, "", True)
+        return _result(True, {"source": path, "parts": created, "count": len(created)}, None, "", changed)
 
     def join(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         n1 = self._node(session_id, arguments["file1"]); n2 = self._node(session_id, arguments["file2"])
@@ -496,12 +559,14 @@ class FilesystemServer(StatefulToolServer):
         map2 = {}
         for l in c2:
             parts = l.split()
-            if parts: map2[parts[0]] = parts
+            if len(parts) > field: map2[parts[field]] = parts
         joined = []
         for l in c1:
             parts = l.split()
-            if parts and parts[0] in map2:
-                joined.append(l + " " + " ".join(map2[parts[0]][field + 1:] if len(map2[parts[0]]) > field else []))
+            key = parts[field] if len(parts) > field else None
+            if key is not None and key in map2:
+                right = [value for idx, value in enumerate(map2[key]) if idx != field]
+                joined.append(l + (" " + " ".join(right) if right else ""))
             else:
                 joined.append(l)
         return _result(True, {"joined": joined}, None, "", False)

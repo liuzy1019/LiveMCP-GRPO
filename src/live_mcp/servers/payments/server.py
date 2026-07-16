@@ -8,11 +8,11 @@ from typing import Any
 from src.live_mcp.server_base import StatefulToolServer, _result, serve
 
 TOOLS = [
-    {"name": "create_invoice", "description": "Create a new invoice.", "input_schema": {"type": "object", "properties": {"customer": {"type": "string"}, "amount": {"type": "number"}, "currency": {"type": "string"}, "description": {"type": "string"}, "due_date": {"type": "string"}}, "required": ["customer", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "create_invoice", "description": "Create a new invoice with a positive amount.", "input_schema": {"type": "object", "properties": {"customer": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive invoice amount; must be greater than zero."}, "currency": {"type": "string"}, "description": {"type": "string"}, "due_date": {"type": "string"}}, "required": ["customer", "amount"]}, "annotations": {"mutating": True}},
     {"name": "get_invoice", "description": "Get invoice details.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}}, "required": ["invoice_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "list_invoices", "description": "List invoices by status, customer, or date range.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "customer": {"type": "string"}, "from_date": {"type": "string"}, "to_date": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "pay_invoice", "description": "Pay an unpaid invoice for exactly its full invoice amount. The invoice must not already be paid, refunded, or partially refunded. Returns a settled payment with a payment_id. Sensitive param on amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number"}, "method": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": True}},
-    {"name": "refund_invoice", "description": "Refund a paid or partially_refunded invoice. Amount must be positive and no greater than the invoice's remaining refundable amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number"}, "reason": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": True}},
+    {"name": "pay_invoice", "description": "Pay an unpaid invoice for exactly its full invoice amount. The invoice must not already have a pending payment and must not be paid, refunded, or partially refunded. Returns a settled payment with a payment_id. Sensitive param on amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount exactly equal to the invoice amount."}, "method": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
+    {"name": "refund_invoice", "description": "Refund a paid or partially_refunded invoice whose linked payment is settled. Amount must be positive and no greater than the invoice's remaining refundable amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount no greater than the remaining refundable amount."}, "reason": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
     {"name": "cancel_payment", "description": "Cancel an existing pending payment before settlement. Requires a payment_id (pay_...), not an invoice_id. Settled or refunded payments cannot be cancelled.", "input_schema": {"type": "object", "properties": {"payment_id": {"type": "string"}, "reason": {"type": "string"}}, "required": ["payment_id"]}, "annotations": {"mutating": True}},
     {"name": "dispute_invoice", "description": "File a dispute on an invoice only when its current status is paid or pending. Requires a non-empty reason.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "reason": {"type": "string"}, "evidence": {"type": "string"}}, "required": ["invoice_id", "reason"]}, "annotations": {"mutating": True}},
     {"name": "create_webhook", "description": "Register a webhook endpoint.", "input_schema": {"type": "object", "properties": {"url": {"type": "string"}, "events": {"type": "array"}}, "required": ["url", "events"]}, "annotations": {"mutating": True}},
@@ -30,7 +30,7 @@ class PaymentsServer(StatefulToolServer):
         amount = float(arguments["amount"])
         if amount <= 0: raise KeyError("amount must be positive")
         inv_id = f"inv_{state['next_inv_num']:04d}"; state["next_inv_num"] += 1
-        inv = {"invoice_id": inv_id, "customer": arguments["customer"], "amount": amount, "currency": arguments.get("currency", "USD"), "description": arguments.get("description", ""), "due_date": arguments.get("due_date", ""), "status": "pending", "payment_id": None, "refund_id": None, "created_at": "2026-06-24"}
+        inv = {"invoice_id": inv_id, "customer": arguments["customer"], "amount": amount, "currency": arguments.get("currency", "USD"), "description": arguments.get("description", ""), "due_date": arguments.get("due_date", ""), "status": "pending", "payment_id": None, "refund_id": None, "created_at": state["current_date"]}
         state["invoices"][inv_id] = inv
         return _result(True, {"invoice": inv}, None, "", True)
 
@@ -63,6 +63,10 @@ class PaymentsServer(StatefulToolServer):
         if not inv: raise KeyError(f"invoice not found: {inv_id}")
         if inv["status"] == "paid": raise KeyError("invoice already paid")
         if inv["status"] in ("refunded", "partially_refunded"): raise KeyError(f"invoice already {inv['status']}")
+        if inv.get("payment_id"):
+            linked = state["payments"].get(inv["payment_id"])
+            linked_status = linked.get("status") if linked else "missing"
+            raise KeyError(f"invoice already has linked payment in status: {linked_status}")
         amount = float(arguments["amount"])
         if amount <= 0: raise KeyError("amount must be positive")
         if abs(amount - inv["amount"]) > 0.01: raise KeyError(f"amount mismatch: {amount} vs {inv['amount']}")
@@ -75,6 +79,11 @@ class PaymentsServer(StatefulToolServer):
         state = self._state(session_id); inv_id = arguments["invoice_id"]; inv = state["invoices"].get(inv_id)
         if not inv: raise KeyError(f"invoice not found: {inv_id}")
         if inv["status"] not in ("paid", "partially_refunded"): raise KeyError(f"cannot refund invoice in status: {inv['status']}")
+        payment_id = inv.get("payment_id")
+        payment = state["payments"].get(payment_id) if payment_id else None
+        if payment is None: raise KeyError("cannot refund invoice without a linked payment")
+        if payment.get("status") != "settled":
+            raise KeyError(f"cannot refund payment in status: {payment.get('status')}")
         amount = float(arguments["amount"])
         if amount <= 0: raise KeyError("amount must be positive")
         if amount > inv["amount"]: raise KeyError(f"refund exceeds invoice: {amount} > {inv['amount']}")
@@ -125,10 +134,14 @@ class PaymentsServer(StatefulToolServer):
     def delete_webhook(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); wid = arguments["webhook_id"]
         if wid not in state["webhooks"]: raise KeyError(f"webhook not found: {wid}")
-        if not state["webhooks"][wid].get("active", True):
-            return _result(True, {"webhook_id": wid, "deleted": True}, None, "", False)
-        state["webhooks"][wid]["active"] = False
-        return _result(True, {"webhook_id": wid, "deleted": True}, None, "", True)
+        deleted = state["webhooks"].pop(wid)
+        return _result(
+            True,
+            {"webhook_id": wid, "deleted": True, "webhook": deleted},
+            None,
+            "",
+            True,
+        )
 
 
 if __name__ == "__main__":

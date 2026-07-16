@@ -1,110 +1,126 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
-  "server_name": "food_delivery",
-  "schema_hash": "774f2fdb4be4d197",
+  "dependency_semantics_version": 11,
+  "server_name": "calendar",
+  "schema_hash": "99b8949876cd2b9d",
   "tool_names": [
-    "add_tip",
-    "cancel_order",
-    "contact_support",
-    "create_order",
-    "filter_by_dietary",
-    "get_estimated_time",
-    "get_menu",
-    "get_order",
-    "get_popular_items",
-    "get_restaurant",
-    "list_orders",
-    "list_restaurants",
-    "rate_order",
-    "reorder",
-    "search_restaurants",
-    "track_rider",
-    "update_order_status"
+    "add_attendee",
+    "change_timezone",
+    "check_conflicts",
+    "create_event",
+    "create_recurring",
+    "delete_event",
+    "export_calendar",
+    "get_event",
+    "get_free_busy",
+    "get_recurring_info",
+    "get_working_hours",
+    "list_events",
+    "remove_attendee",
+    "respond_to_event",
+    "search_events",
+    "set_reminder",
+    "update_event"
   ],
   "graph": {
-    "add_tip": {
+    "add_attendee": {
+      "explicit": [],
+      "implicit": [
+        "respond_to_event"
+      ]
+    },
+    "change_timezone": {
       "explicit": [],
       "implicit": []
     },
-    "cancel_order": {
+    "check_conflicts": {
       "explicit": [],
       "implicit": []
     },
-    "contact_support": {
-      "explicit": [],
-      "implicit": []
-    },
-    "create_order": {
+    "create_event": {
       "explicit": [
-        "add_tip",
-        "get_estimated_time",
-        "get_order",
-        "rate_order",
-        "reorder",
-        "track_rider",
-        "update_order_status"
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
-    "filter_by_dietary": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_estimated_time": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_menu": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_order": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_popular_items": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_restaurant": {
-      "explicit": [],
-      "implicit": []
-    },
-    "list_orders": {
+    "create_recurring": {
       "explicit": [
-        "rate_order",
-        "reorder",
-        "track_rider",
-        "update_order_status"
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
-    "list_restaurants": {
+    "delete_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "export_calendar": {
       "explicit": [
-        "filter_by_dietary"
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event"
       ],
       "implicit": []
     },
-    "rate_order": {
+    "get_event": {
       "explicit": [],
       "implicit": []
     },
-    "reorder": {
+    "get_free_busy": {
       "explicit": [],
       "implicit": []
     },
-    "search_restaurants": {
+    "get_recurring_info": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_working_hours": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_events": {
       "explicit": [
-        "filter_by_dietary"
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
-    "track_rider": {
+    "remove_attendee": {
       "explicit": [],
       "implicit": []
     },
-    "update_order_status": {
+    "respond_to_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_events": {
+      "explicit": [
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "set_reminder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_event": {
       "explicit": [],
       "implicit": []
     }
@@ -112,8 +128,8 @@
   "pair_classifications": [
     {
       "pair": [
-        "add_tip",
-        "cancel_order"
+        "add_attendee",
+        "change_timezone"
       ],
       "source": "",
       "target": "",
@@ -121,8 +137,8 @@
     },
     {
       "pair": [
-        "add_tip",
-        "contact_support"
+        "add_attendee",
+        "check_conflicts"
       ],
       "source": "",
       "target": "",
@@ -130,413 +146,26 @@
     },
     {
       "pair": [
-        "add_tip",
-        "create_order"
+        "add_attendee",
+        "create_event"
       ],
-      "source": "create_order",
-      "target": "add_tip",
+      "source": "create_event",
+      "target": "add_attendee",
       "relation": "explicit"
     },
     {
       "pair": [
-        "add_tip",
-        "filter_by_dietary"
+        "add_attendee",
+        "create_recurring"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "get_estimated_time"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "get_menu"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "get_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "get_popular_items"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_tip",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "contact_support"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "create_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "filter_by_dietary"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "get_estimated_time"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "get_menu"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "get_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "get_popular_items"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_order",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "create_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "filter_by_dietary"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "get_estimated_time"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "get_menu"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "get_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "get_popular_items"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "contact_support",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_order",
-        "filter_by_dietary"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_order",
-        "get_estimated_time"
-      ],
-      "source": "create_order",
-      "target": "get_estimated_time",
+      "source": "create_recurring",
+      "target": "add_attendee",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_order",
-        "get_menu"
+        "add_attendee",
+        "delete_event"
       ],
       "source": "",
       "target": "",
@@ -544,17 +173,386 @@
     },
     {
       "pair": [
-        "create_order",
-        "get_order"
+        "add_attendee",
+        "export_calendar"
       ],
-      "source": "create_order",
-      "target": "get_order",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "respond_to_event"
+      ],
+      "source": "add_attendee",
+      "target": "respond_to_event",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "check_conflicts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_recurring"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "delete_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "export_calendar"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_recurring"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "delete_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "export_calendar"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "create_recurring"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "delete_event"
+      ],
+      "source": "create_event",
+      "target": "delete_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_order",
-        "get_popular_items"
+        "create_event",
+        "export_calendar"
       ],
       "source": "",
       "target": "",
@@ -562,53 +560,35 @@
     },
     {
       "pair": [
-        "create_order",
-        "get_restaurant"
+        "create_event",
+        "get_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_order",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_order",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_order",
-        "rate_order"
-      ],
-      "source": "create_order",
-      "target": "rate_order",
+      "source": "create_event",
+      "target": "get_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_order",
-        "reorder"
+        "create_event",
+        "get_free_busy"
       ],
-      "source": "create_order",
-      "target": "reorder",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_recurring_info"
+      ],
+      "source": "create_event",
+      "target": "get_recurring_info",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_order",
-        "search_restaurants"
+        "create_event",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -616,26 +596,35 @@
     },
     {
       "pair": [
-        "create_order",
-        "track_rider"
+        "create_event",
+        "list_events"
       ],
-      "source": "create_order",
-      "target": "track_rider",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "remove_attendee"
+      ],
+      "source": "create_event",
+      "target": "remove_attendee",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_order",
-        "update_order_status"
+        "create_event",
+        "respond_to_event"
       ],
-      "source": "create_order",
-      "target": "update_order_status",
+      "source": "create_event",
+      "target": "respond_to_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "filter_by_dietary",
-        "get_estimated_time"
+        "create_event",
+        "search_events"
       ],
       "source": "",
       "target": "",
@@ -643,539 +632,53 @@
     },
     {
       "pair": [
-        "filter_by_dietary",
-        "get_menu"
+        "create_event",
+        "set_reminder"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "get_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "get_popular_items"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "list_restaurants"
-      ],
-      "source": "list_restaurants",
-      "target": "filter_by_dietary",
+      "source": "create_event",
+      "target": "set_reminder",
       "relation": "explicit"
     },
     {
       "pair": [
-        "filter_by_dietary",
-        "rate_order"
+        "create_event",
+        "update_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "search_restaurants"
-      ],
-      "source": "search_restaurants",
-      "target": "filter_by_dietary",
+      "source": "create_event",
+      "target": "update_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "filter_by_dietary",
-        "track_rider"
+        "create_recurring",
+        "delete_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "filter_by_dietary",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "get_menu"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "get_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "get_popular_items"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_estimated_time",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "get_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "get_popular_items"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_menu",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "get_popular_items"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_order",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "get_restaurant"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_popular_items",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_restaurant",
-        "list_orders"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_restaurant",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_restaurant",
-        "rate_order"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_restaurant",
-        "reorder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_restaurant",
-        "search_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_restaurant",
-        "track_rider"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_restaurant",
-        "update_order_status"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_orders",
-        "list_restaurants"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_orders",
-        "rate_order"
-      ],
-      "source": "list_orders",
-      "target": "rate_order",
+      "source": "create_recurring",
+      "target": "delete_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_orders",
-        "reorder"
+        "create_recurring",
+        "export_calendar"
       ],
-      "source": "list_orders",
-      "target": "reorder",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_event"
+      ],
+      "source": "create_recurring",
+      "target": "get_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_orders",
-        "search_restaurants"
+        "create_recurring",
+        "get_free_busy"
       ],
       "source": "",
       "target": "",
@@ -1183,26 +686,53 @@
     },
     {
       "pair": [
-        "list_orders",
-        "track_rider"
+        "create_recurring",
+        "get_recurring_info"
       ],
-      "source": "list_orders",
-      "target": "track_rider",
+      "source": "create_recurring",
+      "target": "get_recurring_info",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_orders",
-        "update_order_status"
+        "create_recurring",
+        "get_working_hours"
       ],
-      "source": "list_orders",
-      "target": "update_order_status",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "remove_attendee"
+      ],
+      "source": "create_recurring",
+      "target": "remove_attendee",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_restaurants",
-        "rate_order"
+        "create_recurring",
+        "respond_to_event"
+      ],
+      "source": "create_recurring",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "search_events"
       ],
       "source": "",
       "target": "",
@@ -1210,8 +740,26 @@
     },
     {
       "pair": [
-        "list_restaurants",
-        "reorder"
+        "create_recurring",
+        "set_reminder"
+      ],
+      "source": "create_recurring",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "update_event"
+      ],
+      "source": "create_recurring",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "export_calendar"
       ],
       "source": "",
       "target": "",
@@ -1219,8 +767,8 @@
     },
     {
       "pair": [
-        "list_restaurants",
-        "search_restaurants"
+        "delete_event",
+        "get_event"
       ],
       "source": "",
       "target": "",
@@ -1228,8 +776,8 @@
     },
     {
       "pair": [
-        "list_restaurants",
-        "track_rider"
+        "delete_event",
+        "get_free_busy"
       ],
       "source": "",
       "target": "",
@@ -1237,8 +785,8 @@
     },
     {
       "pair": [
-        "list_restaurants",
-        "update_order_status"
+        "delete_event",
+        "get_recurring_info"
       ],
       "source": "",
       "target": "",
@@ -1246,8 +794,8 @@
     },
     {
       "pair": [
-        "rate_order",
-        "reorder"
+        "delete_event",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -1255,8 +803,8 @@
     },
     {
       "pair": [
-        "rate_order",
-        "search_restaurants"
+        "delete_event",
+        "list_events"
       ],
       "source": "",
       "target": "",
@@ -1264,8 +812,8 @@
     },
     {
       "pair": [
-        "rate_order",
-        "track_rider"
+        "delete_event",
+        "remove_attendee"
       ],
       "source": "",
       "target": "",
@@ -1273,8 +821,8 @@
     },
     {
       "pair": [
-        "rate_order",
-        "update_order_status"
+        "delete_event",
+        "respond_to_event"
       ],
       "source": "",
       "target": "",
@@ -1282,8 +830,8 @@
     },
     {
       "pair": [
-        "reorder",
-        "search_restaurants"
+        "delete_event",
+        "search_events"
       ],
       "source": "",
       "target": "",
@@ -1291,8 +839,8 @@
     },
     {
       "pair": [
-        "reorder",
-        "track_rider"
+        "delete_event",
+        "set_reminder"
       ],
       "source": "",
       "target": "",
@@ -1300,8 +848,8 @@
     },
     {
       "pair": [
-        "reorder",
-        "update_order_status"
+        "delete_event",
+        "update_event"
       ],
       "source": "",
       "target": "",
@@ -1309,8 +857,17 @@
     },
     {
       "pair": [
-        "search_restaurants",
-        "track_rider"
+        "export_calendar",
+        "get_event"
+      ],
+      "source": "export_calendar",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_free_busy"
       ],
       "source": "",
       "target": "",
@@ -1318,8 +875,17 @@
     },
     {
       "pair": [
-        "search_restaurants",
-        "update_order_status"
+        "export_calendar",
+        "get_recurring_info"
+      ],
+      "source": "export_calendar",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -1327,17 +893,467 @@
     },
     {
       "pair": [
-        "track_rider",
-        "update_order_status"
+        "export_calendar",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "remove_attendee"
+      ],
+      "source": "export_calendar",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "respond_to_event"
+      ],
+      "source": "export_calendar",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_events",
+        "remove_attendee"
+      ],
+      "source": "list_events",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "respond_to_event"
+      ],
+      "source": "list_events",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_events",
+        "set_reminder"
+      ],
+      "source": "list_events",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "update_event"
+      ],
+      "source": "list_events",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_events",
+        "set_reminder"
+      ],
+      "source": "search_events",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "search_events",
+        "update_event"
+      ],
+      "source": "search_events",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "set_reminder",
+        "update_event"
       ],
       "source": "",
       "target": "",
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
   "tool_count": 17,
   "expected_pair_count": 136,
   "classified_pair_count": 136,

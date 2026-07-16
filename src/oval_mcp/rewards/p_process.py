@@ -79,14 +79,10 @@ class ProcessScoreResult:
     n_forbidden_steps: int = 0
 
 
-FALLBACK_WARNED = False  # module-level flag for one-time warning
-
-
 class ProcessScorer:
     """Compute per-step process scores and trajectory P_process.
 
-    Uses DomainAdapter.evaluate_event() for predicate satisfaction;
-    falls back to generic heuristics when no adapter is available.
+    Uses DomainAdapter.evaluate_event() for predicate satisfaction.
     """
 
     def __init__(
@@ -113,6 +109,8 @@ class ProcessScorer:
         Penalties are NOT deduplicated (each violation is penalized).
         """
         result = ProcessScoreResult()
+        if domain_adapter is None:
+            raise ValueError("ProcessScorer requires a DomainAdapter")
 
         tools = event_log.tool_call_events
         if not tools:
@@ -158,8 +156,8 @@ class ProcessScorer:
     ) -> StepProcessScore:
         """Compute p_t for a single tool_call event.
 
-        Uses DomainAdapter.evaluate_event() for predicate satisfaction;
-        falls back to generic operation-based heuristics.
+        Uses DomainAdapter.evaluate_event() for predicate satisfaction.
+        Adapter exceptions propagate as reward-integrity failures.
 
         Bonus deduplication: if satisfied_bonuses is provided, only predicates
         NOT already in the set will contribute bonus. Newly satisfied predicates
@@ -174,12 +172,7 @@ class ProcessScorer:
         triggered_penalty: list[str] = []
 
         # ── bonus detection via DomainAdapter ──
-        satisfied: frozenset[str] = frozenset()
-        if domain_adapter is not None and task is not None:
-            try:
-                satisfied = domain_adapter.evaluate_event(event, task)
-            except Exception:
-                pass
+        satisfied = domain_adapter.evaluate_event(event, task or {})
 
         if satisfied:
             for pred, bonus_key in self._PREDICATE_BONUS_MAP.items():
@@ -188,18 +181,6 @@ class ProcessScorer:
                     if bonus_key not in satisfied_bonuses:
                         triggered_bonus.append(bonus_key)
                         satisfied_bonuses.add(bonus_key)
-        else:
-            # Fallback: generic heuristics
-            if event.execution_success and event.state_changed:
-                bonus_key = "B_complete_required_transition"
-                if bonus_key not in satisfied_bonuses:
-                    triggered_bonus.append(bonus_key)
-                    satisfied_bonuses.add(bonus_key)
-            if event.execution_success and event.operation == "query":
-                bonus_key = "B_resolve_required_entity"
-                if bonus_key not in satisfied_bonuses:
-                    triggered_bonus.append(bonus_key)
-                    satisfied_bonuses.add(bonus_key)
 
         # ── penalty detection (schema / execution — orthogonal to predicates) ──
         if not event.schema_valid:

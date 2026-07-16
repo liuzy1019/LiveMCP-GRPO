@@ -143,13 +143,13 @@ class TaskReward:
         result.r_execution = r_execution
         result.r_validity = (r_name_exists + r_args_present + r_execution) / 3.0
 
-        # Terminal-action whitelist enforcement.
-        # Tasks may declare allowed_terminal_actions (e.g. ["ask_clarification"]
-        # for clarification scenarios, ["report_error"] for missing_function,
-        # ["final_answer"] for normal). Violating the whitelist halves
-        # r_validity — strong enough to matter for training, soft enough not
-        # to wipe out partial-credit on coverage / name / arg components.
-        if not self._check_terminal_predicate(event_log, task):
+        # Terminal-action penalties are an OVAL extension, not part of PROVE's
+        # three-level validity definition. The reward profile sets this flag
+        # explicitly so prove_baseline has no extra multiplier.
+        if (
+            task.get("apply_terminal_validity_penalty", False)
+            and not self._check_terminal_predicate(event_log, task)
+        ):
             result.r_validity *= 0.5
 
         # 2. R_coverage: PROVE eq.(1) — dependency-ordered GT step coverage.
@@ -161,20 +161,33 @@ class TaskReward:
         #    non-dependent tools can be called in any order; only dependency
         #    chains enforce ordering constraints.
         dep_edges: list[tuple[int, int]] = task.get("dependency_edges", [])
+        required_call_rounds: list[int] = task.get(
+            "required_call_rounds", [0] * len(required_tool_calls),
+        )
+        if len(required_call_rounds) != len(required_tool_calls):
+            raise ValueError(
+                "required_call_rounds must align with required_tool_calls"
+            )
         if dep_edges:
             aligned_calls = self._match_required_calls_partial_order(
                 tool_events, required_tool_calls, dep_edges,
+                required_call_rounds,
             )
         else:
-            aligned_calls = self._match_required_calls_in_order(tool_events, required_tool_calls)
+            aligned_calls = self._match_required_calls_in_order(
+                tool_events, required_tool_calls, required_call_rounds,
+            )
         total_preds = max(len(required_tool_calls), 1)
         completed = len(aligned_calls)
         result.completed_predicates = completed
         result.total_predicates = total_preds
         result.r_coverage = completed / total_preds
 
-        # Check identity violation → R_coverage = 0
-        if self._has_identity_violation(event_log, task):
+        # Identity coverage penalties are project-level safety shaping.
+        if (
+            task.get("apply_identity_coverage_penalty", False)
+            and self._has_identity_violation(event_log, task)
+        ):
             result.r_coverage = 0.0
 
         # 3. R_name: precision — fraction of model calls whose name is in GT
@@ -220,7 +233,6 @@ class TaskReward:
 
         level-1 r_name_exists: tool_name 在 candidate schema 中存在
             → event.tool_name_known（由 rollout candidate set 设置）
-              若字段不存在则回退到 schema_valid（保持向后兼容）
         level-2 r_args_present: 所有必需参数存在且 JSON 类型兼容
             → event.schema_valid（executor 做完整 schema 校验后设置）
               仅当 level-1 通过时才有意义，否则记 0
@@ -232,12 +244,7 @@ class TaskReward:
         args_ok = 0
         for e in tool_events:
             # level-1: name 存在性
-            # tool_name_known 由 rollout 根据最终 candidate set 设置；
-            # 若旧版 event 没有该字段，回退到 schema_valid（两级合一）
-            l1 = getattr(e, "tool_name_known", None)
-            if l1 is None:
-                # 向后兼容：旧 event 只有 schema_valid，用它同时代表 l1+l2
-                l1 = e.schema_valid
+            l1 = e.tool_name_known
             name_ok += int(bool(l1))
             # level-2: 参数校验（仅 name 存在时才有意义）
             l2 = e.schema_valid if l1 else False
@@ -253,157 +260,6 @@ class TaskReward:
             return 0.0
         success = sum(1 for e in tool_events if e.execution_success)
         return success / len(tool_events)
-
-    def _count_completed_state_criteria(
-        self,
-        event_log: EventLog,
-        criteria: list[dict],
-        final_state: dict[str, Any] | None = None,
-    ) -> int:
-        """P0-2: Verify state-level success_criteria against the trajectory.
-
-        Each criterion is a dict like:
-            {"type": "state_equals", "server": <domain>, "path": <dotted>, "value": <expected>}
-            {"type": "state_exists", "server": <domain>, "path": <dotted>}
-            {"type": "state_absent", "server": <domain>, "path": <dotted>}
-            {"type": "file_exists", "server": <domain>, "path": <dotted>}
-            {"type": "cart_not_empty", "server": <domain>}
-            {"type": "email_count_gte", "server": <domain>, "value": <int>}
-            {"type": "missing_function", ...}                # checked elsewhere
-
-        We approximate the post-trajectory state from the LAST tool_call
-        event whose observation is a dict (the executor returns the
-        post-call state snapshot). When no observation is available we
-        fall back to checking that any tool_call with operation matching
-        the criterion path exists; safer than always returning 0.
-
-        Returns the number of criteria that hold true.
-        """
-        if not criteria:
-            return 0
-
-        # Build a best-effort "final state" view from the latest event observation
-        # whose schema is a dict.
-        if not isinstance(final_state, dict) or not final_state:
-            final_state = None
-            for ev in reversed(event_log.events):
-                obs = getattr(ev, "observation", None)
-                if isinstance(obs, dict) and obs:
-                    final_state = obs
-                    break
-
-        # Build set of ids that the trajectory created/updated/deleted, so
-        # state_exists / state_equals can be approximated even without a
-        # final-state snapshot.
-        seen_ids: set[str] = set()
-        for ev in event_log.events:
-            if getattr(ev, "target_id", ""):
-                seen_ids.add(ev.target_id)
-            for cid in getattr(ev, "created_ids", []) or []:
-                seen_ids.add(cid)
-
-        completed = 0
-        for c in criteria:
-            if not isinstance(c, dict):
-                continue
-            ctype = c.get("type", "")
-            path = c.get("path", "")
-            path_ref = c.get("path_parts", path)
-            if ctype == "missing_function":
-                # Handled by allowed_terminal_actions, not here
-                continue
-            if ctype == "state_exists":
-                if not path:
-                    continue
-                # path is dotted: e.g. "events.evt_001"
-                target = (
-                    str(path_ref[-1])
-                    if isinstance(path_ref, list) and path_ref
-                    else str(path).rsplit(".", 1)[-1]
-                )
-                if target in seen_ids or self._lookup_state(final_state, path_ref) is not None:
-                    completed += 1
-            elif ctype == "state_absent":
-                if not path:
-                    continue
-                if final_state is not None and self._lookup_state(final_state, path_ref) is None:
-                    completed += 1
-            elif ctype == "state_equals":
-                value = c.get("value")
-                actual = self._lookup_state(final_state, path_ref)
-                if actual is None and isinstance(path, str) and path.endswith(".messages_count"):
-                    messages = self._lookup_state(
-                        final_state, path.removesuffix("_count")
-                    )
-                    actual = len(messages) if isinstance(messages, list) else None
-                if actual is not None and str(actual) == str(value):
-                    completed += 1
-            elif ctype == "file_exists":
-                fs = self._lookup_state(final_state, "fs") if final_state else None
-                if isinstance(fs, dict) and path in fs:
-                    completed += 1
-            elif ctype == "cart_not_empty":
-                cart = self._lookup_state(final_state, "cart") if final_state else None
-                if cart:
-                    completed += 1
-            elif ctype == "email_count_gte":
-                emails = self._lookup_state(final_state, "emails") if final_state else None
-                if isinstance(emails, dict) and len(emails) >= int(c.get("value", 0)):
-                    completed += 1
-            else:
-                # Unknown criterion type — skip rather than penalise
-                continue
-        return completed
-
-    @staticmethod
-    def _lookup_state(state: dict | None, path: str | list[str]) -> Any:
-        """Walk a dotted path through a state dict; return None if missing."""
-        if not state or not isinstance(state, dict) or not path:
-            return None
-        cur: Any = state
-        parts = path if isinstance(path, list) else path.split(".")
-        for part in parts:
-            if isinstance(cur, dict) and part in cur:
-                cur = cur[part]
-            else:
-                return None
-        return cur
-
-    def _count_completed_predicates(
-        self,
-        event_log: EventLog,
-        task: dict[str, Any],
-        domain_adapter: Any = None,
-    ) -> int:
-        """Count how many unique progress predicates were satisfied across the trajectory.
-
-        Uses DomainAdapter.evaluate_event() when available; falls back to
-        operation-based counting otherwise.
-        """
-        if domain_adapter is not None:
-            completed: set[str] = set()
-            for event in event_log.events:
-                try:
-                    satisfied = domain_adapter.evaluate_event(event, task)
-                    completed.update(satisfied)
-                except Exception:
-                    pass
-            return len(completed)
-
-        # Fallback: operation-based counting
-        assertions = task.get("outcome_assertions", [])
-        if not assertions:
-            return 0
-        operations = {e.operation for e in event_log.events if e.operation}
-        required_ops = set()
-        for a in assertions:
-            if isinstance(a, dict):
-                op = a.get("operation")
-                if op:
-                    required_ops.add(op)
-        if not required_ops:
-            return 0
-        return sum(1 for op in required_ops if op in operations)
 
     def _has_identity_violation(
         self,
@@ -431,15 +287,20 @@ class TaskReward:
         self,
         tool_events: list,
         required_tool_calls: list[dict],
+        required_call_rounds: list[int],
     ) -> list:
         """Greedily align oracle calls to later successful model events."""
         aligned: list[tuple[Any, dict]] = []
         cursor = 0
-        for required in required_tool_calls:
+        for required, required_round in zip(
+            required_tool_calls, required_call_rounds, strict=True,
+        ):
             required_name = required.get("tool_name", "")
             required_keys = set((required.get("arguments") or {}).keys())
             for idx in range(cursor, len(tool_events)):
                 event = tool_events[idx]
+                if int(getattr(event, "round_idx", -1)) != required_round:
+                    continue
                 if event.tool_name != required_name or not event.execution_success:
                     continue
                 if not required_keys.issubset(set((event.tool_arguments or {}).keys())):
@@ -454,6 +315,7 @@ class TaskReward:
         tool_events: list,
         required_tool_calls: list[dict],
         dependency_edges: list[tuple[int, int]],
+        required_call_rounds: list[int],
     ) -> list:
         """P0-3: dependency partial-order coverage matching with temporal validation.
 
@@ -503,12 +365,15 @@ class TaskReward:
 
                 required_name = required.get("tool_name", "")
                 required_keys = set((required.get("arguments") or {}).keys())
+                required_round = required_call_rounds[i]
 
                 for idx, event in enumerate(tool_events):
                     if idx in used_events:
                         continue
                     if idx <= min_event_idx:
                         continue  # temporal ordering: must be AFTER predecessors
+                    if int(getattr(event, "round_idx", -1)) != required_round:
+                        continue
                     if event.tool_name != required_name or not event.execution_success:
                         continue
                     if not required_keys.issubset(set((event.tool_arguments or {}).keys())):
@@ -564,15 +429,8 @@ class TaskReward:
         - Strings compared case-insensitive after strip.
         - Falls back to str().lower() comparison.
         """
-        # Numeric comparison: try float on both sides
-        try:
-            af = float(actual)
-            ef = float(expected)
-            return abs(af - ef) < 1e-9
-        except (TypeError, ValueError):
-            pass
-
-        # Bool comparison
+        # bool is a subclass of int in Python. Handle it before numeric
+        # coercion so True never matches 1 and False never matches 0.
         if isinstance(actual, bool) or isinstance(expected, bool):
             def _to_bool(x: Any) -> bool | None:
                 if isinstance(x, bool):
@@ -581,8 +439,15 @@ class TaskReward:
                     return x.strip().lower() == "true"
                 return None
             ab, eb = _to_bool(actual), _to_bool(expected)
-            if ab is not None and eb is not None:
-                return ab == eb
+            return ab is not None and eb is not None and ab == eb
+
+        # Numeric comparison: try float on both sides
+        try:
+            af = float(actual)
+            ef = float(expected)
+            return abs(af - ef) < 1e-9
+        except (TypeError, ValueError):
+            pass
 
         # Structured comparison: dict / list
         if isinstance(actual, (dict, list)) or isinstance(expected, (dict, list)):

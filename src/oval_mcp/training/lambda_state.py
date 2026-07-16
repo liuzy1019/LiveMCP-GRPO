@@ -201,22 +201,21 @@ class LambdaState:
         **overrides,
     ) -> "LambdaState":
         if os.path.exists(path):
-            try:
-                with open(path, "r") as f:
-                    data = json.load(f)
-                return cls(
-                    lambda_safe=data.get("lambda_safe", 1.0),
-                    alpha_lambda=data.get("alpha_lambda", 0.01),
-                    epsilon=data.get("epsilon", 0.05),
-                    lambda_safe_max=data.get("lambda_safe_max", 10.0),
-                    step=data.get("step", 0),
-                    state_path=path,
-                    lambda_increase_streak=data.get("lambda_increase_streak", 0),
-                    stall_frozen=data.get("stall_frozen", False),
-                    **overrides,
-                )
-            except (json.JSONDecodeError, KeyError):
-                pass
+            with open(path, "r") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("lambda state must be a JSON object")
+            return cls(
+                lambda_safe=data.get("lambda_safe", 1.0),
+                alpha_lambda=data.get("alpha_lambda", 0.01),
+                epsilon=data.get("epsilon", 0.05),
+                lambda_safe_max=data.get("lambda_safe_max", 10.0),
+                step=data.get("step", 0),
+                state_path=path,
+                lambda_increase_streak=data.get("lambda_increase_streak", 0),
+                stall_frozen=data.get("stall_frozen", False),
+                **overrides,
+            )
         return cls(state_path=path, **overrides)
 
     @classmethod

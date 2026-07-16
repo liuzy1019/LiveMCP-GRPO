@@ -1,4 +1,4 @@
-"""Stateful banking server for Live MCP — 17 tools (PROVE-aligned).
+"""Stateful banking server for Live MCP — 18 tools.
 
 Safety constraints:
   - transfer requires sensitive_param_verification on amount/recipient
@@ -9,6 +9,7 @@ Safety constraints:
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from src.live_mcp.server_base import StatefulToolServer, _result, serve
@@ -19,18 +20,19 @@ TOOLS = [
     {"name": "get_balance", "description": "Get current balance of an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}}, "required": ["account_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_history", "description": "Get recent transaction history.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "limit": {"type": "integer"}, "start_date": {"type": "string"}, "txn_type": {"type": "string"}}, "required": ["account_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_statement", "description": "Get monthly statement with opening/closing balance and transaction summary.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "year": {"type": "integer"}, "month": {"type": "integer"}}, "required": ["account_id", "year", "month"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "transfer", "description": "Transfer money between accounts. Sensitive param.", "input_schema": {"type": "object", "properties": {"from_account": {"type": "string"}, "to_account": {"type": "string"}, "amount": {"type": "number"}, "currency": {"type": "string"}, "memo": {"type": "string"}}, "required": ["from_account", "to_account", "amount"]}, "annotations": {"mutating": True, "sensitive_params": True}},
-    {"name": "wire_transfer", "description": "Wire transfer to external account with routing number.", "input_schema": {"type": "object", "properties": {"from_account": {"type": "string"}, "routing_number": {"type": "string"}, "recipient_name": {"type": "string"}, "amount": {"type": "number"}, "currency": {"type": "string"}}, "required": ["from_account", "routing_number", "recipient_name", "amount"]}, "annotations": {"mutating": True, "sensitive_params": True}},
-    {"name": "deposit", "description": "Deposit money into an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "amount": {"type": "number"}, "source": {"type": "string"}}, "required": ["account_id", "amount"]}, "annotations": {"mutating": True}},
-    {"name": "withdraw", "description": "Withdraw money from an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "amount": {"type": "number"}}, "required": ["account_id", "amount"]}, "annotations": {"mutating": True}},
-    {"name": "bill_pay", "description": "Pay a bill from an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "payee": {"type": "string"}, "amount": {"type": "number"}, "due_date": {"type": "string"}}, "required": ["account_id", "payee", "amount"]}, "annotations": {"mutating": True}},
-    {"name": "schedule_transfer", "description": "Schedule a future transfer between accounts.", "input_schema": {"type": "object", "properties": {"from_account": {"type": "string"}, "to_account": {"type": "string"}, "amount": {"type": "number"}, "execute_date": {"type": "string"}}, "required": ["from_account", "to_account", "amount", "execute_date"]}, "annotations": {"mutating": True}},
+    {"name": "transfer", "description": "Transfer a positive amount between two distinct accounts in the source account currency. Sensitive param.", "input_schema": {"type": "object", "properties": {"from_account": {"type": "string"}, "to_account": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0}, "currency": {"type": "string"}, "memo": {"type": "string"}}, "required": ["from_account", "to_account", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["from_account", "to_account", "amount", "currency"]}},
+    {"name": "wire_transfer", "description": "Wire a positive amount to an external account with routing number. Currency must match the source account because this environment does not perform FX conversion.", "input_schema": {"type": "object", "properties": {"from_account": {"type": "string"}, "routing_number": {"type": "string"}, "recipient_name": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0}, "currency": {"type": "string"}}, "required": ["from_account", "routing_number", "recipient_name", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["from_account", "routing_number", "recipient_name", "amount", "currency"]}},
+    {"name": "deposit", "description": "Deposit a positive amount into an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0}, "source": {"type": "string"}}, "required": ["account_id", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "withdraw", "description": "Withdraw a positive amount from an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0}}, "required": ["account_id", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "bill_pay", "description": "Pay a positive bill amount from an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "payee": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0}, "due_date": {"type": "string"}}, "required": ["account_id", "payee", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "schedule_transfer", "description": "Schedule a positive future transfer between two distinct accounts. execute_date must be an ISO YYYY-MM-DD date later than the current reference date.", "input_schema": {"type": "object", "properties": {"from_account": {"type": "string"}, "to_account": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0}, "execute_date": {"type": "string"}}, "required": ["from_account", "to_account", "amount", "execute_date"]}, "annotations": {"mutating": True}},
+    {"name": "list_scheduled_transfers", "description": "List existing scheduled transfers, optionally filtered by source account or status. Returns scheduled_txn_id values usable by cancel_transfer.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "status": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "cancel_transfer", "description": "Cancel a scheduled transfer.", "input_schema": {"type": "object", "properties": {"scheduled_txn_id": {"type": "string"}}, "required": ["scheduled_txn_id"]}, "annotations": {"mutating": True}},
     {"name": "freeze_account", "description": "Freeze an account (prevents future transfers).", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "reason": {"type": "string"}}, "required": ["account_id"]}, "annotations": {"mutating": True}},
-    {"name": "unfreeze_account", "description": "Unfreeze a previously frozen account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "authorization_code": {"type": "string"}}, "required": ["account_id", "authorization_code"]}, "annotations": {"mutating": True}},
+    {"name": "unfreeze_account", "description": "Unfreeze a previously frozen account using a non-empty authorization code supplied by the user.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "authorization_code": {"type": "string"}}, "required": ["account_id", "authorization_code"]}, "annotations": {"mutating": True, "sensitive_params": ["account_id", "authorization_code"]}},
     {"name": "verify_account", "description": "Verify account ownership details.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "owner_name": {"type": "string"}}, "required": ["account_id", "owner_name"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_exchange_rate", "description": "Get current exchange rate between currencies.", "input_schema": {"type": "object", "properties": {"from_currency": {"type": "string"}, "to_currency": {"type": "string"}}, "required": ["from_currency", "to_currency"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "apply_loan", "description": "Apply for a loan linked to an account.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "amount": {"type": "number"}, "term_months": {"type": "integer"}, "purpose": {"type": "string"}}, "required": ["account_id", "amount", "term_months"]}, "annotations": {"mutating": True}},
+    {"name": "apply_loan", "description": "Apply for a positive loan amount and term linked to an account. The account balance must cover 10% of the requested amount as collateral.", "input_schema": {"type": "object", "properties": {"account_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0}, "term_months": {"type": "integer", "minimum": 1}, "purpose": {"type": "string"}}, "required": ["account_id", "amount", "term_months"]}, "annotations": {"mutating": True}},
 ]
 
 EXCHANGE_RATES = {"USD_EUR": 0.92, "USD_GBP": 0.79, "USD_JPY": 150.5, "USD_CNY": 7.24, "EUR_USD": 1.09, "EUR_GBP": 0.86, "GBP_USD": 1.27, "JPY_USD": 0.0066}
@@ -79,13 +81,17 @@ class BankingServer(StatefulToolServer):
 
     def transfer(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); from_aid, to_aid = arguments["from_account"], arguments["to_account"]; amount = float(arguments["amount"])
+        if from_aid == to_aid: raise KeyError("source and destination accounts must be distinct")
         from_acct = self._acct(state, from_aid); to_acct = self._acct(state, to_aid)
         if from_acct.get("frozen"): raise KeyError(f"account frozen: {from_aid}")
         if to_acct.get("frozen"): raise KeyError(f"recipient account frozen: {to_aid}")
         if amount <= 0: raise KeyError("amount must be positive")
+        currency = arguments.get("currency", from_acct["currency"])
+        if currency != from_acct["currency"] or to_acct["currency"] != from_acct["currency"]:
+            raise KeyError("currency mismatch; transfer does not perform FX conversion")
         if from_acct["balance"] < amount: raise KeyError("insufficient funds")
         from_acct["balance"] -= amount; to_acct["balance"] += amount
-        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": from_aid, "to_account": to_aid, "amount": amount, "currency": from_acct["currency"], "type": "transfer", "memo": arguments.get("memo", ""), "timestamp": "2026-06-24"}
+        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": from_aid, "to_account": to_aid, "amount": amount, "currency": currency, "type": "transfer", "memo": arguments.get("memo", ""), "timestamp": state["current_date"]}
         state["transactions"].append(txn)
         return _result(True, {"transaction": txn, "from_balance": from_acct["balance"], "to_balance": to_acct["balance"]}, None, "", True)
 
@@ -94,10 +100,13 @@ class BankingServer(StatefulToolServer):
         acct = self._acct(state, from_aid)
         if acct.get("frozen"): raise KeyError(f"account frozen: {from_aid}")
         if amount <= 0: raise KeyError("amount must be positive")
+        currency = arguments.get("currency", acct["currency"])
+        if currency != acct["currency"]:
+            raise KeyError(f"currency mismatch: {currency} vs {acct['currency']}")
         fee = max(15.0, amount * 0.01); total = amount + fee
         if acct["balance"] < total: raise KeyError(f"insufficient funds (need {total} including {fee} fee)")
         acct["balance"] -= total
-        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": from_aid, "type": "wire_transfer", "routing_number": arguments["routing_number"], "recipient_name": arguments["recipient_name"], "amount": amount, "fee": fee, "currency": arguments.get("currency", acct["currency"]), "timestamp": "2026-06-24"}
+        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": from_aid, "type": "wire_transfer", "routing_number": arguments["routing_number"], "recipient_name": arguments["recipient_name"], "amount": amount, "fee": fee, "currency": currency, "timestamp": state["current_date"]}
         state["transactions"].append(txn)
         return _result(True, {"transaction": txn, "remaining_balance": acct["balance"], "fee": fee}, None, "", True)
 
@@ -107,7 +116,7 @@ class BankingServer(StatefulToolServer):
         if acct.get("frozen"): raise KeyError(f"account frozen: {aid}")
         if amount <= 0: raise KeyError("amount must be positive")
         acct["balance"] += amount
-        tid = self._txn_id(state); txn = {"txn_id": tid, "to_account": aid, "amount": amount, "currency": acct["currency"], "type": "deposit", "source": arguments.get("source", "branch"), "timestamp": "2026-06-24"}
+        tid = self._txn_id(state); txn = {"txn_id": tid, "to_account": aid, "amount": amount, "currency": acct["currency"], "type": "deposit", "source": arguments.get("source", "branch"), "timestamp": state["current_date"]}
         state["transactions"].append(txn)
         return _result(True, {"transaction": txn, "new_balance": acct["balance"]}, None, "", True)
 
@@ -118,7 +127,7 @@ class BankingServer(StatefulToolServer):
         if amount <= 0: raise KeyError("amount must be positive")
         if acct["balance"] < amount: raise KeyError("insufficient funds")
         acct["balance"] -= amount
-        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": aid, "amount": amount, "currency": acct["currency"], "type": "withdrawal", "timestamp": "2026-06-24"}
+        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": aid, "amount": amount, "currency": acct["currency"], "type": "withdrawal", "timestamp": state["current_date"]}
         state["transactions"].append(txn)
         return _result(True, {"transaction": txn, "new_balance": acct["balance"]}, None, "", True)
 
@@ -129,14 +138,22 @@ class BankingServer(StatefulToolServer):
         if amount <= 0: raise KeyError("amount must be positive")
         if acct["balance"] < amount: raise KeyError("insufficient funds")
         acct["balance"] -= amount
-        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": aid, "amount": amount, "currency": acct["currency"], "type": "bill_pay", "payee": payee, "due_date": arguments.get("due_date", ""), "timestamp": "2026-06-24"}
+        tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": aid, "amount": amount, "currency": acct["currency"], "type": "bill_pay", "payee": payee, "due_date": arguments.get("due_date", ""), "timestamp": state["current_date"]}
         state["transactions"].append(txn)
         return _result(True, {"transaction": txn, "new_balance": acct["balance"]}, None, "", True)
 
     def schedule_transfer(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); from_aid, to_aid = arguments["from_account"], arguments["to_account"]; amount = float(arguments["amount"])
+        if from_aid == to_aid: raise KeyError("source and destination accounts must be distinct")
         self._acct(state, from_aid); self._acct(state, to_aid)
         if amount <= 0: raise KeyError("amount must be positive")
+        try:
+            execute_date = date.fromisoformat(str(arguments["execute_date"]))
+        except ValueError as exc:
+            raise KeyError("execute_date must be ISO YYYY-MM-DD") from exc
+        current_date = date.fromisoformat(state["current_date"])
+        if execute_date <= current_date:
+            raise KeyError(f"execute_date must be later than {current_date.isoformat()}")
         sid = f"sched_{state['next_txn_num']:04d}"; state["next_txn_num"] += 1
         scheduled = {"scheduled_txn_id": sid, "from_account": from_aid, "to_account": to_aid, "amount": amount, "execute_date": arguments["execute_date"], "status": "pending"}
         state.setdefault("scheduled_transfers", {})[sid] = scheduled
@@ -152,22 +169,40 @@ class BankingServer(StatefulToolServer):
         sched["status"] = "cancelled"
         return _result(True, {"scheduled_transfer": sched}, None, "", True)
 
+    def list_scheduled_transfers(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        state = self._state(session_id)
+        account_id = arguments.get("account_id")
+        status = arguments.get("status")
+        transfers = [
+            dict(item)
+            for item in state.get("scheduled_transfers", {}).values()
+            if (not account_id or item.get("from_account") == account_id)
+            and (not status or item.get("status") == status)
+        ]
+        return _result(
+            True,
+            {"scheduled_transfers": transfers, "count": len(transfers)},
+            None,
+            "",
+            False,
+        )
+
     def freeze_account(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
         if acct.get("frozen"):
             return _result(True, {"account_id": aid, "frozen": True, "reason": arguments.get("reason", "unspecified")}, None, "", False)
         reason = arguments.get("reason", "unspecified"); acct["frozen"] = True
-        state["freeze_log"].append({"account_id": aid, "reason": reason, "frozen": True, "timestamp": "2026-06-24"})
+        state["freeze_log"].append({"account_id": aid, "reason": reason, "frozen": True, "timestamp": state["current_date"]})
         return _result(True, {"account_id": aid, "frozen": True, "reason": reason}, None, "", True)
 
     def unfreeze_account(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
-        if arguments.get("authorization_code") != "AUTH_SECURE":
-            raise KeyError("invalid authorization code")
+        if not str(arguments.get("authorization_code", "")).strip():
+            raise KeyError("authorization code must be non-empty")
         if not acct.get("frozen"):
             return _result(True, {"account_id": aid, "frozen": False}, None, "", False)
         acct["frozen"] = False
-        state["freeze_log"].append({"account_id": aid, "reason": "unfrozen", "frozen": False, "timestamp": "2026-06-24"})
+        state["freeze_log"].append({"account_id": aid, "reason": "unfrozen", "frozen": False, "timestamp": state["current_date"]})
         return _result(True, {"account_id": aid, "frozen": False}, None, "", True)
 
     def verify_account(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

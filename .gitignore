@@ -34,8 +34,6 @@ data/*.json
 data/*.log
 data/*.csv
 data/runs/
-data/experiments/*/
-!data/experiments/.gitkeep
 
 # Training artifacts
 checkpoints/
@@ -63,31 +61,14 @@ CLAUDE.md
 修复记录.MD
 *.修复记录.*
 
-# Development documentation (not needed for running)
-docs/
-data/README.md
-configs/README.md
-
 # Reference papers (not needed for running)
 reference/
-
-# Tests (not needed for running)
-tests/
 
 # Models (downloaded separately, not committed)
 models/
 
 # Dependency graph lock files (runtime artifacts)
 *.json.lock
-
-# Development/benchmark scripts (not needed for running)
-scripts/bench_vllm_throughput.py
-scripts/inspect_prompts.py
-scripts/validate_pipeline.py
-scripts/verify_entities.py
-
-# External datasets (not needed for running)
-data/external/
 
 # Experiment outputs
 experiments/

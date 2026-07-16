@@ -7,7 +7,7 @@ context (tools, live state, execution history) and decides the next action
 built by actual execution against live MCP servers.
 
 Deployment modes:
-  1. Local transformers:  --model models/Qwen3-8B
+  1. Local transformers:  --model models/Qwen/Qwen3-8B
   2. vLLM server:         --model Qwen3-8B --api-base http://localhost:8000/v1
 
 PROVE-aligned defaults:
@@ -27,10 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import shutil
-import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -40,10 +37,24 @@ import pandas as pd
 from loguru import logger
 
 from src.live_mcp.task_planner import (
-    _is_mutating_tool, _SELF_CONTAINED_WRITE_TOOLS,
+    _SELF_CONTAINED_WRITE_TOOLS,
     DOMAIN_DESCRIPTIONS, _format_tools,
 )
+from src.live_mcp.tool_semantics import is_mutating_tool
 from src.live_mcp.dedup import dedup_tasks
+
+
+def _irrelevance_ratio_for_round(
+    configured_ratio: float,
+    recovery_round: int,
+) -> float:
+    """Inject irrelevance only into the initial candidate pool.
+
+    Recovery requests fill a measured row/domain deficit. Re-sampling
+    irrelevance there systematically inflates the configured corpus ratio,
+    especially for low-yield domains that need several recovery rounds.
+    """
+    return configured_ratio if recovery_round == 0 else 0.0
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -64,11 +75,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--api-base", default=None,
                     help="OpenAI-compatible API base URL (local transformers if unset)")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
-    p.add_argument("--output", default="data/train.parquet",
+    p.add_argument("--output", default="data/runs/manual/train.parquet",
                     help="Training data output path")
-    p.add_argument("--val-output", default="data/val.parquet",
+    p.add_argument("--val-output", default="data/runs/manual/val.parquet",
                     help="Validation data output path")
-    p.add_argument("--suite", default="configs/live_mcp/suite_mvp.yaml",
+    p.add_argument("--suite", default="configs/live_mcp/ten_domain_suite.yaml",
                     help="Suite config path")
     p.add_argument("--irrelevance-ratio", type=float, default=0.05,
                     help="Fraction of tasks that require report_error (0 to disable)")
@@ -79,16 +90,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--device", type=int, default=None,
                     help="GPU device ID for local inference (default: auto). "
                          "Use with CUDA_VISIBLE_DEVICES for multi-GPU data-parallel.")
-    p.add_argument("--experiment-tag", default=None,
-                    help="Tag for experiment tracking. If set, writes config.json and "
-                         "result.json to data/experiments/{YYYY-MM-DD}_{tag}/")
     p.add_argument("--log-file", default=None,
                     help="Write all logs to this file (auto-flushed, avoids pipe buffering)")
     p.add_argument("--shard-mode", action="store_true",
                     help="Use shard-local integrity checks; global coverage is checked after merge")
     p.add_argument("--pool-oversample-pct", type=float, default=0.50,
                     help="Candidate oversample ratio applied once by this process")
-    p.add_argument("--max-recovery-rounds", type=int, default=6,
+    p.add_argument("--max-recovery-rounds", type=int, default=3,
                     help="Maximum generation/recovery rounds (must be >= 1)")
     p.add_argument("--checkpoint-path", default=None,
                     help="Optional JSON checkpoint; resumes automatically when it exists")
@@ -97,7 +105,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def generate_data(args: argparse.Namespace):
     """Generate GRPO training data with LLM teacher."""
-    from src.live_mcp.api import LiveMCPBranch
+    from src.live_mcp.generation_runtime import TeacherGenerationRuntime
 
     # ── Validate parameters ──
     if args.count < 1:
@@ -130,15 +138,13 @@ def generate_data(args: argparse.Namespace):
             catch=True,
         )
 
-    start_time = datetime.now(timezone.utc)
-
     print(f"[generate_data] Target: {args.count} train + {args.val_count} val tasks, domain={args.domain}, model={args.model}")
     logger.info(f"Generating GRPO data: {args.count} train + {args.val_count} val tasks")
     logger.info(f"  Domain: {args.domain}")
     logger.info(f"  Model: {args.model}")
     logger.info(f"  Difficulty mix: complete=60%, missing=20%, minimal=20%")
 
-    branch = LiveMCPBranch.from_suite(args.suite)
+    branch = TeacherGenerationRuntime.from_suite(args.suite)
     difficulty_mix = {"complete": 0.6, "missing": 0.2, "minimal": 0.2}
 
     try:
@@ -162,6 +168,10 @@ def generate_data(args: argparse.Namespace):
             requested_domains = [
                 item.strip() for item in args.domain.split(",") if item.strip()
             ]
+        if len(requested_domains) != len(set(requested_domains)):
+            raise ValueError(
+                f"duplicate --domain entries are not allowed: {requested_domains}"
+            )
         train_domain_quotas = _domain_quotas(args.count, requested_domains)
         val_domain_quotas = _domain_quotas(args.val_count, requested_domains)
         desired_domain_counts = {
@@ -190,7 +200,7 @@ def generate_data(args: argparse.Namespace):
                 if request_count <= 0:
                     continue
                 try:
-                    generated = branch.generate_tasks_llm(
+                    generated = branch.generate_tasks(
                         server_name=request_domain,
                         count=request_count,
                         seed=round_seed + request_index * 10000,
@@ -198,7 +208,9 @@ def generate_data(args: argparse.Namespace):
                         model_path=args.model,
                         api_base=args.api_base,
                         device=args.device,
-                        irrelevance_ratio=args.irrelevance_ratio,
+                        irrelevance_ratio=_irrelevance_ratio_for_round(
+                            args.irrelevance_ratio, recovery_round,
+                        ),
                         distractor_rate=args.distractor_rate,
                         missing_function_rate=args.missing_function_rate,
                     )
@@ -229,17 +241,17 @@ def generate_data(args: argparse.Namespace):
 
             # Try to split early — if we already have enough, break out.
             eligible = _filter_training_eligible_tasks(all_tasks)
-            unique_eligible = dedup_tasks(eligible, threshold=0.70)
             if args.shard_mode:
-                # Shards are candidate pools. Per-domain quotas only become
-                # meaningful after all shards share one global dedup pool.
-                # Requiring every shard to satisfy them can fail even when the
-                # combined pool has enough rows for every domain.
-                remaining = max(0, total_count - len(unique_eligible))
+                # Shards are candidate pools.  Jaccard and domain quotas are
+                # global corpus gates and must not be applied independently to
+                # each shard.  A shard recovers only its eligible row shortfall;
+                # sequence diversity is logged below as a diagnostic.
+                remaining = max(0, total_count - len(eligible))
                 pending_domain_requests = (
                     [(args.domain, remaining)] if remaining else []
                 )
             else:
+                unique_eligible = dedup_tasks(eligible, threshold=0.70)
                 _, pending_domain_requests = _domain_recovery_requests(
                     unique_eligible,
                     requested_domains,
@@ -247,13 +259,19 @@ def generate_data(args: argparse.Namespace):
                 )
             if len(eligible) >= total_count and not pending_domain_requests:
                 try:
-                    train_tasks, val_tasks = _stratified_task_split(
-                        eligible, train_count=args.count,
-                        val_count=args.val_count, seed=args.seed,
-                        domain_quotas=(
-                            None if args.shard_mode else desired_domain_counts
-                        ),
-                    )
+                    if args.shard_mode:
+                        train_tasks, val_tasks = _candidate_shard_split(
+                            eligible,
+                            train_count=args.count,
+                            val_count=args.val_count,
+                            seed=args.seed,
+                        )
+                    else:
+                        train_tasks, val_tasks = _stratified_task_split(
+                            eligible, train_count=args.count,
+                            val_count=args.val_count, seed=args.seed,
+                            domain_quotas=desired_domain_counts,
+                        )
                     print(
                         f"[generate_data] Early split success: "
                         f"{len(train_tasks)} train + {len(val_tasks)} val "
@@ -268,7 +286,9 @@ def generate_data(args: argparse.Namespace):
                     unique_count = len(unique)
                     if args.shard_mode:
                         domain_counts = {}
-                        round_requests = [(args.domain, max(1, total_count - unique_count))]
+                        round_requests = [
+                            (args.domain, max(1, total_count - len(eligible)))
+                        ]
                     else:
                         domain_counts, round_requests = _domain_recovery_requests(
                             unique, requested_domains, desired_domain_counts,
@@ -305,11 +325,27 @@ def generate_data(args: argparse.Namespace):
         else:
             # Exhausted recovery rounds — fall through with whatever we have.
             eligible = _filter_training_eligible_tasks(all_tasks)
-            train_tasks, val_tasks = _stratified_task_split(
-                eligible, train_count=args.count,
-                val_count=args.val_count, seed=args.seed,
-                domain_quotas=(None if args.shard_mode else desired_domain_counts),
-            )
+            if args.shard_mode:
+                if not eligible:
+                    raise RuntimeError(
+                        "Shard exhausted recovery without any eligible candidates"
+                    )
+                shard_train_count = min(args.count, len(eligible))
+                shard_val_count = min(
+                    args.val_count, len(eligible) - shard_train_count,
+                )
+                train_tasks, val_tasks = _candidate_shard_split(
+                    eligible,
+                    train_count=shard_train_count,
+                    val_count=shard_val_count,
+                    seed=args.seed,
+                )
+            else:
+                train_tasks, val_tasks = _stratified_task_split(
+                    eligible, train_count=args.count,
+                    val_count=args.val_count, seed=args.seed,
+                    domain_quotas=desired_domain_counts,
+                )
             print(
                 f"[generate_data] Final split: {len(train_tasks)} train + "
                 f"{len(val_tasks)} val from {len(eligible)} eligible "
@@ -320,6 +356,12 @@ def generate_data(args: argparse.Namespace):
         all_tasks = eligible  # ensure downstream uses filtered tasks
         all_rows = _tasks_to_rows(train_tasks, args.seed)
         val_rows = _tasks_to_rows(val_tasks, args.seed + 10000)
+        assert branch.executor is not None
+        _validate_canonical_rows_replay(
+            [*all_rows, *val_rows],
+            manager=branch.manager,
+            executor=branch.executor,
+        )
     finally:
         branch.stop()
 
@@ -334,11 +376,143 @@ def generate_data(args: argparse.Namespace):
 
     df_train.to_parquet(Path(args.output), index=False)
     df_val.to_parquet(Path(args.val_output), index=False)
-
-    if args.experiment_tag:
-        _save_experiment_record(args, df_train, df_val, start_time, difficulty_mix)
+    _validate_parquet_readback(Path(args.output))
+    _validate_parquet_readback(Path(args.val_output))
 
     _print_stats(df_train, df_val, Path(args.output), Path(args.val_output), args)
+
+
+def _validate_canonical_rows_replay(
+    rows: list[dict],
+    *,
+    manager,
+    executor,
+) -> None:
+    """Fresh-replay the exact required workflow that will be written.
+
+    The Teacher attempt trace is replayed inside the orchestrator.  Export can
+    subsequently project exact repeats and successful mutating no-ops out of
+    the RL label, so the projected sequence needs its own isolated replay
+    before Parquet publication.
+    """
+    from src.live_mcp.task_planner import replay_validate
+    from src.live_mcp.types import OracleCall
+    from src.utils import normalize_json_field
+
+    for row_index, row in enumerate(rows):
+        extra_info = row.get("extra_info") or {}
+        reward_model = row.get("reward_model") or {}
+        ground_truth = reward_model.get("ground_truth") or {}
+        raw_calls = normalize_json_field(
+            ground_truth.get("oracle_calls", "[]"), default=[],
+        )
+        raw_criteria = normalize_json_field(
+            ground_truth.get("success_criteria", "[]"), default=[],
+        )
+        if not isinstance(raw_calls, list) or not isinstance(raw_criteria, list):
+            raise RuntimeError(
+                f"canonical replay row {row_index} has invalid oracle payload"
+            )
+        calls = [
+            OracleCall(
+                tool_name=str(call.get("tool_name") or ""),
+                arguments=dict(call.get("arguments") or {}),
+                action=str(call.get("action") or "tool_call"),
+            )
+            for call in raw_calls
+            if isinstance(call, dict)
+        ]
+        hidden_raw = extra_info.get("hidden_tools", [])
+        hidden = normalize_json_field(hidden_raw, default=[])
+        if not isinstance(hidden, list):
+            raise RuntimeError(
+                f"canonical replay row {row_index} has invalid hidden_tools"
+            )
+        try:
+            replay = replay_validate(
+                oracle_calls=calls,
+                manager=manager,
+                executor=executor,
+                seed=int(extra_info["session_seed"]),
+                domain=str(extra_info["domain"]),
+                success_criteria=raw_criteria,
+                blocked_tools={str(name) for name in hidden},
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"canonical replay failed for row {row_index} "
+                f"task={extra_info.get('task_id', row.get('uid', 'unknown'))}: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        valid, error_rate, num_errors, num_calls, criteria_ok, criteria_failed = replay
+        if not valid or not criteria_ok:
+            raise RuntimeError(
+                f"canonical replay rejected task="
+                f"{extra_info.get('task_id', row.get('uid', 'unknown'))}: "
+                f"valid={valid}, errors={num_errors}/{num_calls}, "
+                f"criteria_failed={criteria_failed}"
+            )
+        extra_info["canonical_replay_valid"] = True
+        extra_info["canonical_replay_error_rate"] = float(error_rate)
+        extra_info["canonical_replay_num_errors"] = int(num_errors)
+        extra_info["canonical_replay_num_calls"] = int(num_calls)
+        extra_info["canonical_replay_criteria_ok"] = True
+        extra_info["canonical_replay_criteria_failed"] = int(criteria_failed)
+
+
+def _validate_parquet_readback(path: Path) -> None:
+    """Run every written row through the production reward parser."""
+    import importlib
+    import pandas as pd
+    from src.live_mcp.environment_metadata import (
+        compute_initial_state_hashes,
+        validate_prove_corpus_evidence,
+        validate_teacher_generation_evidence,
+        validate_environment_metadata,
+    )
+    from src.reward.oval_reward_fn import _build_task_dict
+    from src.utils import normalize_extra_info
+
+    frame = pd.read_parquet(path)
+    for row_index, raw_extra in enumerate(frame.get("extra_info", [])):
+        try:
+            extra_info = normalize_extra_info(raw_extra)
+            validate_prove_corpus_evidence(extra_info)
+            validate_teacher_generation_evidence(extra_info)
+            owners_raw = extra_info.get("tool_owner_domains", {})
+            if isinstance(owners_raw, str):
+                owners_raw = json.loads(owners_raw)
+            owners = {str(extra_info.get("domain") or "")}
+            if isinstance(owners_raw, dict):
+                owners.update(str(owner) for owner in owners_raw.values())
+            owners.discard("")
+            tools_by_owner = {
+                owner: list(importlib.import_module(
+                    f"src.live_mcp.servers.{owner}.server"
+                ).TOOLS)
+                for owner in owners
+            }
+            validate_environment_metadata(
+                extra_info,
+                current_tools_by_domain=tools_by_owner,
+                required_owner_domains=owners,
+                reward_profile="prove_baseline",
+                runtime_max_observation_chars=int(
+                    extra_info.get("max_observation_chars", 4096)
+                ),
+                current_initial_state_hashes=compute_initial_state_hashes(
+                    owners, int(extra_info["session_seed"]),
+                ),
+            )
+            task = _build_task_dict(extra_info)
+        except Exception as exc:
+            raise RuntimeError(
+                f"{path}: row {row_index} failed production parser readback: {exc}"
+            ) from exc
+        if not isinstance(task, dict) or "required_tool_calls" not in task:
+            raise RuntimeError(
+                f"{path}: row {row_index} produced invalid reward task"
+            )
 
 
 def _domain_recovery_requests(
@@ -360,6 +534,35 @@ def _domain_recovery_requests(
         if domain_counts[domain] < target
     ]
     return domain_counts, requests
+
+
+def _candidate_shard_split(
+    tasks: list,
+    train_count: int,
+    val_count: int,
+    seed: int,
+) -> tuple[list, list]:
+    """Allocate an eligible candidate shard without local corpus gates.
+
+    Global merge owns exact/fingerprint/Jaccard deduplication and domain
+    quotas.  Keeping all eligible shard candidates is necessary for later
+    top-up rounds to compose normally even when one domain has only a few
+    distinct tool sequences.
+    """
+    required = train_count + val_count
+    if len(tasks) < required:
+        raise RuntimeError(
+            f"Cannot allocate candidate shard from {len(tasks)} tasks; "
+            f"need {required}"
+        )
+    candidates = list(tasks)
+    for task in candidates:
+        task.metadata["semantic_fingerprint"] = _task_fingerprint(task)
+    import random
+    random.Random(seed).shuffle(candidates)
+    train = candidates[:train_count]
+    val = candidates[train_count:required]
+    return train, val
 
 
 def _domain_quotas(target: int, domains: list[str]) -> dict[str, int]:
@@ -549,8 +752,23 @@ def _required_round_oracle_calls(task, round_idx: int, round_calls: list) -> lis
                 matched = event
                 history_cursor = index + 1
                 break
-        if matched is not None and matched.get("no_progress_warning"):
-            continue
+        if matched is not None:
+            if matched.get("no_progress_warning"):
+                continue
+            domain = (
+                task.target_servers[0]
+                if getattr(task, "target_servers", None)
+                else ""
+            )
+            if (
+                domain
+                and matched.get("state_changed") is False
+                and is_mutating_tool(call.tool_name, domain)
+            ):
+                # The factual attempt remains in teacher_attempt_trace.  A
+                # successful idempotent/no-op mutation did not produce a
+                # required outcome and must not be rewarded as ground truth.
+                continue
         required.append(call)
     return required
 
@@ -627,21 +845,9 @@ def _build_round_contracts(task) -> list[dict]:
         list[dict] with keys: round_idx, required_tools, allowed_terminal_actions
     """
     if not task.oracle_calls_per_round:
-        # Single-round legacy: derive from flattened oracle_program
-        oracle_calls = getattr(task.oracle_program, "calls", None) or []
-        tools: list[str] = []
-        terminal = "final_answer"
-        for oc in oracle_calls:
-            action = getattr(oc, "action", "tool_call")
-            if action == "tool_call":
-                tools.append(getattr(oc, "tool_name", ""))
-            elif action in ("final_answer", "ask_clarification", "report_error"):
-                terminal = action
-        return [{
-            "round_idx": 0,
-            "required_tools": [t for t in tools if t],
-            "allowed_terminal_actions": [terminal],
-        }]
+        raise ValueError(
+            f"Task {task.task_id} has no canonical oracle_calls_per_round"
+        )
 
     contracts = []
     for round_idx, round_calls in enumerate(task.oracle_calls_per_round):
@@ -758,7 +964,7 @@ def _validate_task_training_contract(task) -> None:
         criteria = _task_success_criteria(task)
         if not criteria:
             state_changing = [t for t in real_required_tools
-                             if _is_mutating_tool(t)
+                             if is_mutating_tool(t, task.target_servers[0])
                              and t not in _SELF_CONTAINED_WRITE_TOOLS]
             if state_changing:
                 # PROVE does NOT reject tasks with empty criteria: R_coverage
@@ -829,6 +1035,36 @@ def _validate_task_training_contract(task) -> None:
                 raise ValueError(
                     f"Task {task.task_id}: round_contracts[{i}]."
                     f"allowed_terminal_actions contains unknown action '{a}'"
+                )
+
+    generation_method = str((task.metadata or {}).get("generation_method", ""))
+    if generation_method in {"task_planner", "irrelevant_teacher_fsm"}:
+        attempt_trace = (task.metadata or {}).get("teacher_attempt_trace")
+        round_trace = (task.metadata or {}).get("teacher_round_trace")
+        if not isinstance(attempt_trace, list):
+            raise ValueError(
+                f"Task {task.task_id}: missing canonical teacher_attempt_trace"
+            )
+        if len(attempt_trace) != int(
+            (task.metadata or {}).get("teacher_attempt_count", -1)
+        ):
+            raise ValueError(
+                f"Task {task.task_id}: teacher_attempt_trace/count mismatch"
+            )
+        if not isinstance(round_trace, list) or len(round_trace) != n_queries:
+            raise ValueError(
+                f"Task {task.task_id}: teacher_round_trace/query mismatch"
+            )
+        for round_idx, trace in enumerate(round_trace):
+            if not isinstance(trace, dict) or trace.get("round_idx") != round_idx:
+                raise ValueError(
+                    f"Task {task.task_id}: invalid teacher round trace "
+                    f"at index {round_idx}"
+                )
+            if str(trace.get("user_query", "")) != str(queries[round_idx]):
+                raise ValueError(
+                    f"Task {task.task_id}: teacher round query mismatch "
+                    f"at index {round_idx}"
                 )
     # ── P0-3: dependency edge integrity ──
     # Chain-seeded tasks MUST produce exactly len(chain_seed)-1 valid edges.
@@ -922,10 +1158,19 @@ def _filter_training_eligible_tasks(tasks: list) -> list:
     eligible = []
     dropped = 0
     for task in tasks:
-        if task.metadata.get("paper_replay_valid") is False:
+        if task.metadata.get("paper_replay_valid") is not True:
             dropped += 1
             logger.warning(
-                "Dropping generated task before split: {} failed PROVE replay validation",
+                "Dropping generated task before split: {} has no positive "
+                "PROVE replay evidence",
+                task.task_id,
+            )
+            continue
+        if task.metadata.get("provenance_valid") is not True:
+            dropped += 1
+            logger.warning(
+                "Dropping generated task before split: {} has no positive "
+                "PROVE provenance evidence",
                 task.task_id,
             )
             continue
@@ -1089,7 +1334,16 @@ def _row_fingerprint(row) -> str:
 
 
 def _assert_split_integrity(df_train, df_val, args) -> None:
-    if len(df_train) != args.count or len(df_val) != args.val_count:
+    if args.shard_mode:
+        if len(df_train) + len(df_val) == 0:
+            raise RuntimeError("Candidate shard contains no rows")
+        if len(df_train) > args.count or len(df_val) > args.val_count:
+            raise RuntimeError(
+                f"Candidate shard exceeds allocation: "
+                f"train={len(df_train)}/{args.count}, "
+                f"val={len(df_val)}/{args.val_count}"
+            )
+    elif len(df_train) != args.count or len(df_val) != args.val_count:
         raise RuntimeError(
             f"Split size mismatch: train={len(df_train)}/{args.count}, "
             f"val={len(df_val)}/{args.val_count}"
@@ -1099,7 +1353,7 @@ def _assert_split_integrity(df_train, df_val, args) -> None:
     train_fp.discard("")
     val_fp.discard("")
     overlap = train_fp & val_fp
-    if overlap:
+    if overlap and not args.shard_mode:
         logger.warning(
             "Train/val fingerprint collision within shard — deduplicating val (%d rows). "
             "This is expected at shard level; final merge handles cross-shard dedup.",
@@ -1349,6 +1603,41 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "required_tools": real_required_tools,
             "session_seed": task.session_seed,
             "initial_state_hash": task.metadata.get("initial_state_hash", ""),
+            "server_schema_hash": task.metadata.get("server_schema_hash", ""),
+            "server_schema_hashes": json.dumps(
+                task.metadata.get("server_schema_hashes", {}),
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            "transition_fingerprints": json.dumps(
+                task.metadata.get("transition_fingerprints", {}),
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            "initial_state_hashes": json.dumps(
+                task.metadata.get("initial_state_hashes", {}),
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            "reward_fingerprint": task.metadata.get(
+                "reward_fingerprint", ""
+            ),
+            "observation_schema_version": task.metadata.get(
+                "observation_schema_version", ""
+            ),
+            "observation_projection_version": task.metadata.get("observation_projection_version", ""),
+            "trajectory_schema_version": task.metadata.get(
+                "trajectory_schema_version", ""
+            ),
+            "max_observation_chars": int(
+                task.metadata.get("max_observation_chars", 4096)
+            ),
+            "reward_profile_compatibility": list(
+                task.metadata.get(
+                    "reward_profile_compatibility",
+                    ["prove_baseline", "oval_full"],
+                )
+            ),
             "user_query": task.user_prompt,
             "budget": action_budget,
             "minimum_action_budget": minimum_action_budget,
@@ -1398,6 +1687,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             # dicts round-trip through Parquet without struct unification.
             "oracle_calls": json.dumps(oracle_calls_serialized, ensure_ascii=False, default=str),
             "success_criteria": success_criteria_json,
+            "has_state_outcome_oracle": bool(success_criteria),
             "hidden_tools": list(task.hidden_tools) if task.hidden_tools else [],
             "visible_tool_names": visible_tool_names,
             "tool_owner_domains": json.dumps({
@@ -1429,7 +1719,11 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "dependency_graph_complete": dependency_graph_complete,
             "generation_mode": generation_mode,
             # P0-3: data quality signals from replay validation.
-            "paper_replay_valid": task.metadata.get("paper_replay_valid", True),
+            "paper_replay_valid": task.metadata.get("paper_replay_valid"),
+            "provenance_valid": task.metadata.get("provenance_valid"),
+            "provenance_violation_count": int(
+                task.metadata.get("provenance_violation_count", 0)
+            ),
             "project_outcome_valid": task.metadata.get("project_outcome_valid", True),
             "replay_error_rate": task.metadata.get("replay_error_rate", 0.0),
             "replay_num_calls": int(task.metadata.get("replay_num_calls", 0)),
@@ -1440,7 +1734,25 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "teacher_failed_attempt_count": int(
                 task.metadata.get("teacher_failed_attempt_count", 0)
             ),
+            "teacher_attempt_trace": json.dumps(
+                task.metadata.get("teacher_attempt_trace", []),
+                ensure_ascii=False,
+                default=str,
+            ),
+            "teacher_round_trace": json.dumps(
+                task.metadata.get("teacher_round_trace", []),
+                ensure_ascii=False,
+                default=str,
+            ),
             "criteria_failed_count": task.metadata.get("criteria_failed", 0),
+            "success_criteria_provenance": json.dumps(
+                task.metadata.get("success_criteria_provenance", []),
+                ensure_ascii=False,
+                default=str,
+            ),
+            "unattributed_success_criteria": int(
+                task.metadata.get("unattributed_success_criteria", 0)
+            ),
             "fsm_final_state": task.metadata.get("fsm_final_state", ""),
             "fsm_transitions": json.dumps(
                 task.metadata.get("fsm_transitions", []),
@@ -1477,88 +1789,6 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         )
 
     return rows
-
-
-def _save_experiment_record(args, df_train, df_val, start_time: datetime, difficulty_mix: dict):
-    """Save experiment config and results to data/experiments/{date}_{tag}/."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    exp_dir = PROJECT_ROOT / "data" / "experiments" / f"{today}_{args.experiment_tag}"
-    exp_dir.mkdir(parents=True, exist_ok=True)
-
-    # Git commit hash
-    try:
-        git_commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=PROJECT_ROOT, text=True,
-        ).strip()
-    except Exception:
-        git_commit = "unknown"
-
-    # GPU info
-    try:
-        gpu_info = subprocess.check_output(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-            text=True,
-        ).strip().split("\n")[0] if shutil.which("nvidia-smi") else "unknown"
-    except Exception:
-        gpu_info = "unknown"
-
-    end_time = datetime.now(timezone.utc)
-    duration = (end_time - start_time).total_seconds()
-
-    # config.json
-    config = {
-        "run_id": f"{today}_{args.experiment_tag}",
-        "command": " ".join(sys.argv),
-        "model": args.model,
-        "api_base": args.api_base or "local",
-        "domain": args.domain,
-        "count": args.count,
-        "val_count": args.val_count,
-        "seed": args.seed,
-        "distractor_rate": args.distractor_rate,
-        "missing_function_rate": args.missing_function_rate,
-        "irrelevance_ratio": args.irrelevance_ratio,
-        "difficulty_mix": difficulty_mix,
-        "git_commit": git_commit,
-        "gpu_model": gpu_info,
-        "timestamp": start_time.isoformat(),
-    }
-    (exp_dir / "config.json").write_text(
-        json.dumps(config, indent=2, ensure_ascii=False) + "\n"
-    )
-
-    # result.json
-    if len(df_train) > 0:
-        domain_dist = _domain_distribution(df_train)
-        scenario_dist = df_train["scenario_type"].value_counts().to_dict()
-        difficulty_dist = df_train["perturbation_level"].value_counts().to_dict()
-    else:
-        domain_dist = {}
-        scenario_dist = {}
-        difficulty_dist = {}
-
-    result = {
-        "run_id": config["run_id"],
-        "train_rows": int(len(df_train)),
-        "val_rows": int(len(df_val)),
-        "yield": round(len(df_train) / args.count, 3) if args.count > 0 else 0.0,
-        "duration_seconds": round(duration, 1),
-        "domain_distribution": domain_dist,
-        "scenario_distribution": scenario_dist,
-        "difficulty_distribution": difficulty_dist,
-        "empty_success_criteria": _empty_success_criteria_counts(df_train),
-        "val_scenario_distribution": (
-            df_val["scenario_type"].value_counts().to_dict()
-            if len(df_val) > 0 else {}
-        ),
-        "timestamp": end_time.isoformat(),
-    }
-    (exp_dir / "result.json").write_text(
-        json.dumps(result, indent=2, ensure_ascii=False) + "\n"
-    )
-
-    logger.info(f"Experiment record saved: {exp_dir}")
 
 
 def _domain_distribution(df: pd.DataFrame) -> dict:

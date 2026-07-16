@@ -1,8 +1,8 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
+  "dependency_semantics_version": 11,
   "server_name": "shopping",
-  "schema_hash": "9653bef37bce5b11",
+  "schema_hash": "a9d98457e62d89c9",
   "tool_names": [
     "add_review",
     "add_to_cart",
@@ -38,15 +38,13 @@
       "implicit": [
         "apply_coupon",
         "checkout",
-        "remove_from_cart",
         "update_cart_quantity"
       ]
     },
     "add_to_wishlist": {
       "explicit": [],
       "implicit": [
-        "get_wishlist",
-        "remove_from_wishlist"
+        "get_wishlist"
       ]
     },
     "apply_coupon": {
@@ -68,19 +66,24 @@
       "implicit": []
     },
     "compare_products": {
-      "explicit": [],
+      "explicit": [
+        "add_to_wishlist"
+      ],
       "implicit": []
     },
     "get_cart": {
       "explicit": [
         "get_product",
         "get_reviews",
-        "remove_from_cart"
+        "remove_from_cart",
+        "update_cart_quantity"
       ],
       "implicit": []
     },
     "get_coupons": {
-      "explicit": [],
+      "explicit": [
+        "apply_coupon"
+      ],
       "implicit": []
     },
     "get_order": {
@@ -140,6 +143,7 @@
     },
     "search_products": {
       "explicit": [
+        "add_to_cart",
         "get_product",
         "update_cart_quantity"
       ],
@@ -493,9 +497,9 @@
         "add_to_cart",
         "remove_from_cart"
       ],
-      "source": "add_to_cart",
-      "target": "remove_from_cart",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -520,9 +524,9 @@
         "add_to_cart",
         "search_products"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_products",
+      "target": "add_to_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -574,9 +578,9 @@
         "add_to_wishlist",
         "compare_products"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "compare_products",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -682,9 +686,9 @@
         "add_to_wishlist",
         "remove_from_wishlist"
       ],
-      "source": "add_to_wishlist",
-      "target": "remove_from_wishlist",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -763,9 +767,9 @@
         "apply_coupon",
         "get_coupons"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_coupons",
+      "target": "apply_coupon",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1483,9 +1487,9 @@
         "get_cart",
         "update_cart_quantity"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_cart",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2433,9 +2437,9 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
   "tool_count": 23,
   "expected_pair_count": 253,
   "classified_pair_count": 253,

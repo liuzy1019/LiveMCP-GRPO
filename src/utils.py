@@ -146,24 +146,18 @@ def extract_json(text: str) -> dict[str, Any]:
     return {}
 
 def iter_prompt_messages(records: list[dict]) -> Iterable[list[dict]]:
-    """从 parquet records 中迭代 prompt 消息。
-
-    parquet 里 prompt 列实际是 list<struct{role, content}>。
-    保留对 JSON 字符串形式的兜底（旧数据兼容）。
-    """
+    """Parse the canonical JSON-string prompt column from Parquet rows."""
     import json as _json
     for r in records:
         p = r.get("prompt")
-        if p is None:
-            yield [{"role": "user", "content": ""}]
-            continue
-        if isinstance(p, list):
-            yield list(p)
-            continue
-        if isinstance(p, str):
-            try:
-                yield _json.loads(p)
-            except (ValueError, TypeError):
-                yield [{"role": "user", "content": p}]
-            continue
-        yield [{"role": "user", "content": str(p)}]
+        if not isinstance(p, str):
+            raise ValueError("prompt must be a JSON string")
+        try:
+            messages = _json.loads(p)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("prompt contains invalid JSON") from exc
+        if not isinstance(messages, list) or not all(
+            isinstance(message, dict) for message in messages
+        ):
+            raise ValueError("prompt JSON must be a list of message objects")
+        yield messages

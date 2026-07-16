@@ -1,16 +1,16 @@
 #!/bin/bash
 # Unified data generation for LiveMCP-GRPO.
 #
-# Auto-detects model size from config.json, compares with GPU memory,
+# Defaults to the validated 4-GPU Teacher-generation profile, detects model
+# size from config.json, compares with GPU memory,
 # and picks the optimal parallel strategy:
 #   - Small model (fits 1 GPU) → local transformers, 1 process per GPU
 #   - Large model (needs TP) → vLLM API server(s), 1 process per instance
 #
 # Usage:
 #   bash scripts/generate_data.sh --count 500 --val-count 100
-#   bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-gemini-proxy/v1 --count 500 --val-count 100
 #   bash scripts/generate_data.sh --domain calendar --count 200
-#   GPU_COUNT=4 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 200
+#   GPU_COUNT=8 bash scripts/generate_data.sh --model models/Qwen/Qwen3-8B --count 200
 #
 # Env override:
 #   OUTPUT_DIR=data  GPU_COUNT=8  VLLM_PORT_START=8001
@@ -75,7 +75,7 @@ MODEL="models/Google/Gemma-4-31B-it"
 COUNT=5000
 VAL_COUNT=500
 DOMAIN="all"
-SUITE="configs/live_mcp/suite_mvp.yaml"
+SUITE="configs/live_mcp/ten_domain_suite.yaml"
 SEED=42
 OUTPUT_DIR="${OUTPUT_DIR:-data}"
 GEN_OVERSAMPLE_PCT="${GEN_OVERSAMPLE_PCT:-10}"  # 10% oversample; set GEN_OVERSAMPLE_PCT env var to override
@@ -114,6 +114,9 @@ export LIVEMCP_TEACHER_TRACE_PATH="${LIVEMCP_TEACHER_TRACE_PATH:-logs/${RUN_ID}_
 exec > >(tee -a "${MAIN_LOG}") 2>&1
 
 # ── GPU detection (via shared gpu_config.sh) ────────────────────────
+# The current formal Teacher-generation baseline is 4×A10 / one TP=4 vLLM
+# instance.  Callers can still opt into another resource count explicitly.
+GPU_COUNT="${GPU_COUNT:-4}"
 source scripts/gpu_config.sh
 GPU_MEM_GB=${GPU_MEM_GB:-0}
 
@@ -198,28 +201,12 @@ _cleanup() {
             kill -TERM "$pid" 2>/dev/null || true
         fi
     done
-    for port in "${VLLM_PORTS[@]}"; do
-        for pid in $(_pids_listening_on_port "${port}"); do
-            if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
-                echo "[cleanup] SIGTERM port ${port} pid=${pid}" >&2
-                kill -TERM "$pid" 2>/dev/null || true
-            fi
-        done
-    done
     sleep 2
     # SIGKILL stragglers
     for pid in "${VLLM_PIDS[@]}"; do
         if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
             kill -KILL "$pid" 2>/dev/null || true
         fi
-    done
-    for port in "${VLLM_PORTS[@]}"; do
-        for pid in $(_pids_listening_on_port "${port}"); do
-            if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
-                echo "[cleanup] SIGKILL port ${port} pid=${pid}" >&2
-                kill -KILL "$pid" 2>/dev/null || true
-            fi
-        done
     done
     # 成功时删除 vLLM 日志；失败时保留用于排查
     if [ "${GEN_SUCCESS}" = "1" ]; then
@@ -239,7 +226,6 @@ _cleanup() {
 trap _cleanup EXIT INT TERM
 
 # ── Environment ────────────────────────────────────────────────────
-export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 export FLASHINFER_WORKSPACE_BASE="${FLASHINFER_WORKSPACE_BASE:-$HOME}"
 export NVCC_APPEND_FLAGS=-allow-unsupported-compiler
@@ -249,7 +235,7 @@ if [[ "${DEPENDENCY_CACHE_PREWARM}" != "0" && "${DEPENDENCY_CACHE_PREWARM}" != "
     exit 1
 fi
 GENERATION_CLIENT_SEED_STRIDE="${GENERATION_CLIENT_SEED_STRIDE:-1000000}"
-GENERATION_MAX_RECOVERY_ROUNDS="${GENERATION_MAX_RECOVERY_ROUNDS:-6}"
+GENERATION_MAX_RECOVERY_ROUNDS="${GENERATION_MAX_RECOVERY_ROUNDS:-3}"
 MERGE_TOPUP_ROUNDS="${MERGE_TOPUP_ROUNDS:-3}"
 if ! [[ "${GENERATION_MAX_RECOVERY_ROUNDS}" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: GENERATION_MAX_RECOVERY_ROUNDS must be >= 1, got ${GENERATION_MAX_RECOVERY_ROUNDS}" >&2
@@ -263,15 +249,16 @@ if ! [[ "${MERGE_TOPUP_ROUNDS}" =~ ^[0-9]+$ ]]; then
     echo "ERROR: MERGE_TOPUP_ROUNDS must be >= 0, got ${MERGE_TOPUP_ROUNDS}" >&2
     exit 1
 fi
-if [ "${GENERATION_CLIENT_SEED_STRIDE}" -le 200000 ]; then
-    echo "ERROR: GENERATION_CLIENT_SEED_STRIDE must exceed the 200000 recovery range, got ${GENERATION_CLIENT_SEED_STRIDE}" >&2
+MAX_RECOVERY_SEED_OFFSET=$(( (GENERATION_MAX_RECOVERY_ROUNDS - 1) * 100000 + 90000 ))
+if [ "${GENERATION_CLIENT_SEED_STRIDE}" -le "${MAX_RECOVERY_SEED_OFFSET}" ]; then
+    echo "ERROR: GENERATION_CLIENT_SEED_STRIDE must exceed max recovery offset ${MAX_RECOVERY_SEED_OFFSET}, got ${GENERATION_CLIENT_SEED_STRIDE}" >&2
     exit 1
 fi
 
 merge_vllm_with_topups() {
     local deficits_path="${TMPDIR_SHARD}/merge_deficits.json"
     local topup_round=0
-    while ! "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
+    while ! "${PYTHON_BIN}" scripts/merge_generation_shards.py \
         --tmpdir "${TMPDIR_SHARD}" \
         --output-dir "${RUN_DIR}" \
         --count "${COUNT}" \
@@ -289,7 +276,12 @@ import json, sys
 report = json.load(open(sys.argv[1], encoding="utf-8"))
 for domain, missing in sorted(report.get("deficits", {}).items()):
     if domain != "__all__" and int(missing) > 0:
-        print(f"{domain}\t{int(missing)}")
+        suggested = int(
+            report.get("suggested_topup_by_domain", {}).get(
+                domain, int(missing) + max(2, (int(missing) + 1) // 2)
+            )
+        )
+        print(f"{domain}\t{int(missing)}\t{suggested}")
 ' "${deficits_path}")
         if [ "${#topup_deficits[@]}" -eq 0 ]; then
             echo "ERROR: merge failed but reported no domain-specific deficit" >&2
@@ -299,35 +291,48 @@ for domain, missing in sorted(report.get("deficits", {}).items()):
         echo "Top-up round ${topup_round}: ${#topup_deficits[@]} deficit domain(s)"
         local -a topup_pids=()
         local topup_index=0
-        local entry topup_domain missing extra topup_count topup_inst topup_port topup_seed topup_prefix
+        local total_topup_slots="${TOTAL_GEN_CLIENTS:-${NUM_INSTANCES}}"
+        local slots_per_domain=$(( total_topup_slots / ${#topup_deficits[@]} ))
+        if [ "${slots_per_domain}" -lt 1 ]; then slots_per_domain=1; fi
+        local entry topup_domain missing topup_count topup_inst topup_port topup_seed topup_prefix
+        local chunk_count chunk_index chunk_base chunk_remainder chunk_size
         for entry in "${topup_deficits[@]}"; do
-            IFS=$'\t' read -r topup_domain missing <<< "${entry}"
-            extra=$(( (missing + 1) / 2 ))
-            if [ "${extra}" -lt 2 ]; then extra=2; fi
-            topup_count=$((missing + extra))
-            topup_inst=$((topup_index % NUM_INSTANCES))
-            topup_port=$((PORT_START + topup_inst))
-            topup_seed=$((SEED + (topup_round + 10) * GENERATION_CLIENT_SEED_STRIDE + topup_index * 10000))
-            topup_prefix="topup_${topup_round}_${topup_domain}"
-            echo "  [${topup_domain}] missing=${missing}, generating=${topup_count}, port=${topup_port}"
-            "${PYTHON_BIN}" scripts/generate_data.py \
-                --count "${topup_count}" \
-                --val-count 0 \
-                --seed "${topup_seed}" \
-                --domain "${topup_domain}" \
-                --model "${SERVED_MODEL}" \
-                --api-base "http://localhost:${topup_port}/v1" \
-                --suite "${SUITE}" \
-                --shard-mode \
-                --pool-oversample-pct 0 \
-                --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
-                --checkpoint-path "${TMPDIR_SHARD}/shard_${topup_prefix}_checkpoint.json" \
-                --output "${TMPDIR_SHARD}/shard_${topup_prefix}_train.parquet" \
-                --val-output "${TMPDIR_SHARD}/shard_${topup_prefix}_val.parquet" \
-                --log-file "${TMPDIR_SHARD}/shard_${topup_prefix}.log" \
-                > "${TMPDIR_SHARD}/shard_${topup_prefix}.stdout" 2>&1 &
-            topup_pids+=($!)
-            topup_index=$((topup_index + 1))
+            IFS=$'\t' read -r topup_domain missing topup_count <<< "${entry}"
+            chunk_count="${slots_per_domain}"
+            if [ "${topup_count}" -lt "${chunk_count}" ]; then chunk_count="${topup_count}"; fi
+            chunk_base=$(( topup_count / chunk_count ))
+            chunk_remainder=$(( topup_count % chunk_count ))
+            echo "  [${topup_domain}] missing=${missing}, generating=${topup_count} across ${chunk_count} shard(s)"
+            for ((chunk_index=0; chunk_index<chunk_count; chunk_index++)); do
+                chunk_size="${chunk_base}"
+                if [ "${chunk_index}" -lt "${chunk_remainder}" ]; then
+                    chunk_size=$((chunk_size + 1))
+                fi
+                topup_inst=$((topup_index % NUM_INSTANCES))
+                topup_port=$((PORT_START + topup_inst))
+                topup_seed=$((SEED + (TOTAL_GEN_CLIENTS + 1 + topup_round * total_topup_slots + topup_index) * GENERATION_CLIENT_SEED_STRIDE))
+                topup_prefix="topup_${topup_round}_${topup_domain}_${chunk_index}"
+                echo "    shard=${chunk_index}, count=${chunk_size}, port=${topup_port}"
+                "${PYTHON_BIN}" scripts/generate_data.py \
+                    --count "${chunk_size}" \
+                    --val-count 0 \
+                    --seed "${topup_seed}" \
+                    --domain "${topup_domain}" \
+                    --model "${SERVED_MODEL}" \
+                    --api-base "http://localhost:${topup_port}/v1" \
+                    --suite "${SUITE}" \
+                    --shard-mode \
+                    --pool-oversample-pct 0 \
+                    --irrelevance-ratio 0 \
+                    --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
+                    --checkpoint-path "${TMPDIR_SHARD}/shard_${topup_prefix}_checkpoint.json" \
+                    --output "${TMPDIR_SHARD}/shard_${topup_prefix}_train.parquet" \
+                    --val-output "${TMPDIR_SHARD}/shard_${topup_prefix}_val.parquet" \
+                    --log-file "${TMPDIR_SHARD}/shard_${topup_prefix}.log" \
+                    > "${TMPDIR_SHARD}/shard_${topup_prefix}.stdout" 2>&1 &
+                topup_pids+=($!)
+                topup_index=$((topup_index + 1))
+            done
         done
         local topup_failed=0
         local i
@@ -338,8 +343,7 @@ for domain, missing in sorted(report.get("deficits", {}).items()):
             }
         done
         if [ "${topup_failed}" -gt 0 ]; then
-            echo "ERROR: ${topup_failed}/${#topup_pids[@]} top-up processes failed" >&2
-            return 1
+            echo "WARNING: ${topup_failed}/${#topup_pids[@]} top-up processes failed; preserving successful candidate shards and recomputing global deficits" >&2
         fi
     done
 }
@@ -353,7 +357,8 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
         echo "ERROR: GENERATION_WORKERS_PER_PROCESS must be >= 1, got ${GENERATION_WORKERS_PER_PROCESS}" >&2
         exit 1
     fi
-    export LIVEMCP_GENERATION_MAX_WORKERS="${GENERATION_WORKERS_PER_PROCESS}"
+export LIVEMCP_GENERATION_MAX_WORKERS="${GENERATION_WORKERS_PER_PROCESS}"
+export OVAL_SUITE_PATH="${SUITE}"
     echo ""
     echo "Strategy: LOCAL — ${GPU_COUNT} parallel processes, 1 per GPU"
     echo "Generation workers: ${GENERATION_WORKERS_PER_PROCESS} per process"
@@ -371,7 +376,7 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
         echo ""
         echo "Prewarming dependency graph cache for domain=${DOMAIN}..."
         CUDA_VISIBLE_DEVICES="${GPU_INDEX_ARRAY[0]}" \
-            "${PYTHON_BIN}" scripts/dependency_graph.py \
+            "${PYTHON_BIN}" scripts/build_dependency_cache.py \
                 --domain "${DOMAIN}" \
                 --model "${MODEL}" \
                 --suite "${SUITE}" \
@@ -423,7 +428,7 @@ if [ "$FITS_SINGLE_GPU" = "1" ]; then
         exit 1
     fi
 
-    "${PYTHON_BIN}" scripts/merge_rollout_shards.py \
+    "${PYTHON_BIN}" scripts/merge_generation_shards.py \
         --tmpdir "${TMPDIR_SHARD}" \
         --output-dir "${RUN_DIR}" \
         --count "${COUNT}" \
@@ -550,6 +555,11 @@ print(tp)
         GPU_SLICE=("${GPU_INDEX_ARRAY[@]:$GPU_START:$TP_SIZE}")
         GPU_LIST=$(IFS=','; echo "${GPU_SLICE[*]}")
         PORT=$(( PORT_START + inst ))
+        EXISTING_PORT_PIDS="$(_pids_listening_on_port "${PORT}")"
+        if [ -n "${EXISTING_PORT_PIDS}" ]; then
+            echo "ERROR: vLLM port ${PORT} is already in use by pid(s): ${EXISTING_PORT_PIDS}" >&2
+            exit 1
+        fi
         VLLM_PORTS+=("${PORT}")
         LOG="logs/${RUN_ID}_vllm_instance${inst}.log"
         VLLM_LOGS+=("${LOG}")
@@ -575,16 +585,21 @@ print(tp)
             --port "${PORT}" \
             --trust-remote-code
         )
-        # Gemma-4 is a multimodal model; vLLM allocates extra encoder cache for vision.
-        # We only use text generation — disable vision encoder to reclaim memory on A10.
+        # Gemma-4 is multimodal, but the Teacher pipeline is text-only.  Disable every
+        # multimodal input (including video), otherwise vLLM profiles an encoder cache
+        # and leaves too little KV cache for concurrent 8192-token requests on A10.
         if [[ "${MODEL}" == *"Gemma-4"* ]]; then
-            VLLM_ARGS+=(--limit-mm-per-prompt '{"image": 0}')
+            VLLM_ARGS+=(--language-model-only)
         fi
         if [ "${VLLM_ENFORCE_EAGER}" = "1" ]; then
             VLLM_ARGS+=(--enforce-eager)
         fi
 
-        CUDA_VISIBLE_DEVICES="${GPU_LIST}" "${PYTHON_BIN}" "${VLLM_ARGS[@]}" > "${LOG}" 2>&1 &
+        # This is a launcher-side concurrency setting, not a vLLM setting.  Do
+        # not leak it into vLLM's reserved VLLM_* environment namespace.
+        env -u VLLM_CLIENTS_PER_INSTANCE \
+            CUDA_VISIBLE_DEVICES="${GPU_LIST}" \
+            "${PYTHON_BIN}" "${VLLM_ARGS[@]}" > "${LOG}" 2>&1 &
         VLLM_PIDS+=($!)
     done
 
@@ -624,7 +639,7 @@ print(tp)
     if [ "${DEPENDENCY_CACHE_PREWARM}" = "1" ]; then
         echo ""
         echo "Prewarming dependency graph cache for domain=${DOMAIN}..."
-        "${PYTHON_BIN}" scripts/dependency_graph.py \
+        "${PYTHON_BIN}" scripts/build_dependency_cache.py \
             --domain "${DOMAIN}" \
             --model "${SERVED_MODEL}" \
             --api-base "http://localhost:${PORT_START}/v1" \
@@ -758,16 +773,20 @@ for label, path in [('train', '${RUN_DIR}/train.parquet'), ('val', '${RUN_DIR}/v
         print(f'    FAIL: {bad_prompt} rows have invalid prompt JSON')
         issues += 1
 
-    # Spot-check: first row _build_task_dict
+    # Production readback: every row must survive the same normalization and
+    # task reconstruction used by training/reward.
     try:
         from src.reward.oval_reward_fn import _build_task_dict
-        first_extra = df.iloc[0]['extra_info']
-        td = _build_task_dict(first_extra)
-        if not isinstance(td, dict) or 'required_tool_calls' not in td:
-            print(f'    FAIL: _build_task_dict spot-check returned invalid dict')
-            issues += 1
+        from src.utils import normalize_extra_info
+        for row_idx, row in df.iterrows():
+            normalized = normalize_extra_info(row['extra_info'])
+            td = _build_task_dict(normalized)
+            if not isinstance(td, dict) or 'required_tool_calls' not in td:
+                print(f'    FAIL: row {row_idx} _build_task_dict returned invalid dict')
+                issues += 1
+                break
     except Exception as e:
-        print(f'    FAIL: _build_task_dict spot-check crashed — {e}')
+        print(f'    FAIL: production parser readback crashed — {e}')
         issues += 1
 
 if issues:

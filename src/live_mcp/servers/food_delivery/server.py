@@ -23,8 +23,8 @@ TOOLS = [
     {"name": "cancel_order", "description": "Cancel an order (only before preparing).", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "reason": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"mutating": True}},
     {"name": "get_estimated_time", "description": "Get estimated delivery time for an order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "track_rider", "description": "Track the assigned delivery rider. The order must currently be in delivering status.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string", "description": "Existing order_id whose current status is delivering."}}, "required": ["order_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "rate_order", "description": "Rate a delivered order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "rating": {"type": "integer"}, "review": {"type": "string"}}, "required": ["order_id", "rating"]}, "annotations": {"mutating": True}},
-    {"name": "add_tip", "description": "Add a tip to an order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "amount": {"type": "number"}}, "required": ["order_id", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "rate_order", "description": "Rate a delivered, not-yet-rated order from 1 to 5.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "rating": {"type": "integer", "minimum": 1, "maximum": 5, "description": "Integer rating from 1 to 5."}, "review": {"type": "string"}}, "required": ["order_id", "rating"]}, "annotations": {"mutating": True}},
+    {"name": "add_tip", "description": "Add one positive tip to an order; an order that already has a tip cannot be tipped again.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive tip amount; must be greater than zero."}}, "required": ["order_id", "amount"]}, "annotations": {"mutating": True}},
     {"name": "reorder", "description": "Re-order from a past order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "delivery_address": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"mutating": True}},
     {"name": "contact_support", "description": "Contact support about an order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "issue_type": {"type": "string"}, "description": {"type": "string"}}, "required": ["order_id", "issue_type", "description"]}, "annotations": {"mutating": True}},
 ]
@@ -85,7 +85,7 @@ class FoodDeliveryServer(StatefulToolServer):
             total += menu_map[name]["price"] * qty
         oid = f"ord_{state['next_order_num']:04d}"; state["next_order_num"] += 1
         delivery_fee = r.get("delivery_fee", 2.99)
-        created_at = f"{state.get('current_date', '2026-06-24')}T21:40:00"
+        created_at = f"{state['current_date']}T21:40:00"
         order = {"order_id": oid, "restaurant_id": rid, "restaurant_name": r["name"], "items": items, "delivery_address": arguments["delivery_address"], "special_instructions": arguments.get("special_instructions", ""), "subtotal": total, "delivery_fee": delivery_fee, "tip": 0.0, "total": round(total + delivery_fee, 2), "status": "placed", "rating": None, "created_at": created_at}
         state["orders"][oid] = order
         return _result(True, {"order": order}, None, "", True)
@@ -121,9 +121,10 @@ class FoodDeliveryServer(StatefulToolServer):
         return _result(True, {"order_id": order["order_id"], "status": order["status"], "estimated_minutes": eta}, None, "", False)
 
     def track_rider(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        order = self._order(self._state(session_id), arguments["order_id"])
+        state = self._state(session_id)
+        order = self._order(state, arguments["order_id"])
         if order["status"] not in ("delivering",): raise KeyError(f"rider not assigned for status: {order['status']}")
-        return _result(True, {"order_id": order["order_id"], "rider_name": "Alex Driver", "rider_location": {"lat": 40.7128, "lng": -74.0060}, "distance_km": 1.2, "estimated_arrival": "2026-06-24T21:50:00"}, None, "", False)
+        return _result(True, {"order_id": order["order_id"], "rider_name": "Alex Driver", "rider_location": {"lat": 40.7128, "lng": -74.0060}, "distance_km": 1.2, "estimated_arrival": f"{state['current_date']}T21:50:00"}, None, "", False)
 
     def rate_order(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         order = self._order(self._state(session_id), arguments["order_id"]); rating = int(arguments["rating"])
@@ -147,7 +148,7 @@ class FoodDeliveryServer(StatefulToolServer):
     def contact_support(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); order = self._order(state, arguments["order_id"]); issue = arguments["issue_type"]
         tid = f"ticket_{state['next_ticket_num']:04d}"; state["next_ticket_num"] += 1
-        created_at = f"{state.get('current_date', '2026-06-24')}T21:40:00"
+        created_at = f"{state['current_date']}T21:40:00"
         ticket = {"ticket_id": tid, "order_id": order["order_id"], "issue_type": issue, "description": arguments["description"], "status": "open", "created_at": created_at}
         state.setdefault("support_tickets", []).append(ticket)
         return _result(True, {"ticket": ticket}, None, "", True)

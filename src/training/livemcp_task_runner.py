@@ -21,20 +21,28 @@ from verl.trainer.main_ppo import TaskRunner
 
 
 class LiveMCPTaskRunner(TaskRunner):
-    """在 ray actor 内注册 livemcp_grpo estimator 的 TaskRunner。"""
+    """Register the OVAL estimator in Ray; leave PROVE GRPO untouched."""
 
     def run(self, config):
         """注册 estimator 后执行标准训练流程。"""
-        # 注册 livemcp_grpo estimator + monkey-patch compute_advantage
-        from src.training.register_estimator import register_livemcp_estimator
+        estimator_name = str(config.algorithm.adv_estimator)
+        if estimator_name == "livemcp_grpo":
+            from src.training.register_estimator import register_livemcp_estimator
 
-        success = register_livemcp_estimator(
-            config={"use_livemcp": True}
-        )
-        if success:
-            logger.info("LiveMCPTaskRunner: estimator 注册成功")
+            success = register_livemcp_estimator(
+                config={"use_livemcp": True}
+            )
+            if not success:
+                raise RuntimeError(
+                    "LiveMCPTaskRunner: estimator registration failed inside Ray actor"
+                )
+            logger.info("LiveMCPTaskRunner: livemcp_grpo estimator registered")
+        elif estimator_name == "grpo":
+            logger.info("LiveMCPTaskRunner: using verl standard GRPO estimator")
         else:
-            logger.warning("LiveMCPTaskRunner: estimator 注册失败，将使用标准 GRPO")
+            raise RuntimeError(
+                f"unsupported estimator for LiveMCP training: {estimator_name!r}"
+            )
 
         # 执行标准训练流程
         return super().run(config)

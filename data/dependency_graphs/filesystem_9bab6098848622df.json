@@ -1,8 +1,8 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
+  "dependency_semantics_version": 11,
   "server_name": "filesystem",
-  "schema_hash": "844025a0dab3b480",
+  "schema_hash": "9bab6098848622df",
   "tool_names": [
     "awk",
     "cat",
@@ -56,15 +56,7 @@
     },
     "cd": {
       "explicit": [],
-      "implicit": [
-        "cut",
-        "diff",
-        "du",
-        "file_info",
-        "find",
-        "grep",
-        "head"
-      ]
+      "implicit": []
     },
     "chmod": {
       "explicit": [],
@@ -149,8 +141,8 @@
     "mkdir": {
       "explicit": [],
       "implicit": [
-        "rm",
-        "stat"
+        "tar_extract",
+        "unzip"
       ]
     },
     "mv": {
@@ -162,7 +154,15 @@
       "implicit": []
     },
     "readlink": {
-      "explicit": [],
+      "explicit": [
+        "sha256sum",
+        "sort",
+        "split",
+        "stat",
+        "tail",
+        "tar_create",
+        "tar_extract"
+      ],
       "implicit": []
     },
     "rm": {
@@ -970,9 +970,9 @@
         "cd",
         "cut"
       ],
-      "source": "cd",
-      "target": "cut",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -988,54 +988,54 @@
         "cd",
         "diff"
       ],
-      "source": "cd",
-      "target": "diff",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cd",
         "du"
       ],
-      "source": "cd",
-      "target": "du",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cd",
         "file_info"
       ],
-      "source": "cd",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cd",
         "find"
       ],
-      "source": "cd",
-      "target": "find",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cd",
         "grep"
       ],
-      "source": "cd",
-      "target": "grep",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cd",
         "head"
       ],
-      "source": "cd",
-      "target": "head",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5020,9 +5020,9 @@
         "mkdir",
         "rm"
       ],
-      "source": "mkdir",
-      "target": "rm",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5065,9 +5065,9 @@
         "mkdir",
         "stat"
       ],
-      "source": "mkdir",
-      "target": "stat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5101,9 +5101,9 @@
         "mkdir",
         "tar_extract"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "mkdir",
+      "target": "tar_extract",
+      "relation": "implicit"
     },
     {
       "pair": [
@@ -5155,9 +5155,9 @@
         "mkdir",
         "unzip"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "mkdir",
+      "target": "unzip",
+      "relation": "implicit"
     },
     {
       "pair": [
@@ -5578,36 +5578,36 @@
         "readlink",
         "sha256sum"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "readlink",
+      "target": "sha256sum",
+      "relation": "explicit"
     },
     {
       "pair": [
         "readlink",
         "sort"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "readlink",
+      "target": "sort",
+      "relation": "explicit"
     },
     {
       "pair": [
         "readlink",
         "split"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "readlink",
+      "target": "split",
+      "relation": "explicit"
     },
     {
       "pair": [
         "readlink",
         "stat"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "readlink",
+      "target": "stat",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -5623,27 +5623,27 @@
         "readlink",
         "tail"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "readlink",
+      "target": "tail",
+      "relation": "explicit"
     },
     {
       "pair": [
         "readlink",
         "tar_create"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "readlink",
+      "target": "tar_create",
+      "relation": "explicit"
     },
     {
       "pair": [
         "readlink",
         "tar_extract"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "readlink",
+      "target": "tar_extract",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -7266,9 +7266,9 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
   "tool_count": 40,
   "expected_pair_count": 780,
   "classified_pair_count": 780,

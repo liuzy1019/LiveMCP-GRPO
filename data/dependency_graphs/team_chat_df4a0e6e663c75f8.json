@@ -1,8 +1,8 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
+  "dependency_semantics_version": 11,
   "server_name": "team_chat",
-  "schema_hash": "2a2977ccd7f29a20",
+  "schema_hash": "df4a0e6e663c75f8",
   "tool_names": [
     "archive_channel",
     "create_channel",
@@ -38,7 +38,9 @@
       "implicit": []
     },
     "get_channel": {
-      "explicit": [],
+      "explicit": [
+        "react_message"
+      ],
       "implicit": []
     },
     "get_thread": {
@@ -357,9 +359,9 @@
         "get_channel",
         "react_message"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_channel",
+      "target": "react_message",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -578,9 +580,9 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
   "tool_count": 11,
   "expected_pair_count": 55,
   "classified_pair_count": 55,

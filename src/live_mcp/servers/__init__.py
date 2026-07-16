@@ -1,1 +1,1 @@
-"""MVP local Live MCP servers."""
+"""Local LiveMCP domain servers."""

@@ -2,13 +2,13 @@
 # GRPO 训练入口 —— PyTorch Lightning 风格配置 + 实验管理。
 #
 # 支持模式：
-#   - 单卡:    bash scripts/train_grpo.sh --model models/Qwen3-4B
+#   - 单卡:    bash scripts/train_grpo.sh --model models/Qwen/Qwen3-4B
 #   - 多卡 FSDP: bash scripts/train_grpo.sh --gpus 0,1,2,3
 #   - WandB:   bash scripts/train_grpo.sh --wandb
 #   - 环境变量覆盖所有 TrainerConfig 字段（OVAL_* 前缀）
 #
 # Options:
-#   --model PATH              模型路径（default: models/Qwen3-4B）
+#   --model PATH              模型路径（default: models/Qwen/Qwen3-4B）
 #   --gpus IDS                指定 GPU（如 0,1,2,3）
 #   --devices N               限制 GPU 数量
 #   --total-steps N           训练步数
@@ -20,6 +20,8 @@
 #   --lr LR                   学习率
 #   --batch-size N            训练 batch size
 #   --rollout-n N             Rollout 每组数量
+#   --reward-profile PROFILE  prove_baseline | oval_full
+#   --max-observation-chars N Policy observation budget; default reads suite
 #   --debug                   调试模式（更多日志）
 #
 # 实验命名：自动生成 {日期}_{strategy}_{GPU数}gpu_b{batch}_lr{学习率}，如：
@@ -33,27 +35,11 @@
 
 set -euo pipefail
 
-# ── vLLM orphan cleanup trap ────────────────────────────────────────
-_cleanup_vllm_orphans() {
-    local exit_code=$?
-    VLLM_ORPHANS=$(ps -eo pid,comm --no-headers 2>/dev/null | awk '/VLLM::EngineCore/{print $1}' || true)
-    if [ -n "$VLLM_ORPHANS" ]; then
-        echo "[cleanup] Killing orphaned VLLM::EngineCore: $VLLM_ORPHANS" >&2
-        for pid in $VLLM_ORPHANS; do
-            kill -KILL "$pid" 2>/dev/null || true
-        done
-        sleep 1
-    fi
-    exit $exit_code
-}
-trap _cleanup_vllm_orphans EXIT INT TERM
-
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 # ── Environment ─────────────────────────────────────────────────────
 export VLLM_USE_FLASHINFER_SAMPLER=0
-export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export NVCC_APPEND_FLAGS=-allow-unsupported-compiler
 export TOKENIZERS_PARALLELISM=false
 export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
@@ -96,17 +82,14 @@ while [[ $# -gt 0 ]]; do
         --batch-size=*) export OVAL_TRAIN_BATCH_SIZE="${1#*=}"; shift ;;
         --rollout-n)  export OVAL_ROLLOUT_N="$2"; shift 2 ;;
         --rollout-n=*) export OVAL_ROLLOUT_N="${1#*=}"; shift ;;
+        --reward-profile) export OVAL_REWARD_PROFILE="$2"; shift 2 ;;
+        --reward-profile=*) export OVAL_REWARD_PROFILE="${1#*=}"; shift ;;
+        --max-observation-chars) export OVAL_MAX_OBSERVATION_CHARS="$2"; shift 2 ;;
+        --max-observation-chars=*) export OVAL_MAX_OBSERVATION_CHARS="${1#*=}"; shift ;;
         --debug)      export OVAL_DEBUG=1; shift ;;
         *)            echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
-
-# ── Cleanup stale Ray ───────────────────────────────────────────────
-if ray status &>/dev/null 2>&1; then
-    echo "[cleanup] Stopping stale Ray cluster..."
-    ray stop --force 2>/dev/null || true
-    sleep 2
-fi
 
 # ── GPU detection ───────────────────────────────────────────────────
 if [ -n "${GPU_ARG}" ]; then
@@ -180,7 +163,7 @@ if [ -z "${CONDA_PYTHON:-}" ]; then
 fi
 if [ ! -x "${CONDA_PYTHON}" ]; then
     echo "ERROR: Python interpreter is not executable: ${CONDA_PYTHON}" >&2
-    echo "Set PYTHON_BIN=/mnt/data2/liuzhanyi/envs/arl/bin/python" >&2
+    echo "Set PYTHON_BIN to the Python executable in the project environment." >&2
     exit 1
 fi
 export CONDA_PYTHON
@@ -246,12 +229,35 @@ USE_WANDB=$("${CONDA_PYTHON}" -c "import json; print(json.load(open('${CONFIG_JS
 WANDB_DIR=$("${CONDA_PYTHON}" -c "import json; print(json.load(open('${CONFIG_JSON_FILE}'))['wandb_dir'])")
 rm -f "${CONFIG_JSON_FILE}"
 
+# Save the effective LiveMCP objective/contract next to trainer config and
+# checkpoints. This is the cross-process source used by reward workers.
+"${CONDA_PYTHON}" -c "
+import json
+from pathlib import Path
+from src.training.livemcp_hyperparams import LiveMCPHyperparams
+hp = LiveMCPHyperparams.from_env()
+from src.live_mcp.config import load_suite_config
+suite = load_suite_config(hp.suite_path)
+runtime_observation_budget = int(
+    suite.rollout.get('observation_max_chars', 4096)
+)
+path = Path('${RUN_DIR}') / 'livemcp_config.json'
+path.write_text(json.dumps(hp.to_dict(), indent=2, ensure_ascii=False) + '\\n')
+print(hp.summary())
+"
+
 # ── Validate data ───────────────────────────────────────────────────
 echo ""
 echo "=== Validating data ==="
 "${CONDA_PYTHON}" -c "
-import sys, pandas as pd
+import json, sys, pandas as pd
 from pathlib import Path
+from src.live_mcp.observation import (
+    TRAJECTORY_SCHEMA_VERSION, OBSERVATION_SCHEMA_VERSION, OBSERVATION_PROJECTION_VERSION,
+)
+from src.training.livemcp_hyperparams import LiveMCPHyperparams
+
+hp = LiveMCPHyperparams.from_env()
 
 train_file = '${OVAL_TRAIN_FILE:-data/train.parquet}'
 val_file = '${OVAL_VAL_FILE:-data/val.parquet}'
@@ -263,9 +269,92 @@ for path in [train_file, val_file]:
     df = pd.read_parquet(path)
     domains = set()
     from src.utils import normalize_extra_info
+    from src.live_mcp.environment_metadata import (
+        compute_initial_state_hashes,
+        validate_prove_corpus_evidence,
+        validate_teacher_generation_evidence,
+        validate_environment_metadata,
+    )
+    import importlib
+    from src.reward.oval_reward_fn import _build_task_dict
     for _, row in df.iterrows():
         ei = normalize_extra_info(row['extra_info'])
+        validate_prove_corpus_evidence(ei)
+        validate_teacher_generation_evidence(ei)
+        _build_task_dict(ei)
         domains.add(ei.get('domain', 'unknown'))
+        expected = {
+            'observation_schema_version': OBSERVATION_SCHEMA_VERSION,
+            'observation_projection_version': OBSERVATION_PROJECTION_VERSION,
+            'trajectory_schema_version': TRAJECTORY_SCHEMA_VERSION,
+        }
+        for field, value in expected.items():
+            if str(ei.get(field, '')) != value:
+                raise RuntimeError(
+                    f'{path}: {field} mismatch or missing for task '
+                    f'{ei.get("task_id", "unknown")}'
+                )
+        if not ei.get('server_schema_hash'):
+            raise RuntimeError(f'{path}: missing server_schema_hash')
+        schema_hashes = ei.get('server_schema_hashes', {})
+        if isinstance(schema_hashes, str):
+            try:
+                schema_hashes = json.loads(schema_hashes)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f'{path}: invalid server_schema_hashes JSON'
+                ) from exc
+        if not isinstance(schema_hashes, dict) or not schema_hashes:
+            raise RuntimeError(f'{path}: missing server_schema_hashes')
+        owner_domains = ei.get('tool_owner_domains', {})
+        if isinstance(owner_domains, str):
+            try:
+                owner_domains = json.loads(owner_domains)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f'{path}: invalid tool_owner_domains JSON'
+                ) from exc
+        required_schema_domains = {
+            str(ei.get('domain', '')),
+            *(str(domain) for domain in (
+                owner_domains.values() if isinstance(owner_domains, dict) else []
+            )),
+        }
+        missing_schema_domains = required_schema_domains - set(schema_hashes)
+        if missing_schema_domains:
+            raise RuntimeError(
+                f'{path}: server_schema_hashes missing owner domains '
+                f'{sorted(missing_schema_domains)}'
+            )
+        tools_by_domain = {
+            domain: list(importlib.import_module(
+                f'src.live_mcp.servers.{domain}.server'
+            ).TOOLS)
+            for domain in required_schema_domains if domain
+        }
+        validate_environment_metadata(
+            ei,
+            current_tools_by_domain=tools_by_domain,
+            required_owner_domains={domain for domain in required_schema_domains if domain},
+            reward_profile=hp.reward_profile,
+            runtime_max_observation_chars=runtime_observation_budget,
+            current_initial_state_hashes=compute_initial_state_hashes(
+                {domain for domain in required_schema_domains if domain},
+                int(ei['session_seed']),
+            ),
+        )
+        compatible = ei.get('reward_profile_compatibility', [])
+        if hasattr(compatible, 'tolist'):
+            compatible = compatible.tolist()
+        if isinstance(compatible, str):
+            try:
+                compatible = json.loads(compatible)
+            except json.JSONDecodeError:
+                compatible = [compatible]
+        if hp.reward_profile not in list(compatible):
+            raise RuntimeError(
+                f'{path}: reward profile {hp.reward_profile} not in {compatible}'
+            )
     print(f'  {path}: {len(df)} rows, domains={sorted(domains)}')
     if len(df) > 0:
         ei = normalize_extra_info(df.iloc[0]['extra_info'])
@@ -290,7 +379,7 @@ echo "  Experiment: ${RUN_DIR}"
 echo "  Log:        ${RUN_DIR}/logs/train.log"
 echo ""
 
-exec "${CONDA_PYTHON}" "scripts/train_grpo.py" \
+exec "${CONDA_PYTHON}" "src/training/run_grpo.py" \
     ${OVERRIDES_STR} \
     2>&1 | tee "${RUN_DIR}/logs/train.log"
 

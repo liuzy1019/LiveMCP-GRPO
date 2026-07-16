@@ -2,7 +2,6 @@
 # 支付系统：事务状态，支持 invoice/payment/refund 全流程
 
 name: payments
-type: local_subprocess
 enabled: true
 
 command:
@@ -17,110 +16,4 @@ transport:
   request_timeout_s: 10
 
 session:
-  reset_mode: deterministic_seed
-  max_sessions: 64
   default_seed: 42
-
-tools:
-  discovery:
-    - list_invoices
-  readonly:
-    - get_invoice
-    - list_invoices
-  mutating:
-    - create_invoice
-    - pay_invoice
-    - refund_invoice
-    - create_webhook
-
-reward_profile: payments_basic
-
-dependency_graph:
-  edges:
-    # ── Invoice discovery → detail → operations ──
-    - source_tool: list_invoices
-      target_tool: get_invoice
-      relation: explicit
-      source_output_path: invoices[].invoice_id
-      target_argument_path: invoice_id
-    - source_tool: list_invoices
-      target_tool: pay_invoice
-      relation: explicit
-      source_output_path: invoices[].invoice_id
-      target_argument_path: invoice_id
-    - source_tool: list_invoices
-      target_tool: dispute_invoice
-      relation: explicit
-      source_output_path: invoices[].invoice_id
-      target_argument_path: invoice_id
-
-    # ── Invoice lifecycle ──
-    - source_tool: create_invoice
-      target_tool: pay_invoice
-      relation: explicit
-      source_output_path: invoice.invoice_id
-      target_argument_path: invoice_id
-    - source_tool: create_invoice
-      target_tool: get_invoice
-      relation: implicit
-      description: verify created invoice
-    - source_tool: create_invoice
-      target_tool: list_invoices
-      relation: implicit
-      description: verify invoice appears in listing
-
-    # ── Payment → verify → refund/cancel ──
-    - source_tool: pay_invoice
-      target_tool: get_invoice
-      relation: implicit
-      description: verify payment status
-    - source_tool: pay_invoice
-      target_tool: refund_invoice
-      relation: implicit
-      description: pay then refund
-    - source_tool: pay_invoice
-      target_tool: cancel_payment
-      relation: explicit
-      source_output_path: payment.payment_id
-      target_argument_path: payment_id
-    - source_tool: cancel_payment
-      target_tool: get_invoice
-      relation: implicit
-      description: verify cancellation reverts invoice
-
-    # ── Refund → verify ──
-    - source_tool: refund_invoice
-      target_tool: get_invoice
-      relation: implicit
-      description: verify refund status
-
-    # ── Dispute ──
-    - source_tool: get_invoice
-      target_tool: dispute_invoice
-      relation: explicit
-      source_output_path: invoice.invoice_id
-      target_argument_path: invoice_id
-
-    # ── Webhook lifecycle ──
-    - source_tool: create_webhook
-      target_tool: list_webhooks
-      relation: implicit
-      description: verify webhook registered
-    - source_tool: list_webhooks
-      target_tool: delete_webhook
-      relation: explicit
-      source_output_path: webhooks[].webhook_id
-      target_argument_path: webhook_id
-    - source_tool: delete_webhook
-      target_tool: list_webhooks
-      relation: implicit
-      description: verify webhook removed
-
-query_templates:
-  payments_create_and_pay:
-    - "Create an invoice for {customer} for {amount} {currency}, then pay it."
-  payments_refund:
-    - "Find the paid invoice for {customer}, then issue a refund for {amount}."
-  payments_invoice_check:
-    - "List all unpaid invoices and check the details of the most recent one."
-

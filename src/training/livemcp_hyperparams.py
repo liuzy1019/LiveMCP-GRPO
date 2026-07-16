@@ -32,6 +32,10 @@ from typing import ClassVar
 class LiveMCPHyperparams:
     """LiveMCP 训练的所有超参，单点定义默认值。"""
 
+    # oval_full preserves the existing OVAL objective. Set prove_baseline for
+    # the paper-compatible five-component task reward only.
+    reward_profile: str = "oval_full"
+
     # ── 奖励消融开关 ──────────────────────────────────────────────
     # I_shape: 启用 F_gamma 进度塑形项（0=关, 1=开）
     i_shape: int = 0
@@ -59,10 +63,6 @@ class LiveMCPHyperparams:
     tau_unsafe_stall: float = 0.5
 
     # ── Advantage ─────────────────────────────────────────────────
-    # beta: StratAdv 全局残差权重（0=纯层内，1=纯全局）
-    beta: float = 0.25
-    # min_stratum_size: 层内最小样本数
-    min_stratum_size: int = 3
     # min_group_std: 饱和检测阈值
     min_group_std: float = 0.01
 
@@ -84,38 +84,71 @@ class LiveMCPHyperparams:
     p_max: float = 0.3
 
     # ── Agent Loop ────────────────────────────────────────────────
-    suite_path: str = "configs/live_mcp/suite_mvp.yaml"
+    suite_path: str = "configs/live_mcp/ten_domain_suite.yaml"
     domains: str = "calendar,shopping,banking,email,filesystem,payments,crm,issue_tracker,team_chat,food_delivery"
+    # 0 means read rollout.observation_max_chars from the suite.
+    max_observation_chars: int = 0
 
     # ── 训练流程 ──────────────────────────────────────────────────
     # 启动时是否重置 LambdaState
     keep_lambda: bool = False
-    # 是否运行 E4 group 完整性预检
-    precheck: bool = False
     # Ray temp dir（避免 AF_UNIX socket path 超限）
     ray_tmpdir: str = "/tmp/oval_ray"
 
     # ── 环境变量名映射表 ──────────────────────────────────────────
     _ENV_MAP: ClassVar[dict[str, str]] = {
+        "reward_profile":    "OVAL_REWARD_PROFILE",
         "i_shape":          "OVAL_I_SHAPE",
         "i_process":        "OVAL_I_PROCESS",
         "lambda_shape":     "OVAL_LAMBDA_SHAPE",
         "lambda_process":   "OVAL_LAMBDA_PROCESS",
         "gamma":            "OVAL_GAMMA",
+        "lambda_safe_default": "OVAL_LAMBDA_SAFE_DEFAULT",
         "alpha_lambda":     "OVAL_ALPHA_LAMBDA",
         "lambda_epsilon":   "OVAL_LAMBDA_EPSILON",
         "lambda_safe_max":  "OVAL_LAMBDA_SAFE_MAX",
-        "beta":             "OVAL_BETA",
-        "min_stratum_size": "OVAL_MIN_STRATUM_SIZE",
+        "k_stall":          "OVAL_K_STALL",
+        "tau_unsafe_stall": "OVAL_TAU_UNSAFE_STALL",
         "min_group_std":    "OVAL_MIN_GROUP_STD",
         "lata_mode":        "LIVEMCP_LATA",
         "p_max":            "OVAL_P_MAX",
+        "w_val":            "OVAL_W_VAL",
+        "w_cov":            "OVAL_W_COV",
+        "w_eff":            "OVAL_W_EFF",
+        "w_name":           "OVAL_W_NAME",
+        "w_arg":            "OVAL_W_ARG",
+        "alpha_eff":        "OVAL_ALPHA_EFF",
+        "beta_budget":      "OVAL_BETA_BUDGET",
         "suite_path":       "OVAL_SUITE_PATH",
         "domains":          "OVAL_DOMAINS",
+        "max_observation_chars": "OVAL_MAX_OBSERVATION_CHARS",
         "keep_lambda":      "OVAL_KEEP_LAMBDA",
-        "precheck":         "OVAL_PRECHECK",
         "ray_tmpdir":       "OVAL_RAY_TMPDIR",
     }
+
+    def __post_init__(self) -> None:
+        if self.reward_profile not in {"prove_baseline", "oval_full"}:
+            raise ValueError(
+                "reward_profile must be 'prove_baseline' or 'oval_full', "
+                f"got {self.reward_profile!r}"
+            )
+        if self.reward_profile == "prove_baseline":
+            self.i_shape = 0
+            self.i_process = 0
+            self.lambda_safe_default = 0.0
+        if self.max_observation_chars < 0:
+            raise ValueError("max_observation_chars must be 0 or >= 256")
+        if 0 < self.max_observation_chars < 256:
+            raise ValueError("max_observation_chars must be 0 or >= 256")
+
+    @property
+    def objective_formula(self) -> str:
+        if self.reward_profile == "prove_baseline":
+            return "J = R_task"
+        return (
+            "J = R_task + I_shape*lambda_shape*F_gamma "
+            "+ I_process*lambda_process*P_process - lambda_safe*C_safety"
+        )
 
     @classmethod
     def from_env(cls, **overrides) -> "LiveMCPHyperparams":
@@ -145,29 +178,32 @@ class LiveMCPHyperparams:
         """生成人类可读的配置摘要。"""
         lines = ["LiveMCP Hyperparams:"]
         sections = {
-            "Reward": ["i_shape", "i_process", "lambda_shape", "lambda_process", "gamma"],
+            "Reward": ["reward_profile", "i_shape", "i_process", "lambda_shape", "lambda_process", "gamma"],
             "Safety": ["lambda_safe_default", "alpha_lambda", "lambda_epsilon", "lambda_safe_max", "k_stall", "tau_unsafe_stall"],
-            "Advantage": ["beta", "min_stratum_size", "min_group_std"],
+            "Advantage": ["min_group_std"],
             "LATA": ["lata_mode"],
             "TaskReward": ["w_val", "w_cov", "w_eff", "w_name", "w_arg", "alpha_eff", "beta_budget"],
             "P_process": ["p_max"],
-            "Loop": ["suite_path", "domains"],
-            "Train": ["keep_lambda", "precheck", "ray_tmpdir"],
+            "Loop": ["suite_path", "domains", "max_observation_chars"],
+            "Train": ["keep_lambda", "ray_tmpdir"],
         }
         for section, keys in sections.items():
             items = [f"  {k}={getattr(self, k)}" for k in keys if hasattr(self, k)]
             if items:
                 lines.append(f"  [{section}]")
                 lines.extend(items)
+        lines.append(f"  objective={self.objective_formula}")
         return "\n".join(lines)
 
     def to_dict(self) -> dict:
         """转为纯字典，用于 JSON/YAML 序列化和 wandb 记录。"""
-        return {
+        payload = {
             f.name: getattr(self, f.name)
             for f in fields(self)
             if not f.name.startswith("_")
         }
+        payload["objective_formula"] = self.objective_formula
+        return payload
 
 
 def _coerce(raw: str, field_type) -> object:

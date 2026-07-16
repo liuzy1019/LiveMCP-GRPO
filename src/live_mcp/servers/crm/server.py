@@ -15,12 +15,12 @@ TOOLS = [
     {"name": "list_leads", "description": "List leads by status, source, or company.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "source": {"type": "string"}, "company": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "create_contact", "description": "Create a contact directly.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "company": {"type": "string"}}, "required": ["name", "email"]}, "annotations": {"mutating": True}},
     {"name": "update_contact", "description": "Update an existing contact's name, email, phone, or company.", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}, "fields": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "company": {"type": "string"}}, "additionalProperties": False, "minProperties": 1}}, "required": ["contact_id", "fields"], "additionalProperties": False}, "annotations": {"mutating": True}},
-    {"name": "delete_contact", "description": "Delete a contact (fails if referenced by deals).", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}}, "required": ["contact_id"]}, "annotations": {"mutating": True}},
-    {"name": "create_deal", "description": "Create a deal linked to an existing contact or lead. The amount must be greater than zero.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive deal amount; must be greater than zero."}, "contact_id": {"type": "string", "description": "Optional existing contact_id."}, "lead_id": {"type": "string", "description": "Optional existing lead_id."}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}}, "required": ["name", "amount"]}, "annotations": {"mutating": True}},
-    {"name": "update_deal", "description": "Update deal stage or amount.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}, "amount": {"type": "number"}}, "required": ["deal_id"]}, "annotations": {"mutating": True}},
+    {"name": "delete_contact", "description": "Delete a contact only when it is not referenced by any deal or converted lead.", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string", "description": "Existing contact_id with no deal or converted-lead references."}}, "required": ["contact_id"]}, "annotations": {"mutating": True}},
+    {"name": "create_deal", "description": "Create a deal linked to at least one existing contact or lead. The amount must be greater than zero.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive deal amount; must be greater than zero."}, "contact_id": {"type": "string", "description": "Existing contact_id; at least contact_id or lead_id is required."}, "lead_id": {"type": "string", "description": "Existing lead_id; at least contact_id or lead_id is required."}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}}, "required": ["name", "amount"]}, "annotations": {"mutating": True}},
+    {"name": "update_deal", "description": "Update at least one of deal stage or amount. Any supplied amount must be greater than zero.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive deal amount; must be greater than zero."}}, "required": ["deal_id"]}, "annotations": {"mutating": True}},
     {"name": "list_deals", "description": "List deals by stage/contact/lead.", "input_schema": {"type": "object", "properties": {"stage": {"type": "string"}, "contact_id": {"type": "string"}, "lead_id": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_deal", "description": "Get full deal details with linked contact/lead.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}}, "required": ["deal_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "create_task", "description": "Create a task related to a deal or contact.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "deal_id": {"type": "string"}, "contact_id": {"type": "string"}, "due_date": {"type": "string"}, "priority": {"type": "string"}}, "required": ["title"]}, "annotations": {"mutating": True}},
+    {"name": "create_task", "description": "Create a task related to at least one existing deal or contact.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "deal_id": {"type": "string", "description": "Existing deal_id; at least deal_id or contact_id is required."}, "contact_id": {"type": "string", "description": "Existing contact_id; at least deal_id or contact_id is required."}, "due_date": {"type": "string"}, "priority": {"type": "string"}}, "required": ["title"]}, "annotations": {"mutating": True}},
     {"name": "list_tasks", "description": "List tasks by status, deal, or priority.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "deal_id": {"type": "string"}, "priority": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "complete_task", "description": "Mark a task as completed.", "input_schema": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}, "annotations": {"mutating": True}},
     {"name": "add_note", "description": "Add a note to a deal, contact, or lead.", "input_schema": {"type": "object", "properties": {"entity_type": {"type": "string"}, "entity_id": {"type": "string"}, "content": {"type": "string"}}, "required": ["entity_type", "entity_id", "content"]}, "annotations": {"mutating": True}},
@@ -71,6 +71,11 @@ class CRMServer(StatefulToolServer):
         if lead["status"] == "converted": raise KeyError("cannot delete converted lead")
         refs = [d for d in state["deals"].values() if d.get("lead_id") == lid]
         if refs: raise KeyError(f"lead referenced by {len(refs)} deal(s)")
+        note_refs = [
+            note for note in state.get("notes", {}).values()
+            if note.get("entity_type") == "lead" and note.get("entity_id") == lid
+        ]
+        if note_refs: raise KeyError(f"lead referenced by {len(note_refs)} note(s)")
         state["leads"].pop(lid)
         return _result(True, {"deleted_lead": lead}, None, "", True)
 
@@ -104,14 +109,31 @@ class CRMServer(StatefulToolServer):
     def delete_contact(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); cid = arguments["contact_id"]
         if cid not in state["contacts"]: raise KeyError(f"contact not found: {cid}")
-        refs = [d for d in state["deals"].values() if d.get("contact_id") == cid]
-        if refs: raise KeyError(f"contact referenced by {len(refs)} deal(s)")
+        deal_refs = [d for d in state["deals"].values() if d.get("contact_id") == cid]
+        if deal_refs: raise KeyError(f"contact referenced by {len(deal_refs)} deal(s)")
+        # convert_lead persists the new contact_id on the source lead.  Removing
+        # that contact without checking the reverse reference creates a live
+        # state that Replay can reproduce but no later CRM tool can resolve.
+        lead_refs = [lead for lead in state["leads"].values() if lead.get("contact_id") == cid]
+        if lead_refs:
+            raise KeyError(f"contact referenced by {len(lead_refs)} converted lead(s)")
+        task_refs = [
+            task for task in state.get("tasks", {}).values()
+            if task.get("contact_id") == cid
+        ]
+        if task_refs: raise KeyError(f"contact referenced by {len(task_refs)} task(s)")
+        note_refs = [
+            note for note in state.get("notes", {}).values()
+            if note.get("entity_type") == "contact" and note.get("entity_id") == cid
+        ]
+        if note_refs: raise KeyError(f"contact referenced by {len(note_refs)} note(s)")
         state["contacts"].pop(cid)
         return _result(True, {"deleted_contact_id": cid}, None, "", True)
 
     def create_deal(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
         cid = arguments.get("contact_id"); lid = arguments.get("lead_id")
+        if not cid and not lid: raise KeyError("contact_id or lead_id is required")
         if cid and cid not in state["contacts"]: raise KeyError(f"contact not found: {cid}")
         if lid and lid not in state["leads"]: raise KeyError(f"lead not found: {lid}")
         amount = float(arguments["amount"])
@@ -119,13 +141,15 @@ class CRMServer(StatefulToolServer):
         stage = arguments.get("stage", "prospecting")
         if stage not in VALID_STAGES: raise KeyError(f"invalid stage: '{stage}'. Valid stages: {VALID_STAGES}")
         did = f"deal_{state['next_deal_num']:04d}"; state["next_deal_num"] += 1
-        deal = {"deal_id": did, "name": arguments["name"], "amount": amount, "stage": stage, "contact_id": cid, "lead_id": lid, "created_at": "2026-06-24"}
+        deal = {"deal_id": did, "name": arguments["name"], "amount": amount, "stage": stage, "contact_id": cid, "lead_id": lid, "created_at": state["current_date"]}
         state["deals"][did] = deal
         return _result(True, {"deal": deal}, None, "", True)
 
     def update_deal(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); deal = state["deals"].get(arguments["deal_id"])
         if not deal: raise KeyError(f"deal not found: {arguments['deal_id']}")
+        if "stage" not in arguments and "amount" not in arguments:
+            raise KeyError("stage or amount is required")
         changed = False
         if "stage" in arguments:
             if arguments["stage"] not in VALID_STAGES: raise KeyError(f"invalid stage: {arguments['stage']}")
@@ -156,6 +180,8 @@ class CRMServer(StatefulToolServer):
 
     def create_task(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
+        if not arguments.get("deal_id") and not arguments.get("contact_id"):
+            raise KeyError("deal_id or contact_id is required")
         if arguments.get("deal_id") and arguments["deal_id"] not in state["deals"]:
             raise KeyError(f"deal not found: {arguments['deal_id']}")
         if arguments.get("contact_id") and arguments["contact_id"] not in state["contacts"]:
@@ -184,7 +210,7 @@ class CRMServer(StatefulToolServer):
         entities = {"lead": state["leads"], "contact": state["contacts"], "deal": state["deals"]}
         if etype not in entities or eid not in entities[etype]: raise KeyError(f"{etype} not found: {eid}")
         nid = f"note_{state['next_note_num']:04d}"; state["next_note_num"] += 1
-        note = {"note_id": nid, "entity_type": etype, "entity_id": eid, "content": arguments["content"], "created_at": "2026-06-24"}
+        note = {"note_id": nid, "entity_type": etype, "entity_id": eid, "content": arguments["content"], "created_at": state["current_date"]}
         state.setdefault("notes", {})[nid] = note
         return _result(True, {"note": note}, None, "", True)
 

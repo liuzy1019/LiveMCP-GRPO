@@ -10,13 +10,12 @@ lambda_safe 更新和数据规范化逻辑在 hooks.py 中。
 
 import importlib
 import functools
-import os
 from typing import Optional
 
 import numpy as np
 from loguru import logger
 
-from src.training.hooks import update_lambda_safe, normalize_livemcp_non_tensor_batch
+from src.training.hooks import update_lambda_safe, validate_livemcp_non_tensor_batch
 
 
 def register_livemcp_estimator(config: Optional[dict] = None) -> bool:
@@ -27,7 +26,7 @@ def register_livemcp_estimator(config: Optional[dict] = None) -> bool:
         return False
 
     try:
-        from src.training import livemcp_grpo_estimator  # noqa: F401
+        importlib.import_module("src.training.livemcp_grpo_estimator")
         logger.info("livemcp_grpo estimator 已注册")
     except Exception as e:
         logger.error(f"estimator 注册失败: {e}")
@@ -48,22 +47,11 @@ def register_livemcp_estimator(config: Optional[dict] = None) -> bool:
             if str(adv_estimator) == "livemcp_grpo":
                 adv_estimator_fn = get_adv_estimator_fn(adv_estimator)
                 bsz = data.batch["token_level_rewards"].shape[0]
-                non_tensor_batch = normalize_livemcp_non_tensor_batch(
+                non_tensor_batch = validate_livemcp_non_tensor_batch(
                     data.non_tensor_batch, bsz
                 )
 
-                # Wire OVAL_BETA into config so estimator sees it.
-                # Reference uses hydra config; this bridge ensures consistency
-                # with the centralized LiveMCPHyperparams.
                 _config = kwargs.get("config")
-                beta_env = os.environ.get("OVAL_BETA")
-                if beta_env is not None and _config is not None:
-                    try:
-                        from omegaconf import OmegaConf, open_dict
-                        with open_dict(_config):
-                            _config.beta = float(beta_env)
-                    except Exception:
-                        pass
 
                 adv_kwargs = {
                     "token_level_rewards": data.batch["token_level_rewards"],
@@ -87,10 +75,9 @@ def register_livemcp_estimator(config: Optional[dict] = None) -> bool:
                 nb_keys = set(nb.keys()) if nb else set()
                 has_fields = {"perturbation_level", "group_id", "scenario_type"}.issubset(nb_keys)
                 if not hasattr(patched_compute_advantage, '_diagnosed'):
-                    beta_log = f" (beta={float(beta_env):.3f})" if beta_env else ""
                     logger.info(
                         f"livemcp_grpo monkey-patch: "
-                        f"batch_size={bsz}{beta_log}, "
+                        f"batch_size={bsz}, "
                         f"non_tensor_batch_keys={nb_keys}, "
                         f"has_perturbation_level={has_fields}"
                     )
@@ -116,11 +103,6 @@ def register_livemcp_estimator(config: Optional[dict] = None) -> bool:
     return True
 
 
-# 向后兼容：保持旧的 import 路径
-_normalize_livemcp_non_tensor_batch = normalize_livemcp_non_tensor_batch
-
-
 __all__ = [
     "register_livemcp_estimator",
-    "_normalize_livemcp_non_tensor_batch",
 ]

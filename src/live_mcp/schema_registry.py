@@ -64,7 +64,10 @@ class SchemaRegistry:
 
     def get_schema(self, tool_name: str, domain: str | None = None) -> dict[str, Any] | None:
         keys = self._matching_keys(tool_name, domain=domain)
-        return self._schemas.get(keys[0]) if keys else None
+        # A bare name can exist in multiple domains (for example add_label).
+        # Registration order is not an execution contract: callers must either
+        # supply the owner domain or use a qualified name.
+        return self._schemas.get(keys[0]) if len(keys) == 1 else None
 
     def server_for_tool(self, tool_name: str, arguments: dict[str, Any] | None = None, domain: str | None = None) -> str | None:
         """Return server name for a tool. Disambiguates by argument validation or domain hint if needed."""

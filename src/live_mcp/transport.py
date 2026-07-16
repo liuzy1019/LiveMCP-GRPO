@@ -21,6 +21,128 @@ class TransportError(RuntimeError):
         self.error_type = error_type
 
 
+def _dump_mcp_content_block(block: Any) -> dict[str, Any]:
+    """Convert one MCP content block to a JSON-safe, lossless mapping."""
+    if hasattr(block, "model_dump"):
+        dumped = block.model_dump(by_alias=True, exclude_none=True)
+        if isinstance(dumped, dict):
+            return dumped
+    if isinstance(block, dict):
+        return dict(block)
+    return {"type": "unknown", "value": str(block)}
+
+
+def normalize_mcp_call_result(result: Any) -> dict[str, Any]:
+    """Normalize MCP structuredContent and every content[] block.
+
+    A single JSON text block keeps the historical plain-dict contract. For a
+    structured or multi-block result, the primary dict remains at top level
+    and the complete block envelope is retained under ``_mcp_content``.
+    """
+    blocks = [
+        _dump_mcp_content_block(block)
+        for block in (getattr(result, "content", None) or [])
+    ]
+    structured = getattr(result, "structuredContent", None)
+    if structured is None:
+        structured = getattr(result, "structured_content", None)
+
+    parsed_text: list[Any] = []
+    for block in blocks:
+        if block.get("type") != "text":
+            continue
+        try:
+            parsed_text.append(json.loads(str(block.get("text", ""))))
+        except json.JSONDecodeError:
+            continue
+
+    if isinstance(structured, dict):
+        normalized = dict(structured)
+    else:
+        primary = next(
+            (item for item in parsed_text if isinstance(item, dict)),
+            None,
+        )
+        if primary is not None:
+            normalized = dict(primary)
+        elif parsed_text:
+            normalized = {"data": parsed_text[0]}
+        elif blocks:
+            normalized = {}
+        else:
+            return {}
+
+    # Preserve the exact envelope whenever a single JSON text block is not a
+    # complete representation of the result.
+    single_json_text = (
+        structured is None
+        and len(blocks) == 1
+        and blocks[0].get("type") == "text"
+        and len(parsed_text) == 1
+        and isinstance(parsed_text[0], dict)
+    )
+    if blocks and not single_json_text:
+        normalized["_mcp_content"] = blocks
+    return normalized
+
+
+def normalize_mcp_tool_response(
+    result: Any, *, allow_generic_readonly: bool = False,
+) -> dict[str, Any]:
+    """Adapt a successful native MCP result to the executor response contract.
+
+    Project-owned MCP servers may already return the LiveMCP envelope
+    (``success``/``observation``/``state_changed``). Generic MCP servers
+    instead return their domain payload directly via ``structuredContent`` or
+    ``content[]``. Such payloads are accepted only for tools explicitly marked
+    readonly during discovery: without an auditable envelope, a mutation cannot
+    be represented truthfully at the executor boundary.
+    """
+    normalized = normalize_mcp_call_result(result)
+    if "success" not in normalized:
+        if not allow_generic_readonly:
+            raise TransportError(
+                errors.EXECUTION_ERROR,
+                "native MCP tool returned no auditable LiveMCP envelope",
+            )
+        return {
+            "success": True,
+            "observation": normalized,
+            "state_changed": False,
+        }
+
+    content = normalized.pop("_mcp_content", None)
+    if content:
+        observation = normalized.get("observation")
+        if isinstance(observation, dict):
+            observation = dict(observation)
+            observation["_mcp_content"] = content
+        else:
+            observation = {
+                "data": observation,
+                "_mcp_content": content,
+            }
+        normalized["observation"] = observation
+    return normalized
+
+
+def mcp_error_message(result: Any) -> str:
+    """Render every MCP error content block instead of dropping the tail."""
+    parts: list[str] = []
+    structured = getattr(result, "structuredContent", None)
+    if structured is None:
+        structured = getattr(result, "structured_content", None)
+    if structured is not None:
+        parts.append(json.dumps(structured, ensure_ascii=False, default=str))
+    for block in getattr(result, "content", None) or []:
+        dumped = _dump_mcp_content_block(block)
+        if dumped.get("type") == "text":
+            parts.append(str(dumped.get("text", "")))
+        else:
+            parts.append(json.dumps(dumped, ensure_ascii=False, default=str))
+    return "\n".join(part for part in parts if part).strip()
+
+
 class MCPTransport(Protocol):
     def start(self) -> None: ...
 
@@ -51,6 +173,7 @@ class SubprocessStdioTransport:
         self.process: subprocess.Popen[str] | None = None
         self._responses: dict[str, queue.Queue[dict[str, Any]]] = {}
         self._response_lock = threading.Lock()
+        self._write_lock = threading.Lock()
         self._stderr_lines: list[str] = []
         self._reader_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
@@ -122,8 +245,11 @@ class SubprocessStdioTransport:
             self._responses[req_id] = q
         request = {"id": req_id, "method": method, "params": params}
         try:
-            self.process.stdin.write(json.dumps(request, ensure_ascii=True) + "\n")
-            self.process.stdin.flush()
+            # One request is one line-delimited frame.  Protect serialization,
+            # write and flush as a unit when generation threads share transport.
+            with self._write_lock:
+                self.process.stdin.write(json.dumps(request, ensure_ascii=True) + "\n")
+                self.process.stdin.flush()
             response = q.get(timeout=timeout_s)
         except queue.Empty as exc:
             raise TransportError(errors.TIMEOUT, f"request timed out: {method}") from exc
@@ -188,6 +314,7 @@ class MCPStdioTransport:
         self._stdio_ctx: object | None = None  # async context manager
         self._server_name: str = ""
         self._stderr_lines: list[str] = []
+        self._readonly_tools: set[str] = set()
 
     @property
     def stderr_text(self) -> str:
@@ -309,6 +436,7 @@ class MCPStdioTransport:
             if method == "tools/list":
                 result = await s.list_tools()
                 tools: list[dict[str, Any]] = []
+                readonly_tools: set[str] = set()
                 for t in result.tools:
                     td = t.model_dump() if hasattr(t, "model_dump") else dict(t)  # type: ignore[arg-type]
                     # Convert camelCase MCP keys → snake_case our system expects
@@ -328,9 +456,19 @@ class MCPStdioTransport:
                                 r for r in ischema["required"]
                                 if r != "session_id"
                             ]
+                    annotations = td.get("annotations") or {}
+                    if isinstance(annotations, dict) and bool(
+                        annotations.get("readOnlyHint")
+                        or annotations.get("read_only_hint")
+                        or annotations.get("readonly")
+                    ):
+                        readonly_tools.add(str(td.get("name", "")))
                     tools.append(td)
                 # Filter out internal lifecycle tools (prefixed with _)
                 tools = [td for td in tools if not str(td.get("name", "")).startswith("_")]
+                self._readonly_tools = {
+                    name for name in readonly_tools if name and not name.startswith("_")
+                }
                 return {"tools": tools}
 
             # ----- tools/call -----
@@ -346,39 +484,31 @@ class MCPStdioTransport:
                 }
                 result = await s.call_tool(name, mcp_args)
                 if result.isError:
-                    error_text = ""
-                    if result.content:
-                        error_text = getattr(result.content[0], "text", "")
+                    error_text = mcp_error_message(result)
                     raise TransportError(errors.EXECUTION_ERROR, error_text or "tool call failed")
-                if result.content:
-                    text = getattr(result.content[0], "text", "{}")
-                    return json.loads(text)
-                return {}
+                return normalize_mcp_tool_response(
+                    result,
+                    allow_generic_readonly=name in self._readonly_tools,
+                )
 
             # ----- session/reset -----
             if method == "session/reset":
                 session_id = str(params["session_id"])
                 seed = int(params.get("seed", 42))
                 result = await s.call_tool("_session_reset", {"session_id": session_id, "seed": seed})
-                if result.content:
-                    return json.loads(result.content[0].text)
-                return {"ok": True}
+                return normalize_mcp_call_result(result) or {"ok": True}
 
             # ----- session/close -----
             if method == "session/close":
                 session_id = str(params["session_id"])
                 result = await s.call_tool("_session_close", {"session_id": session_id})
-                if result.content:
-                    return json.loads(result.content[0].text)
-                return {"ok": True}
+                return normalize_mcp_call_result(result) or {"ok": True}
 
             # ----- debug/get_state -----
             if method == "debug/get_state":
                 session_id = str(params["session_id"])
                 result = await s.call_tool("_debug_get_state", {"session_id": session_id})
-                if result.content:
-                    return json.loads(result.content[0].text)
-                return {"state": {}}
+                return normalize_mcp_call_result(result) or {"state": {}}
 
             raise TransportError(errors.UNKNOWN_TOOL, f"unknown method: {method}")
 
@@ -391,31 +521,3 @@ class MCPStdioTransport:
             raise
         except Exception as exc:
             raise TransportError(errors.EXECUTION_ERROR, str(exc)) from exc
-
-
-class InProcessTransport:
-    """Test/debug transport backed by an object with handle_request()."""
-
-    def __init__(self, handler: Any):
-        self.handler = handler
-        self.started = False
-
-    def start(self) -> None:
-        self.started = True
-
-    def stop(self) -> None:
-        self.started = False
-
-    def request(
-        self,
-        method: str,
-        params: dict[str, Any],
-        timeout_s: float,
-    ) -> dict[str, Any]:
-        if not self.started:
-            raise TransportError(errors.SERVER_UNAVAILABLE, "in-process transport not started")
-        response = self.handler.handle_request(method, params)
-        if "error" in response:
-            error = response["error"]
-            raise TransportError(error.get("type", errors.EXECUTION_ERROR), error.get("message", ""))
-        return response.get("result", {})

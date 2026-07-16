@@ -1,126 +1,110 @@
 {
   "cache_version": 5,
-  "dependency_semantics_version": 10,
-  "server_name": "calendar",
-  "schema_hash": "916aff906512d366",
+  "dependency_semantics_version": 11,
+  "server_name": "email",
+  "schema_hash": "98893f26cc61839c",
   "tool_names": [
-    "add_attendee",
-    "change_timezone",
-    "check_conflicts",
-    "create_event",
-    "create_recurring",
-    "delete_event",
-    "export_calendar",
-    "get_event",
-    "get_free_busy",
-    "get_recurring_info",
-    "get_working_hours",
-    "list_events",
-    "remove_attendee",
-    "respond_to_event",
-    "search_events",
-    "set_reminder",
-    "update_event"
+    "add_label",
+    "archive_email",
+    "create_draft",
+    "create_filter",
+    "forward_email",
+    "get_attachments",
+    "get_email",
+    "get_thread",
+    "list_filters",
+    "list_inbox",
+    "mark_read",
+    "mark_unread",
+    "move_to_thread",
+    "remove_label",
+    "reply_email",
+    "search_emails",
+    "send_email"
   ],
   "graph": {
-    "add_attendee": {
-      "explicit": [],
-      "implicit": [
-        "respond_to_event"
-      ]
-    },
-    "change_timezone": {
+    "add_label": {
       "explicit": [],
       "implicit": []
     },
-    "check_conflicts": {
+    "archive_email": {
       "explicit": [],
       "implicit": []
     },
-    "create_event": {
+    "create_draft": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_filter": {
+      "explicit": [],
+      "implicit": []
+    },
+    "forward_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_attachments": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_email": {
       "explicit": [
-        "add_attendee",
-        "delete_event",
-        "get_event",
-        "get_recurring_info",
-        "remove_attendee",
-        "respond_to_event",
-        "set_reminder",
-        "update_event"
+        "get_thread"
       ],
       "implicit": []
     },
-    "create_recurring": {
+    "get_thread": {
       "explicit": [
-        "add_attendee",
-        "delete_event",
-        "get_event",
-        "get_recurring_info",
-        "remove_attendee",
-        "respond_to_event",
-        "set_reminder",
-        "update_event"
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email",
+        "send_email"
       ],
       "implicit": []
     },
-    "delete_event": {
+    "list_filters": {
       "explicit": [],
       "implicit": []
     },
-    "export_calendar": {
+    "list_inbox": {
       "explicit": [
-        "get_event",
-        "get_recurring_info",
-        "remove_attendee",
-        "respond_to_event"
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
       ],
       "implicit": []
     },
-    "get_event": {
+    "mark_read": {
       "explicit": [],
       "implicit": []
     },
-    "get_free_busy": {
+    "mark_unread": {
       "explicit": [],
       "implicit": []
     },
-    "get_recurring_info": {
+    "move_to_thread": {
       "explicit": [],
       "implicit": []
     },
-    "get_working_hours": {
+    "remove_label": {
       "explicit": [],
       "implicit": []
     },
-    "list_events": {
+    "reply_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_emails": {
       "explicit": [
-        "remove_attendee",
-        "respond_to_event",
-        "set_reminder",
-        "update_event"
+        "send_email"
       ],
       "implicit": []
     },
-    "remove_attendee": {
-      "explicit": [],
-      "implicit": []
-    },
-    "respond_to_event": {
-      "explicit": [],
-      "implicit": []
-    },
-    "search_events": {
-      "explicit": [
-        "set_reminder",
-        "update_event"
-      ],
-      "implicit": []
-    },
-    "set_reminder": {
-      "explicit": [],
-      "implicit": []
-    },
-    "update_event": {
+    "send_email": {
       "explicit": [],
       "implicit": []
     }
@@ -128,8 +112,8 @@
   "pair_classifications": [
     {
       "pair": [
-        "add_attendee",
-        "change_timezone"
+        "add_label",
+        "archive_email"
       ],
       "source": "",
       "target": "",
@@ -137,8 +121,8 @@
     },
     {
       "pair": [
-        "add_attendee",
-        "check_conflicts"
+        "add_label",
+        "create_draft"
       ],
       "source": "",
       "target": "",
@@ -146,485 +130,890 @@
     },
     {
       "pair": [
-        "add_attendee",
-        "create_event"
+        "add_label",
+        "create_filter"
       ],
-      "source": "create_event",
-      "target": "add_attendee",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "forward_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "create_draft"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "create_filter"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "forward_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "create_filter"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "forward_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "forward_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "get_thread"
+      ],
+      "source": "get_email",
+      "target": "get_thread",
       "relation": "explicit"
     },
     {
       "pair": [
-        "add_attendee",
-        "create_recurring"
+        "get_email",
+        "list_filters"
       ],
-      "source": "create_recurring",
-      "target": "add_attendee",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "mark_read"
+      ],
+      "source": "get_thread",
+      "target": "mark_read",
       "relation": "explicit"
     },
     {
       "pair": [
-        "add_attendee",
-        "delete_event"
+        "get_thread",
+        "mark_unread"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "export_calendar"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "get_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "get_free_busy"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "get_recurring_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "respond_to_event"
-      ],
-      "source": "add_attendee",
-      "target": "respond_to_event",
-      "relation": "implicit"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "add_attendee",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "check_conflicts"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "create_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "create_recurring"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "delete_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "export_calendar"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "get_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "get_free_busy"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "get_recurring_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "change_timezone",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "create_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "create_recurring"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "delete_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "export_calendar"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "get_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "get_free_busy"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "get_recurring_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "check_conflicts",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_event",
-        "create_recurring"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_event",
-        "delete_event"
-      ],
-      "source": "create_event",
-      "target": "delete_event",
+      "source": "get_thread",
+      "target": "mark_unread",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_event",
-        "export_calendar"
+        "get_thread",
+        "move_to_thread"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_event",
-        "get_event"
-      ],
-      "source": "create_event",
-      "target": "get_event",
+      "source": "get_thread",
+      "target": "move_to_thread",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_event",
-        "get_free_busy"
+        "get_thread",
+        "remove_label"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_event",
-        "get_recurring_info"
-      ],
-      "source": "create_event",
-      "target": "get_recurring_info",
+      "source": "get_thread",
+      "target": "remove_label",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_event",
-        "get_working_hours"
+        "get_thread",
+        "reply_email"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_event",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_event",
-        "remove_attendee"
-      ],
-      "source": "create_event",
-      "target": "remove_attendee",
+      "source": "get_thread",
+      "target": "reply_email",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_event",
-        "respond_to_event"
+        "get_thread",
+        "search_emails"
       ],
-      "source": "create_event",
-      "target": "respond_to_event",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_email"
+      ],
+      "source": "get_thread",
+      "target": "send_email",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_event",
-        "search_events"
+        "list_filters",
+        "list_inbox"
       ],
       "source": "",
       "target": "",
@@ -632,71 +1021,116 @@
     },
     {
       "pair": [
-        "create_event",
-        "set_reminder"
+        "list_filters",
+        "mark_read"
       ],
-      "source": "create_event",
-      "target": "set_reminder",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "mark_read"
+      ],
+      "source": "list_inbox",
+      "target": "mark_read",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_event",
-        "update_event"
+        "list_inbox",
+        "mark_unread"
       ],
-      "source": "create_event",
-      "target": "update_event",
+      "source": "list_inbox",
+      "target": "mark_unread",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_recurring",
-        "delete_event"
+        "list_inbox",
+        "move_to_thread"
       ],
-      "source": "create_recurring",
-      "target": "delete_event",
+      "source": "list_inbox",
+      "target": "move_to_thread",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_recurring",
-        "export_calendar"
+        "list_inbox",
+        "remove_label"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_recurring",
-        "get_event"
-      ],
-      "source": "create_recurring",
-      "target": "get_event",
+      "source": "list_inbox",
+      "target": "remove_label",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_recurring",
-        "get_free_busy"
+        "list_inbox",
+        "reply_email"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_recurring",
-        "get_recurring_info"
-      ],
-      "source": "create_recurring",
-      "target": "get_recurring_info",
+      "source": "list_inbox",
+      "target": "reply_email",
       "relation": "explicit"
     },
     {
       "pair": [
-        "create_recurring",
-        "get_working_hours"
+        "list_inbox",
+        "search_emails"
       ],
       "source": "",
       "target": "",
@@ -704,8 +1138,8 @@
     },
     {
       "pair": [
-        "create_recurring",
-        "list_events"
+        "list_inbox",
+        "send_email"
       ],
       "source": "",
       "target": "",
@@ -713,647 +1147,197 @@
     },
     {
       "pair": [
-        "create_recurring",
-        "remove_attendee"
+        "mark_read",
+        "mark_unread"
       ],
-      "source": "create_recurring",
-      "target": "remove_attendee",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "reply_email",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "reply_email",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_emails",
+        "send_email"
+      ],
+      "source": "search_emails",
+      "target": "send_email",
       "relation": "explicit"
-    },
-    {
-      "pair": [
-        "create_recurring",
-        "respond_to_event"
-      ],
-      "source": "create_recurring",
-      "target": "respond_to_event",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "create_recurring",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "create_recurring",
-        "set_reminder"
-      ],
-      "source": "create_recurring",
-      "target": "set_reminder",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "create_recurring",
-        "update_event"
-      ],
-      "source": "create_recurring",
-      "target": "update_event",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "export_calendar"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "get_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "get_free_busy"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "get_recurring_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "delete_event",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "get_event"
-      ],
-      "source": "export_calendar",
-      "target": "get_event",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "get_free_busy"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "get_recurring_info"
-      ],
-      "source": "export_calendar",
-      "target": "get_recurring_info",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "remove_attendee"
-      ],
-      "source": "export_calendar",
-      "target": "remove_attendee",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "respond_to_event"
-      ],
-      "source": "export_calendar",
-      "target": "respond_to_event",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "export_calendar",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "get_free_busy"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "get_recurring_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_event",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "get_recurring_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_free_busy",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_recurring_info",
-        "get_working_hours"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_recurring_info",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_recurring_info",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_recurring_info",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_recurring_info",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_recurring_info",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_recurring_info",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_working_hours",
-        "list_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_working_hours",
-        "remove_attendee"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_working_hours",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_working_hours",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_working_hours",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_working_hours",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_events",
-        "remove_attendee"
-      ],
-      "source": "list_events",
-      "target": "remove_attendee",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "list_events",
-        "respond_to_event"
-      ],
-      "source": "list_events",
-      "target": "respond_to_event",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "list_events",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_events",
-        "set_reminder"
-      ],
-      "source": "list_events",
-      "target": "set_reminder",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "list_events",
-        "update_event"
-      ],
-      "source": "list_events",
-      "target": "update_event",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "remove_attendee",
-        "respond_to_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "remove_attendee",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "remove_attendee",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "remove_attendee",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "respond_to_event",
-        "search_events"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "respond_to_event",
-        "set_reminder"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "respond_to_event",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "search_events",
-        "set_reminder"
-      ],
-      "source": "search_events",
-      "target": "set_reminder",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "search_events",
-        "update_event"
-      ],
-      "source": "search_events",
-      "target": "update_event",
-      "relation": "explicit"
-    },
-    {
-      "pair": [
-        "set_reminder",
-        "update_event"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
     }
   ],
-  "classifier_contract_hash": "758fbe9c13fe4f57",
+  "classifier_contract_hash": "b007d5c5e1d59b2b",
   "teacher_model_id": "Gemma-4-31B-it",
-  "classifier_prompt_sha256": "8122a33c447527eb6337a83b34a184faa28f24217edbf5c84ea4f176164bb581",
+  "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
   "tool_count": 17,
   "expected_pair_count": 136,
   "classified_pair_count": 136,

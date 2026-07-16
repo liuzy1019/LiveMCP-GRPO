@@ -13,7 +13,7 @@ rollout 流程：
   5. 终止或 row action budget 耗尽 → 将 audit_events 存入 extra_fields
 
 verl 集成方式：
-  - 通过 configs/agent_loop.yaml 注册为 "livemcp_oval"
+  - 通过 configs/livemcp_rollout.yaml 注册为 "livemcp_oval"
   - 数据中 extra_info 需要包含 task 定义（target_servers, required_tools 等）
 """
 
@@ -26,6 +26,15 @@ from uuid import uuid4
 from loguru import logger
 
 from src.agent_loop.oval_mcp_worker import OvalMCPWorkerContext
+from src.live_mcp.observation import (
+    DEFAULT_POLICY_OBSERVATION_CHARS,
+    TRAJECTORY_SCHEMA_VERSION,
+    OBSERVATION_SCHEMA_VERSION,
+    OBSERVATION_PROJECTION_VERSION,
+    compute_server_schema_hash,
+    serialize_execution_error,
+    serialize_tool_result,
+)
 from src.live_mcp.types import ToolCall
 from src.utils import strip_think_tags
 
@@ -62,6 +71,37 @@ except ImportError:
 
 
 logger = logger.opt(colors=True)
+
+
+def _validate_environment_metadata(
+    extra_info: dict[str, Any],
+    current_tools: list[dict[str, Any]],
+    reward_profile: str,
+    *,
+    current_tools_by_domain: dict[str, list[dict[str, Any]]] | None = None,
+    required_owner_domains: set[str] | None = None,
+    runtime_max_observation_chars: int | None = None,
+) -> None:
+    """Fail before rollout when data and live environment contracts drift."""
+    from src.live_mcp.environment_metadata import (
+        validate_environment_metadata,
+    )
+
+    runtime_by_domain = dict(current_tools_by_domain or {})
+    required_domains = set(required_owner_domains or set())
+    if not runtime_by_domain and len(required_domains) == 1:
+        runtime_by_domain[next(iter(required_domains))] = current_tools
+    validate_environment_metadata(
+        extra_info,
+        current_tools_by_domain=runtime_by_domain,
+        required_owner_domains=required_domains,
+        reward_profile=reward_profile,
+        runtime_max_observation_chars=(
+            int(runtime_max_observation_chars)
+            if runtime_max_observation_chars is not None
+            else int(extra_info.get("max_observation_chars", 0))
+        ),
+    )
 
 
 # ── 工具调用解析 ──
@@ -128,7 +168,7 @@ _oval_ctx_lock = threading.Lock()
 
 
 def _get_oval_ctx(
-    suite_path: str = "configs/live_mcp/suite_mvp.yaml",
+    suite_path: str = "configs/live_mcp/ten_domain_suite.yaml",
     domains: list[str] | None = None,
 ) -> OvalMCPWorkerContext:
     """获取或创建进程级 OvalMCPWorkerContext 单例（线程安全）。"""
@@ -168,14 +208,11 @@ class LiveMCPOvalLoop(AgentLoopBase):
         super().__init__(**kwargs)
         rollout_cfg = self.config.actor_rollout_ref.rollout
         multi_turn_cfg = rollout_cfg.get("multi_turn", {})
-        # Fallback for legacy rows without an explicit action budget. Generated
-        # rows carry a verified per-row budget and use that value directly.
         self.max_turns = int(
             multi_turn_cfg.get("max_assistant_turns", None)
             or rollout_cfg.get("max_turns", 5)
             or 5
         )
-        self.max_obs_length = 1024
         self.response_length = int(rollout_cfg.response_length)
         self.apply_chat_template_kwargs = dict(
             self.config.data.get("apply_chat_template_kwargs", {}) or {}
@@ -183,19 +220,37 @@ class LiveMCPOvalLoop(AgentLoopBase):
         self.apply_chat_template_kwargs.setdefault("enable_thinking", False)
 
         # Oval 配置
-        try:
-            from src.training.livemcp_hyperparams import get_config
-            cfg = get_config()
-        except ImportError:
-            cfg = None
+        from src.training.livemcp_hyperparams import get_config
+        cfg = get_config()
         self.suite_path = (
             os.environ.get("OVAL_SUITE_PATH")
-            or (cfg.suite_path if cfg else None)
-            or "configs/live_mcp/suite_mvp.yaml"
+            or cfg.suite_path
+            or "configs/live_mcp/ten_domain_suite.yaml"
+        )
+        configured_obs_budget = int(
+            cfg.max_observation_chars
+        )
+        if configured_obs_budget <= 0:
+            try:
+                from src.live_mcp.config import load_suite_config
+
+                configured_obs_budget = int(
+                    load_suite_config(self.suite_path).rollout.get(
+                        "observation_max_chars",
+                        DEFAULT_POLICY_OBSERVATION_CHARS,
+                    )
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"cannot load observation budget from {self.suite_path}: {exc}"
+                ) from exc
+        self.max_obs_length = max(256, configured_obs_budget)
+        self.reward_profile = str(
+            cfg.reward_profile
         )
         domains_str = (
             os.environ.get("OVAL_DOMAINS")
-            or (cfg.domains if cfg else None)
+            or cfg.domains
             or "calendar,shopping,banking,email,filesystem,payments,crm,issue_tracker,team_chat,food_delivery"
         )
         self.domains = [d.strip() for d in domains_str.split(",") if d.strip()]
@@ -203,6 +258,19 @@ class LiveMCPOvalLoop(AgentLoopBase):
         self._ctx: OvalMCPWorkerContext | None = None
 
     async def run(self, sampling_params: dict[str, Any], **kwargs) -> AgentLoopOutput:
+        """Run one rollout and close every session even on unexpected errors."""
+        cleanup: list[tuple[OvalMCPWorkerContext, str]] = []
+        kwargs["_session_cleanup"] = cleanup
+        try:
+            return await self._run_impl(sampling_params, **kwargs)
+        finally:
+            for ctx, session_id in cleanup:
+                try:
+                    ctx.close_session(session_id)
+                except Exception:
+                    pass
+
+    async def _run_impl(self, sampling_params: dict[str, Any], **kwargs) -> AgentLoopOutput:
         """运行 live MCP Oval rollout。"""
         raw_prompt = kwargs.get("raw_prompt", [])
         extra_info = kwargs.get("extra_info", {})
@@ -210,18 +278,30 @@ class LiveMCPOvalLoop(AgentLoopBase):
         # ── normalize extra_info ──
         from src.utils import normalize_extra_info, normalize_json_field
         extra_info = normalize_extra_info(extra_info)
+        from src.live_mcp.environment_metadata import (
+            validate_prove_corpus_evidence,
+            validate_teacher_generation_evidence,
+        )
+        validate_prove_corpus_evidence(extra_info)
+        validate_teacher_generation_evidence(extra_info)
+        from src.reward.oval_reward_fn import _build_task_dict
+        _build_task_dict(extra_info)
 
         # ── 获取 task 信息 ──
         task_domain = extra_info.get("target_servers", extra_info.get("domain", ""))
         if isinstance(task_domain, list):
             task_domain = task_domain[0] if task_domain else ""
         if not task_domain:
-            task_domain = "calendar"  # fallback
+            raise RuntimeError("rollout row is missing target domain")
 
         required_tools = extra_info.get("required_tools", [])
         if isinstance(required_tools, str):
             required_tools = [t.strip() for t in required_tools.split(",")]
-        budget = extra_info.get("budget", self.max_turns)
+        if "budget" not in extra_info or "minimum_action_budget" not in extra_info:
+            raise RuntimeError(
+                "rollout row is missing canonical action budget metadata"
+            )
+        budget = extra_info["budget"]
         task_id = extra_info.get("task_id", str(uuid4().hex[:8]))
         request_id = uuid4().hex
         rid_short = request_id[:8]
@@ -247,32 +327,25 @@ class LiveMCPOvalLoop(AgentLoopBase):
             round_contracts = []
 
         # P0-2 Fix: multi-round data MUST have matching round_contracts.
-        # Missing OR mismatched contracts on multi-round data is a data
-        # integrity error.  Only single-round legacy rows can proceed without
-        # contracts.
         n_conversation_rounds = len(conversation_queries)
-        if n_conversation_rounds > 1:
-            if not round_contracts:
+        if n_conversation_rounds < 1:
+            raise RuntimeError(f"Task {task_id} has no conversation_queries")
+        if not round_contracts:
+            raise RuntimeError(f"Task {task_id} has no round_contracts")
+        if len(round_contracts) != n_conversation_rounds:
                 raise RuntimeError(
-                    f"Multi-round task {task_id} has {n_conversation_rounds} "
-                    f"conversation queries but no round_contracts. "
-                    f"Re-generate data with updated generate_data.py."
-                )
-            if len(round_contracts) != n_conversation_rounds:
-                raise RuntimeError(
-                    f"Multi-round task {task_id}: "
+                    f"Task {task_id}: "
                     f"{len(round_contracts)} round_contracts vs "
                     f"{n_conversation_rounds} conversation queries. "
                     f"Counts must match."
                 )
-            # Verify round_idx matches position
-            for i, c in enumerate(round_contracts):
-                actual_idx = c.get("round_idx", -1)
-                if actual_idx != i:
-                    raise RuntimeError(
-                        f"Multi-round task {task_id}: round_contracts[{i}] "
-                        f"has round_idx={actual_idx}, expected {i}."
-                    )
+        for i, c in enumerate(round_contracts):
+            actual_idx = c.get("round_idx", -1)
+            if actual_idx != i:
+                raise RuntimeError(
+                    f"Task {task_id}: round_contracts[{i}] "
+                    f"has round_idx={actual_idx}, expected {i}."
+                )
 
         # A generated row must be structurally executable even before model
         # exploration: one action per reference tool call plus one terminal per
@@ -299,28 +372,74 @@ class LiveMCPOvalLoop(AgentLoopBase):
             )
 
         ctx = self._ctx
+        tool_owner_domains = normalize_json_field(
+            extra_info.get("tool_owner_domains", {}), default={},
+        )
+        if not isinstance(tool_owner_domains, dict):
+            tool_owner_domains = {}
+        raw_schema_hashes = normalize_json_field(
+            extra_info.get("server_schema_hashes", {}), default={},
+        )
+        schema_owner_domains = (
+            {str(domain) for domain in raw_schema_hashes}
+            if isinstance(raw_schema_hashes, dict)
+            else set()
+        )
+        required_owner_domains = {
+            task_domain,
+            *(str(domain) for domain in tool_owner_domains.values()),
+        }
+        _validate_environment_metadata(
+            extra_info,
+            ctx.get_tool_schemas(task_domain),
+            self.reward_profile,
+            current_tools_by_domain={
+                domain: ctx.get_tool_schemas(domain)
+                for domain in schema_owner_domains
+            },
+            required_owner_domains=required_owner_domains,
+            runtime_max_observation_chars=self.max_obs_length,
+        )
 
         # ── 创建 session ──
         session_seed = extra_info.get("session_seed", 42)
         if isinstance(session_seed, str):
             session_seed = int(session_seed)
         session_id = ctx.create_session(seed=session_seed)
+        kwargs["_session_cleanup"].append((ctx, session_id))
 
-        # A row is valid only for the exact deterministic initial state used by
-        # its teacher oracle.  Silent reset drift invalidates both reward and
-        # safety diagnostics.
-        expected_initial_hash = str(extra_info.get("initial_state_hash", ""))
-        if expected_initial_hash:
-            import hashlib
-            actual_state = ctx.get_state(session_id, task_domain)
-            canonical = json.dumps(actual_state, sort_keys=True, ensure_ascii=True, default=str)
-            actual_initial_hash = hashlib.sha256(canonical.encode()).hexdigest()
-            if actual_initial_hash != expected_initial_hash:
-                ctx.close_session(session_id)
-                raise RuntimeError(
-                    f"initial state hash mismatch for task={task_id}: "
-                    f"expected={expected_initial_hash[:12]} actual={actual_initial_hash[:12]}"
-                )
+        # Bind every executable owner, including cross-domain distractors, to
+        # the exact deterministic state used during Teacher generation.
+        import hashlib
+        actual_initial_hashes: dict[str, str] = {}
+        for owner in sorted(required_owner_domains):
+            owner_state = ctx.get_state(session_id, owner)
+            canonical = json.dumps(
+                owner_state, sort_keys=True, ensure_ascii=True, default=str,
+            )
+            actual_initial_hashes[owner] = hashlib.sha256(
+                canonical.encode()
+            ).hexdigest()
+        from src.live_mcp.environment_metadata import (
+            validate_environment_metadata,
+        )
+        validate_environment_metadata(
+            extra_info,
+            current_tools_by_domain={
+                owner: ctx.get_tool_schemas(owner)
+                for owner in required_owner_domains
+            },
+            required_owner_domains=required_owner_domains,
+            reward_profile=self.reward_profile,
+            runtime_max_observation_chars=self.max_obs_length,
+            current_initial_state_hashes=actual_initial_hashes,
+        )
+        expected_primary_hash = str(extra_info.get("initial_state_hash", ""))
+        if expected_primary_hash != actual_initial_hashes[task_domain]:
+            ctx.close_session(session_id)
+            raise RuntimeError(
+                f"primary initial_state_hash mismatch for task={task_id}"
+            )
 
         # ── missing_function: blocked tools ──
         hidden_tools = extra_info.get("hidden_tools", [])
@@ -335,18 +454,12 @@ class LiveMCPOvalLoop(AgentLoopBase):
         visible_tool_names = extra_info.get("visible_tool_names", [])
         if isinstance(visible_tool_names, str):
             visible_tool_names = [t.strip() for t in visible_tool_names.split(",")]
-        tool_owner_domains = normalize_json_field(
-            extra_info.get("tool_owner_domains", {}), default={},
-        )
-        if not isinstance(tool_owner_domains, dict):
-            tool_owner_domains = {}
         if blocked_tools and visible_tool_names:
             still_visible = blocked_tools & set(visible_tool_names)
             if still_visible:
-                logger.warning(
-                    f"[oval {rid_short}] hidden_tools 一致性警告: "
-                    f"被标记为 hidden 的工具 {still_visible} 仍然出现在 "
-                    f"visible_tool_names 中。模型可能会尝试调用不可用的工具。"
+                raise RuntimeError(
+                    f"hidden tools remain visible for task={task_id}: "
+                    f"{sorted(still_visible)}"
                 )
 
         if self.tokenizer is None:
@@ -405,6 +518,9 @@ class LiveMCPOvalLoop(AgentLoopBase):
         all_response_ids: list[int] = []
         all_response_mask: list[int] = []
         audit_events: list[dict] = []
+        trajectory_diagnostics: list[dict] = []
+        trajectory_errors: list[dict] = []
+        trajectory_integrity_ok = True
         n_model_tool_calls = 0
         n_exec_success = 0
 
@@ -438,6 +554,12 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 )
             except Exception as e:
                 logger.error(f"[oval {rid_short}] turn={turn_idx} 生成失败: {e}")
+                trajectory_integrity_ok = False
+                trajectory_errors.append({
+                    "stage": "model_generation",
+                    "turn": turn_idx,
+                    "error": f"{type(e).__name__}: {e}",
+                })
                 break
 
             response_ids = (
@@ -451,11 +573,6 @@ class LiveMCPOvalLoop(AgentLoopBase):
 
             all_response_ids.extend(response_ids)
             all_response_mask.extend([1] * len(response_ids))
-
-            # 长度兜底
-            if len(all_response_ids) >= self.response_length:
-                logger.debug(f"[oval {rid_short}] turn={turn_idx} response_length 耗尽")
-                break
 
             # 2. 解析模型输出
             tool_call_matches = list(_TOOL_CALL_PATTERN.finditer(response_text))
@@ -474,9 +591,34 @@ class LiveMCPOvalLoop(AgentLoopBase):
                         action_type=terminal_type,
                         model_output=response_text,
                     )
+                    event.round_idx = conversation_round_idx
                     audit_events.append(event.to_dict())
                 except Exception as e:
                     logger.warning(f"[oval {rid_short}] audit terminal 失败: {e}")
+                    trajectory_integrity_ok = False
+                    trajectory_errors.append({
+                        "stage": "terminal_audit",
+                        "turn": turn_idx,
+                        "error": f"{type(e).__name__}: {e}",
+                    })
+                    # Preserve one action event per model action.  Reward will
+                    # reject the trajectory via the integrity flag, but the
+                    # event count and action history remain factual.
+                    audit_events.append({
+                        "event_id": f"terminal_audit_error_{uuid4().hex[:8]}",
+                        "session_id": session_id,
+                        "step": turn_idx,
+                        "round_idx": conversation_round_idx,
+                        "action_type": terminal_type,
+                        "terminal_action": response_text,
+                        "operation": "terminal",
+                        "execution_success": False,
+                        "schema_valid": True,
+                        "tool_name_known": True,
+                        "state_changed": False,
+                        "error_type": "audit_infrastructure_error",
+                        "error_message": str(e),
+                    })
 
                 # P0-2: validate terminal against round contract.
                 # Only advance to the next conversation round if the terminal
@@ -498,7 +640,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
                         f"terminal {terminal_type} not in contract {contract_allowed} — "
                         f"recording contract violation and stopping"
                     )
-                    audit_events.append({
+                    trajectory_diagnostics.append({
                         "event_id": f"contract_violation_{uuid4().hex[:8]}",
                         "session_id": session_id,
                         "step": turn_idx,
@@ -532,10 +674,9 @@ class LiveMCPOvalLoop(AgentLoopBase):
                         )
                         break
 
-                # P0-2: enforce per-round required_tools contract.
-                # Every tool in contract_required must have been called
-                # successfully this round.  A single distractor call is not
-                # enough; missing tools are explicitly listed and recorded.
+                # Per-round required_tools describe the reference trace.  They
+                # are diagnostic only: PROVE allows equivalent tool paths, so
+                # an exact-name miss must not truncate the conversation.
                 contract_required = (
                     current_contract.get("required_tools", [])
                     if current_contract else []
@@ -547,24 +688,23 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     missing_counts = required_counts - called_counts
                     if missing_counts:
                         missing_names = list(missing_counts.elements())
-                        logger.warning(
+                        logger.debug(
                             f"[oval {rid_short}] turn={turn_idx} round={conversation_round_idx} "
                             f"terminal {terminal_type} missing required tools: "
                             f"{sorted(missing_counts)} "
                             f"(called: {sorted(round_successful_tool_names)}, "
                             f"required: {contract_required})"
                         )
-                        audit_events.append({
-                            "event_id": f"round_tool_violation_{uuid4().hex[:8]}",
+                        trajectory_diagnostics.append({
+                            "event_id": f"round_tool_diagnostic_{uuid4().hex[:8]}",
                             "session_id": session_id,
                             "step": turn_idx,
-                            "action_type": "round_tool_violation",
+                            "action_type": "round_tool_diagnostic",
                             "round_idx": conversation_round_idx,
                             "required_tools": contract_required,
                             "called_tools": sorted(round_successful_tool_names),
                             "missing_tools": sorted(missing_names),
                         })
-                        break
 
                 # Only final_answer (or paired ask_clarification) advances.
                 if (
@@ -597,6 +737,27 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     f"[oval {rid_short}] turn={turn_idx} 同一 turn 同时输出 "
                     f"tool_call 和 terminal tag，视为非法，终止"
                 )
+                trajectory_integrity_ok = False
+                trajectory_errors.append({
+                    "stage": "action_parse",
+                    "turn": turn_idx,
+                    "error": "assistant emitted tool_call and terminal in one action",
+                })
+                audit_events.append({
+                    "event_id": f"invalid_mixed_action_{uuid4().hex[:8]}",
+                    "session_id": session_id,
+                    "step": turn_idx,
+                    "round_idx": conversation_round_idx,
+                    "action_type": "tool_call",
+                    "tool_name": "",
+                    "tool_arguments": {},
+                    "tool_name_known": False,
+                    "schema_valid": False,
+                    "execution_success": False,
+                    "error_type": "invalid_mixed_action",
+                    "error_message": "tool_call and terminal emitted together",
+                    "state_changed": False,
+                })
                 break
 
             # 3. 处理 tool_call → 真实 MCP 执行
@@ -610,9 +771,15 @@ class LiveMCPOvalLoop(AgentLoopBase):
 
             if len(all_parsed_calls) != 1:
                 # JSON 解析失败 → 返回错误 observation
-                observation = (
-                    "Error: Emit exactly one valid <tool_call> per assistant turn; "
+                error_message = (
+                    "Emit exactly one valid <tool_call> per assistant turn; "
                     f"received {len(all_parsed_calls)}."
+                )
+                observation = serialize_execution_error(
+                    "invalid_tool_call",
+                    error_message,
+                    self.max_obs_length,
+                    observation={"parsed_tool_call_count": len(all_parsed_calls)},
                 )
                 logger.warning(
                     f"[oval {rid_short}] turn={turn_idx} expected one tool call, "
@@ -622,6 +789,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     "event_id": f"invalid_tool_call_{uuid4().hex[:8]}",
                     "session_id": session_id,
                     "step": turn_idx,
+                    "round_idx": conversation_round_idx,
                     "action_type": "tool_call",
                     "tool_name": "",
                     "tool_arguments": {},
@@ -629,7 +797,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     "schema_valid": False,
                     "execution_success": False,
                     "error_type": "invalid_tool_call",
-                    "error_message": observation,
+                    "error_message": error_message,
                     "state_changed": False,
                 })
             else:
@@ -653,38 +821,63 @@ class LiveMCPOvalLoop(AgentLoopBase):
                         model_output=response_text,
                         blocked_tools=blocked_tools,
                     )
+                    event.round_idx = conversation_round_idx
                     event.tool_name_known = tool_call.name in set(visible_tool_names)
                     if execution_domain != task_domain:
                         event.forbidden_transition = "cross_domain_distractor_call"
                     audit_events.append(event.to_dict())
 
+                    if event.state_evidence_errors:
+                        trajectory_integrity_ok = False
+                        trajectory_errors.append({
+                            "stage": "tool_state_evidence",
+                            "turn": turn_idx,
+                            "tool_name": tool_call.name,
+                            "errors": list(event.state_evidence_errors),
+                        })
+
                     if exec_result.success:
                         n_exec_success += 1
                         round_successful_tool_names.append(tool_call.name)
-                        observation = (
-                            json.dumps(exec_result.observation, ensure_ascii=False)
-                            if isinstance(exec_result.observation, (dict, list))
-                            else str(exec_result.observation or "")
-                        )
-                    else:
-                        observation = (
-                            f"Error: {exec_result.error_message}"
-                            if exec_result.error_message
-                            else "Error: tool execution failed."
-                        )
+                    observation = serialize_tool_result(
+                        exec_result, self.max_obs_length,
+                    )
 
                     logger.debug(
                         f"[oval {rid_short}] turn={turn_idx} exec: "
                         f"tool={tool_call.name} ok={exec_result.success}"
                     )
                 except Exception as e:
-                    observation = f"Error: tool execution failed: {e}"
+                    observation = serialize_execution_error(
+                        "rollout_execution_exception",
+                        f"tool execution failed: {e}",
+                        self.max_obs_length,
+                    )
                     logger.warning(f"[oval {rid_short}] turn={turn_idx} exec 异常: {e}")
+                    trajectory_integrity_ok = False
+                    trajectory_errors.append({
+                        "stage": "tool_execution_audit",
+                        "turn": turn_idx,
+                        "tool_name": tool_call.name,
+                        "error": f"{type(e).__name__}: {e}",
+                    })
+                    audit_events.append({
+                        "event_id": f"execution_audit_error_{uuid4().hex[:8]}",
+                        "session_id": session_id,
+                        "step": turn_idx,
+                        "round_idx": conversation_round_idx,
+                        "action_type": "tool_call",
+                        "tool_name": tool_call.name,
+                        "tool_arguments": dict(tool_call.arguments),
+                        "tool_name_known": tool_call.name in set(visible_tool_names),
+                        "schema_valid": False,
+                        "execution_success": False,
+                        "error_type": "rollout_execution_exception",
+                        "error_message": str(e),
+                        "state_changed": False,
+                    })
 
             # 4. 拼接 observation 到 response
-            if len(observation) > self.max_obs_length:
-                observation = observation[: self.max_obs_length] + "...(truncated)"
-
             tool_msg = [{"role": "tool", "content": observation}]
             tool_tokens = await self._encode_message_tokens(tool_msg)
 
@@ -701,10 +894,21 @@ class LiveMCPOvalLoop(AgentLoopBase):
 
         # Capture verifier evidence before closing the isolated session.
         final_state: dict[str, Any] = {}
+        state_evidence = {"status": "available", "error": ""}
         try:
             final_state = ctx.get_state(session_id, task_domain)
         except Exception as e:
             logger.warning(f"[oval {rid_short}] final state capture failed: {e}")
+            trajectory_integrity_ok = False
+            state_evidence = {
+                "status": "error",
+                "error": f"{type(e).__name__}: {e}",
+            }
+            trajectory_errors.append({
+                "stage": "final_state_capture",
+                "turn": turn_idx,
+                "error": state_evidence["error"],
+            })
 
         # 清理 session
         try:
@@ -729,11 +933,20 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 "n_model_tool_calls": n_model_tool_calls,
                 "n_exec_success": n_exec_success,
                 "audit_events": audit_events,
+                "trajectory_diagnostics": trajectory_diagnostics,
+                "trajectory_integrity_ok": trajectory_integrity_ok,
+                "trajectory_errors": trajectory_errors,
+                "state_evidence": state_evidence,
                 "task_id": task_id,
                 "domain": task_domain,
                 "required_tools": required_tools,
                 "session_id": session_id,
                 "final_state": final_state,
+                "observation_schema_version": OBSERVATION_SCHEMA_VERSION,
+                "observation_projection_version": OBSERVATION_PROJECTION_VERSION,
+                "trajectory_schema_version": TRAJECTORY_SCHEMA_VERSION,
+                "max_observation_chars": self.max_obs_length,
+                "reward_profile": self.reward_profile,
             },
         )
 

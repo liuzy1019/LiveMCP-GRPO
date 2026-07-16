@@ -13,7 +13,6 @@ Pipeline:
   8. J = R_task + lambda_shape * F + lambda_process * P - lambda_safe * C
 """
 
-import os
 from typing import Any
 
 from src.oval_mcp.envs.domain_adapter import get_adapter
@@ -23,16 +22,8 @@ from src.oval_mcp.rewards.task_reward import TaskReward
 from src.oval_mcp.rewards.f_gamma import ProgressTracker
 from src.oval_mcp.rewards.p_process import ProcessScorer
 
-try:
-    from src.oval_mcp.training.lambda_state import LambdaState, DEFAULT_STATE_PATH
-except ImportError:
-    LambdaState = None  # type: ignore
-    DEFAULT_STATE_PATH = "/tmp/ovalmcp_lambda_state.json"
-
-try:
-    from src.training.livemcp_hyperparams import get_config
-except ImportError:
-    get_config = None  # type: ignore
+from src.oval_mcp.training.lambda_state import LambdaState, DEFAULT_STATE_PATH
+from src.training.livemcp_hyperparams import get_config
 
 # ── 模块级单例（延迟初始化，由 _get_cfg() 统一管理） ──
 _safety_verifier = SafetyVerifier()
@@ -40,28 +31,8 @@ _progress_tracker = ProgressTracker()
 
 
 def _get_cfg():
-    """获取配置：优先从 LiveMCPHyperparams，fallback 到环境变量。"""
-    if get_config is not None:
-        return get_config()
-    # Fallback: 从环境变量手动构建（兼容未安装 livemcp_hyperparams 的场景）
-    from dataclasses import dataclass
-    @dataclass
-    class _FallbackCfg:
-        i_shape: int = int(os.environ.get("OVAL_I_SHAPE", "0"))
-        i_process: int = int(os.environ.get("OVAL_I_PROCESS", "0"))
-        lambda_shape: float = float(os.environ.get("OVAL_LAMBDA_SHAPE", "0.5"))
-        lambda_process: float = float(os.environ.get("OVAL_LAMBDA_PROCESS", "0.3"))
-        gamma: float = float(os.environ.get("OVAL_GAMMA", "1.0"))
-        lambda_safe_default: float = 1.0
-        p_max: float = float(os.environ.get("OVAL_P_MAX", "0.3"))
-        w_val: float = 0.5
-        w_cov: float = 0.5
-        w_eff: float = 0.15
-        w_name: float = 0.2
-        w_arg: float = 0.1
-        alpha_eff: float = 0.5   # PROVE §4.1: α = 0.5
-        beta_budget: float = 0.5  # PROVE §4.1: β = 0.5
-    return _FallbackCfg()
+    """Read the single project-owned training configuration."""
+    return get_config()
 
 # 模块加载时解析一次配置
 _cfg = _get_cfg()
@@ -72,6 +43,7 @@ _I_PROCESS = _cfg.i_process
 _LAMBDA_SHAPE = _cfg.lambda_shape
 _LAMBDA_PROCESS = _cfg.lambda_process
 _GAMMA = _cfg.gamma
+_REWARD_PROFILE = _cfg.reward_profile
 
 _LAMBDA_SAFE_DEFAULT = _cfg.lambda_safe_default
 
@@ -90,12 +62,17 @@ _task_reward = TaskReward(weights={
 })
 
 
+class RewardIntegrityError(RuntimeError):
+    """Infrastructure/data failure that must not become a model reward."""
+
+
 def _dict_to_audit_event(d: dict) -> AuditEvent:
     """从序列化 dict 重构 AuditEvent。"""
     return AuditEvent(
         event_id=d.get("event_id", ""),
         session_id=d.get("session_id", ""),
         step=d.get("step", d.get("step_index", 0)),
+        round_idx=d.get("round_idx", 0),
         action_type=d.get("action_type", ""),
         tool_name=d.get("tool_name", ""),
         tool_arguments=d.get("tool_arguments", {}),
@@ -119,6 +96,9 @@ def _dict_to_audit_event(d: dict) -> AuditEvent:
         tool_name_known=d.get("tool_name_known", False),
         state_changed=d.get("state_changed", False),
         latency_ms=d.get("latency_ms", 0),
+        pre_state_status=d.get("pre_state_status", "available"),
+        post_state_status=d.get("post_state_status", "available"),
+        state_evidence_errors=d.get("state_evidence_errors", []),
     )
 
 
@@ -132,11 +112,11 @@ def _parse_audit_events(raw: Any) -> list[AuditEvent]:
     if isinstance(raw, str):
         try:
             raw = _json.loads(raw)
-        except _json.JSONDecodeError:
-            return []
+        except _json.JSONDecodeError as exc:
+            raise RewardIntegrityError("audit_events contains invalid JSON") from exc
 
     if not isinstance(raw, list):
-        return []
+        raise RewardIntegrityError("audit_events must contain a list")
 
     events: list[AuditEvent] = []
     for item in raw:
@@ -145,106 +125,13 @@ def _parse_audit_events(raw: Any) -> list[AuditEvent]:
         elif isinstance(item, dict):
             try:
                 events.append(_dict_to_audit_event(item))
-            except Exception:
-                pass
+            except Exception as exc:
+                raise RewardIntegrityError("invalid audit event") from exc
+        else:
+            raise RewardIntegrityError(
+                f"invalid audit event type: {type(item).__name__}"
+            )
     return events
-
-
-def _infer_operation(tool_name: str) -> str:
-    """Infer CRUD operation from tool name using naming conventions.
-
-    Covers all 109+ tool names across 10 domains without static enumeration.
-    """
-    if not tool_name:
-        return "query"
-
-    tn = tool_name.lower()
-
-    # ── Explicit exceptions (non-standard naming) ──
-    _exceptions = {
-        # filesystem commands
-        "cat": "query", "cd": "query", "pwd": "query", "ls": "query",
-        "stat": "query", "file_info": "query",
-        "wc": "query", "head": "query", "tail": "query", "grep": "query",
-        "df": "query", "du": "query", "tree": "query", "find": "query",
-        "diff": "query", "readlink": "query", "xxd": "query",
-        "md5sum": "query", "sha256sum": "query", "uniq": "query",
-        "sort": "query", "split": "query", "join": "query",
-        "cut": "query", "awk": "query",
-        "touch": "create", "mkdir": "create",
-        "cp": "create", "tar_create": "create", "zip": "create",
-        "mv": "update", "sed": "update", "chmod": "update",
-        "chown": "update", "symlink": "update", "truncate": "update",
-        "rm": "delete", "unzip": "update",
-        # semantic ops
-        "convert_lead": "update", "transition_issue": "update",
-        "move_to_thread": "update", "schedule_transfer": "update",
-        "transfer": "update", "wire_transfer": "update",
-        "pay_invoice": "update", "refund_invoice": "create",
-        "dispute_invoice": "update", "cancel_payment": "delete",
-        "freeze_account": "update", "unfreeze_account": "update",
-        "verify_account": "update",
-        "time_track": "create", "reorder": "create",
-        "mark_read": "update", "mark_unread": "update",
-        "apply_coupon": "update", "apply_loan": "update",
-        "rate_order": "update", "track_order": "query",
-        "track_rider": "query", "contact_support": "create",
-        "export_calendar": "query", "set_reminder": "create",
-        "set_milestone": "update", "get_history": "query",
-        "get_statement": "query", "get_recurring_info": "query",
-        "get_exchange_rate": "query", "get_working_hours": "query",
-        "get_user_status": "query", "get_menu": "query",
-        "get_popular_items": "query", "get_recommendations": "query",
-        "get_return_status": "query", "get_reviews": "query",
-        "get_time_report": "query",
-        "bill_pay": "update", "deposit": "create", "withdraw": "delete",
-        "cancel_transfer": "delete", "cancel_order": "delete",
-        "return_order": "delete", "clear_cart": "delete",
-        "complete_task": "update", "add_note": "create",
-        "add_review": "create", "add_watcher": "create",
-        "remove_watcher": "delete",
-        "create_task": "create", "list_tasks": "query",
-        "create_filter": "create", "list_filters": "query",
-        "list_categories": "query", "list_webhooks": "query",
-        "delete_webhook": "delete", "delete_contact": "delete",
-        "update_contact": "update", "update_order_status": "update",
-        "send_dm": "create", "change_timezone": "update",
-    }
-    if tn in _exceptions:
-        return _exceptions[tn]
-
-    # ── Pattern-based inference ──
-    _create_prefix = (
-        "create_", "add_", "send_", "new_", "generate_", "register_",
-        "forward_", "reply_",
-    )
-    _update_prefix = (
-        "update_", "modify_", "change_", "edit_", "set_", "upload_",
-        "rename_", "move_", "react_", "respond_", "assign_", "comment_",
-        "schedule_",
-    )
-    _delete_prefix = (
-        "delete_", "remove_", "cancel_", "archive_", "destroy_", "clear_",
-    )
-    _query_prefix = (
-        "get_", "list_", "search_", "check_", "lookup_", "view_", "read_",
-        "fetch_", "find_", "compare_", "show_", "count_", "calc_",
-    )
-
-    for p in _create_prefix:
-        if tn.startswith(p):
-            return "create"
-    for p in _delete_prefix:
-        if tn.startswith(p):
-            return "delete"
-    for p in _update_prefix:
-        if tn.startswith(p):
-            return "update"
-    for p in _query_prefix:
-        if tn.startswith(p):
-            return "query"
-
-    return "query"  # safe default
 
 
 def _build_task_dict(extra_info: dict) -> dict:
@@ -265,137 +152,126 @@ def _build_task_dict(extra_info: dict) -> dict:
 
     domain = extra_info.get("domain", "unknown")
     task_id = extra_info.get("task_id", "unknown")
-    required_tools = extra_info.get("required_tools", [])
-    if isinstance(required_tools, str):
-        required_tools = [t.strip() for t in required_tools.split(",") if t.strip()]
-    else:
-        required_tools = _as_list(required_tools)
 
     # Use saved oracle calls for accurate arg matching
     oracle_calls_raw = extra_info.get("oracle_calls", [])
-    # P1-11: oracle_calls may be a JSON string (to prevent pyarrow struct
-    # unification) or a legacy list[dict]. Parse accordingly.
-    if isinstance(oracle_calls_raw, str):
-        try:
-            oracle_calls = _json.loads(oracle_calls_raw)
-        except (_json.JSONDecodeError, TypeError):
-            oracle_calls = []
-    elif isinstance(oracle_calls_raw, list):
-        oracle_calls = oracle_calls_raw
-    elif hasattr(oracle_calls_raw, "tolist"):
-        oracle_calls = oracle_calls_raw.tolist()
-    else:
-        oracle_calls = []
+    if not isinstance(oracle_calls_raw, str):
+        raise RewardIntegrityError("oracle_calls must be canonical JSON text")
+    try:
+        oracle_calls = _json.loads(oracle_calls_raw)
+    except (_json.JSONDecodeError, TypeError) as exc:
+        raise RewardIntegrityError("oracle_calls contains invalid JSON") from exc
     if not isinstance(oracle_calls, list):
-        oracle_calls = []
+        raise RewardIntegrityError("oracle_calls JSON must contain a list")
 
     terminal_actions = [
         oc.get("action") for oc in oracle_calls
         if isinstance(oc, dict)
-        and oc.get("action") in ("final_answer", "ask_clarification", "report_error", "clarification")
+        and oc.get("action") in ("final_answer", "ask_clarification", "report_error")
     ]
     terminal_action = terminal_actions[-1] if terminal_actions else ""
-    if terminal_action == "clarification":  # legacy parquet compatibility
-        terminal_action = "ask_clarification"
-    last_oracle_is_clarification = terminal_action == "ask_clarification"
     real_oracle_calls = [
         oc for oc in oracle_calls
         if isinstance(oc, dict) and oc.get("action", "tool_call") == "tool_call"
     ]
+    round_contracts = _parse_round_contracts(extra_info)
+    contract_tool_names: list[str] = []
+    oracle_call_rounds: list[int] = []
+    for expected_round_idx, contract in enumerate(round_contracts):
+        if contract.get("round_idx") != expected_round_idx:
+            raise RewardIntegrityError(
+                f"task {task_id} has non-canonical round_idx at "
+                f"round_contracts[{expected_round_idx}]"
+            )
+        names = contract.get("required_tools", [])
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise RewardIntegrityError(
+                f"task {task_id} has invalid required_tools in round "
+                f"{expected_round_idx}"
+            )
+        contract_tool_names.extend(names)
+        oracle_call_rounds.extend([expected_round_idx] * len(names))
+    oracle_tool_names = [str(call.get("tool_name", "")) for call in real_oracle_calls]
+    if contract_tool_names != oracle_tool_names:
+        raise RewardIntegrityError(
+            f"task {task_id} round contracts do not align with canonical oracle calls"
+        )
 
     # Irrelevance/no-tool tasks require zero calls. Missing-function and
     # clarification trajectories may contain successful visible-prefix calls
     # before the hidden capability is discovered; preserve those oracle calls.
     scenario_type = extra_info.get("scenario_type", "")
     is_abstain_task = scenario_type in ("irrelevant", "no_tool_or_abstention")
+    is_missing_function_terminal = (
+        scenario_type in ("missing_function", "clarification_required")
+        and terminal_action in ("ask_clarification", "report_error")
+    )
 
     if is_abstain_task:
         required_tool_calls = []
-    elif last_oracle_is_clarification and not real_oracle_calls:
-        # P1-edge: Last round is pure clarification (no tool calls).
-        # The model should output ask_clarification, NOT call tools.
-        # Do NOT fallback to required_tools.
+    elif is_missing_function_terminal and not real_oracle_calls:
+        # PROVE graceful give-up permits a missing-function trajectory to end
+        # with ask_clarification or report_error without first manufacturing a
+        # failed tool call. Visible-prefix calls, when present, are preserved
+        # by the real_oracle_calls branch below.
         required_tool_calls = []
     elif real_oracle_calls:
-        # P3a CRITICAL: Derive required_tool_calls from oracle_calls, NOT
-        # from the required_tools field.  required_tools comes from the
-        # generation-time plan and may differ from what the teacher LLM
-        # actually called (e.g. plan says {A, B} but teacher only called {A}).
-        # Using required_tools → tool-name mismatch in R_name/R_coverage.
+        # Derive required calls only from the replayed Teacher oracle.
         required_tool_calls = [
             {"tool_name": oc["tool_name"], "arguments": oc.get("arguments", {})}
             for oc in real_oracle_calls
         ]
     else:
-        # Fallback — no oracle and not an abstain task (shouldn't happen in
-        # practice, but keep as safety net).
-        required_tool_calls = [
-            {"tool_name": tn, "arguments": {}} for tn in required_tools
-        ]
-
-    # P3a: Build outcome_assertions from the tools that actually appear in
-    # oracle_calls (or required_tool_calls for abstain tasks), NOT from the
-    # original required_tools field which may include tools the teacher never
-    # called.
-    tool_names_for_assertions = (
-        required_tools if is_abstain_task
-        else sorted(set(oc["tool_name"] for oc in real_oracle_calls)) if real_oracle_calls
-        else []
-        # P1-edge: when clarification-only, real_oracle_calls is empty.
-        # Use empty list — the only expected "operation" is "terminal".
+        raise RewardIntegrityError(
+            f"task {task_id} has no canonical oracle tool calls"
+        )
+    required_call_rounds = (
+        oracle_call_rounds if required_tool_calls else []
     )
-    # Use naming-pattern inference instead of static ot_map (covers 109+ tools).
-    assertions: list[dict] = []
-    for tn in tool_names_for_assertions:
-        op = _infer_operation(tn)
-        assertions.append({"operation": op, "tool_name": tn})
-    assertions.append({"operation": "terminal", "tool_name": ""})
 
-    # P0-1 fix: success_criteria may be a JSON string (post-Parquet
-    # roundtrip) or a list. Normalise to list[dict].
     success_criteria_raw = extra_info.get("success_criteria", [])
-    if isinstance(success_criteria_raw, str):
-        try:
-            success_criteria = _json.loads(success_criteria_raw)
-        except _json.JSONDecodeError:
-            success_criteria = []
-    elif isinstance(success_criteria_raw, list):
-        success_criteria = success_criteria_raw
-    else:
-        success_criteria = []
+    if not isinstance(success_criteria_raw, str):
+        raise RewardIntegrityError("success_criteria must be canonical JSON text")
+    try:
+        success_criteria = _json.loads(success_criteria_raw)
+    except _json.JSONDecodeError as exc:
+        raise RewardIntegrityError("success_criteria contains invalid JSON") from exc
+    if not isinstance(success_criteria, list):
+        raise RewardIntegrityError("success_criteria JSON must contain a list")
 
     # P0-3 / P1-5 / P4b: scenario-aware terminal action whitelist.
-    explicit_allowed = extra_info.get("allowed_terminal_actions", [])
+    explicit_allowed = extra_info.get("allowed_terminal_actions")
     if isinstance(explicit_allowed, str):
         try:
             explicit_allowed = _json.loads(explicit_allowed)
-        except _json.JSONDecodeError:
-            explicit_allowed = [explicit_allowed]
-    else:
-        explicit_allowed = _as_list(explicit_allowed)
-    if explicit_allowed:
-        allowed_terminal = explicit_allowed
-    elif terminal_action:
-        allowed_terminal = [terminal_action]
-    elif scenario_type == "clarification_required":
-        # PROVE §3.2: missing-function variant produces clarification trajectories.
-        # Must allow ask_clarification even when explicit_allowed is absent
-        # (e.g. legacy parquet rows or edge cases).
-        allowed_terminal = ["ask_clarification"]
-    elif is_abstain_task:
-        # irrelevance / no_tool_or_abstention / missing_function fallback.
-        allowed_terminal = ["report_error"]
-    elif last_oracle_is_clarification:
-        allowed_terminal = ["ask_clarification"]
-    else:
-        allowed_terminal = ["final_answer"]
+        except _json.JSONDecodeError as exc:
+            raise RewardIntegrityError(
+                "allowed_terminal_actions contains invalid JSON"
+            ) from exc
+    elif hasattr(explicit_allowed, "tolist"):
+        explicit_allowed = explicit_allowed.tolist()
+    if not isinstance(explicit_allowed, list) or not explicit_allowed:
+        raise RewardIntegrityError(
+            f"task {task_id} is missing allowed_terminal_actions"
+        )
+    allowed_terminal = [str(action) for action in explicit_allowed]
+    invalid_terminal = sorted(
+        set(allowed_terminal)
+        - {"final_answer", "ask_clarification", "report_error"}
+    )
+    if invalid_terminal:
+        raise RewardIntegrityError(
+            f"task {task_id} has invalid allowed terminal actions: {invalid_terminal}"
+        )
 
     protected_by_resource_raw = extra_info.get("protected_fields_by_resource", {})
     if isinstance(protected_by_resource_raw, str):
         try:
             protected_by_resource = _json.loads(protected_by_resource_raw)
-        except (_json.JSONDecodeError, TypeError):
-            protected_by_resource = {}
+        except (_json.JSONDecodeError, TypeError) as exc:
+            raise RewardIntegrityError(
+                "protected_fields_by_resource contains invalid JSON"
+            ) from exc
     elif isinstance(protected_by_resource_raw, dict):
         protected_by_resource = protected_by_resource_raw
     else:
@@ -404,9 +280,9 @@ def _build_task_dict(extra_info: dict) -> dict:
     return {
         "task_id": task_id,
         "required_tool_calls": required_tool_calls,
+        "required_call_rounds": required_call_rounds,
         "identity_policy": extra_info.get("identity_policy", "domain_defined"),
         "budget": extra_info.get("budget", 8),
-        "outcome_assertions": assertions,
         "allowed_terminal_actions": allowed_terminal,
         "success_criteria": success_criteria,
         "target_resource_ids": _as_list(extra_info.get("target_resource_ids", [])),
@@ -417,7 +293,7 @@ def _build_task_dict(extra_info: dict) -> dict:
         "scenario_type": scenario_type,
         "final_state": extra_info.get("final_state", {}),
         # P0-2: round contracts for per-round terminal validation
-        "round_contracts": _parse_round_contracts(extra_info),
+        "round_contracts": round_contracts,
         # P0-3: dependency edges for partial-order coverage.
         # Deserialised from JSON string (Parquet-safe) or parsed from
         # ground_truth.dependency_edges.  Used by TaskReward._match_required_calls
@@ -436,7 +312,7 @@ def _parse_dependency_edges(extra_info: dict) -> list[tuple[int, int]]:
     lookup (which fails on repeated tool names and non-name keys).
 
     Accepts JSON string (Parquet round-trip), list of tuple/list, or empty.
-    Returns empty list if absent or unparseable.
+    Malformed present metadata is an integrity failure.
     """
     import json as _json
     raw = extra_info.get("dependency_edges")
@@ -447,34 +323,43 @@ def _parse_dependency_edges(extra_info: dict) -> list[tuple[int, int]]:
     if isinstance(raw, str):
         try:
             raw = _json.loads(raw)
-        except (_json.JSONDecodeError, TypeError):
-            return []
+        except (_json.JSONDecodeError, TypeError) as exc:
+            raise RewardIntegrityError("dependency_edges contains invalid JSON") from exc
+    elif hasattr(raw, "tolist"):
+        raw = raw.tolist()
     if not isinstance(raw, list):
-        return []
+        raise RewardIntegrityError("dependency_edges must contain a list")
     edges: list[tuple[int, int]] = []
     for edge in raw:
-        if isinstance(edge, (list, tuple)) and len(edge) == 2:
-            try:
-                src, dst = int(edge[0]), int(edge[1])
-                edges.append((src, dst))
-            except (ValueError, TypeError):
-                pass
+        if not isinstance(edge, (list, tuple)) or len(edge) != 2:
+            raise RewardIntegrityError(f"invalid dependency edge: {edge!r}")
+        try:
+            src, dst = int(edge[0]), int(edge[1])
+        except (ValueError, TypeError) as exc:
+            raise RewardIntegrityError(f"invalid dependency edge: {edge!r}") from exc
+        if src < 0 or dst < 0 or src == dst:
+            raise RewardIntegrityError(f"invalid dependency edge: {edge!r}")
+        edges.append((src, dst))
     return edges
 
 
 def _parse_round_contracts(extra_info: dict) -> list[dict]:
-    """P0-2: parse round_contracts from extra_info (may be JSON string or list)."""
+    """Parse the required canonical per-round contract."""
     import json as _json
-    raw = extra_info.get("round_contracts", [])
+    raw = extra_info.get("round_contracts")
     if isinstance(raw, str):
         try:
             parsed = _json.loads(raw)
-            return parsed if isinstance(parsed, list) else []
-        except (_json.JSONDecodeError, TypeError):
-            return []
-    if isinstance(raw, list):
-        return raw
-    return []
+        except (_json.JSONDecodeError, TypeError) as exc:
+            raise RewardIntegrityError("round_contracts contains invalid JSON") from exc
+        raw = parsed
+    elif hasattr(raw, "tolist"):
+        raw = raw.tolist()
+    if not isinstance(raw, list) or not raw:
+        raise RewardIntegrityError("round_contracts must contain a non-empty list")
+    if not all(isinstance(item, dict) for item in raw):
+        raise RewardIntegrityError("round_contracts contains a non-object entry")
+    return raw
 
 
 def _compute_f_gamma(event_log: EventLog, task_dict: dict, domain_adapter=None) -> dict:
@@ -488,9 +373,8 @@ def _compute_f_gamma(event_log: EventLog, task_dict: dict, domain_adapter=None) 
             "completed_required": float(fg_result.completed_required_states),
             "total_required": float(fg_result.total_required_states),
         }
-    except Exception:
-        return {"f_gamma": 0.0, "phi_initial": 0.0, "phi_final": 0.0,
-                "completed_required": 0.0, "total_required": 0.0}
+    except Exception as exc:
+        raise RewardIntegrityError(f"progress reward failed: {exc}") from exc
 
 
 def _compute_p_process(event_log: EventLog, task_dict: dict, domain_adapter=None) -> dict:
@@ -503,9 +387,25 @@ def _compute_p_process(event_log: EventLog, task_dict: dict, domain_adapter=None
             "p_total_penalty": pp_result.total_penalty,
             "n_forbidden_steps": float(pp_result.n_forbidden_steps),
         }
-    except Exception:
-        return {"p_process": 0.0, "p_total_bonus": 0.0, "p_total_penalty": 0.0,
-                "n_forbidden_steps": 0.0}
+    except Exception as exc:
+        raise RewardIntegrityError(f"process reward failed: {exc}") from exc
+
+
+def _apply_round_contract_penalty(
+    components: tuple[float, float, float, float],
+    *,
+    round_contract_ok: bool,
+    reward_profile: str,
+) -> tuple[float, float, float, float]:
+    """Reject incomplete local trajectories before profile-specific scoring.
+
+    This is a structural eligibility gate, not a sixth PROVE reward component:
+    valid trajectories keep the five-component score unchanged in every
+    profile; invalid terminal/round protocols receive no positive task signal.
+    """
+    if round_contract_ok:
+        return components
+    return (0.0, 0.0, 0.0, 0.0)
 
 
 def compute_score(
@@ -522,9 +422,14 @@ def compute_score(
     """
     extra_info = extra_info or {}
 
+    if extra_info.get("trajectory_integrity_ok") is False:
+        raise RewardIntegrityError(
+            f"trajectory integrity failed: {extra_info.get('trajectory_errors', [])}"
+        )
+
     # Merge ground_truth data (e.g., oracle_calls, success_criteria) into extra_info
     if isinstance(ground_truth, dict):
-        for key in ("oracle_calls", "success_criteria", "required_tools"):
+        for key in ("oracle_calls", "success_criteria"):
             if key not in extra_info and key in ground_truth:
                 extra_info[key] = ground_truth[key]
 
@@ -533,18 +438,7 @@ def compute_score(
     audit_events = _parse_audit_events(audit_raw)
 
     if not audit_events:
-        return {
-            "score": 0.0,
-            "r_task": 0.0, "r_validity": 0.0, "r_coverage": 0.0, "r_efficiency": 0.0,
-            "c_safety": 0.0, "c_violations": "",
-            "f_gamma": 0.0, "phi_final": 0.0,
-            "p_process": 0.0,
-            "j": 0.0, "lambda_safe": 1.0,
-            "n_events": 0.0,
-            "n_model_tool_calls": float(extra_info.get("n_model_tool_calls", 0)),
-            "n_exec_success": float(extra_info.get("n_exec_success", 0)),
-            "error": "no audit events",
-        }
+        raise RewardIntegrityError("no audit events")
 
     # ── 构建 EventLog ──
     session_id = extra_info.get("session_id", "")
@@ -553,13 +447,21 @@ def compute_score(
 
     # ── 构建 task_dict ──
     task_dict = _build_task_dict(extra_info)
+    task_dict["apply_terminal_validity_penalty"] = (
+        _REWARD_PROFILE == "oval_full"
+    )
+    task_dict["apply_identity_coverage_penalty"] = (
+        _REWARD_PROFILE == "oval_full"
+    )
 
     # ── Domain adapter ──
     domain = extra_info.get("domain", "calendar")
     try:
         domain_adapter = get_adapter(domain)
-    except Exception:
-        domain_adapter = None
+    except Exception as exc:
+        raise RewardIntegrityError(
+            f"domain adapter unavailable for {domain!r}: {exc}"
+        ) from exc
 
     # ── R_task ──
     try:
@@ -568,27 +470,32 @@ def compute_score(
         r_validity = r_result.r_validity
         r_coverage = r_result.r_coverage
         r_efficiency = r_result.r_efficiency
-    except Exception:
-        r_task = 0.0; r_validity = 0.0; r_coverage = 0.0; r_efficiency = 0.0
+    except Exception as exc:
+        raise RewardIntegrityError(f"task reward failed: {exc}") from exc
 
     # P0-2: validate per-round terminals against round_contracts.
     r_round_ok, r_round_details = _validate_round_contracts(audit_events, task_dict)
-    if not r_round_ok:
-        # Wrong terminal somewhere in the trajectory: apply a multiplicative
-        # penalty to R_task (models that learn illegal terminal-advancing
-        # should not receive full credit even if the final terminal is correct).
-        r_task *= 0.1
-        r_validity *= 0.1
-        r_coverage *= 0.1
-        r_efficiency *= 0.1
+    # An incomplete local conversation is not a valid trajectory for either
+    # profile.  Valid trajectories retain the unchanged PROVE formula.
+    r_task, r_validity, r_coverage, r_efficiency = (
+        _apply_round_contract_penalty(
+            (r_task, r_validity, r_coverage, r_efficiency),
+            round_contract_ok=r_round_ok,
+            reward_profile=_REWARD_PROFILE,
+        )
+    )
 
     # ── C_safety ──
-    try:
-        safety_result = _safety_verifier.verify(event_log, task_dict)
-        c_safety = safety_result.c_safety
-        violations = safety_result.violation_types
-    except Exception:
-        c_safety = 0; violations = []
+    if _REWARD_PROFILE == "prove_baseline":
+        c_safety = 0.0
+        violations = []
+    else:
+        try:
+            safety_result = _safety_verifier.verify(event_log, task_dict)
+            c_safety = safety_result.c_safety
+            violations = safety_result.violation_types
+        except Exception as exc:
+            raise RewardIntegrityError(f"safety verification failed: {exc}") from exc
 
     # ── F_gamma (conditional on I_shape) ──
     fg_info = {"f_gamma": 0.0, "phi_final": 0.0}
@@ -603,16 +510,23 @@ def compute_score(
     # ── lambda_safe ──
     lambda_safe = float(extra_info.get("lambda_safe", _LAMBDA_SAFE_DEFAULT))
     # also try LambdaState file for dynamic updates
-    if LambdaState is not None:
+    if _REWARD_PROFILE != "prove_baseline" and LambdaState is not None:
         try:
             state = LambdaState.load_or_default()
             lambda_safe = state.lambda_safe
-        except Exception:
-            pass
+        except Exception as exc:
+            raise RewardIntegrityError(f"lambda state unavailable: {exc}") from exc
+    if _REWARD_PROFILE == "prove_baseline":
+        lambda_safe = 0.0
 
     # ── J = R_task + I_shape*lambda_shape*F + I_process*lambda_process*P - lambda_safe*C ──
-    shape_term = _I_SHAPE * _LAMBDA_SHAPE * fg_info["f_gamma"]
-    process_term = _I_PROCESS * _LAMBDA_PROCESS * pp_info["p_process"]
+    contract_multiplier = 1.0 if r_round_ok else 0.0
+    shape_term = (
+        contract_multiplier * _I_SHAPE * _LAMBDA_SHAPE * fg_info["f_gamma"]
+    )
+    process_term = (
+        contract_multiplier * _I_PROCESS * _LAMBDA_PROCESS * pp_info["p_process"]
+    )
     j = r_task + shape_term + process_term - lambda_safe * c_safety
 
     n_model_calls = float(extra_info.get("n_model_tool_calls", 0))
@@ -632,6 +546,7 @@ def compute_score(
         "p_process": float(pp_info["p_process"]),
         "j": float(j),
         "lambda_safe": float(lambda_safe),
+        "reward_profile": _REWARD_PROFILE,
         "n_events": float(n_events),
         "n_model_tool_calls": n_model_calls,
         "n_exec_success": n_exec_ok,
@@ -660,43 +575,33 @@ def _validate_round_contracts(audit_events: list, task_dict: dict) -> tuple[bool
     Returns (ok, details_str).
     """
     contracts = task_dict.get("round_contracts", [])
-    if not contracts or len(contracts) <= 1:
-        # Single-round tasks: terminal validation is handled by
-        # allowed_terminal_actions in the existing reward components.
-        return True, "single_round"
+    if not contracts:
+        return False, "missing_round_contracts"
 
-    # Extract terminal events and their approximate round indices.
-    # Round boundaries are detected by counting terminal actions.
-    terminal_events: list[tuple[int, str]] = []  # (round_guess, action_type)
-    round_idx = 0
+    terminal_events: list[tuple[int, str]] = []
     for ev in audit_events:
-        action = ""
         if hasattr(ev, "action_type"):
             action = ev.action_type
+            round_idx = int(getattr(ev, "round_idx", -1))
         elif isinstance(ev, dict):
             action = ev.get("action_type", "")
+            round_idx = int(ev.get("round_idx", -1))
+        else:
+            continue
+        if action == "tool_call":
+            if round_idx < 0 or round_idx >= len(contracts):
+                return False, f"tool event has invalid round_idx={round_idx}"
+            continue
         if action in ("final_answer", "ask_clarification", "report_error"):
             terminal_events.append((round_idx, action))
-            round_idx += 1
         elif action == "contract_violation":
             return False, f"contract_violation at round {round_idx}"
         elif action == "round_tool_violation":
             return False, f"round_tool_violation at round {round_idx}"
-
-    if not terminal_events:
-        # No valid terminals at all — let R_task deal with it
-        return False, "no_terminals"
-
-    # Check that each round's terminal matches its contract
-    for i, (ri, term) in enumerate(terminal_events):
-        if i >= len(contracts):
-            break
-        allowed = contracts[i].get("allowed_terminal_actions", [])
-        if allowed and term not in allowed:
-            return False, (
-                f"round {i}: terminal '{term}' not in "
-                f"allowed {allowed}"
-            )
+        elif action == "round_tool_diagnostic":
+            continue
+        else:
+            return False, f"invalid terminal action '{action}' at round {round_idx}"
 
     n_expected = len(contracts)
     n_actual = len(terminal_events)
@@ -707,4 +612,23 @@ def _validate_round_contracts(audit_events: list, task_dict: dict) -> tuple[bool
             f"expected {n_expected} ({direction})"
         )
 
-    return True, f"rounds_ok={n_actual}/{n_expected}"
+    terminals_by_round: dict[int, list[str]] = {}
+    for round_idx, term in terminal_events:
+        terminals_by_round.setdefault(round_idx, []).append(term)
+    for i, contract in enumerate(contracts):
+        round_terminals = terminals_by_round.get(i, [])
+        if len(round_terminals) != 1:
+            return False, (
+                f"round {i}: expected exactly one terminal, "
+                f"got {len(round_terminals)}"
+            )
+        term = round_terminals[0]
+        allowed = contract.get("allowed_terminal_actions", [])
+        if allowed and term not in allowed:
+            return False, (
+                f"round {i}: terminal '{term}' not in "
+                f"allowed {allowed}"
+            )
+    return True, (
+        "single_round" if n_expected == 1 else f"rounds_ok={n_actual}/{n_expected}"
+    )

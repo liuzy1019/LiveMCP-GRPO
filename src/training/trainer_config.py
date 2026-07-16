@@ -11,7 +11,7 @@
     from src.training.trainer_config import TrainerConfig, ExperimentManager
 
     config = TrainerConfig(
-        model_path="models/Qwen3-4B",
+        model_path="models/Qwen/Qwen3-4B",
         train_file="data/train.parquet",
         val_file="data/val.parquet",
         total_steps=200,
@@ -53,7 +53,7 @@ class TrainerConfig:
     """训练配置 —— 所有参数集中管理，可被环境变量覆盖。"""
 
     # ── 模型 ──
-    model_path: str = "models/Qwen3-4B"
+    model_path: str = "models/Qwen/Qwen3-4B"
 
     # ── 数据 ──
     train_file: str = "data/train.parquet"
@@ -126,6 +126,8 @@ class TrainerConfig:
     agent_loop: str = "livemcp_oval"
     reward_fn_path: str = "src/reward/oval_reward_fn.py"
     reward_fn_name: str = "compute_score"
+    # from_env() binds this to the reward profile: PROVE uses standard GRPO;
+    # oval_full uses the audited LiveMCP extension.
     adv_estimator: str = "livemcp_grpo"
 
     # ── 恢复 ──
@@ -237,7 +239,7 @@ class TrainerConfig:
             f"actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu={self.log_prob_micro_batch}",
             "actor_rollout_ref.rollout.mode=async",
             f"actor_rollout_ref.rollout.agent.default_agent_loop={self.agent_loop}",
-            "actor_rollout_ref.rollout.agent.agent_loop_config_path=configs/agent_loop.yaml",
+            "actor_rollout_ref.rollout.agent.agent_loop_config_path=configs/livemcp_rollout.yaml",
             f"actor_rollout_ref.rollout.agent.num_workers={self.devices}",
             # Multi-turn caps (PROVE §4: 5 user turns, 10 assistant turns)
             f"actor_rollout_ref.rollout.multi_turn.max_assistant_turns={self.max_assistant_turns}",
@@ -336,6 +338,24 @@ class TrainerConfig:
                 kwargs[field_name] = val
 
         kwargs.update(overrides)
+
+        reward_profile = os.environ.get("OVAL_REWARD_PROFILE", "oval_full")
+        if reward_profile not in {"prove_baseline", "oval_full"}:
+            raise ValueError(
+                "OVAL_REWARD_PROFILE must be 'prove_baseline' or 'oval_full', "
+                f"got {reward_profile!r}"
+            )
+        expected_estimator = (
+            "grpo" if reward_profile == "prove_baseline" else "livemcp_grpo"
+        )
+        configured_estimator = kwargs.get("adv_estimator", expected_estimator)
+        if configured_estimator != expected_estimator:
+            raise ValueError(
+                f"reward profile {reward_profile!r} requires "
+                f"adv_estimator={expected_estimator!r}, got "
+                f"{configured_estimator!r}"
+            )
+        kwargs["adv_estimator"] = expected_estimator
         return cls(**kwargs)
 
     def to_dict(self) -> Dict[str, Any]:

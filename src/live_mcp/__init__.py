@@ -1,4 +1,4 @@
-"""Live MCP MVP components."""
+"""LiveMCP environment components."""
 
 from src.live_mcp.types import (
     LiveTask,

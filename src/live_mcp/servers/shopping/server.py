@@ -13,8 +13,8 @@ TOOLS = [
     {"name": "list_categories", "description": "List product categories with counts.", "input_schema": {"type": "object", "properties": {}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "compare_products", "description": "Compare products side-by-side.", "input_schema": {"type": "object", "properties": {"product_ids": {"type": "array"}}, "required": ["product_ids"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_recommendations", "description": "Get personalized product recommendations.", "input_schema": {"type": "object", "properties": {"based_on_product": {"type": "string"}, "category": {"type": "string"}, "limit": {"type": "integer"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "add_to_cart", "description": "Add product to cart.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}, "quantity": {"type": "integer"}}, "required": ["product_id", "quantity"]}, "annotations": {"mutating": True}},
-    {"name": "update_cart_quantity", "description": "Update quantity of an item in cart.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}, "quantity": {"type": "integer"}}, "required": ["product_id", "quantity"]}, "annotations": {"mutating": True}},
+    {"name": "add_to_cart", "description": "Add product to cart.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}, "quantity": {"type": "integer", "minimum": 1, "description": "Positive item quantity."}}, "required": ["product_id", "quantity"]}, "annotations": {"mutating": True}},
+    {"name": "update_cart_quantity", "description": "Update quantity of an item in cart.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}, "quantity": {"type": "integer", "minimum": 1, "description": "Positive replacement quantity; use remove_from_cart to remove an item."}}, "required": ["product_id", "quantity"]}, "annotations": {"mutating": True}},
     {"name": "remove_from_cart", "description": "Remove a product from cart.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"]}, "annotations": {"mutating": True}},
     {"name": "get_cart", "description": "View current cart contents and total.", "input_schema": {"type": "object", "properties": {}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "clear_cart", "description": "Remove all items from cart.", "input_schema": {"type": "object", "properties": {}, "required": []}, "annotations": {"mutating": True}},
@@ -26,7 +26,7 @@ TOOLS = [
     {"name": "track_order", "description": "Track order delivery status.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}}, "required": ["order_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "return_order", "description": "Initiate a return for an order.", "input_schema": {"type": "object", "properties": {"order_id": {"type": "string"}, "reason": {"type": "string"}, "items": {"type": "array"}}, "required": ["order_id", "reason"]}, "annotations": {"mutating": True}},
     {"name": "get_return_status", "description": "Check return status.", "input_schema": {"type": "object", "properties": {"return_id": {"type": "string"}}, "required": ["return_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "add_review", "description": "Add a product review.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}, "rating": {"type": "integer"}, "title": {"type": "string"}, "body": {"type": "string"}}, "required": ["product_id", "rating", "body"]}, "annotations": {"mutating": True}},
+    {"name": "add_review", "description": "Add a product review.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}, "rating": {"type": "integer", "minimum": 1, "maximum": 5}, "title": {"type": "string"}, "body": {"type": "string"}}, "required": ["product_id", "rating", "body"]}, "annotations": {"mutating": True}},
     {"name": "get_reviews", "description": "Get reviews for a product.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}, "sort_by": {"type": "string"}}, "required": ["product_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "add_to_wishlist", "description": "Add product to wishlist.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"]}, "annotations": {"mutating": True}},
     {"name": "remove_from_wishlist", "description": "Remove product from wishlist.", "input_schema": {"type": "object", "properties": {"product_id": {"type": "string"}}, "required": ["product_id"]}, "annotations": {"mutating": True}},
@@ -34,6 +34,7 @@ TOOLS = [
 ]
 
 COUPONS = {"SAVE10": 0.10, "WELCOME20": 0.20, "FREESHIP": None}
+SHIPPING_FEE = 7.99
 
 class ShoppingServer(StatefulToolServer):
     def __init__(self) -> None:
@@ -93,7 +94,7 @@ class ShoppingServer(StatefulToolServer):
         diff = qty - item["quantity"]; p = state["products"][pid]
         if diff > 0 and p["stock"] < diff: raise KeyError(f"insufficient stock: {pid}")
         p["stock"] -= diff; item["quantity"] = qty
-        return _result(True, {"cart": list(state["cart"]), "total": sum(i["quantity"] * i["unit_price"] for i in state["cart"])}, None, "", True)
+        return _result(True, {"cart": list(state["cart"]), "total": sum(i["quantity"] * i["unit_price"] for i in state["cart"])}, None, "", diff != 0)
 
     def remove_from_cart(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); pid = arguments["product_id"]
@@ -114,7 +115,8 @@ class ShoppingServer(StatefulToolServer):
         total = sum(i["quantity"] * i["unit_price"] for i in state["cart"])
         coupon = state.get("applied_coupon"); discount = 0.0
         if coupon and coupon in COUPONS and COUPONS[coupon]: discount = total * COUPONS[coupon]
-        return _result(True, {"cart": list(state["cart"]), "total": total, "discount": discount, "final_total": total - discount, "item_count": len(state["cart"])}, None, "", False)
+        shipping = 0.0 if coupon == "FREESHIP" or not state["cart"] else SHIPPING_FEE
+        return _result(True, {"cart": list(state["cart"]), "total": total, "discount": discount, "shipping": shipping, "final_total": round(total - discount + shipping, 2), "item_count": len(state["cart"])}, None, "", False)
 
     def clear_cart(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
@@ -143,8 +145,10 @@ class ShoppingServer(StatefulToolServer):
         total = sum(i["quantity"] * i["unit_price"] for i in state["cart"])
         coupon = state.get("applied_coupon")
         if coupon and coupon in COUPONS and COUPONS[coupon]: total *= (1 - COUPONS[coupon])
+        shipping = 0.0 if coupon == "FREESHIP" else SHIPPING_FEE
+        total += shipping
         oid = f"ord_{state['next_order_num']:03d}"; state["next_order_num"] += 1
-        order = {"order_id": oid, "items": list(state["cart"]), "total": round(total, 2), "shipping_address": arguments.get("shipping_address", ""), "payment_method": arguments.get("payment_method", "card"), "status": "placed", "tracking": [], "created_at": "2026-06-24"}
+        order = {"order_id": oid, "items": list(state["cart"]), "total": round(total, 2), "shipping": shipping, "shipping_address": arguments.get("shipping_address", ""), "payment_method": arguments.get("payment_method", "card"), "status": "placed", "tracking": [], "created_at": state["current_date"]}
         state["orders"][oid] = order; state["cart"] = []; state.pop("applied_coupon", None)
         return _result(True, {"order": order}, None, "", True)
 
@@ -159,9 +163,10 @@ class ShoppingServer(StatefulToolServer):
         return _result(True, {"orders": orders, "count": len(orders)}, None, "", False)
 
     def track_order(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        o = self._state(session_id)["orders"].get(arguments["order_id"])
+        state = self._state(session_id)
+        o = state["orders"].get(arguments["order_id"])
         if not o: raise KeyError(f"order not found: {arguments['order_id']}")
-        tracking = o.get("tracking", [{"status": o.get("status", "placed"), "timestamp": "2026-06-24", "location": "Warehouse"}])
+        tracking = o.get("tracking", [{"status": o.get("status", "placed"), "timestamp": state["current_date"], "location": "Warehouse"}])
         return _result(True, {"order_id": o["order_id"], "tracking": tracking, "current_status": o.get("status")}, None, "", False)
 
     def return_order(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -183,7 +188,7 @@ class ShoppingServer(StatefulToolServer):
         if pid not in state["products"]: raise KeyError(f"product not found: {pid}")
         if not 1 <= rating <= 5: raise KeyError("rating must be 1-5")
         rid = f"rev_{state['next_order_num']:03d}"; state["next_order_num"] += 1
-        review = {"review_id": rid, "product_id": pid, "rating": rating, "title": arguments.get("title", ""), "body": arguments["body"], "author": "current_user", "date": "2026-06-24"}
+        review = {"review_id": rid, "product_id": pid, "rating": rating, "title": arguments.get("title", ""), "body": arguments["body"], "author": "current_user", "date": state["current_date"]}
         state.setdefault("reviews", {}).setdefault(pid, []).append(review)
         return _result(True, {"review": review}, None, "", True)
 

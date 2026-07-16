@@ -1,6 +1,6 @@
-# LiveMCP-GRPO dependencies for the verified L20 stack.
+# LiveMCP-GRPO dependencies for the verified ARL environment.
 #
-# L20 server:
+# Current A10 server:
 #   nvcc 12.8 / CUDA Toolkit 12.8
 #   PyTorch is installed from the official cu128 wheel index.
 #
@@ -17,7 +17,7 @@
 # flash-attn 当前未安装（vLLM V1 默认 flashinfer attention backend）。
 
 # 核心
-numpy>=1.26.4
+numpy==1.26.4
 PyYAML==6.0.3
 pydantic==2.12.5
 loguru==0.7.3
@@ -31,7 +31,7 @@ hydra-core==1.3.3
 omegaconf>=2.3.0
 
 # 数据
-huggingface_hub==0.36.2
+huggingface_hub==1.22.0
 pyarrow==23.0.1
 pandas>=2.2.3
 datasets==4.8.4

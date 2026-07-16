@@ -41,21 +41,6 @@ PROGRESS_PREDICATE_NAMES: list[str] = [
 
 
 @dataclass
-class ProgressState:
-    """Snapshot of which required progress predicates have been completed so far."""
-
-    completed: set[str] = field(default_factory=set)
-    total: int = 0
-
-    @property
-    def phi(self) -> float:
-        """Phi(m_t) ∈ [0, 1]."""
-        if self.total == 0:
-            return 0.0
-        return len(self.completed) / self.total
-
-
-@dataclass
 class FGammaResult:
     """F_gamma decomposition for one trajectory."""
 
@@ -87,11 +72,11 @@ class ProgressTracker:
     ) -> FGammaResult:
         """Compute F_gamma from trajectory event log and task definition.
 
-        When domain_adapter is provided, uses adapter.evaluate_event()
-        for precise predicate evaluation.  Falls back to a generic
-        operation-based mapping otherwise.
+        The canonical ten-domain reward path requires a DomainAdapter.
         """
         result = FGammaResult()
+        if domain_adapter is None:
+            raise ValueError("ProgressTracker requires a DomainAdapter")
 
         task_predicates = self._get_task_progress_predicates(task)
         total = len(task_predicates)
@@ -145,50 +130,16 @@ class ProgressTracker:
             return predicates
         return list(self._required)
 
-    def _eval_event(self, event, task: dict, domain_adapter: Any = None) -> frozenset[str]:
+    def _eval_event(self, event, task: dict, domain_adapter: Any) -> frozenset[str]:
         """Return predicates satisfied by *event*.
 
-        Prefers DomainAdapter.evaluate_event(); falls back to a minimal
-        generic mapping when no adapter is available.
+        Adapter errors are reward-integrity failures and must propagate.
         """
-        if domain_adapter is not None:
-            try:
-                return domain_adapter.evaluate_event(event, task)
-            except Exception:
-                pass  # fall through to generic
-
-        return _generic_evaluate_event(event)
-
-
-def _generic_evaluate_event(event) -> frozenset[str]:
-    """Minimal fallback when no DomainAdapter is available.
-
-    Mirrors the default implementation in DomainAdapter.evaluate_event().
-    """
-    predicates: set[str] = set()
-    if not getattr(event, "execution_success", False):
-        return frozenset()
-
-    op = getattr(event, "operation", "")
-    action = getattr(event, "action_type", "")
-
-    if op == "query":
-        predicates.add("resolved_required_entity")
-    if op in ("create", "update", "delete"):
-        predicates.add("completed_required_transition")
-        predicates.add("resolved_required_entity")
-    if action == "final_answer":
-        predicates.add("verified_postcondition")
-        predicates.add("produced_required_response")
-    elif action in ("ask_clarification", "report_error"):
-        predicates.add("produced_required_response")
-
-    return frozenset(predicates)
+        return domain_adapter.evaluate_event(event, task)
 
 
 __all__ = [
     "FGammaResult",
-    "ProgressState",
     "ProgressTracker",
     "PROGRESS_PREDICATE_NAMES",
 ]

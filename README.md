@@ -3,10 +3,9 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.10](https://img.shields.io/badge/PyTorch-2.10-red.svg)](https://pytorch.org/)
 [![veRL 0.6.1](https://img.shields.io/badge/veRL-0.6.1-orange.svg)](https://github.com/volcengine/verl)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **基于 PROVE 框架的多步 MCP 工具调用 GRPO 训练**：状态机数据合成 + 实时执行验证 + 多组件可编程奖励。
-> 当前覆盖 **10 个 MCP domain、188 个工具**，在 session-scoped state isolation 下做 live-execution RL。
+> 当前覆盖 **10 个 MCP domain、190 个工具**，在 session-scoped state isolation 下做 live-execution RL。
 
 ## 核心方法
 
@@ -44,31 +43,31 @@ Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
 │   ├── generate_data.sh       # 数据生成 shell 入口（自动管理 vLLM + GPU 自适应）
 │   ├── generate_data.py       # 数据生成 Python 入口（5 步状态机管线）
 │   ├── train_grpo.sh          # GRPO 训练 shell 入口
-│   ├── train_grpo.py          # GRPO 训练 Hydra 入口
-│   ├── dependency_graph.py    # 依赖图预计算（C(n,2) 无序 pair，各分类一次）
-│   ├── validate_pipeline.py   # 端到端管线验证
-│   ├── verify_entities.py     # 实体验证
-│   ├── merge_rollout_shards.py # Rollout 分片合并（含质量门禁）
-│   ├── inspect_prompts.py     # Prompt 内容检查
-│   ├── convert_external_datasets.py  # 外部数据集转换（When2Call / xLAM-Irrelevance）
+│   ├── build_dependency_cache.py # 构建依赖图缓存（C(n,2) 无序 pair）
+│   ├── validate_generation_pipeline.py   # 端到端管线验证
+│   ├── audit_tool_semantics.py     # 实体验证
+│   ├── merge_generation_shards.py # 生成分片合并（含质量门禁）
+│   ├── audit_generated_data.py # 正式 Parquet 逐行生产合同审计
+│   ├── serve_policy_model.sh   # 独立策略模型 vLLM 服务
 │   └── bench_vllm_throughput.py # vLLM 吞吐量基准
 ├── configs/
-│   ├── live_mcp/               # 各 domain 配置（banking/calendar/.../suite_mvp.yaml）
-│   ├── agent_loop.yaml         # Agent loop 注册
-│   └── ds_zero2.json           # DeepSpeed ZeRO-2 配置
+│   ├── live_mcp/               # 各 domain 与 ten_domain_suite.yaml
+│   └── livemcp_rollout.yaml    # LiveMCP rollout 注册
 ├── data/
 │   ├── dependency_graphs/      # 各 domain 工具依赖图缓存
-│   ├── external/               # 外部数据集
 │   ├── runs/                   # 生成产出（每次运行独立子目录）
-│   ├── experiments/            # 实验记录（config.json + result.json）
-│   ├── train.parquet           # 完整生成成功后建立的符号链接 → 当前可用 run
-│   └── val.parquet             # 完整生成成功后建立的符号链接 → 当前可用 run
+│   ├── train.parquet           # 成功生成后指向最新 run 的符号链接
+│   ├── val.parquet             # 成功生成后指向最新 run 的符号链接
+│   └── README.md               # 数据合同与生成说明
 ├── reference/                  # 参考论文（PROVE / COVERT）
 ├── tests/                      # pytest 测试
 ├── verl/                       # verl 0.6.1（vendored, editable install）
 ├── pyproject.toml
 └── requirements.txt
 ```
+
+正式训练入口为 `bash scripts/train_grpo.sh`，其唯一 Python 委托目标是
+`src/training/run_grpo.py`，不保留第二套兼容训练入口。
 
 ---
 
@@ -96,8 +95,6 @@ pip install -e ".[train,rl]"
 ```bash
 # 默认使用本地 Gemma-4-31B-it
 bash scripts/generate_data.sh --count 500 --val-count 100
-# 也可指定外部 API
-bash scripts/generate_data.sh --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 500 --val-count 100
 ```
 
 ### Train
@@ -110,11 +107,11 @@ bash scripts/train_grpo.sh --gpus 0,1,2,3 --total-steps 300
 ### Validate
 
 ```bash
-python scripts/validate_pipeline.py
+python scripts/validate_generation_pipeline.py --stages 1,2
 python -m compileall src scripts tests
 ```
 
-> **Hardware（当前环境）**: 8×A10 22GB（也支持 4×A10，`generate_data.sh` 自动检测）。Teacher: 本地 Gemma-4-31B-it（也可通过 `--api-base` 接入外部 API）。Policy: Qwen3-4B (vLLM local)。脚本自动检测 GPU，不绑定特定硬件。
+> **Hardware（当前环境）**: 8×A10 22GB（也支持 4×A10，`generate_data.sh` 自动检测）。Teacher: 本地 Gemma-4-31B-it。Policy: Qwen3-4B (vLLM local)。脚本自动检测 GPU，不绑定特定硬件。
 
 ---
 
@@ -123,9 +120,3 @@ python -m compileall src scripts tests
 - [veRL](https://github.com/volcengine/verl) 0.6.1 · vLLM 0.19.1 · FlashInfer · GRPO
 - Teacher: 本地 Gemma-4-31B-it（对齐 PROVE 论文 Teacher）· Policy: Qwen3-4B（vLLM local serving）
 - Multi-component programmatic reward: R_validity + R_coverage + R_efficiency + R_name + R_arg（论文 §3.3）
-
----
-
-## 📄 License
-
-MIT

@@ -2,7 +2,6 @@
 # 提供商品搜索、购物车、下单操作，用于 live MCP 训练/评测
 
 name: shopping
-type: local_subprocess
 enabled: true
 
 command:
@@ -17,111 +16,4 @@ transport:
   request_timeout_s: 10
 
 session:
-  reset_mode: deterministic_seed
-  max_sessions: 64
   default_seed: 42
-
-tools:
-  discovery:
-    - search_products
-  readonly:
-    - search_products
-    - get_order
-  mutating:
-    - add_to_cart
-    - remove_from_cart
-    - checkout
-
-reward_profile: shopping_basic
-
-dependency_graph:
-  edges:
-    # ── Product discovery ──
-    - source_tool: search_products
-      target_tool: get_product
-      relation: implicit  # search → drill into specific product
-      source_output_path: products[].product_id
-      target_argument_path: product_id
-    - source_tool: list_categories
-      target_tool: search_products
-      relation: implicit  # browse category → search within it
-
-    # ── Product → cart (explicit ID handoff) ──
-    - source_tool: search_products
-      target_tool: add_to_cart
-      relation: explicit
-      source_output_path: products[].product_id
-      target_argument_path: product_id
-    - source_tool: get_product
-      target_tool: add_to_cart
-      relation: explicit
-      source_output_path: product.product_id
-      target_argument_path: product_id
-
-    # ── Cart management ──
-    - source_tool: add_to_cart
-      target_tool: get_cart
-      relation: implicit  # verify cart after adding
-    - source_tool: add_to_cart
-      target_tool: update_cart_quantity
-      relation: implicit  # adjust qty after adding
-
-    # ── Coupon workflow ──
-    - source_tool: get_coupons
-      target_tool: apply_coupon
-      relation: implicit  # browse coupons → apply one
-
-    # ── Checkout requires non-empty cart ──
-    - source_tool: add_to_cart
-      target_tool: checkout
-      relation: implicit
-      description: checkout requires non-empty cart
-    - source_tool: get_cart
-      target_tool: checkout
-      relation: implicit
-      description: review cart before checkout
-    - source_tool: apply_coupon
-      target_tool: checkout
-      relation: implicit  # apply coupon before checkout
-
-    # ── Post-checkout order tracking ──
-    - source_tool: checkout
-      target_tool: get_order
-      relation: explicit
-      source_output_path: order.order_id
-      target_argument_path: order_id
-    - source_tool: checkout
-      target_tool: list_orders
-      relation: implicit  # verify order appeared
-
-    # ── Order lifecycle ──
-    - source_tool: list_orders
-      target_tool: get_order
-      relation: explicit
-      source_output_path: orders[].order_id
-      target_argument_path: order_id
-    - source_tool: get_order
-      target_tool: track_order
-      relation: implicit  # check shipping status
-    - source_tool: get_order
-      target_tool: return_order
-      relation: implicit  # return if needed
-
-    # ── Reviews and wishlist ──
-    - source_tool: get_product
-      target_tool: add_review
-      relation: implicit  # review after examining product
-      source_output_path: product.product_id
-      target_argument_path: product_id
-    - source_tool: search_products
-      target_tool: add_to_wishlist
-      relation: implicit  # bookmark for later
-      source_output_path: products[].product_id
-      target_argument_path: product_id
-    - source_tool: get_wishlist
-      target_tool: add_to_cart
-      relation: implicit  # buy from wishlist
-
-query_templates:
-  shopping_buy_product:
-    - "Find a {category} under {max_price} dollars, add it to the cart, and checkout. Tell me the order id."

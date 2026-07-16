@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import os
-from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,9 +46,7 @@ def _percentile(sorted_xs: list[int], pct: float) -> int:
     return sorted_xs[idx]
 
 
-# 向后兼容：iter_prompt_messages 已移至 utils.py，此处保留 re-export
 from src.utils import iter_prompt_messages
-_iter_prompt_messages = iter_prompt_messages
 
 
 def check_split_length(
@@ -70,7 +67,7 @@ def check_split_length(
 
     lens: list[int] = []
     n_template_fail = 0
-    for messages in _iter_prompt_messages(records):
+    for messages in iter_prompt_messages(records):
         try:
             ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
             lens.append(len(ids))
@@ -158,93 +155,3 @@ def maybe_run_length_check(argv: list[str]) -> None:
     check_split_length(train, model_path, limit, "train")
     if val:
         check_split_length(val, model_path, limit, "val")
-
-
-########## group 完整性检查
-
-
-def assert_e4_group_integrity(
-    parquet_path: str | Path,
-    tokenizer_path: str,
-    max_prompt_length: int,
-    split: str,
-    expected_levels: dict[str, int] | None = None,
-) -> None:
-    """前置检查：模拟 verl 的 prompt 长度过滤后，每个 group_id 内的 group 结构是否完整。
-
-    E4（静态 replay）数据预期每个 group 有 9 条、每条对应一个 perturbation_level，
-    分布为 {"none": 3, "mild": 3, "strong": 3}。OVAL（live MCP）数据标签和分布不同，
-    可通过 expected_levels 注入，或传 None 跳过标签分布检查、只做 group 完整性校验。
-
-    Args:
-        parquet_path: 训练/验证 parquet 文件。
-        tokenizer_path: tokenizer 路径或模型名。
-        max_prompt_length: prompt 长度上限（超限的行会被 verl 静默过滤）。
-        split: "train" 或 "val"（仅用于日志）。
-        expected_levels: 期望的标签分布，如 {"none": 3, "mild": 3, "strong": 3}。
-            None 时跳过标签分布检查，仅校验每个 group 的样本数一致性。
-    """
-    import pyarrow.parquet as pq
-    from verl.utils.tokenizer import hf_tokenizer
-
-    tokenizer = hf_tokenizer(tokenizer_path)
-    records = pq.read_table(str(parquet_path)).to_pylist()
-    expected = expected_levels or {}
-    grouped: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    n_filtered = 0
-    n_missing_group = 0
-    for r, messages in zip(records, _iter_prompt_messages(records)):
-        try:
-            n = len(tokenizer.apply_chat_template(messages, add_generation_prompt=True))
-        except Exception:
-            n = max_prompt_length + 1
-        if n > max_prompt_length:
-            n_filtered += 1
-            continue
-        gid = r.get("group_id", "")
-        if not gid:
-            n_missing_group += 1
-            gid = f"_no_group_{n_missing_group}"  # 每个缺失 group_id 的行独立成组
-        grouped[gid][r.get("perturbation_level", "none")] += 1
-
-    if n_missing_group > 0:
-        logger.warning(
-            f"[{split}] {n_missing_group}/{len(records)} 行缺少 group_id，"
-            f"已拍平为独立 group（每组 1 条），StratAdv 将回退到 GRPO baseline"
-        )
-
-    if expected:
-        # 精确标签分布检查（E4 3:3:3 等）
-        bad = [(gid, dict(d)) for gid, d in grouped.items() if dict(d) != expected]
-        if bad:
-            sample = "\n".join(f"  {gid}: {dist}" for gid, dist in bad[:5])
-            raise AssertionError(
-                f"[{split}] 过滤后 group 完整性破坏：{len(bad)} 个 group_id "
-                f"不再满足预期分布 {expected}。\n"
-                f"max_prompt_length={max_prompt_length} 过滤掉了 {n_filtered}/{len(records)} 行。\n"
-                f"前 5 个异常 group:\n{sample}"
-            )
-        expected_total = sum(expected.values())
-        logger.info(
-            f"[{split}] group 完整性 OK: {len(grouped)} groups × {expected_total} records "
-            f"({', '.join(f'{k}={v}' for k, v in expected.items())})"
-        )
-    else:
-        # 宽松检查：统计每个 group 的样本数，验证过滤后无 group 被截断
-        group_sizes = {gid: sum(d.values()) for gid, d in grouped.items()}
-        # 允许 tolerance：最大和最小 group 样本数之差 ≤ 1（因随机过滤可能不均）
-        if group_sizes:
-            sizes = sorted(set(group_sizes.values()))
-            if len(sizes) > 2 or (len(sizes) == 2 and sizes[1] - sizes[0] > 1):
-                bad_sizes = [(gid, s) for gid, s in sorted(group_sizes.items())[:10]]
-                sample = "\n".join(f"  {gid}: {s}" for gid, s in bad_sizes)
-                logger.warning(
-                    f"[{split}] group 样本数差异较大 (sizes={sizes})，"
-                    f"可能存在过滤不均。前 10:\n{sample}"
-                )
-            total = sum(group_sizes.values())
-            avg_size = total / len(group_sizes) if group_sizes else 0
-            logger.info(
-                f"[{split}] group 完整性 OK: {len(grouped)} groups, "
-                f"avg {avg_size:.1f} rec/group (#filtered={n_filtered})"
-            )

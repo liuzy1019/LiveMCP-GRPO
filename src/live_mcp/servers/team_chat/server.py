@@ -3,6 +3,7 @@ Append-only: channels, messages, threads, reactions, DMs, search, user status.
 """
 
 from __future__ import annotations
+import copy
 from typing import Any
 from src.live_mcp.server_base import StatefulToolServer, _result, serve
 
@@ -75,10 +76,13 @@ class TeamChatServer(StatefulToolServer):
         if tid and tid not in state["threads"]: raise KeyError(f"thread not found: {tid}")
         if tid and state["threads"][tid].get("channel_id") != cid: raise KeyError(f"thread not in channel: {tid}")
         mid = f"msg_{state['next_msg_num']:04d}"; state["next_msg_num"] += 1
-        msg = {"message_id": mid, "channel_id": cid, "content": arguments["content"], "author": "current_user", "thread_id": tid, "reactions": [], "timestamp": "2026-06-24T21:40:00"}
+        msg = {"message_id": mid, "channel_id": cid, "content": arguments["content"], "author": "current_user", "thread_id": tid, "reactions": [], "timestamp": f"{state['current_date']}T21:40:00"}
         state["channels"][cid]["messages"].append(msg)
         if tid:
-            state["threads"][tid].setdefault("messages", []).append(msg)
+            # Keep the denormalized thread view synchronized explicitly.  A
+            # separate object prevents mutations from leaking through Python
+            # aliasing and bypassing the declared state footprint.
+            state["threads"][tid].setdefault("messages", []).append(copy.deepcopy(msg))
         return _result(True, {"message": msg}, None, "", True)
 
     def send_dm(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -87,7 +91,7 @@ class TeamChatServer(StatefulToolServer):
         if recipient not in members: raise KeyError(f"user not found: {recipient}")
         if not arguments["content"].strip(): raise KeyError("content must be non-empty")
         did = f"dm_{state['next_msg_num']:04d}"; state["next_msg_num"] += 1
-        dm = {"dm_id": did, "sender": "current_user", "recipient": recipient, "content": arguments["content"], "timestamp": "2026-06-24T21:40:00"}
+        dm = {"dm_id": did, "sender": "current_user", "recipient": recipient, "content": arguments["content"], "timestamp": f"{state['current_date']}T21:40:00"}
         state.setdefault("dms", []).append(dm)
         return _result(True, {"direct_message": dm}, None, "", True)
 
@@ -116,6 +120,14 @@ class TeamChatServer(StatefulToolServer):
         if reaction in msg["reactions"]:
             return _result(True, {"message_id": mid, "reactions": msg["reactions"]}, None, "", False)
         msg["reactions"].append(reaction)
+        tid = msg.get("thread_id")
+        if tid and tid in state["threads"]:
+            thread_msg = next(
+                (item for item in state["threads"][tid].get("messages", []) if item.get("message_id") == mid),
+                None,
+            )
+            if thread_msg is not None and reaction not in thread_msg.setdefault("reactions", []):
+                thread_msg["reactions"].append(reaction)
         return _result(True, {"message_id": mid, "reactions": msg["reactions"]}, None, "", True)
 
     def search_messages(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

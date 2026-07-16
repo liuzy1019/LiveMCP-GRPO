@@ -1,7 +1,7 @@
 # Live MCP 10-domain 套件配置（PROVE Table 2 精选子集）
 # 当前配置使用 live backend，通过 MCP subprocess 执行。
 
-suite_name: live_mcp_full
+suite_name: ten_domain_live_mcp
 servers:
   - configs/live_mcp/calendar.yaml       # Productivity: calendar
   - configs/live_mcp/shopping.yaml       # Commerce: shopping
@@ -14,30 +14,11 @@ servers:
   - configs/live_mcp/team_chat.yaml      # Social: team_chat (append-only)
   - configs/live_mcp/food_delivery.yaml  # Lifestyle: food_delivery (lifecycle)
 
-environment:
-  backend: live  # live（默认 live，MCP subprocess 执行）
-
-live:
-  transport: subprocess_stdio  # stdio 子进程通信
-  task_file: data/live_mcp/tasks/live_mcp_full.jsonl
-  trace_dir: data/live_mcp/traces
-
 rollout:
   max_turns: 10  # 缺省 action-turn budget；生成数据由逐行 budget 覆盖，非 PROVE 2--3 conversation rounds
-  max_parallel_tool_calls: 4  # 并行 tool call 上限
   observation_max_chars: 4096  # 工具返回截断长度
-  stop_on_execution_error: false  # 执行错误不中断 episode
 
 reward:
-  profile: full_default
-  weights:
-    validity: 0.50       # R_validity  (was 0.25)
-    coverage: 0.50       # R_coverage  (was 0.25)
-    efficiency: 0.15     # R_efficiency  (was 0.10)
-    tool_selection: 0.20 # R_name  (was 0.20)
-    argument_value: 0.10 # R_arg  (was 0.20)
-
-trace:
-  output_dir: data/live_mcp/traces
-  save_success: true  # 保存成功 trace
-  save_failure: true  # 保存失败 trace（用于分析）
+  # The active objective and weights are selected by OVAL_REWARD_PROFILE and
+  # LiveMCPHyperparams. The suite only declares compatible profiles.
+  supported_profiles: [prove_baseline, oval_full]

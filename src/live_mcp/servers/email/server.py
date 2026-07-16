@@ -10,7 +10,7 @@ TOOLS = [
     {"name": "list_inbox", "description": "List emails in inbox with optional label/category filter.", "input_schema": {"type": "object", "properties": {"label": {"type": "string"}, "category": {"type": "string"}, "limit": {"type": "integer"}, "unread_only": {"type": "boolean"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "search_emails", "description": "Full-text search across sender, subject, body.", "input_schema": {"type": "object", "properties": {"sender": {"type": "string"}, "subject_contains": {"type": "string"}, "keyword": {"type": "string"}, "after_date": {"type": "string"}, "before_date": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_email", "description": "Get full email by id including headers, body, attachments.", "input_schema": {"type": "object", "properties": {"email_id": {"type": "string"}}, "required": ["email_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "send_email", "description": "Send email. Sensitive params. Appends to thread if thread_id given.", "input_schema": {"type": "object", "properties": {"to": {"type": "string"}, "cc": {"type": "string"}, "bcc": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}, "thread_id": {"type": "string"}, "attachments": {"type": "array"}}, "required": ["to", "subject", "body"]}, "annotations": {"mutating": True, "sensitive_params": True}},
+    {"name": "send_email", "description": "Send email. Sensitive params. Appends to thread if thread_id given.", "input_schema": {"type": "object", "properties": {"to": {"type": "string"}, "cc": {"type": "string"}, "bcc": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}, "thread_id": {"type": "string"}, "attachments": {"type": "array"}}, "required": ["to", "subject", "body"]}, "annotations": {"mutating": True, "sensitive_params": ["to", "cc", "bcc", "thread_id", "attachments"]}},
     {"name": "create_draft", "description": "Create an email draft.", "input_schema": {"type": "object", "properties": {"to": {"type": "string"}, "cc": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}}, "required": ["to", "subject", "body"]}, "annotations": {"mutating": True}},
     {"name": "forward_email", "description": "Forward an existing email.", "input_schema": {"type": "object", "properties": {"email_id": {"type": "string"}, "to": {"type": "string"}, "additional_note": {"type": "string"}}, "required": ["email_id", "to"]}, "annotations": {"mutating": True}},
     {"name": "reply_email", "description": "Reply to an existing email in thread.", "input_schema": {"type": "object", "properties": {"email_id": {"type": "string"}, "body": {"type": "string"}}, "required": ["email_id", "body"]}, "annotations": {"mutating": True}},
@@ -64,13 +64,13 @@ class EmailServer(StatefulToolServer):
             raise KeyError(f"thread not found: {tid}")
         eid = self._nxt_eml(state)
         if tid not in state["threads"]: state["threads"][tid] = []
-        email = {"email_id": eid, "to": arguments["to"], "cc": arguments.get("cc", ""), "bcc": arguments.get("bcc", ""), "sender": "current_user@example.com", "subject": arguments["subject"], "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": "2026-06-24", "read": True, "attachments": arguments.get("attachments", [])}
+        email = {"email_id": eid, "to": arguments["to"], "cc": arguments.get("cc", ""), "bcc": arguments.get("bcc", ""), "sender": "current_user@example.com", "subject": arguments["subject"], "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": state["current_date"], "read": True, "attachments": arguments.get("attachments", [])}
         state["emails"][eid] = email; state["threads"][tid].append(eid)
         return _result(True, {"email": email}, None, "", True)
 
     def create_draft(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); eid = f"dft_{state['next_email_num']:04d}"; state["next_email_num"] += 1
-        draft = {"email_id": eid, "to": arguments["to"], "cc": arguments.get("cc", ""), "subject": arguments["subject"], "body": arguments["body"], "labels": [], "status": "draft", "date": "2026-06-24"}
+        draft = {"email_id": eid, "to": arguments["to"], "cc": arguments.get("cc", ""), "subject": arguments["subject"], "body": arguments["body"], "labels": [], "status": "draft", "date": state["current_date"]}
         state["drafts"][eid] = draft
         return _result(True, {"draft": draft}, None, "", True)
 
@@ -80,7 +80,7 @@ class EmailServer(StatefulToolServer):
         eid = self._nxt_eml(state); note = arguments.get("additional_note", "")
         body = f"---------- Forwarded message ----------\nFrom: {orig['sender']}\nSubject: {orig['subject']}\n\n{orig['body']}"
         if note: body = note + "\n\n" + body
-        email = {"email_id": eid, "to": arguments["to"], "cc": "", "sender": "current_user@example.com", "subject": f"Fwd: {orig['subject']}", "body": body, "labels": [], "thread_id": f"thd_{state['next_thread_num']:03d}", "status": "sent", "date": "2026-06-24", "read": True}
+        email = {"email_id": eid, "to": arguments["to"], "cc": "", "sender": "current_user@example.com", "subject": f"Fwd: {orig['subject']}", "body": body, "labels": [], "thread_id": f"thd_{state['next_thread_num']:03d}", "status": "sent", "date": state["current_date"], "read": True}
         state["emails"][eid] = email
         state["threads"].setdefault(email["thread_id"], []).append(eid); state["next_thread_num"] += 1
         return _result(True, {"email": email}, None, "", True)
@@ -92,7 +92,7 @@ class EmailServer(StatefulToolServer):
         if not tid:
             tid = f"thd_{state['next_thread_num']:03d}"
             state["next_thread_num"] += 1
-        email = {"email_id": eid, "to": orig["sender"], "cc": "", "sender": "current_user@example.com", "subject": f"Re: {orig['subject']}", "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": "2026-06-24", "read": True}
+        email = {"email_id": eid, "to": orig["sender"], "cc": "", "sender": "current_user@example.com", "subject": f"Re: {orig['subject']}", "body": arguments["body"], "labels": [], "thread_id": tid, "status": "sent", "date": state["current_date"], "read": True}
         state["emails"][eid] = email
         state["threads"].setdefault(tid, []).append(eid)
         return _result(True, {"email": email}, None, "", True)
