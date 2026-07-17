@@ -31,6 +31,13 @@ if [ -z "${PYTHON_BIN:-}" ]; then
 fi
 export PYTHON_BIN
 export PYTHONNOUSERSITE=1
+# Keep vLLM's writable runtime state off the user-home filesystem.  The model
+# and generated data remain project-relative; these directories only contain
+# disposable compiler/config state.  Callers may override either path.
+export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-${TMPDIR:-/tmp}/livemcp_vllm_cache}"
+export VLLM_CONFIG_ROOT="${VLLM_CONFIG_ROOT:-${TMPDIR:-/tmp}/livemcp_vllm_config}"
+export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
+mkdir -p "${VLLM_CACHE_ROOT}" "${VLLM_CONFIG_ROOT}"
 PYTHON_BIN_DIR="$(cd "$(dirname "${PYTHON_BIN}")" && pwd)"
 PYTHON_PREFIX="$(cd "${PYTHON_BIN_DIR}/.." && pwd)"
 export PATH="${PYTHON_BIN_DIR}:${PATH}"
@@ -595,9 +602,18 @@ print(tp)
             VLLM_ARGS+=(--enforce-eager)
         fi
 
-        # This is a launcher-side concurrency setting, not a vLLM setting.  Do
-        # not leak it into vLLM's reserved VLLM_* environment namespace.
-        env -u VLLM_CLIENTS_PER_INSTANCE \
+        # These variables configure this launcher; vLLM receives the resolved
+        # values through CLI flags. Do not leak launcher-only names into
+        # vLLM's reserved VLLM_* environment namespace.
+        env \
+            -u VLLM_CLIENTS_PER_INSTANCE \
+            -u VLLM_NUM_INSTANCES \
+            -u VLLM_MAX_NUM_SEQS \
+            -u VLLM_MAX_NUM_BATCHED_TOKENS \
+            -u VLLM_MAX_MODEL_LEN \
+            -u VLLM_GPU_MEMORY_UTILIZATION \
+            -u VLLM_ENFORCE_EAGER \
+            -u VLLM_PORT_START \
             CUDA_VISIBLE_DEVICES="${GPU_LIST}" \
             "${PYTHON_BIN}" "${VLLM_ARGS[@]}" > "${LOG}" 2>&1 &
         VLLM_PIDS+=($!)
@@ -713,90 +729,8 @@ echo "Val parquet:   ${RUN_DIR}/val.parquet"
 # ── Parquet integrity validation ────────────────────────────────────
 echo ""
 echo "=== Parquet Integrity Check ==="
-"${PYTHON_BIN}" -c "
-import json, sys
-import pandas as pd
-
-issues = 0
-for label, path in [('train', '${RUN_DIR}/train.parquet'), ('val', '${RUN_DIR}/val.parquet')]:
-    try:
-        df = pd.read_parquet(path)
-    except Exception as e:
-        print(f'  FAIL {label}: cannot read parquet — {e}')
-        issues += 1
-        continue
-
-    print(f'  {label}: {len(df)} rows')
-
-    for col in ('prompt', 'reward_model', 'extra_info', 'scenario_type'):
-        if col not in df.columns:
-            print(f'    FAIL: missing column {col}')
-            issues += 1
-
-    if issues > 0:
-        continue
-
-    # A caller may explicitly request an empty split (for example
-    # --val-count 0 in a focused generation smoke).  The empty parquet schema
-    # was checked above; there is no row available for semantic spot-checks.
-    if df.empty:
-        continue
-
-    # Abstain scenarios (clarification_required, missing_function,
-    # no_tool_or_abstention, irrelevant) are expected to have empty
-    # success_criteria — don't flag them.
-    ABSTAIN_SCENARIOS = {'clarification_required', 'missing_function', 'no_tool_or_abstention', 'irrelevant'}
-
-    empty_oc = 0
-    empty_sc = 0
-    bad_prompt = 0
-    for i, row in df.iterrows():
-        gt = row['reward_model'].get('ground_truth', {})
-        oc = gt.get('oracle_calls', '')
-        sc = gt.get('success_criteria', '')
-        if not oc or (isinstance(oc, str) and oc in ('[]', '')):
-            empty_oc += 1
-        st = row.get('scenario_type', '')
-        if st not in ABSTAIN_SCENARIOS:
-            if not sc or (isinstance(sc, str) and sc in ('[]', '')):
-                empty_sc += 1
-        try:
-            json.loads(row['prompt'])
-        except (json.JSONDecodeError, TypeError):
-            bad_prompt += 1
-
-    if empty_oc:
-        print(f'    WARN: {empty_oc} rows have empty oracle_calls')
-    if empty_sc:
-        print(f'    WARN: {empty_sc} rows have empty success_criteria (non-abstain scenarios)')
-    if bad_prompt:
-        print(f'    FAIL: {bad_prompt} rows have invalid prompt JSON')
-        issues += 1
-
-    # Production readback: every row must survive the same normalization and
-    # task reconstruction used by training/reward.
-    try:
-        from src.reward.oval_reward_fn import _build_task_dict
-        from src.utils import normalize_extra_info
-        for row_idx, row in df.iterrows():
-            normalized = normalize_extra_info(row['extra_info'])
-            td = _build_task_dict(normalized)
-            if not isinstance(td, dict) or 'required_tool_calls' not in td:
-                print(f'    FAIL: row {row_idx} _build_task_dict returned invalid dict')
-                issues += 1
-                break
-    except Exception as e:
-        print(f'    FAIL: production parser readback crashed — {e}')
-        issues += 1
-
-if issues:
-    print(f'\n  Parquet validation FAILED ({issues} issue(s))')
-    sys.exit(1)
-else:
-    print(f'  Parquet validation PASSED')
-"
-
-if [ $? -ne 0 ]; then
+if ! "${PYTHON_BIN}" scripts/audit_generated_data.py \
+    "${RUN_DIR}/train.parquet" "${RUN_DIR}/val.parquet"; then
     echo "ERROR: Parquet integrity check failed. See above for details." >&2
     exit 1
 fi

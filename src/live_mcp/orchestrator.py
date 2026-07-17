@@ -43,6 +43,7 @@ from src.live_mcp.observation import (
     tool_result_envelope,
 )
 from src.live_mcp.types import LiveTask, OracleCall, OracleProgram, to_plain
+from src.live_mcp.tool_semantics import unresolved_failed_tool_names
 from src.utils import extract_json as _extract_json
 
 
@@ -526,6 +527,13 @@ class TaskOrchestrator:
                 break
 
             if action.action in ("final_answer", "report_error"):
+                if action.action == "final_answer":
+                    unresolved = unresolved_failed_tool_names(execution_history)
+                    if unresolved:
+                        raise RuntimeError(
+                            "Teacher emitted final_answer with unresolved failed "
+                            f"actions in round {round_idx}: {sorted(unresolved)}"
+                        )
                 _trace(
                     "terminal_action", round_idx=round_idx,
                     action=action.action, text=action.text,
@@ -1928,7 +1936,9 @@ class TaskOrchestrator:
         ) if irrelevance_ratio > 0 else 0
         n_normal = count - n_irrelevant
 
-        # Per-domain budget: each domain gets its fair share (PROVE uniform distribution)
+        # Uniform candidate exploration avoids imposing a distribution prior.
+        # Final corpus quotas are assigned by global merge from observed
+        # feasible, Jaccard-unique dependency-chain capacity.
         per_domain = n_normal // len(servers)
         remainder = n_normal % len(servers)
         global_seed_offset = 0
@@ -3528,6 +3538,28 @@ class TaskOrchestrator:
                 tool_name=tool_name,
             )
 
+        # A successful wishlist probe proves both membership and
+        # non-membership for every product discovered in the same session.
+        # Without the explicit False value, query/continuation generation can
+        # select an already wishlisted product for add_to_wishlist because an
+        # absent field is indistinguishable from an unobserved field.
+        if server_name == "shopping" and any(
+            item.get("tool") == "get_wishlist" and item.get("success")
+            for item in probe_results
+        ):
+            for idx, record in enumerate(entity_records):
+                if record.get("type") != "product":
+                    continue
+                data = record.get("data")
+                if not isinstance(data, dict):
+                    data = {}
+                    record["data"] = data
+                data.setdefault("wishlist_member", False)
+                entity_summaries[idx] = _format_entity_summary(
+                    str(record.get("id") or ""), "product", data,
+                    server_name=server_name,
+                )
+
         # ── P0-1 Fix: two-stage enrichment for entities needing sub-probes ──
         # Some quality predicates (e.g. food_delivery restaurant → menu) depend
         # on data not returned by top-level discovery tools.  After the primary
@@ -4780,20 +4812,22 @@ _COMMON_ENTITY_SUMMARY_FIELDS = (
     "currency", "due_date", "cuisine", "rating", "total",
     "member_count", "start_time", "end_time", "location",
     "reminders", "recurrence", "attendees", "labels", "watchers",
-    "members",
+    "members", "wishlist_member", "cart_member",
 )
 
 # Handler-dependent facts belong to typed projections.  A single ever-growing
 # generic whitelist hides which business invariant each field supports and
 # previously dropped facts that discovery had returned correctly.
 _DOMAIN_ENTITY_SUMMARY_FIELDS: dict[tuple[str, str], tuple[str, ...]] = {
-    ("filesystem", "file"): ("permissions", "size"),
-    ("email", "email"): ("read", "archived", "date"),
+    ("filesystem", "file"): ("permissions", "size", "path"),
+    ("email", "email"): ("read", "archived", "date", "labels", "thread_id"),
+    ("shopping", "product"): ("wishlist_member",),
+    ("shopping", "cart_item"): ("cart_member",),
     ("issue_tracker", "issue"): (
         "state", "assignee", "sprint_id", "milestone",
     ),
     ("team_chat", "channel"): ("archived", "description"),
-    ("team_chat", "message"): ("reactions",),
+    ("team_chat", "message"): ("reactions", "thread_id", "channel_id"),
     ("food_delivery", "order"): (
         "tip", "subtotal", "delivery_fee", "delivery_address",
     ),
@@ -4893,7 +4927,18 @@ def _extract_probe_entities(
         if server_name == "shopping" and tool_name == "get_cart":
             for item in obj.get("cart") or []:
                 if isinstance(item, dict) and item.get("product_id"):
-                    add_entity(str(item["product_id"]), "cart_item", item)
+                    add_entity(
+                        str(item["product_id"]), "cart_item",
+                        {**item, "cart_member": True},
+                    )
+
+        if server_name == "shopping" and tool_name == "get_wishlist":
+            for item in obj.get("wishlist") or []:
+                if isinstance(item, dict) and item.get("product_id"):
+                    add_entity(
+                        str(item["product_id"]), "product",
+                        {**item, "wishlist_member": True},
+                    )
 
         if server_name == "team_chat":
             for member in obj.get("members") or []:
@@ -5595,6 +5640,25 @@ def _entity_record_satisfies_chain(
                     return False
                 if field in record:
                     break
+        wishlist_member = record.get("wishlist_member")
+        add_then_remove = (
+            "add_to_wishlist" in tools
+            and "remove_from_wishlist" in tools
+            and chain_seed.index("add_to_wishlist")
+            < chain_seed.index("remove_from_wishlist")
+        )
+        if (
+            "remove_from_wishlist" in tools
+            and not add_then_remove
+            and wishlist_member is False
+        ):
+            return False
+        if (
+            "add_to_wishlist" in tools
+            and "remove_from_wishlist" not in tools
+            and wishlist_member is True
+        ):
+            return False
     if server_name == "food_delivery" and etype == "restaurant":
         if "create_order" in tools:
             menu = record.get("menu", record.get("items"))
@@ -5621,7 +5685,10 @@ def _entity_record_satisfies_chain(
             if not attendee_produced and "attendees" in record and not record.get("attendees"):
                 return False
     if server_name == "filesystem" and "readlink" in tools:
-        if "type" in record and str(record["type"]) not in {"symlink", "link"}:
+        # readlink has an exact handler precondition (node.type == symlink).
+        # A directory listing root has no ``type`` field and therefore cannot
+        # be treated as an unknown-but-possibly-valid file for this chain.
+        if str(record.get("type", "")) not in {"symlink", "link"}:
             return False
     if server_name == "filesystem" and "tar_extract" in tools and etype == "file":
         if "type" in record and str(record["type"]) != "file":

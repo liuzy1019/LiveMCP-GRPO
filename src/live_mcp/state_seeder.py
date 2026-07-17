@@ -378,7 +378,13 @@ def _email_state(seed: int) -> dict[str, Any]:
             # add_label call mutate unrelated emails and corrupt state-delta
             # success criteria.
             "labels": list(rng.choice(labels_pool)),
-            "thread_id": _seed_scoped_id("thd", seed, idx // 3, width=3),
+            # Only messages with the same normalized subject share a thread.
+            # Grouping by record position made unrelated seeded subjects look
+            # like one conversation and taught the model to rationalize an
+            # impossible mailbox state.
+            "thread_id": _seed_scoped_id(
+                "thd", seed, idx % len(subjects), width=3,
+            ),
             "status": "received",
             "date": (reference_date - _datetime.timedelta(days=idx % 8)).isoformat(),
             "read": rng.random() < 0.5,

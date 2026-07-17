@@ -49,6 +49,18 @@ rollout 通过前，不为了消除 metadata 告警批量改动 GPU 依赖树。
 运行需显式核对 merge 返回值、generation PID 统计、integrity check、symlink publish、
 `GEN_SUCCESS` 与最终退出码；未复现前不写入猜测性修复。
 
+## KI-011：小缺口 top-up 会显著过量生成
+
+- 状态：`Open`
+- 影响范围：Teacher 灰度与小规模多域生成效率
+
+`0716_semantic_fix_adv_smoke_6_0` 的三域 6-row smoke 中，初始单样本 shard 没有覆盖
+email 与 issue_tracker；global merge 正确 fail-closed，但每个仅缺 2 条的 domain 随后按
+top-up 下限启动 4 个各 6 条的 shard，即每域生成 24 个候选。全局 quota 已有足够候选后，
+运行中的 shard 不会提前停止，造成多余 Teacher 请求。该问题不放宽或改变 fresh replay、
+provenance、Jaccard 与逐域 quota，只影响调度成本。修复时应基于缺口和已观测保留率设置
+小规模上限，并保持 top-up shard 的部分结果可合并；不得通过减少质量门禁换取速度。
+
 ## 执行门禁
 
 - 不得仅根据注释或测试数量宣称不存在所有潜在 bug。

@@ -40,7 +40,10 @@ from src.live_mcp.task_planner import (
     _SELF_CONTAINED_WRITE_TOOLS,
     DOMAIN_DESCRIPTIONS, _format_tools,
 )
-from src.live_mcp.tool_semantics import is_mutating_tool
+from src.live_mcp.tool_semantics import (
+    is_mutating_tool,
+    resolve_tool_execution_semantics,
+)
 from src.live_mcp.dedup import dedup_tasks
 
 
@@ -725,7 +728,9 @@ def _task_fingerprint(task) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _required_round_oracle_calls(task, round_idx: int, round_calls: list) -> list:
+def _required_round_oracle_projection(
+    task, round_idx: int, round_calls: list,
+) -> tuple[list, list[dict[str, Any]]]:
     """Project Teacher actions onto required workflow steps for RL labels.
 
     The full live trace remains untouched on ``task.oracle_program`` and in the
@@ -736,6 +741,7 @@ def _required_round_oracle_calls(task, round_idx: int, round_calls: list) -> lis
     history = histories[round_idx] if round_idx < len(histories) else []
     history_cursor = 0
     required = []
+    decisions: list[dict[str, Any]] = []
     for call in round_calls:
         if getattr(call, "action", "tool_call") != "tool_call":
             required.append(call)
@@ -754,6 +760,12 @@ def _required_round_oracle_calls(task, round_idx: int, round_calls: list) -> lis
                 break
         if matched is not None:
             if matched.get("no_progress_warning"):
+                decisions.append({
+                    "round_idx": round_idx,
+                    "tool_name": str(call.tool_name),
+                    "decision": "drop",
+                    "reason": "exact_no_progress_repeat",
+                })
                 continue
             domain = (
                 task.target_servers[0]
@@ -763,14 +775,60 @@ def _required_round_oracle_calls(task, round_idx: int, round_calls: list) -> lis
             if (
                 domain
                 and matched.get("state_changed") is False
-                and is_mutating_tool(call.tool_name, domain)
+                and resolve_tool_execution_semantics(
+                    call.tool_name, domain,
+                ) == "state_transition"
             ):
                 # The factual attempt remains in teacher_attempt_trace.  A
-                # successful idempotent/no-op mutation did not produce a
-                # required outcome and must not be rewarded as ground truth.
+                # successful state-transition no-op did not produce a required
+                # outcome and must not be rewarded as ground truth.  Successful
+                # action-execution tools (for example unzip) remain required
+                # even when their net state delta is empty.
+                decisions.append({
+                    "round_idx": round_idx,
+                    "tool_name": str(call.tool_name),
+                    "decision": "drop",
+                    "reason": "state_transition_noop",
+                })
                 continue
+            if (
+                domain
+                and matched.get("state_changed") is False
+                and resolve_tool_execution_semantics(
+                    call.tool_name, domain,
+                ) == "action_execution"
+            ):
+                decisions.append({
+                    "round_idx": round_idx,
+                    "tool_name": str(call.tool_name),
+                    "decision": "keep",
+                    "reason": "action_execution_no_net_change",
+                })
         required.append(call)
+    return required, decisions
+
+
+def _required_round_oracle_calls(task, round_idx: int, round_calls: list) -> list:
+    required, _ = _required_round_oracle_projection(
+        task, round_idx, round_calls,
+    )
     return required
+
+
+def _required_workflow_projection_summary(task) -> dict[str, Any]:
+    decisions: list[dict[str, Any]] = []
+    for round_idx, round_calls in enumerate(
+        getattr(task, "oracle_calls_per_round", None) or []
+    ):
+        _, round_decisions = _required_round_oracle_projection(
+            task, round_idx, list(round_calls),
+        )
+        decisions.extend(round_decisions)
+    counts: dict[str, int] = {}
+    for item in decisions:
+        reason = str(item["reason"])
+        counts[reason] = counts.get(reason, 0) + 1
+    return {"counts": counts, "events": decisions}
 
 
 def _serialize_training_oracle(task) -> list[dict]:
@@ -1554,6 +1612,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         # can include per-round terminal actions; training rows keep only the
         # final terminal so the reward contract remains single-terminal.
         oracle_calls_serialized = _serialize_training_oracle(task)
+        projection_summary = _required_workflow_projection_summary(task)
         round_contracts = _build_round_contracts(task)
         minimum_action_budget = _minimum_action_budget(
             oracle_calls_serialized, round_contracts,
@@ -1733,6 +1792,22 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             ),
             "teacher_failed_attempt_count": int(
                 task.metadata.get("teacher_failed_attempt_count", 0)
+            ),
+            "required_workflow_projection": json.dumps(
+                projection_summary, ensure_ascii=False, default=str,
+            ),
+            "projection_exact_repeat_dropped": int(
+                projection_summary["counts"].get(
+                    "exact_no_progress_repeat", 0,
+                )
+            ),
+            "projection_state_transition_noop_dropped": int(
+                projection_summary["counts"].get("state_transition_noop", 0)
+            ),
+            "projection_action_no_net_change_retained": int(
+                projection_summary["counts"].get(
+                    "action_execution_no_net_change", 0,
+                )
             ),
             "teacher_attempt_trace": json.dumps(
                 task.metadata.get("teacher_attempt_trace", []),

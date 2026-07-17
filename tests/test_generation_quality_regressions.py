@@ -22,6 +22,7 @@ from scripts.generate_data import (
     _load_generation_checkpoint,
     _minimum_action_budget,
     _required_round_oracle_calls,
+    _required_workflow_projection_summary,
     _serialize_training_oracle,
     _stratified_task_split,
     _tasks_to_rows,
@@ -30,9 +31,11 @@ from scripts.generate_data import (
     _write_generation_checkpoint,
 )
 from scripts.merge_generation_shards import (
-    _dedup_jaccard, _quality_issue, _row_fingerprint,
+    _capacity_weighted_domain_quotas, _dedup_jaccard,
+    _domain_unique_chain_capacity, _frozen_allocation_capacity,
+    _quality_issue, _row_fingerprint,
     _initial_query_key, _isolate_initial_queries, _suggest_topup_count,
-    merge_shards,
+    _unresolved_failure_issue, merge_shards,
 )
 from scripts.validate_generation_pipeline import _stage3_output_issue, _strict_cache_issue
 from src.live_mcp.orchestrator import (
@@ -87,6 +90,7 @@ from src.live_mcp.servers.shopping.server import TOOLS as SHOPPING_TOOLS
 from src.live_mcp.servers.team_chat.server import TOOLS as TEAM_CHAT_TOOLS
 from src.live_mcp.task_planner import (
     ActionPlan, ContinuationPolicy, TaskPlanner, _PERSONA_TEMPLATES,
+    _final_answer_requests_user_input,
     derive_success_criteria,
     provenance_check, replay_validate,
 )
@@ -100,7 +104,7 @@ from src.live_mcp.observation import (
     project_observation,
 )
 from src.live_mcp.types import LiveTask, OracleCall, OracleProgram
-from src.reward.oval_reward_fn import _build_task_dict
+from src.reward.oval_reward_fn import _build_task_dict, compute_score
 
 
 def test_multi_round_action_budget_covers_tools_and_terminals() -> None:
@@ -1221,6 +1225,98 @@ def test_final_answer_question_is_retried_as_clarification() -> None:
     assert action.text == "Which account should I use?"
 
 
+def test_embedded_user_question_in_final_answer_is_retried() -> None:
+    class SequencedClient:
+        calls = 0
+
+        def generate_chat(self, messages, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return json.dumps({
+                    "action": "final_answer",
+                    "text": (
+                        "No assignee was specified. Would you like me to assign "
+                        "the issue to someone? I can list members for you."
+                    ),
+                })
+            return json.dumps({
+                "action": "ask_clarification",
+                "question": "Who should I assign the issue to?",
+            })
+
+    client = SequencedClient()
+    planner = TaskPlanner(client, "issue_tracker", seed=1)
+    action = planner.decide_action(
+        tool_schemas=[],
+        user_query="Should I assign this bug to anyone?",
+        execution_history=[],
+        attempt=0,
+        difficulty="minimal",
+        allow_direct_answer=True,
+    )
+    assert client.calls == 2
+    assert action.action == "ask_clarification"
+
+
+@pytest.mark.parametrize("text", [
+    "Please provide the account number.",
+    "The operation is blocked. Could you confirm the destination? I can retry.",
+    "No assignee was specified—would you like me to list members? I can do that.",
+    "More information is required\nWhich account should I use?",
+    "Which account should I use?",
+])
+def test_final_answer_input_request_detector_rejects_direct_requests(
+    text: str,
+) -> None:
+    assert _final_answer_requests_user_input(text)
+
+
+@pytest.mark.parametrize("text", [
+    "The saved title is 'Why now?'; the record is complete.",
+    'The email subject is "Can you review this?" and it was archived.',
+    'The user asked. "Would you like me to retry?" I answered no.',
+    "The cancellation is complete.",
+])
+def test_final_answer_input_request_detector_allows_quoted_questions(
+    text: str,
+) -> None:
+    assert not _final_answer_requests_user_input(text)
+
+
+def test_action_prompt_preserves_prove_boundary_for_multiround_recovery() -> None:
+    class CapturingClient:
+        messages = None
+
+        def generate_chat(self, messages, **kwargs):
+            self.messages = messages
+            return json.dumps({
+                "action": "report_error",
+                "reason": "The required capability is unavailable.",
+            })
+
+    client = CapturingClient()
+    planner = TaskPlanner(client, "email", seed=1)
+    planner.decide_action(
+        tool_schemas=[],
+        user_query="Mark that email as read and archive the other one.",
+        execution_history=[],
+        attempt=1,
+        difficulty="complete",
+        conversation_context=[{
+            "round_idx": 0,
+            "user_query": "Send an email to support.",
+            "assistant_response": "Sent as eml_0013.",
+            "terminal_action": "final_answer",
+        }],
+        missing_function=True,
+        allow_direct_answer=True,
+    )
+    system = client.messages[0]["content"]
+    assert "complete Prior Conversation Rounds" in system
+    assert "multiple independent outcomes" in system
+    assert "no user answer can restore the missing capability" in system
+
+
 def test_followup_prompt_contains_previous_visible_response() -> None:
     class CapturingClient:
         messages = None
@@ -1347,6 +1443,52 @@ def test_turn_loop_executes_repeated_teacher_calls_against_live_mcp() -> None:
     assert "no_progress_warning" in teacher.histories[2][-1]
 
 
+def test_turn_loop_rejects_final_answer_after_unresolved_failure() -> None:
+    class SequencedTeacher:
+        def __init__(self):
+            self.index = 0
+
+        def decide_action(self, **kwargs):
+            actions = [
+                ActionPlan("tool_call", "readlink", {"path": "/home/user"}),
+                ActionPlan("tool_call", "ls", {"path": "/home/user"}),
+                ActionPlan("tool_call", "tail", {"path": "/home/user/logs/app.log"}),
+                ActionPlan("final_answer", text="The linked log is shown."),
+            ]
+            action = actions[self.index]
+            self.index += 1
+            return action
+
+        def decide_recovery(self, **kwargs):
+            return {"action": "give_up", "reason": "not available"}
+
+    class FakeExecutor:
+        def execute(self, _session_id, call, **kwargs):
+            failed = call.name == "readlink"
+            return SimpleNamespace(
+                success=not failed,
+                observation={} if failed else {"ok": True},
+                execution_status="FAILURE" if failed else "SUCCESS",
+                error_type="precondition_failed" if failed else "",
+                error_message="not a symlink" if failed else "",
+                state_changed=False,
+                schema_valid=True,
+                metadata={},
+            )
+
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.executor = FakeExecutor()
+    with pytest.raises(RuntimeError, match="unresolved failed actions.*readlink"):
+        orchestrator._run_turn_loop(
+            teacher=SequencedTeacher(), current_query="show the linked log",
+            server_tools=[
+                {"name": "readlink"}, {"name": "ls"}, {"name": "tail"},
+            ],
+            server_name="filesystem", session_id="s",
+            difficulty="complete", round_idx=0,
+        )
+
+
 def test_no_progress_repeat_stays_in_trace_but_not_required_rl_oracle() -> None:
     call = OracleCall("list_events", {"date": "today"})
     terminal = OracleCall(
@@ -1458,6 +1600,26 @@ def test_no_progress_required_oracle_survives_parquet_reward_roundtrip(
     assert reward_task["required_tool_calls"] == [{
         "tool_name": "list_events", "arguments": {"date": "today"},
     }]
+    reward_extra = dict(read_row["extra_info"])
+    reward_extra["audit_events"] = [
+        {
+            "event_id": "tool-0", "session_id": "s", "step": 0,
+            "round_idx": 0, "action_type": "tool_call",
+            "tool_name": "list_events",
+            "tool_arguments": {"date": "today"},
+            "tool_name_known": True, "schema_valid": True,
+            "execution_success": True,
+        },
+        {
+            "event_id": "terminal-0", "session_id": "s", "step": 1,
+            "round_idx": 0, "action_type": "final_answer",
+            "terminal_action": "final_answer",
+        },
+    ]
+    reward_result = compute_score(
+        "live_mcp_state_machine", "", {}, reward_extra,
+    )
+    assert reward_result["r_coverage"] == pytest.approx(1.0)
     assert list(read_row["extra_info"]["teacher_trace_tool_sequence"]) == [
         "list_events", "list_events",
     ]
@@ -1478,6 +1640,11 @@ def test_no_progress_required_oracle_survives_parquet_reward_roundtrip(
     assert read_row["extra_info"]["max_observation_chars"] == 4096
     assert bool(read_row["extra_info"]["provenance_valid"])
     assert read_row["extra_info"]["provenance_violation_count"] == 0
+    assert read_row["extra_info"]["projection_exact_repeat_dropped"] == 1
+    projection = json.loads(
+        read_row["extra_info"]["required_workflow_projection"]
+    )
+    assert projection["counts"] == {"exact_no_progress_repeat": 1}
     assert list(read_row["extra_info"]["reward_profile_compatibility"]) == [
         "prove_baseline", "oval_full",
     ]
@@ -1728,6 +1895,39 @@ def test_successful_mutating_noop_is_not_a_required_oracle_step() -> None:
     ]
 
 
+def test_successful_action_execution_without_net_delta_remains_required() -> None:
+    call = OracleCall(
+        "unzip",
+        {"archive": "/home/user/bundle.zip", "target_dir": "/home/user/out"},
+    )
+    terminal = OracleCall(
+        "final_answer", {"text": "The archive was extracted."},
+        action="final_answer",
+    )
+    task = SimpleNamespace(
+        target_servers=["filesystem"],
+        oracle_calls_per_round=[[call, terminal]],
+        execution_history_per_round=[[{
+            "tool_name": "unzip",
+            "arguments": dict(call.arguments),
+            "success": True,
+            "state_changed": False,
+            "observation": {
+                "archive": "/home/user/bundle.zip",
+                "extracted_to": "/home/user/out",
+                "extracted_paths": ["/home/user/out/a.txt"],
+            },
+        }]],
+    )
+
+    assert _required_round_oracle_calls(task, 0, [call, terminal]) == [
+        call, terminal,
+    ]
+    assert _required_workflow_projection_summary(task)["counts"] == {
+        "action_execution_no_net_change": 1,
+    }
+
+
 def test_canonical_row_replay_uses_exact_exported_oracle(monkeypatch) -> None:
     captured = {}
 
@@ -1884,6 +2084,83 @@ def test_global_merge_enforces_train_and_val_domain_quotas(tmp_path: Path) -> No
     assert val["extra_info"].map(lambda x: x["domain"]).value_counts().to_dict() == {
         "calendar": 1, "filesystem": 1,
     }
+
+
+def test_capacity_weighted_quota_keeps_floor_and_uses_unique_chains() -> None:
+    capacities = {"calendar": 1, "filesystem": 3}
+    assert _capacity_weighted_domain_quotas(
+        10, ["calendar", "filesystem"], capacities,
+        minimum_per_domain=1,
+    ) == {"calendar": 3, "filesystem": 7}
+
+    rows = []
+    for index in range(4):
+        row = _row(f"calendar-{index}", f"calendar-{index}", "calendar")
+        row["extra_info"]["source_chain_seed"] = ["list_events", "get_event"]
+        rows.append(row)
+    for index, chain in enumerate((
+        ["find", "cat"], ["ls", "tail"], ["stat", "readlink"],
+    )):
+        row = _row(f"filesystem-{index}", f"filesystem-{index}", "filesystem")
+        row["extra_info"]["source_chain_seed"] = chain
+        rows.append(row)
+    assert _domain_unique_chain_capacity(
+        pd.DataFrame(rows), ["calendar", "filesystem"],
+    ) == {"calendar": 1, "filesystem": 3}
+
+
+def test_topup_reuses_first_merge_allocation_capacity(tmp_path: Path) -> None:
+    report = tmp_path / "merge_deficits.json"
+    report.write_text(json.dumps({
+        "allocation_capacity_by_domain": {
+            "calendar": 1, "filesystem": 3,
+        },
+        "unique_chain_capacity_by_domain": {
+            "calendar": 4, "filesystem": 5,
+        },
+    }))
+    assert _frozen_allocation_capacity(
+        report, ["calendar", "filesystem"],
+    ) == {"calendar": 1, "filesystem": 3}
+
+
+def test_global_merge_uses_capacity_weighted_final_distribution(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    output_dir = tmp_path / "out"
+    shard_dir.mkdir()
+    rows = []
+    for index in range(4):
+        row = _row(f"calendar-{index}", f"calendar-{index}", "calendar")
+        row["extra_info"]["source_chain_seed"] = ["list_events", "get_event"]
+        rows.append(row)
+    filesystem_chains = (
+        ["find", "cat"], ["ls", "tail"], ["stat", "readlink"],
+    )
+    for index in range(6):
+        row = _row(f"filesystem-{index}", f"filesystem-{index}", "filesystem")
+        row["extra_info"]["source_chain_seed"] = filesystem_chains[index % 3]
+        rows.append(row)
+    pd.DataFrame(rows[:5]).to_parquet(
+        shard_dir / "shard_0_train.parquet", index=False,
+    )
+    pd.DataFrame(rows[5:]).to_parquet(
+        shard_dir / "shard_0_val.parquet", index=False,
+    )
+
+    assert merge_shards(
+        shard_dir, output_dir, count=8, val_count=2,
+        domains=["calendar", "filesystem"],
+    ) == 0
+    train = pd.read_parquet(output_dir / "train.parquet")
+    val = pd.read_parquet(output_dir / "val.parquet")
+    assert train["extra_info"].map(
+        lambda value: value["domain"]
+    ).value_counts().to_dict() == {"filesystem": 5, "calendar": 3}
+    assert val["extra_info"].map(
+        lambda value: value["domain"]
+    ).value_counts().to_dict() == {"calendar": 1, "filesystem": 1}
 
 
 def test_global_merge_fails_when_one_domain_cannot_meet_quota(tmp_path: Path) -> None:
@@ -2082,27 +2359,244 @@ def test_final_split_isolates_cross_domain_query_and_preserves_quotas() -> None:
 
 
 def test_merge_rejects_unrelated_email_label_criteria() -> None:
+    from src.live_mcp.state_seeder import StateSeeder
+
+    seed = 42
+    initial = StateSeeder().seed_state("email", "audit", seed)
+    existing_ids = list(initial["emails"])
+    target_id, unrelated_id = existing_ids[:2]
     row = pd.Series({
         "prompt": json.dumps([{"role": "user", "content": "label it"}]),
         "scenario_type": "normal_safe_success",
         "extra_info": {
             **_environment_extra("email"),
             "domain": "email",
+            "session_seed": seed,
             "paper_replay_valid": True,
             "hidden_tools": [],
             "visible_tool_names": ["add_label"],
             "oracle_calls": json.dumps([{
                 "action": "tool_call",
                 "tool_name": "add_label",
-                "arguments": {"email_id": "eml_1", "label": "urgent"},
+                "arguments": {"email_id": target_id, "label": "urgent"},
             }]),
             "success_criteria": json.dumps([
-                {"type": "state_equals", "path_parts": ["emails", "eml_1", "labels"], "value": ["urgent"]},
-                {"type": "state_equals", "path_parts": ["emails", "eml_2", "labels"], "value": ["urgent"]},
+                {"type": "state_equals", "path_parts": ["emails", target_id, "labels"], "value": ["urgent"]},
+                {"type": "state_equals", "path_parts": ["emails", unrelated_id, "labels"], "value": ["urgent"]},
             ]),
         },
     })
     assert _quality_issue(row).startswith("unrelated_email_label_criteria:")
+
+
+def test_email_seeded_threads_only_group_matching_subjects() -> None:
+    from src.live_mcp.state_seeder import StateSeeder
+
+    state = StateSeeder().seed_state("email", "thread-audit", 3100042)
+    for email_ids in state["threads"].values():
+        subjects = {
+            state["emails"][email_id]["subject"].removeprefix("Re: ").strip().casefold()
+            for email_id in email_ids
+        }
+        assert len(subjects) == 1
+
+
+def test_merge_allows_labels_field_on_new_reply_email() -> None:
+    seed = 42
+    row = pd.Series({
+        "prompt": json.dumps([{"role": "user", "content": "reply to it"}]),
+        "scenario_type": "normal_safe_success",
+        "extra_info": {
+            **_environment_extra("email"),
+            "domain": "email",
+            "session_seed": seed,
+            "paper_replay_valid": True,
+            "hidden_tools": [],
+            "visible_tool_names": ["reply_email"],
+            "oracle_calls": json.dumps([{
+                "action": "tool_call",
+                "tool_name": "reply_email",
+                "arguments": {"email_id": "eml_s42_0001", "body": "Thanks"},
+            }]),
+            "success_criteria": json.dumps([{
+                "type": "state_equals",
+                "path_parts": ["emails", "eml_0013", "labels"],
+                "value": [],
+            }]),
+        },
+    })
+    issue = _quality_issue(row)
+    assert issue is None or not issue.startswith("unrelated_email_label_criteria:")
+
+
+def test_merge_rejects_final_answer_after_unresolved_failed_action() -> None:
+    row = pd.Series(_row("show the linked log", "filesystem-bad", "filesystem"))
+    row["extra_info"]["teacher_attempt_count"] = 3
+    row["extra_info"]["teacher_failed_attempt_count"] = 1
+    row["extra_info"]["teacher_attempt_trace"] = json.dumps([
+        {
+            "round_idx": 0,
+            "call": {"tool_name": "readlink", "arguments": {"path": "/home/user"}},
+            "observation": {},
+        },
+        {
+            "round_idx": 0,
+            "call": {"tool_name": "ls", "arguments": {"path": "/home/user"}},
+            "observation": {"entries": []},
+        },
+        {
+            "round_idx": 0,
+            "call": {"tool_name": "tail", "arguments": {"path": "/home/user/logs/app.log"}},
+            "observation": {"lines": []},
+        },
+    ])
+    row["extra_info"]["teacher_round_trace"] = json.dumps([{
+        "round_idx": 0,
+        "user_query": "show the linked log",
+        "oracle_calls": [
+            {"action": "tool_call", "tool_name": "ls", "arguments": {"path": "/home/user"}},
+            {"action": "tool_call", "tool_name": "tail", "arguments": {"path": "/home/user/logs/app.log"}},
+            {"action": "final_answer", "tool_name": "final_answer", "arguments": {"text": "done"}},
+        ],
+        "execution_history": [
+            {"tool_name": "readlink", "success": False, "error_type": "precondition_failed"},
+            {"tool_name": "ls", "success": True},
+            {"tool_name": "tail", "success": True},
+        ],
+    }])
+    assert _quality_issue(row).startswith(
+        "unresolved_failed_action_final_answer:round=0:tools=['readlink']"
+    )
+
+
+def test_merge_allows_failed_action_with_graceful_report_error() -> None:
+    row = pd.Series(_row("dispute it", "payments-recovery", "payments"))
+    row["extra_info"]["teacher_attempt_count"] = 1
+    row["extra_info"]["teacher_failed_attempt_count"] = 1
+    row["extra_info"]["teacher_attempt_trace"] = json.dumps([{
+        "round_idx": 0,
+        "call": {"tool_name": "dispute_invoice", "arguments": {"invoice_id": "inv_1"}},
+        "observation": {},
+    }])
+    row["extra_info"]["teacher_round_trace"] = json.dumps([{
+        "round_idx": 0,
+        "user_query": "dispute it",
+        "oracle_calls": [{
+            "action": "report_error",
+            "tool_name": "report_error",
+            "arguments": {"text": "invoice status does not allow a dispute"},
+        }],
+        "execution_history": [{
+            "tool_name": "dispute_invoice",
+            "success": False,
+            "error_type": "precondition_failed",
+        }],
+    }])
+    issue = _quality_issue(row)
+    assert not issue.startswith("unresolved_failed_action_final_answer:")
+
+
+@pytest.mark.parametrize(("domain", "tool_name", "identity_field"), [
+    ("payments", "dispute_invoice", "invoice_id"),
+    ("issue_tracker", "time_track", "issue_id"),
+])
+def test_merge_rejects_success_on_different_mutation_target(
+    domain: str, tool_name: str, identity_field: str,
+) -> None:
+    extra = {
+        "domain": domain,
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [
+                {
+                    "tool_name": tool_name,
+                    "arguments": {identity_field: "target_1"},
+                    "success": False,
+                    "error_type": "precondition_failed",
+                },
+                {
+                    "tool_name": tool_name,
+                    "arguments": {identity_field: "target_2"},
+                    "success": True,
+                },
+            ],
+        }],
+    }
+    assert _unresolved_failure_issue(extra) == (
+        "unresolved_failed_action_final_answer:round=0:"
+        f"tools=['{tool_name}']"
+    )
+
+
+def test_merge_allows_corrected_retry_on_same_mutation_target() -> None:
+    extra = {
+        "domain": "payments",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [
+                {
+                    "tool_name": "dispute_invoice",
+                    "arguments": {"invoice_id": "inv_1", "reason": ""},
+                    "success": False,
+                    "error_type": "schema_invalid",
+                },
+                {
+                    "tool_name": "dispute_invoice",
+                    "arguments": {"invoice_id": "inv_1", "reason": "wrong amount"},
+                    "success": True,
+                },
+            ],
+        }],
+    }
+    assert _unresolved_failure_issue(extra) == ""
+
+
+def test_merge_allows_corrected_destination_on_same_mutation_target() -> None:
+    extra = {
+        "domain": "email",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [
+                {
+                    "tool_name": "move_to_thread",
+                    "arguments": {"email_id": "eml_1", "thread_id": "bad"},
+                    "success": False,
+                },
+                {
+                    "tool_name": "move_to_thread",
+                    "arguments": {"email_id": "eml_1", "thread_id": "th_2"},
+                    "success": True,
+                },
+            ],
+        }],
+    }
+    assert _unresolved_failure_issue(extra) == ""
+
+
+def test_merge_allows_readonly_retry_with_different_target() -> None:
+    extra = {
+        "domain": "payments",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [
+                {
+                    "tool_name": "get_invoice",
+                    "arguments": {"invoice_id": "inv_missing"},
+                    "success": False,
+                },
+                {
+                    "tool_name": "get_invoice",
+                    "arguments": {"invoice_id": "inv_1"},
+                    "success": True,
+                },
+            ],
+        }],
+    }
+    assert _unresolved_failure_issue(extra) == ""
 
 
 def test_merge_rejects_unrelated_team_chat_reaction_criteria() -> None:
@@ -3179,6 +3673,14 @@ def test_state_filters_reject_only_handler_proven_invalid_entities() -> None:
         record={"subject": "Hello"},
     )
     assert not _entity_record_satisfies_chain(
+        server_name="filesystem", chain_seed=["find", "readlink"], etype="file",
+        record={"path": "/home/user", "entries": []},
+    )
+    assert _entity_record_satisfies_chain(
+        server_name="filesystem", chain_seed=["find", "readlink"], etype="file",
+        record={"path": "/home/user/asset", "type": "symlink"},
+    )
+    assert not _entity_record_satisfies_chain(
         server_name="team_chat", chain_seed=["send_message"], etype="channel",
         record={"archived": True},
     )
@@ -3238,10 +3740,12 @@ def test_chain_entity_summary_keeps_required_supporting_data() -> None:
 
 def test_domain_entity_projection_keeps_handler_decision_fields() -> None:
     cases = [
-        ("filesystem", "file", {"permissions": "755", "size": 12}, ("permissions", "size")),
-        ("email", "email", {"read": False, "archived": True}, ("read", "archived")),
+        ("filesystem", "file", {"permissions": "755", "size": 12, "path": "/home/user/a"}, ("permissions", "size", "path")),
+        ("email", "email", {"read": False, "archived": True, "labels": ["urgent"], "thread_id": "th_1"}, ("read", "archived", "labels", "thread_id")),
+        ("shopping", "product", {"wishlist_member": True}, ("wishlist_member", "True")),
+        ("calendar", "event", {"attendees": ["a@example.com"], "reminders": [{"minutes_before": 15}]}, ("attendees", "reminders")),
         ("issue_tracker", "issue", {"state": "in_progress", "assignee": "usr_1", "sprint_id": "spr_1"}, ("state", "assignee", "sprint_id")),
-        ("team_chat", "message", {"reactions": ["👍"]}, ("reactions", "👍")),
+        ("team_chat", "message", {"reactions": ["👍"], "thread_id": "th_1", "channel_id": "ch_1"}, ("reactions", "👍", "thread_id", "channel_id")),
         ("food_delivery", "order", {"tip": 5.0, "total": 20.0}, ("tip", "5.0")),
         ("payments", "invoice", {"amount": 100.0, "total_refunded": 40.0}, ("total_refunded", "remaining_refundable", "60.0")),
     ]
@@ -3251,6 +3755,47 @@ def test_domain_entity_projection_keeps_handler_decision_fields() -> None:
         )
         for marker in expected:
             assert marker in summary, (domain, marker, summary)
+
+
+def test_wishlist_probe_marks_product_membership_for_query_and_continuation() -> None:
+    extracted = []
+
+    def add_entity(eid, etype, data=None):
+        extracted.append((eid, etype, data))
+
+    product = {
+        "product_id": "prod_1", "name": "Keyboard", "stock": 3,
+    }
+    _extract_probe_entities(
+        {"wishlist": [product], "count": 1}, add_entity,
+        server_name="shopping", tool_name="get_wishlist",
+    )
+
+    matching = [
+        data for eid, etype, data in extracted
+        if eid == "prod_1" and etype == "product" and isinstance(data, dict)
+    ]
+    assert matching
+    assert any(data.get("wishlist_member") is True for data in matching)
+    summary = _format_entity_summary(
+        "prod_1", "product", matching[0], server_name="shopping",
+    )
+    assert "wishlist_member" in summary
+
+
+def test_wishlist_chain_feasibility_uses_observed_membership() -> None:
+    assert not _entity_record_satisfies_chain(
+        server_name="shopping", chain_seed=["add_to_wishlist"],
+        etype="product", record={"stock": 3, "wishlist_member": True},
+    )
+    assert _entity_record_satisfies_chain(
+        server_name="shopping", chain_seed=["remove_from_wishlist"],
+        etype="product", record={"stock": 3, "wishlist_member": True},
+    )
+    assert not _entity_record_satisfies_chain(
+        server_name="shopping", chain_seed=["remove_from_wishlist"],
+        etype="product", record={"stock": 3, "wishlist_member": False},
+    )
 
 
 def test_shopping_list_orders_preserves_primary_order_record() -> None:
@@ -3376,11 +3921,11 @@ def test_robustness_plan_sample_remains_class_api() -> None:
     assert plan.missing_function is True
 
 
-def test_launcher_skips_row_spotcheck_for_explicitly_empty_split() -> None:
+def test_launcher_reuses_authoritative_parquet_audit() -> None:
     source = Path("scripts/generate_data.sh").read_text()
-    empty_guard = source.index("if df.empty:")
-    spotcheck = source.index("# Production readback: every row")
-    assert empty_guard < spotcheck
+    integrity = source[source.index("=== Parquet Integrity Check ==="):]
+    assert 'scripts/audit_generated_data.py' in integrity
+    assert 'from src.reward.oval_reward_fn import _build_task_dict' not in integrity
 
 
 def test_launcher_does_not_spawn_zero_quota_shards() -> None:
@@ -3464,6 +4009,32 @@ def test_provenance_rejects_hallucinated_schema_sensitive_amount() -> None:
 
     assert not passed
     assert any(v["param"] == "amount" for v in violations)
+
+
+def test_provenance_accepts_formatted_amount_and_currency_symbol() -> None:
+    from src.live_mcp.servers.banking.server import TOOLS as BANKING_TOOLS
+
+    call = OracleCall("wire_transfer", {
+        "from_account": "acc_s46_003",
+        "recipient_name": "Sarah Jenkins",
+        "routing_number": "123456789",
+        "account_number": "987654321",
+        "amount": 1200.0,
+        "currency": "USD",
+    })
+    passed, violations = provenance_check(
+        [call],
+        user_query=(
+            "Wire $1,200 from acc_s46_003 to Sarah Jenkins, routing "
+            "123456789, account 987654321."
+        ),
+        aligned_observations=[{}],
+        tool_schemas=BANKING_TOOLS,
+        domain="banking",
+    )
+
+    assert passed
+    assert violations == []
 
 
 def test_success_criteria_cover_top_level_scalars_none_and_deletion() -> None:

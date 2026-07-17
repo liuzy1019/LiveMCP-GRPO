@@ -27,6 +27,7 @@ import hashlib
 import json as _json
 import os
 import random
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
@@ -389,6 +390,40 @@ class ActionPlan:
     tool_name: str = ""
     arguments: dict[str, Any] = field(default_factory=dict)
     text: str = ""       # terminal text / error reason / clarification question
+
+
+_DIRECT_USER_QUESTION_RE = re.compile(
+    r"(?:^|[.!;:]\s+|—\s*|\n\s*)"
+    r"(?:"
+    r"(?:would|could|can|will|may|should|do|did|are)\s+you\b"
+    r"|(?:what|which|who|when|where|why|how)\b[^?？\n]{0,160}"
+    r"\b(?:you|should\s+i|can\s+i|do\s+i)\b"
+    r")"
+    r"[^?？\n]{0,240}[?？]",
+    re.IGNORECASE,
+)
+_DIRECT_USER_IMPERATIVE_RE = re.compile(
+    r"(?:^|[.!;:]\s+|—\s*|\n\s*)"
+    r"(?:please\s+)?"
+    r"(?:provide|specify|confirm|choose|identify|tell\s+me|let\s+me\s+know)\b",
+    re.IGNORECASE,
+)
+
+
+def _final_answer_requests_user_input(text: str) -> bool:
+    """Return whether a final answer directly asks the user for new input.
+
+    This is deliberately a narrow terminal-format check, not a semantic judge.
+    It recognizes direct interrogatives and imperatives while allowing quoted
+    question-bearing titles or history inside an otherwise completed answer.
+    """
+    normalized = re.sub(r"[ \t]+", " ", text).strip()
+    if not normalized:
+        return False
+    return bool(
+        _DIRECT_USER_QUESTION_RE.search(normalized)
+        or _DIRECT_USER_IMPERATIVE_RE.search(normalized)
+    )
 
 
 class TaskPlanner:
@@ -1234,8 +1269,18 @@ Return only:
             "A successful read or partial side effect is not completion when a requested "
             "outcome remains undone.\n"
             "- If the response asks the user to choose, identify, confirm, or provide "
-            "anything, use ask_clarification. final_answer must not end by requesting "
-            "new user input.\n"
+            "anything, use ask_clarification. final_answer must not request new user "
+            "input anywhere in its text.\n"
+            "- Resolve words such as 'that', 'it', and 'that email' from the complete "
+            "Prior Conversation Rounds and execution observations. If the latest "
+            "history identifies exactly one referent, use it instead of asking the "
+            "user to repeat information.\n"
+            "- For a request with multiple independent outcomes, complete every still-"
+            "feasible outcome before reporting that another outcome is blocked. One "
+            "failed subtask does not justify abandoning an independent available one.\n"
+            "- When a required capability is absent from Available Tools, ask for user "
+            "input only if that information can actually unblock an available tool. "
+            "If no user answer can restore the missing capability, use report_error.\n"
             "- For a mutating call, state_changed=true proves the call changed the "
             "recorded state. Do not later claim that the changed condition was already "
             "true before that call unless an earlier observation explicitly proves it.\n"
@@ -1339,7 +1384,7 @@ Output one JSON object:
                         continue
                     if (
                         action == "final_answer"
-                        and terminal_text.rstrip().endswith(("?", "？"))
+                        and _final_answer_requests_user_input(terminal_text)
                     ):
                         logger.debug(
                             f"decide_action rejected question-shaped final_answer "
@@ -2046,6 +2091,14 @@ def provenance_check(
     contracts = build_tool_semantics(domain, tool_schemas)
 
     def _traceable(value: Any, sources: list[str]) -> bool:
+        import re
+
+        currency_symbols = {
+            "USD": "$",
+            "EUR": "€",
+            "GBP": "£",
+            "JPY": "¥",
+        }
         values = value if isinstance(value, list) else [value]
         for item in values:
             if item is None or item == "":
@@ -2055,13 +2108,24 @@ def provenance_check(
                 continue
             if any(item_text.casefold() in source.casefold() for source in sources):
                 continue
+            if (
+                item_text.upper() in currency_symbols
+                and any(currency_symbols[item_text.upper()] in source for source in sources)
+            ):
+                continue
             if isinstance(item, (int, float)) and not isinstance(item, bool):
-                import re
                 numeric_match = False
                 for source in sources:
-                    for token in re.findall(r"(?<![\w.])-?\d+(?:\.\d+)?", source):
+                    # User-facing amounts commonly contain thousands separators
+                    # (for example "$1,200").  Compare their numeric value
+                    # rather than requiring the serialized tool argument to be
+                    # a literal substring of the prompt.
+                    for token in re.findall(
+                        r"(?<![\w.])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?",
+                        source,
+                    ):
                         try:
-                            if float(token) == float(item):
+                            if float(token.replace(",", "")) == float(item):
                                 numeric_match = True
                                 break
                         except ValueError:

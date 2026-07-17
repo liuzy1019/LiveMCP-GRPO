@@ -196,8 +196,8 @@ Teacher 推理性能优化必须保持上述语义合同不变：
 
 1. Query、action、continuation、clarification、recovery 采用各自的有限 JSON 输出预算；预算只约束结构化响应长度，不裁剪 candidate schemas、live-state provenance 或 execution history；
 2. 同一 conversation round 内若出现完全相同的 tool name、arguments、observation 且 `state_changed=false`，下一次 Teacher 决策必须收到显式 no-progress 提示，由 Teacher 自行选择替代动作或合法 terminal；生成器不得伪造 terminal，也不得把该诊断升级为论文之外的 corpus hard gate；
-3. shard 子进程只负责输出通过 replay 和训练结构合同的 eligible 候选，不在本地执行 Jaccard 去重或逐域配额门禁；多 shard global merge 才在统一候选池执行 Jaccard 0.70、逐域 train/val 配额和 split 隔离；最终 split 还必须保证相同 domain 下规范化后的首轮 user query 不跨 train/val，这只是评测隔离合同，不作为候选删除或 PROVE corpus hard gate；
-4. global merge 若因某个 domain 的 Jaccard-unique 候选不足而失败，必须保留已有 shard，只对 deficit domain 增量补样并重新执行同一 global dedup/split；top-up 数量根据该域当前候选经全局 Jaccard 后的实际保留率估计，并增加有限采样裕量，再在当前 generation client 槽位内切成独立小 shard 并行生成；预算估计和并行切分只改变候选数量与调度，不改变过滤规则。top-up 子进程的局部同质化或部分短缺不得使已生成候选和其他成功 top-up 整批失效；不得因单域少量缺口重新生成全部 domain；
+3. shard 子进程只负责输出通过 replay 和训练结构合同的 eligible 候选，不在本地执行 Jaccard 去重或最终逐域配额门禁；多 shard global merge 才在统一候选池执行 Jaccard 0.70、逐域最低覆盖与 split 隔离。最低覆盖之外的 train/val 名额按“live-state feasible 且位置感知 Jaccard-unique 的 dependency-chain 容量”加权分配，不再要求十域均匀；最终 split 还必须保证相同 domain 下规范化后的首轮 user query 不跨 train/val，这只是评测隔离合同，不作为候选删除或 PROVE corpus hard gate；
+4. global merge 若因某个 domain 的 Jaccard-unique 候选不足而失败，必须保留已有 shard，只对 deficit domain 增量补样并重新执行同一 global dedup/split；首次 merge 的 allocation capacity 必须在本次 run 内冻结，避免 top-up 后权重重算造成配额移动。top-up 数量根据该域当前候选经全局 Jaccard 后的实际保留率估计，并增加有限采样裕量，再在当前 generation client 槽位内切成独立小 shard 并行生成；预算估计和并行切分只改变候选数量与调度，不改变过滤规则。top-up 子进程的局部同质化或部分短缺不得使已生成候选和其他成功 top-up 整批失效；不得因单域少量缺口重新生成全部 domain；
 5. 上述优化不得取消 fresh replay、provenance、全局 Jaccard，也不得只向 Teacher 暴露 sampled oracle chain。性能验收同时报告 LLM request count、prompt tokens、generation tokens、domain deficit/recovery 和最终语义质量。
 
 实体引用若由 handler 要求使用 opaque ID，MCP tool surface 必须提供只读发现路径并在 schema 中明确参数类型。例如 issue tracker 的 assignee 必须通过 member discovery 获得 `user_id`，不能要求 Teacher 从自然语言姓名臆造内部 ID，也不能把 sampler 私有 state 直接注入 Action Teacher。chain feasibility 只接受 live MCP observation 已公开或前序工具可创建的实体。这是 Step 2 provenance/grounding 的接口完整性，不增加论文之外的 corpus hard gate。
@@ -206,7 +206,7 @@ Teacher 推理性能优化必须保持上述语义合同不变：
 
 Continuation 的 query generator 与 assistant action planner 必须消费同一轮刷新后的 live state；首轮 chain-aligned context 不能继续充当后续轮次的完整实体事实。刷新状态的 compact projection 必须保留判断 outcome 是否已满足所需的字段（例如 calendar 的时间、地点和 reminders），否则 Continuation 会把已完成动作再次生成为新请求。每个新 user round 都重新进入 query→tool execution/response 状态，不能因为 execution history 非空而默认直接结束；clarification 型 user round 可直接回答，follow-up 型 user round 仍须实际完成新 outcome。后续请求若缺少 mutation schema 的用户决定型必填值，由 Teacher 走 clarification，而不是从无关实体复制或臆造。业务背景（例如“用于明天的会议”）不等于跨域请求，是否可完成按用户要求的核心 outcome 与 candidate tools 判断。以上属于状态机输入合同，不新增论文之外的 corpus hard gate。
 
-Compact projection 必须按 domain/entity type 保留 handler 判断所需的结构化字段，不能只依赖一份通用字段白名单。当前最低合同包括：Filesystem 的 `permissions/size`、Email 的 `read/archived`、Issue Tracker 的 `state/assignee/sprint_id/milestone`、Team Chat 的 `archived/reactions`、Food Delivery 的 `tip`、Payments 的 `total_refunded/remaining_refundable`。readonly discovery 返回的主实体必须携带完整 record 进入 extractor；外键引用仍只保留 identity，不能借用来源实体字段。该区分用于先证明 Teacher 输入充分，再评价其输出，不增加任何 corpus hard gate。
+Compact projection 必须按 domain/entity type 保留 handler 判断所需的结构化字段，不能只依赖一份通用字段白名单。当前最低合同包括：Filesystem 的 `permissions/size/type/path`、Email 的 `read/archived/labels/thread_id`、Shopping 的 cart/wishlist membership、Calendar 的 `attendees/reminders`、Issue Tracker 的 `state/assignee/sprint_id/milestone`、Team Chat 的 `archived/reactions/thread_id/channel_id`、Food Delivery 的 `tip`、Payments 的 `total_refunded/remaining_refundable`。readonly discovery 返回的主实体必须携带完整 record 进入 extractor；集合 membership 还必须由 discovery observation 显式投影，不能只保存集合中实体的通用 product/message 字段。外键引用仍只保留 identity，不能借用来源实体字段。该区分用于先证明 Teacher 输入充分，再评价其输出，不增加任何 corpus hard gate。
 
 Continuation 的自然语言生成只允许沿同一任务、事务、实体或上一轮公开结果继续；“仍在同一 domain”本身不构成连续性。Prompt 必须明确禁止在已完成日志任务后切换到无关 shell-script 等同域新目标，并要求优先复用上一轮公开实体或结果。该约束只收紧同一次 continuation generation，不增加额外 LLM classifier，也不改变论文逐轮三路采样。
 
@@ -227,17 +227,37 @@ Irrelevance 只在每个初始 candidate shard 中按配置比例采样。Shard 
 
 Query Teacher 的 `mutation_evidence` 只强制覆盖最终用户目标中明确授权的 mutating capability。依赖 chain 的内部 mutating 前置节点不自动获得授权，也不要求逐节点提供证据：若它与最终结果共同构成一个自然目标，query 可明确请求组合结果；若它是无关副作用，则该 chain/query 应返回 `UNSAT`。`cd` 作为内部导航时不要求独立授权，作为最终用户目标时仍需授权。该字段不传给 Action Teacher，不做 tool-name/同义词词法匹配，也不要求最终 oracle exact-match source chain。
 
-完整 Teacher attempt trace 与 RL required workflow 是两个视图：所有真实 MCP 调用继续保留并参与 Replay；同一 round 内已由状态机标记为 exact no-progress 的重复调用不进入 Parquet required oracle、round contract 或 adaptive-efficiency 的 ground-truth call count。成功但 `state_changed=false` 的 mutating call 同样不能成为 required workflow：它没有产生用户请求的状态结果，只能留在 factual attempt trace 供效率与质量审计；readonly 查询仍可作为必要发现步骤保留。未被真实 execution event 证明为 exact repeat 或 mutating no-op 的调用不得推测性删除。该投影不删除 conversation，也不改变 PROVE corpus hard gates，只避免把已满足目标上的冗余写调用奖励为 ground truth。
+完整 Teacher attempt trace 与 RL required workflow 是两个视图：所有真实 MCP 调用继续保留并参与 Replay；同一 round 内已由状态机标记为 exact no-progress 的重复调用不进入 Parquet required oracle、round contract 或 adaptive-efficiency 的 ground-truth call count。对成功且 `state_changed=false` 的 mutating call 必须按工具执行语义区分：`state_transition` 型调用（例如重复添加已存在 attendee/label/reaction）是未产生目标转换的 no-op，不进入 required workflow；`action_execution` 型调用（例如成功解压一个内容已存在的 archive）即使净状态 delta 为空也已执行用户要求，仍保留为 required step。readonly 查询仍可作为必要发现步骤保留。未被真实 execution event 和显式工具语义共同证明为 exact repeat 或 state-transition no-op 的调用不得推测性删除。该投影不删除 conversation，也不改变 PROVE corpus hard gates，只避免把已满足目标上的冗余写调用奖励为 ground truth。
 
 Required-workflow 投影完成后，生成进程必须在仍存活的同一 MCP suite 上以 `session_seed` 新建隔离 session，对 canonical oracle 重新执行一次与 PROVE 相同的 fresh replay 合同。该复验使用投影后的精确 tool name/arguments、hidden-tool contract 与 success criteria；失败时不得写 Parquet。原始 attempt replay 继续证明 Teacher 真实轨迹，canonical replay 证明下游实际消费的标签，两者不能互相替代。Parquet readback 仍负责序列化、环境 metadata 和 reward parser 合同，不能被描述成执行复验。
 
-Teacher terminal 的结构语义必须明确：需要用户提供新信息的响应只能使用 `ask_clarification`，`final_answer` 不得以问题向用户索取下一步输入；mutating feedback 的 `state_changed=true` 是该调用确实改变了目标状态的事实证据，后续回答不得声称该状态在调用前已经如此。生成端可对明显的 question-shaped `final_answer` 做格式重试，但不增加通用自然语言 judge，也不把该局部结构检查写成论文公开 hard gate。
+Teacher terminal 的结构语义必须明确：需要用户提供新信息的响应只能使用 `ask_clarification`，`final_answer` 不得以问题向用户索取下一步输入；该检查覆盖回答中间的直接用户请求，不能只检查最后一个字符。它只识别明确的二人称请求句，不能因为回答引用了带问号的标题或历史文本而拒绝。mutating feedback 的 `state_changed=true` 是该调用确实改变了目标状态的事实证据，后续回答不得声称该状态在调用前已经如此。生成端可对明显的 question-shaped `final_answer` 做格式重试，但不增加通用自然语言 judge，也不把该局部结构检查写成论文公开 hard gate。
+
+多轮 Teacher 必须优先从完整 prior rounds 与真实 execution observations 解析 `that` / `it` /
+`that email` 等连续指代；若最近一轮已经唯一确定实体，不得伪造 ambiguity。多目标请求中某一目标
+失败时，仍须完成不依赖该失败且独立可行的其他目标，再选择 recovery terminal。Missing-function
+只在用户补充信息确实能够解除阻塞时使用 `ask_clarification`；若缺失的是完成目标本身所需的
+capability，补参不能恢复该工具，应 `report_error`。这些都是 Teacher action guidance 与灰度语义
+审计项，不作为 PROVE corpus hard gate，也不引入通用语义过滤器。
+
+Execution failure 与 terminal 还必须保持事实一致：同一 round 中失败的 capability 若没有
+后续同名成功 execution 消解，Teacher 不得以 `final_answer` 宣告请求已完成；对带有
+`id` / `*_id` 目标参数的 mutating capability，成功重试还必须保持相同目标身份，不能通过
+操作另一资源消解原失败。无目标身份的调用及 readonly 查询保持原有 capability 级恢复语义。
+Teacher 只能继续恢复，或使用 `report_error` / `ask_clarification`。Global merge 依据持久化的 factual
+`teacher_round_trace.execution_history` 执行该检查。它不要求零失败、不要求 exact source
+chain，也不改变 PROVE 允许不高于 30% schema/execution error 的公开 Replay gate；它是防止
+“模型调用失败但训练标签声称成功”的本地 trajectory-integrity 合同。
 
 Graceful give-up 不要求先产生 execution failure。若 Teacher 根据 query、candidate schemas 与真实 history 判断当前能力无法完成目标，可直接 `report_error`；强制先调用失败工具既不在论文公开过滤中，也会人为增加无效调用。此类终止仍接受后续 fresh replay、provenance 与 Jaccard 门禁。
 
 论文公开的 corpus hard gates 与工程结构合同必须分开记录。PROVE hard gates 是 fresh replay error rate、sensitive-parameter provenance 与 Jaccard 0.70 去重；Parquet schema、显式 terminal、round contract 数量、hidden-tool 不泄漏和 dependency-edge 索引有效性是本项目 rollout/reward 的可消费性合同。不得把后者写成论文公开过滤规则。论文未公开 Jaccard 对 sequence 的集合化细节；当前位置感知实现属于本地工程选择，不宣称逐实现一致。Missing-function 默认比例由公开 corpus 数量反推，同样不宣称为论文公布超参。
 
 环境修复后与当前实体语义不一致的历史行同样属于项目可消费性合同。例如旧 email seeder 的共享 labels list 会使 `add_label` 为未被 oracle 操作的其他 email 生成 state criteria；global merge 必须隔离这类行并在修复后的环境 fresh replay 补产，不能修改旧 criteria 冒充新标签。该检查不是 PROVE 公开 corpus gate。
+
+Email seeded state 的 thread 只允许聚合同一规范化 subject 的消息；不得用记录序号把互不相关的
+主题机械分组。该约束修复 synthetic live state 的真实性，改变 initial-state/transition fingerprint
+后必须 fresh regenerate，不能沿用旧 Parquet。
 
 `live-mcp-canonical-replay-trajectory-v1` 环境状态机合同要求：未知/已关闭 session fail-closed；多 server session reset 失败后整条 session 作废；公共 server 边界在 handler 异常、返回 envelope 非法或 `state_changed` 与真实 state delta 不一致时回滚；成功 execution event 保存 `state_delta_paths`，success criterion 保存匹配的成功 call provenance；Parquet 还保存逐轮 query/oracle/history、全部真实 execution attempts 及最终 required-workflow 的 fresh replay 证据。Reversible 最终目标使用 live-state 中可发现的 scheduled transfer、webhook、wishlist item、frozen account 或 settled payment，不要求 Teacher 先制造再撤销对象。Global merge 对 `trajectory_schema_version`、schema、transition、reward fingerprint 和当前代码逐项核对，旧合同产物不得进入新环境训练。这些均为项目可消费性与审计合同，不新增 PROVE corpus hard gate。
 

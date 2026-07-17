@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.generate_data import _validate_parquet_readback
 from scripts.merge_generation_shards import _as_extra, _quality_issue
+from src.live_mcp.task_planner import _final_answer_requests_user_input
 from src.reward.oval_reward_fn import _build_task_dict
 from src.utils import normalize_extra_info
 
@@ -29,6 +30,8 @@ def audit_file(path: Path) -> dict[str, object]:
     domains: Counter[str] = Counter()
     scenarios: Counter[str] = Counter()
     terminals: Counter[str] = Counter()
+    projection: Counter[str] = Counter()
+    diagnostics: Counter[str] = Counter()
 
     for index, row in frame.iterrows():
         issue = _quality_issue(row)
@@ -49,6 +52,40 @@ def audit_file(path: Path) -> dict[str, object]:
             "missing",
         )
         terminals[terminal] += 1
+        projection["exact_repeat_dropped"] += int(
+            extra.get("projection_exact_repeat_dropped", 0) or 0
+        )
+        projection["state_transition_noop_dropped"] += int(
+            extra.get("projection_state_transition_noop_dropped", 0) or 0
+        )
+        projection["action_no_net_change_retained"] += int(
+            extra.get("projection_action_no_net_change_retained", 0) or 0
+        )
+        terminal_call = next(
+            (
+                call for call in reversed(oracle_calls)
+                if str(call.get("action")) != "tool_call"
+            ),
+            {},
+        )
+        terminal_args = terminal_call.get("arguments") or {}
+        terminal_text = str(
+            terminal_args.get("text")
+            or terminal_args.get("question")
+            or ""
+        ) if isinstance(terminal_args, dict) else ""
+        if terminal == "final_answer" and _final_answer_requests_user_input(
+            terminal_text
+        ):
+            diagnostics["final_answer_requests_user_input"] += 1
+        queries = extra.get("conversation_queries", [])
+        if isinstance(queries, str):
+            queries = json.loads(queries)
+        normalized_queries = [
+            " ".join(str(query).lower().split()) for query in queries
+        ] if isinstance(queries, list) else []
+        if len(normalized_queries) != len(set(normalized_queries)):
+            diagnostics["repeated_continuation_query_rows"] += 1
 
     if failures:
         preview = "\n".join(failures[:20])
@@ -62,6 +99,8 @@ def audit_file(path: Path) -> dict[str, object]:
         "domains": dict(sorted(domains.items())),
         "scenarios": dict(sorted(scenarios.items())),
         "terminals": dict(sorted(terminals.items())),
+        "required_workflow_projection": dict(sorted(projection.items())),
+        "diagnostics": dict(sorted(diagnostics.items())),
     }
 
 

@@ -3,12 +3,36 @@
 from __future__ import annotations
 
 import importlib
+import json
 from functools import lru_cache
 from dataclasses import dataclass
 from typing import Any, Literal
 
 
 ToolOperation = Literal["query", "create", "update", "delete"]
+ToolExecutionSemantics = Literal[
+    "readonly", "state_transition", "action_execution",
+]
+
+
+# These tools report a successful execution even when replaying the action
+# produces no net state delta (for example, extracting archive entries that
+# already exist with identical contents).  That is materially different from
+# an idempotent state-transition request such as adding an existing attendee.
+_ACTION_EXECUTION_TOOLS: dict[str, frozenset[str]] = {
+    "filesystem": frozenset({"tar_extract", "unzip"}),
+}
+
+
+# Prefer the resource whose state is being mutated over routing/destination
+# IDs such as thread_id, sprint_id, or channel_id.  This lets a retry correct
+# a destination while still requiring it to operate on the same user target.
+_MUTATION_TARGET_FIELD_PRIORITY: tuple[str, ...] = (
+    "email_id", "issue_id", "message_id", "event_id", "order_id",
+    "invoice_id", "payment_id", "product_id", "account_id", "lead_id",
+    "contact_id", "deal_id", "task_id", "webhook_id", "transfer_id",
+    "restaurant_id", "id",
+)
 
 
 _MUTATION_OPERATIONS: dict[str, dict[str, ToolOperation]] = {
@@ -90,6 +114,7 @@ class ToolSemantics:
     domain: str
     name: str
     operation: ToolOperation
+    execution_semantics: ToolExecutionSemantics
     sensitive_params: tuple[str, ...]
     allowed_state_roots: tuple[str, ...]
 
@@ -211,6 +236,15 @@ def build_tool_semantics(
             domain=domain,
             name=name,
             operation=operation,
+            execution_semantics=(
+                "readonly"
+                if readonly
+                else (
+                    "action_execution"
+                    if name in _ACTION_EXECUTION_TOOLS.get(domain, frozenset())
+                    else "state_transition"
+                )
+            ),
             sensitive_params=tuple(str(field) for field in sensitive),
             allowed_state_roots=tuple(allowed_roots),
         )
@@ -262,7 +296,72 @@ def resolve_tool_operation(
     )
 
 
+def resolve_tool_execution_semantics(
+    name: str, domain: str,
+) -> ToolExecutionSemantics:
+    """Resolve whether a successful no-delta call is still a required action."""
+    domain_name = str(domain).lower()
+    tool_name = str(name).lower()
+    semantics = _public_tool_semantics(domain_name).get(tool_name)
+    if semantics is None:
+        raise ValueError(
+            f"unknown public tool semantics: {domain_name}.{tool_name}"
+        )
+    return semantics.execution_semantics
+
+
+def mutation_target_identity(
+    tool_name: str, arguments: Any,
+) -> tuple[tuple[str, str], ...] | None:
+    """Return stable explicit resource identity for a mutating call."""
+    try:
+        if resolve_tool_operation(tool_name) == "query":
+            return None
+    except ValueError:
+        return None
+    if not isinstance(arguments, dict):
+        return None
+    for name in _MUTATION_TARGET_FIELD_PRIORITY:
+        if name in arguments:
+            return ((
+                name,
+                json.dumps(
+                    arguments[name], sort_keys=True, ensure_ascii=False,
+                    default=str,
+                ),
+            ),)
+    return None
+
+
+def unresolved_failed_tool_names(
+    execution_history: list[dict[str, Any]],
+) -> set[str]:
+    """Return failed capabilities not repaired by a matching success."""
+    unresolved: set[
+        tuple[str, tuple[tuple[str, str], ...] | None]
+    ] = set()
+    for event in execution_history:
+        if not isinstance(event, dict):
+            continue
+        tool_name = str(event.get("tool_name") or "")
+        if not tool_name:
+            continue
+        target_identity = mutation_target_identity(
+            tool_name, event.get("arguments", {}),
+        )
+        failure_key = (tool_name, target_identity)
+        if event.get("success") is True:
+            unresolved.discard(failure_key)
+            # Readonly and identity-free calls recover at capability level.
+            unresolved.discard((tool_name, None))
+        elif event.get("success") is False:
+            unresolved.add(failure_key)
+    return {tool_name for tool_name, _ in unresolved}
+
+
 __all__ = [
-    "ToolSemantics", "ToolOperation", "build_tool_semantics",
-    "is_mutating_tool", "resolve_tool_operation",
+    "ToolSemantics", "ToolOperation", "ToolExecutionSemantics",
+    "build_tool_semantics", "is_mutating_tool", "resolve_tool_operation",
+    "resolve_tool_execution_semantics", "mutation_target_identity",
+    "unresolved_failed_tool_names",
 ]

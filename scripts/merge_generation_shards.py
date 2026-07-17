@@ -26,6 +26,7 @@ from src.live_mcp.observation import (
     OBSERVATION_PROJECTION_VERSION,
     compute_server_schema_hash,
 )
+from src.live_mcp.tool_semantics import unresolved_failed_tool_names
 
 DOMAINS_ALL = [
     "banking", "calendar", "crm", "email", "filesystem",
@@ -62,6 +63,48 @@ def _as_json_list(value: Any) -> list[Any]:
 def _oracle_calls(extra: dict[str, Any]) -> list[dict[str, Any]]:
     calls = _as_json_list(extra.get("oracle_calls", []))
     return [call for call in calls if isinstance(call, dict)]
+
+
+def _unresolved_failure_issue(extra: dict[str, Any]) -> str:
+    """Reject a round that claims success with an unresolved failed action.
+
+    PROVE permits execution errors up to its replay threshold, so the failure
+    itself is not a corpus defect.  The structural defect is a ``final_answer``
+    after the failed capability was never successfully retried on the same
+    explicit mutation target: that terminal presents an unresolved action as
+    completed.  ``report_error`` and ``ask_clarification`` remain valid
+    graceful recovery terminals.
+    """
+    rounds = _as_json_list(extra.get("teacher_round_trace", []))
+    for round_pos, round_trace in enumerate(rounds):
+        if not isinstance(round_trace, dict):
+            continue
+        history = [
+            event
+            for event in _as_json_list(
+                round_trace.get("execution_history", [])
+            )
+            if isinstance(event, dict)
+        ]
+        unresolved = unresolved_failed_tool_names(history)
+        terminal = next(
+            (
+                str(call.get("action") or "")
+                for call in reversed(
+                    _as_json_list(round_trace.get("oracle_calls", []))
+                )
+                if isinstance(call, dict)
+                and str(call.get("action") or "tool_call") != "tool_call"
+            ),
+            "",
+        )
+        if unresolved and terminal == "final_answer":
+            round_idx = int(round_trace.get("round_idx", round_pos))
+            return (
+                f"unresolved_failed_action_final_answer:round={round_idx}:"
+                f"tools={sorted(unresolved)}"
+            )
+    return ""
 
 
 @lru_cache(maxsize=1)
@@ -215,6 +258,10 @@ def _quality_issue(row: pd.Series) -> str:
     if overlap:
         return f"hidden_tool_visible:{sorted(overlap)}"
 
+    failure_issue = _unresolved_failure_issue(extra)
+    if failure_issue:
+        return failure_issue
+
     # Rows generated before mutable email label templates were isolated can
     # contain state criteria for unrelated emails: add_label mutated every
     # entity sharing the same Python list.  Such criteria are impossible under
@@ -236,7 +283,24 @@ def _quality_issue(row: pd.Series) -> str:
             and parts[0] == "emails"
             and parts[2] == "labels"
         }
+        # A reply/send/forward creates a new email whose complete state
+        # legitimately includes a ``labels`` field even when no label tool was
+        # called.  The historical aliasing defect only polluted *seeded*
+        # emails, so compare non-target criteria against the deterministic
+        # initial state instead of rejecting every created email label field.
+        initial_email_ids: set[str] | None = None
+        if extra.get("session_seed") is not None:
+            from src.live_mcp.state_seeder import StateSeeder
+
+            initial = StateSeeder().seed_state(
+                "email", "merge-audit", int(extra["session_seed"]),
+            )
+            initial_email_ids = {
+                str(email_id) for email_id in initial.get("emails", {})
+            }
         unrelated = criteria_label_ids - label_targets
+        if initial_email_ids is not None:
+            unrelated &= initial_email_ids
         if unrelated:
             return f"unrelated_email_label_criteria:{sorted(unrelated)}"
 
@@ -350,15 +414,122 @@ def _domain_quotas(target: int, domains: list[str]) -> dict[str, int]:
     }
 
 
+def _capacity_weighted_domain_quotas(
+    target: int,
+    domains: list[str],
+    capacities: dict[str, int],
+    *,
+    minimum_per_domain: int | None = None,
+) -> dict[str, int]:
+    """Apportion a split by unique feasible-chain capacity plus a floor."""
+    if not domains:
+        return {}
+    if target < 0:
+        raise ValueError("target must be non-negative")
+    if minimum_per_domain is None:
+        minimum_per_domain = (
+            max(1, target // (2 * len(domains)))
+            if target >= len(domains)
+            else 0
+        )
+    floor = max(0, int(minimum_per_domain))
+    if floor * len(domains) > target:
+        raise ValueError(
+            f"minimum domain coverage {floor} x {len(domains)} exceeds "
+            f"split target {target}"
+        )
+    quotas = {domain: floor for domain in domains}
+    remainder = target - floor * len(domains)
+    if remainder == 0:
+        return quotas
+
+    weights = {
+        domain: max(0, int(capacities.get(domain, 0)))
+        for domain in domains
+    }
+    total_weight = sum(weights.values())
+    if total_weight == 0:
+        weights = {domain: 1 for domain in domains}
+        total_weight = len(domains)
+
+    raw = {
+        domain: remainder * weights[domain] / total_weight
+        for domain in domains
+    }
+    assigned = 0
+    for domain in domains:
+        whole = math.floor(raw[domain])
+        quotas[domain] += whole
+        assigned += whole
+    leftover = remainder - assigned
+    order = sorted(
+        domains,
+        key=lambda domain: (-(raw[domain] - math.floor(raw[domain])), domain),
+    )
+    for domain in order[:leftover]:
+        quotas[domain] += 1
+    return quotas
+
+
+def _dependency_chain_sequence(row: pd.Series) -> list[str]:
+    """Return the live-feasible dependency seed, falling back for old rows."""
+    extra = _as_extra(row["extra_info"])
+    raw = extra.get("source_chain_seed", [])
+    chain = _as_json_list(raw)
+    sequence = [str(name) for name in chain if str(name)]
+    if not sequence:
+        sequence = [item.split("::", 1)[-1] for item in _row_tool_sequence(row)]
+    return sequence
+
+
+def _sequence_jaccard(a: list[str], b: list[str]) -> float:
+    if not a or not b:
+        return 0.0
+    pos_a = set(enumerate(a))
+    pos_b = set(enumerate(b))
+    return len(pos_a & pos_b) / len(pos_a | pos_b)
+
+
+def _domain_unique_chain_capacity(
+    pool: pd.DataFrame,
+    domains: list[str],
+    threshold: float = 0.70,
+) -> dict[str, int]:
+    """Count position-aware Jaccard-unique feasible chains per domain."""
+    capacities: dict[str, int] = {}
+    for domain in domains:
+        kept: list[list[str]] = []
+        domain_rows = pool.loc[
+            pool["extra_info"].map(
+                lambda value: str(_as_extra(value).get("domain", "")) == domain
+            )
+        ]
+        for _, row in domain_rows.iterrows():
+            sequence = _dependency_chain_sequence(row)
+            if not sequence:
+                continue
+            if any(
+                _sequence_jaccard(sequence, prior) >= threshold
+                for prior in kept
+            ):
+                continue
+            kept.append(sequence)
+        capacities[domain] = len(kept)
+    return capacities
+
+
 def _domain_deficit_report(
     pool: pd.DataFrame,
     count: int,
     val_count: int,
     domains: list[str],
     candidate_by_domain: dict[str, int] | None = None,
+    train_quotas: dict[str, int] | None = None,
+    val_quotas: dict[str, int] | None = None,
+    unique_chain_capacity: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    train_quotas = _domain_quotas(count, domains)
-    val_quotas = _domain_quotas(val_count, domains)
+    train_quotas = train_quotas or _domain_quotas(count, domains)
+    val_quotas = val_quotas or _domain_quotas(val_count, domains)
     available = {
         domain: int(
             pool["extra_info"].map(
@@ -391,6 +562,9 @@ def _domain_deficit_report(
         "available_by_domain": available,
         "candidate_by_domain": candidates,
         "jaccard_retention_by_domain": retention,
+        "unique_chain_capacity_by_domain": unique_chain_capacity or {},
+        "train_quota_by_domain": train_quotas,
+        "val_quota_by_domain": val_quotas,
         "required_by_domain": required,
         "deficits": deficits,
         "suggested_topup_by_domain": {
@@ -440,6 +614,26 @@ def _write_deficit_report(path: Path | None, report: dict[str, Any]) -> None:
         encoding="utf-8",
     )
     temporary.replace(path)
+
+
+def _frozen_allocation_capacity(
+    path: Path | None,
+    domains: list[str],
+) -> dict[str, int] | None:
+    """Reuse the first merge's capacity weights across top-up rounds."""
+    if path is None or not path.exists():
+        return None
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+    raw = report.get("allocation_capacity_by_domain")
+    if not isinstance(raw, dict) or set(raw) != set(domains):
+        return None
+    try:
+        return {domain: max(0, int(raw[domain])) for domain in domains}
+    except (TypeError, ValueError):
+        return None
 
 
 def _initial_query_key(row: pd.Series) -> str:
@@ -530,9 +724,11 @@ def _balanced_domain_split(
     count: int,
     val_count: int,
     domains: list[str],
+    train_quotas: dict[str, int] | None = None,
+    val_quotas: dict[str, int] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame] | None:
-    train_quotas = _domain_quotas(count, domains)
-    val_quotas = _domain_quotas(val_count, domains)
+    train_quotas = train_quotas or _domain_quotas(count, domains)
+    val_quotas = val_quotas or _domain_quotas(val_count, domains)
     train_parts: list[pd.DataFrame] = []
     val_parts: list[pd.DataFrame] = []
     for domain in domains:
@@ -681,6 +877,8 @@ def merge_shards(
     val_count: int,
     domains: list[str] | None = None,
     deficits_output: Path | None = None,
+    min_domain_train: int | None = None,
+    min_domain_val: int | None = None,
 ) -> int:
     """Globally deduplicate candidates before final train/val truncation."""
     train_path = output_dir / "train.parquet"
@@ -741,13 +939,32 @@ def merge_shards(
         }
         if domains else {}
     )
+    observed_chain_capacity = {}
+    allocation_capacity = {}
+    if domains:
+        observed_chain_capacity = _domain_unique_chain_capacity(pool, domains)
+        allocation_capacity = _frozen_allocation_capacity(
+            deficits_output, domains,
+        ) or observed_chain_capacity
     pool, jaccard_removed = _dedup_jaccard(pool, threshold=0.70)
 
     if domains:
+        train_quotas = _capacity_weighted_domain_quotas(
+            count, domains, allocation_capacity,
+            minimum_per_domain=min_domain_train,
+        )
+        val_quotas = _capacity_weighted_domain_quotas(
+            val_count, domains, allocation_capacity,
+            minimum_per_domain=min_domain_val,
+        )
         deficit_report = _domain_deficit_report(
             pool, count, val_count, domains,
             candidate_by_domain=candidate_by_domain,
+            train_quotas=train_quotas,
+            val_quotas=val_quotas,
+            unique_chain_capacity=observed_chain_capacity,
         )
+        deficit_report["allocation_capacity_by_domain"] = allocation_capacity
     else:
         required = count + val_count
         deficit_report = {
@@ -774,7 +991,10 @@ def merge_shards(
         return 1
 
     if domains:
-        split = _balanced_domain_split(pool, count, val_count, domains)
+        split = _balanced_domain_split(
+            pool, count, val_count, domains,
+            train_quotas=train_quotas, val_quotas=val_quotas,
+        )
         if split is None:
             return 1
         train_df, val_df = split
@@ -804,6 +1024,8 @@ def main() -> int:
     parser.add_argument("--val-count", type=int, required=True)
     parser.add_argument("--domain", default="all")
     parser.add_argument("--deficits-output")
+    parser.add_argument("--min-domain-train", type=int)
+    parser.add_argument("--min-domain-val", type=int)
     args = parser.parse_args()
 
     domains = (
@@ -820,6 +1042,8 @@ def main() -> int:
         Path(args.tmpdir), Path(args.output_dir), args.count, args.val_count,
         domains=domains,
         deficits_output=Path(args.deficits_output) if args.deficits_output else None,
+        min_domain_train=args.min_domain_train,
+        min_domain_val=args.min_domain_val,
     )
 
 

@@ -81,6 +81,13 @@ conda activate "$ARL_ENV"
 export PYTHON_BIN="$ARL_ENV/bin/python"
 ```
 
+也可以用统一运行时入口完成 prefix、CUDA/FlashInfer JIT 路径注入和依赖检查：
+
+```bash
+bash scripts/run_in_runtime_environment.sh --check
+bash scripts/run_in_runtime_environment.sh -- bash scripts/generate_data.sh --count 50 --val-count 10
+```
+
 本机的 Conda 名称索引仍把 `arl` 指向已不存在的 `/mnt/data1/.../envs/arl`，因此当前不要使用 `conda activate arl`。生成和训练脚本均支持显式解释器变量。
 
 ### Install

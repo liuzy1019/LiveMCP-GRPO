@@ -10,6 +10,10 @@
 
 set -euo pipefail
 export PYTHONNOUSERSITE=1
+export VLLM_CACHE_ROOT="${VLLM_CACHE_ROOT:-${TMPDIR:-/tmp}/livemcp_vllm_cache}"
+export VLLM_CONFIG_ROOT="${VLLM_CONFIG_ROOT:-${TMPDIR:-/tmp}/livemcp_vllm_config}"
+export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS:-1}"
+mkdir -p "${VLLM_CACHE_ROOT}" "${VLLM_CONFIG_ROOT}"
 
 if [ -z "${PYTHON_BIN:-}" ]; then
   if [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/python" ]; then

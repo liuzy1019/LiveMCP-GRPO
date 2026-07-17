@@ -122,6 +122,13 @@ Reversible 最终目标优先绑定可发现的既有实体：banking 通过 `li
 
 Recovery 边界：论文明确包含 graceful give-up with fallback explanation。Teacher 判断当前 candidate tools 无法完成用户结果时可以直接 `report_error`，不要求先执行一个必然失败的工具调用；“无 execution failure 的 report_error”只记录诊断，不作为导出拒绝条件。
 
+失败 terminal 完整性属于本地可训练性合同：允许失败尝试进入统一 30% Replay error 统计；
+但同一 round 中失败的 capability 若没有后续同名成功 execution，不能以 `final_answer`
+冒充完成；带 `id` / `*_id` 目标参数的 mutating capability 还要求成功重试保持相同目标身份，
+不能用另一资源上的同名成功掩盖原失败。`report_error` 与 `ask_clarification` 保持合法，成功
+alternative tool 也不要求匹配 source chain。该检查消费 factual `teacher_round_trace`，不是
+PROVE 公开 corpus gate。
+
 预算边界：论文 continuation 的 `min_turns=2, max_turns=3` 指 conversation rounds；一次 round 内可以包含多个顺序 tool calls。Parquet `budget` 是本项目 rollout 的 action-turn 工程合同，必须满足 `budget >= ground-truth tool-call 数 + conversation round 数`，从而至少容纳每轮一个 terminal。论文 §3.3 的 adaptive efficiency budget 按 tool-call 数计算奖励惩罚，不负责截断 episode。
 
 真实十域 smoke 的补充约束：成功 normal conversation 必须有 2--3 个真实 user turns；follow-up 必须依赖当前 live state 和全部已完成 user/assistant rounds 并继续此前 conversation，不得由内部 chain 节点机械改写。供 continuation 使用的 compact entity summary 必须保留判断目标是否已经满足的业务字段，避免把已有 reminder、地点等结果再次请求。filesystem archive 操作只使用 live-state 中的 file 实体。
@@ -193,11 +200,11 @@ irrelevance:
   2. Clarification / abstention trajectories — missing-function 与 irrelevance 变体
 ```
 
-**生成策略**：全局只计算一次候选预算；shard 子进程不重复增加固定 oversample floor。`generate_many` 按 domain 增量提交任务，达到 quota 后停止为该 domain 创建新 future。不足时 recovery 只补充缺口，经 replay、provenance、Jaccard 去重和训练合约过滤后取精确 N 条。recovery 默认最多 3 轮；可通过 `--max-recovery-rounds` 显式调整，但该值属于本地工程产出参数，必须记录到实验配置，不能表述为 PROVE 公开算法参数。不同 domain 的富余样本不能代替缺口。长任务应指定 `--checkpoint-path`：每轮完成后原子保存候选 `LiveTask`、下一轮缺口请求和配置指纹；用相同配置重启时只补剩余 domain，不重复首轮。
+**生成策略**：全局只计算一次候选预算；shard 子进程不重复增加固定 oversample floor。初始 candidate sampling 可均匀探索十域，但这不是最终 corpus 的均匀分配要求。Global merge 对每域保留最低 train/val 覆盖，剩余名额按通过 live-state feasibility 且对 dependency-chain sequence 做位置感知 Jaccard 0.70 去重后的容量加权分配；首次 global merge 的 allocation capacity 在同一 run 的 deficit report 中冻结，后续 top-up 只更新观测容量和缺口，不移动最终配额。`generate_many` 按 candidate domain 增量提交任务，达到本轮探索 quota 后停止创建新 future；不足时 recovery 只补最终加权配额的缺口，经 replay、provenance、Jaccard 去重和训练合约过滤后取精确 N 条。recovery 默认最多 3 轮；可通过 `--max-recovery-rounds` 显式调整，但该值属于本地工程产出参数并须记录到实验配置，不能表述为 PROVE 公开算法参数。长任务应指定 `--checkpoint-path`：每轮完成后原子保存候选 `LiveTask`、下一轮缺口请求和配置指纹；用相同配置重启时只补剩余 domain，不重复首轮。
 
 Teacher JSON stage 使用独立输出预算，避免短 JSON 响应按通用 1024-token 上限占用 vLLM KV cache。action loop 对完全重复且无状态变化的调用只注入 no-progress 反馈，后续替代动作或 terminal 仍必须由 Teacher 产生。multi-shard merge 会输出逐域 deficit、Jaccard 前候选数、实际保留率和建议补样数；launcher 保留已生成 shard，只为缺口 domain 追加 top-up shard，再重新执行全局 Jaccard 与 train/val split。建议补样数按该域累计保留率反推并增加 20% 有限裕量，再在现有 generation client 槽位内均匀切片，避免单个 deficit domain 串行占满整个补量阶段；这些设置只影响生成预算和调度，不放宽 replay、provenance 或 Jaccard 门槛。
 
-多 shard 边界：`--shard-mode` 子进程只保证输出通过 replay 与训练结构合同的 eligible 候选，不执行 shard-local Jaccard，也不要求每个 shard 独立满足十域比例。子进程按 eligible 行数恢复局部生成短缺；所有 shard 汇总后，global merge 才执行跨 shard Jaccard 0.70、逐域 train/val quota 与 split 隔离。最终 split 将全域规范化后的相同首轮 user query 绑定到同一 split，同时保持逐域 train/val quota，防止跨 domain 的 irrelevant/query 模板泄漏；该分组不删除候选、不改变 PROVE corpus gate。Top-up 的部分有效结果必须保留并交给下一次 global merge，只有全局 top-up 轮次耗尽后仍存在 domain 缺口才 fail-closed。
+多 shard 边界：`--shard-mode` 子进程只保证输出通过 replay 与训练结构合同的 eligible 候选，不执行 shard-local Jaccard，也不要求每个 shard 独立满足十域比例。子进程按 eligible 行数恢复局部生成短缺；所有 shard 汇总后，global merge 才执行跨 shard Jaccard 0.70、最低域覆盖 + unique-chain 容量加权的 train/val quota 与 split 隔离。最终 split 将全域规范化后的相同首轮 user query 绑定到同一 split，同时保持计算出的逐域 train/val quota，防止跨 domain 的 irrelevant/query 模板泄漏；该分组不删除候选、不改变 PROVE corpus gate。Top-up 的部分有效结果必须保留并交给下一次 global merge，只有全局 top-up 轮次耗尽后仍存在 domain 缺口才 fail-closed。
 
 ### 难度分布
 
@@ -240,6 +247,8 @@ Teacher JSON stage 使用独立输出预算，避免短 JSON 响应按通用 102
 | `replay_error_rate` | float | replay 错误率 |
 | `teacher_attempt_trace` | JSON | 全部 Teacher tool attempt 的 round、参数、expected/actual outcome 与原始 MCP observation；模型实际看到的投影文本由相同 projector/budget 产生，exact prompt/raw response 仍以当前 run JSONL 为准；该字段不进入 Policy prompt/reward |
 | `teacher_round_trace` | JSON | 每轮 user query、完整 oracle（含中间 terminal 文本）与真实 execution history；用于输入充分性和 continuation 审计 |
+| `required_workflow_projection` | JSON | factual trace 到 required GT 的逐事件 keep/drop 原因；只记录 exact repeat、state-transition no-op 与 action-execution 无净变化三类显式证据 |
+| `projection_exact_repeat_dropped` / `projection_state_transition_noop_dropped` / `projection_action_no_net_change_retained` | int | 上述投影分类的行级计数，供 corpus 审计；不是额外 hard gate |
 | `chain_seed` | JSON `[str]` | 任务使用的工具链种子 |
 | `generation_mode` | str | 固定为 `chain_seeded`；缺少 dependency-chain seed 直接拒绝 |
 

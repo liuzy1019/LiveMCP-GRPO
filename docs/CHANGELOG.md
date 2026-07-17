@@ -8,6 +8,27 @@
 
 ### Contract boundary
 
+- 最终 corpus 取消十域均匀配额：每域保留可配置最低 train/val 覆盖，剩余名额按真实候选中
+  live-state feasible、位置感知 Jaccard-unique 的 dependency-chain 容量分配。初始 shard 的均匀
+  candidate exploration 仅用于估计容量，不再被描述为 PROVE 分布要求。
+- Required-workflow no-op 投影增加显式执行语义：`state_transition` 型成功 no-op 从 GT 排除，
+  `action_execution` 型成功动作即使净状态未变化仍保留；完整 factual trace 与 PROVE hard gates 不变。
+
+- Teacher action guidance 明确三项本地语义合同：跨轮唯一指代不得伪造 ambiguity；多目标请求
+  不得因一个子目标失败而放弃独立可行的其他目标；missing-function 只有在补充信息能够解除
+  阻塞时才使用 `ask_clarification`。这些约束不加入 PROVE 公开 corpus hard gates，也不增加
+  exact-chain 或通用自然语言 judge。
+- Question-shaped `final_answer` 校验覆盖回答中间明确向用户索取输入的二人称问句，同时允许
+  引用带问号的标题或历史文本。Email seeded state 改为只将相同规范化 subject 聚合到同一
+  thread，不再按记录序号把无关主题机械分组；旧 initial-state fingerprint 数据必须重生成。
+- Global merge 增加本地 trajectory-integrity gate：同一 round 中真实 execution failure
+  若未被同名 capability 的后续成功重试消解，不得以 `final_answer` 声称完成；
+  对带 `id` / `*_id` 目标参数的 mutating capability，成功重试必须保持相同目标身份，
+  防止通过操作另一资源掩盖原失败。`report_error` / `ask_clarification` 仍是合法 recovery terminal。该规则只隔离
+  “失败未解决却宣告成功”的不可训练标签，不改变 PROVE 公开 30% Replay error 阈值。
+- Sensitive provenance 数值归一化支持千分位金额，并识别 `$`/`USD` 等明确货币符号；
+  filesystem `readlink` live-state feasibility 只接受明确 symlink/link 类型；email 历史
+  labels-aliasing 检查不再把 reply/send 新建邮件的合法空 labels 字段误判为污染。
 - 轨迹合同更新为功能化名称 `live-mcp-canonical-replay-trajectory-v1`：canonical Parquet 必须持久化逐轮 Teacher query/oracle/history、全部真实 execution attempts，以及最终 required-workflow 的 fresh replay 证据；生成 readback、merge、训练预检和 rollout 共用同一证据验证器。历史数据缺少该证据，当前不得训练。
 - `ToolSemantics` 收敛逐工具 operation、sensitive fields 与允许 mutation roots；entity、requirements、relevance 仍由 orchestrator 的单一解析器提供，并通过显式 callback 给 planner 消费。PROVE 五步算法和公开 replay/provenance/Jaccard hard gates 不变。
 - 旧训练入口、旧 import re-export、DomainAdapter 名称前缀 fallback 和 reward 配置 fallback 纳入本轮删除范围；统计/生成/serving 的当前运行容错不属于旧兼容层。
@@ -36,6 +57,14 @@
 - 删除 shell 错误提示中的机器绝对环境路径；运行时继续通过 `PYTHON_BIN` 注入解释器。
 
 ### Fixed
+
+- Teacher launcher 的最终 Parquet 门禁改为直接调用权威
+  `scripts/audit_generated_data.py`，删除重复的内联 pandas/reward parser 实现。定向 smoke
+  曾在内联检查已打印 `Parquet validation PASSED` 后于解释器关闭阶段触发 SIGABRT，导致
+  合格产物被错误标记为生成失败；统一入口同时避免两套质量合同继续漂移。
+- Teacher generation 与独立 Policy serving 默认关闭 vLLM usage telemetry，并将
+  vLLM 可写 cache/config 根目录放到 `${TMPDIR:-/tmp}`；用户 home 所在分区空间耗尽时，
+  不再因写 `~/.config/vllm/usage_stats.json` 污染或中断模型启动。路径仍可由环境变量覆盖。
 
 - 重建 calendar 当前 schema 的完整 `C(17,2)=136` pair cache；十域 Stage 1/2 验证为
   `51 passed / 0 failed`，并验证模型服务关闭后仍可严格命中磁盘缓存。

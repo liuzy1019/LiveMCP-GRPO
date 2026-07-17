@@ -14,7 +14,8 @@
 #   4. verl 从源码安装：
 #      python -m pip install -e ./verl
 #
-# flash-attn 当前未安装（vLLM V1 默认 flashinfer attention backend）。
+# flash-attn 当前未安装，也不是 Gemma-4 Teacher 依赖；vLLM 对该模型强制
+# TRITON_ATTN。flashinfer-python 保留用于 sampling/JIT 路径。
 
 # 核心
 numpy==1.26.4
