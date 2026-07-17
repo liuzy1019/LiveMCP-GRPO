@@ -2,7 +2,7 @@
   "cache_version": 5,
   "dependency_semantics_version": 11,
   "server_name": "calendar",
-  "schema_hash": "99b8949876cd2b9d",
+  "schema_hash": "4040e2531b744d71",
   "tool_names": [
     "add_attendee",
     "change_timezone",

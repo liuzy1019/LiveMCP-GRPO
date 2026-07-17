@@ -11,7 +11,7 @@ TOOLS = [
     {"name": "create_invoice", "description": "Create a new invoice with a positive amount.", "input_schema": {"type": "object", "properties": {"customer": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive invoice amount; must be greater than zero."}, "currency": {"type": "string"}, "description": {"type": "string"}, "due_date": {"type": "string"}}, "required": ["customer", "amount"]}, "annotations": {"mutating": True}},
     {"name": "get_invoice", "description": "Get invoice details.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}}, "required": ["invoice_id"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "list_invoices", "description": "List invoices by status, customer, or date range.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "customer": {"type": "string"}, "from_date": {"type": "string"}, "to_date": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "pay_invoice", "description": "Pay an unpaid invoice for exactly its full invoice amount. The invoice must not already have a pending payment and must not be paid, refunded, or partially refunded. Returns a settled payment with a payment_id. Sensitive param on amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount exactly equal to the invoice amount."}, "method": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
+    {"name": "pay_invoice", "description": "Pay an unpaid pending or overdue invoice for exactly its full invoice amount. The invoice must have no linked payment or open dispute and must not be paid, disputed, refunded, or partially refunded. Returns a settled payment with a payment_id. Sensitive param on amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount exactly equal to the invoice amount."}, "method": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
     {"name": "refund_invoice", "description": "Refund a paid or partially_refunded invoice whose linked payment is settled. Amount must be positive and no greater than the invoice's remaining refundable amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount no greater than the remaining refundable amount."}, "reason": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
     {"name": "cancel_payment", "description": "Cancel an existing pending payment before settlement. Requires a payment_id (pay_...), not an invoice_id. Settled or refunded payments cannot be cancelled.", "input_schema": {"type": "object", "properties": {"payment_id": {"type": "string"}, "reason": {"type": "string"}}, "required": ["payment_id"]}, "annotations": {"mutating": True}},
     {"name": "dispute_invoice", "description": "File a dispute on an invoice only when its current status is paid or pending. Requires a non-empty reason.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "reason": {"type": "string"}, "evidence": {"type": "string"}}, "required": ["invoice_id", "reason"]}, "annotations": {"mutating": True}},
@@ -61,8 +61,20 @@ class PaymentsServer(StatefulToolServer):
     def pay_invoice(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); inv_id = arguments["invoice_id"]; inv = state["invoices"].get(inv_id)
         if not inv: raise KeyError(f"invoice not found: {inv_id}")
-        if inv["status"] == "paid": raise KeyError("invoice already paid")
-        if inv["status"] in ("refunded", "partially_refunded"): raise KeyError(f"invoice already {inv['status']}")
+        if inv["status"] not in ("pending", "overdue"):
+            raise KeyError(f"cannot pay invoice in status: {inv['status']}")
+        open_dispute = next(
+            (
+                dispute for dispute in state.get("disputes", {}).values()
+                if dispute.get("invoice_id") == inv_id
+                and dispute.get("status") == "open"
+            ),
+            None,
+        )
+        if open_dispute is not None:
+            raise KeyError(
+                f"invoice has open dispute: {open_dispute.get('dispute_id', 'unknown')}"
+            )
         if inv.get("payment_id"):
             linked = state["payments"].get(inv["payment_id"])
             linked_status = linked.get("status") if linked else "missing"

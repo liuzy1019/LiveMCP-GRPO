@@ -4,7 +4,7 @@
 `docs/CHANGELOG.md`，算法与数据合同以 `docs/OVAL-MCP.md` 和
 `data/README.md` 为准。
 
-- 最后更新：2026-07-16
+- 最后更新：2026-07-17
 
 ## KI-008：ARL 的 vLLM/CUDA 周边依赖 metadata 漂移
 
@@ -20,15 +20,17 @@ validator 和 `livemcp_grpo` estimator 注册 smoke。Teacher vLLM 已完成 500
 `nvidia-cudnn-frontend`，以及 xformers 声明的 Torch 版本差异。在真实 Policy
 rollout 通过前，不为了消除 metadata 告警批量改动 GPU 依赖树。
 
-## KI-009：十域缓存已就绪，等待重新生成当前合同数据
+## KI-009：MCP 环境修复后等待重新生成当前合同数据
 
 - 状态：`Open`
 - 影响范围：Teacher 数据分布与语义置信度
 
-十域 strict dependency cache 已按当前 schema、Gemma-4-31B-it 与 classifier contract 验证，
-包括完整 `C(n,2)` pair ledger。旧 Parquet 已清理，当前没有可供 merge、rollout 或训练的数据；
-下一步是从当前生成链重新产出并执行 production parser、canonical replay、环境 metadata 和
-逐行自然语言/工具逻辑审计。
+`0717_capacity_200_50` 的逐行审计定位并修复了两项 MCP 环境缺陷：disputed invoice 可被
+`pay_invoice` 覆盖，以及 calendar attendee/email 接口接受 display name。修复改变了 calendar
+与 payments 的 schema/transition fingerprint；该轮 200+50 Parquet 现在会被 production parser
+按环境身份不匹配拒绝，不能用于 rollout 或训练。下一步必须从当前环境重新生成，并重新执行
+production parser、canonical replay、环境 metadata 和逐行自然语言/工具逻辑审计。受影响域的
+strict dependency cache 也必须按新 schema key 正常重建，不能手工改旧 cache 的 fingerprint。
 
 重新生成后仍需持续报告而非隐去的质量信号：
 

@@ -936,6 +936,59 @@ def test_calendar_attendee_response_and_timezone_are_consistent() -> None:
     assert invalid["success"] is False
 
 
+def test_calendar_rejects_display_names_in_email_identity_fields() -> None:
+    server = CalendarServer(); sid = _reset(server)
+    state = server.sessions[sid]
+    event_id = next(iter(state["events"]))
+    before = json.dumps(state, sort_keys=True)
+    cases = [
+        ("create_event", {
+            "title": "Invalid attendee",
+            "start_time": "2026-07-20T10:00:00",
+            "end_time": "2026-07-20T11:00:00",
+            "attendees": ["Sarah"],
+        }),
+        ("update_event", {
+            "event_id": event_id,
+            "fields": {"attendees": ["Sarah"]},
+        }),
+        ("create_recurring", {
+            "title": "Invalid recurring attendee",
+            "start_time": "2026-07-20T10:00:00",
+            "end_time": "2026-07-20T11:00:00",
+            "recurrence": "FREQ=WEEKLY;BYDAY=MO",
+            "attendees": ["Sarah"],
+        }),
+        ("add_attendee", {"event_id": event_id, "email": "Sarah"}),
+        ("remove_attendee", {"event_id": event_id, "email": "Sarah"}),
+        ("get_free_busy", {
+            "emails": ["Sarah"],
+            "start_time": "2026-07-20T10:00:00",
+            "end_time": "2026-07-20T11:00:00",
+        }),
+        ("respond_to_event", {
+            "event_id": event_id,
+            "email": "Sarah",
+            "response": "accepted",
+        }),
+    ]
+    for name, arguments in cases:
+        result = server._call_tool({
+            "session_id": sid,
+            "name": name,
+            "arguments": arguments,
+        })
+        assert result["success"] is False, name
+        assert result["state_changed"] is False, name
+        assert "valid email address" in result["error_message"], name
+        assert json.dumps(state, sort_keys=True) == before, name
+
+    schemas = {tool["name"]: tool["input_schema"] for tool in server.tools}
+    assert schemas["create_event"]["properties"]["attendees"]["items"]["format"] == "email"
+    assert schemas["get_free_busy"]["properties"]["emails"]["minItems"] == 1
+    assert schemas["add_attendee"]["properties"]["email"]["format"] == "email"
+
+
 def test_payments_pending_payment_is_not_refundable() -> None:
     server = PaymentsServer(); sid = _reset(server)
     state = server.sessions[sid]
@@ -948,6 +1001,61 @@ def test_payments_pending_payment_is_not_refundable() -> None:
         "arguments": {"invoice_id": invoice["invoice_id"], "amount": invoice["amount"]},
     })
     assert result["success"] is False
+
+
+def test_payments_disputed_invoice_cannot_be_paid() -> None:
+    server = PaymentsServer(); sid = _reset(server)
+    state = server.sessions[sid]
+    invoice = next(
+        item for item in state["invoices"].values()
+        if item["status"] == "pending" and not item.get("payment_id")
+    )
+    disputed = server._call_tool({
+        "session_id": sid,
+        "name": "dispute_invoice",
+        "arguments": {
+            "invoice_id": invoice["invoice_id"],
+            "reason": "duplicate charge",
+        },
+    })
+    assert disputed["success"] is True
+    assert invoice["status"] == "disputed"
+    dispute_id = disputed["observation"]["dispute"]["dispute_id"]
+    before = json.dumps(state, sort_keys=True)
+
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "pay_invoice",
+        "arguments": {
+            "invoice_id": invoice["invoice_id"],
+            "amount": invoice["amount"],
+        },
+    })
+    assert result["success"] is False
+    assert result["state_changed"] is False
+    assert "cannot pay invoice in status: disputed" in result["error_message"]
+    assert json.dumps(state, sort_keys=True) == before
+    assert state["disputes"][dispute_id]["status"] == "open"
+    assert invoice["status"] == "disputed"
+    assert invoice.get("payment_id") is None
+
+    # Defend against an already-inconsistent imported/seeded state too: the
+    # open dispute is authoritative even if the invoice status was stale.
+    invoice = state["invoices"][invoice["invoice_id"]]
+    invoice["status"] = "pending"
+    inconsistent_before = json.dumps(state, sort_keys=True)
+    open_dispute_result = server._call_tool({
+        "session_id": sid,
+        "name": "pay_invoice",
+        "arguments": {
+            "invoice_id": invoice["invoice_id"],
+            "amount": invoice["amount"],
+        },
+    })
+    assert open_dispute_result["success"] is False
+    assert open_dispute_result["state_changed"] is False
+    assert f"invoice has open dispute: {dispute_id}" in open_dispute_result["error_message"]
+    assert json.dumps(state, sort_keys=True) == inconsistent_before
 
 
 def test_crm_rejects_unlinked_resources_and_noop_update() -> None:

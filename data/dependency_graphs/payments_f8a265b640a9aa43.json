@@ -2,7 +2,7 @@
   "cache_version": 5,
   "dependency_semantics_version": 11,
   "server_name": "payments",
-  "schema_hash": "af930297b1a0030e",
+  "schema_hash": "f8a265b640a9aa43",
   "tool_names": [
     "cancel_payment",
     "create_invoice",

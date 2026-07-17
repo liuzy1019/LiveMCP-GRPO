@@ -4,26 +4,40 @@ Features: events, recurring rules, attendees, reminders, free/busy, timezone, co
 
 from __future__ import annotations
 from datetime import datetime
+import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from src.live_mcp.server_base import StatefulToolServer, _result, serve
+
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_SCHEMA = {
+    "type": "string",
+    "format": "email",
+    "description": "Exact attendee email address, not a display name.",
+}
+_EMAILS_SCHEMA = {
+    "type": "array",
+    "items": _EMAIL_SCHEMA,
+    "uniqueItems": True,
+}
 
 TOOLS = [
     {"name": "list_events", "description": "List calendar events with optional filters.", "input_schema": {"type": "object", "properties": {"date_range": {"type": "string"}, "attendee": {"type": "string"}, "keyword": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "search_events", "description": "Search events by keyword in title/description.", "input_schema": {"type": "object", "properties": {"query": {"type": "string"}, "start_after": {"type": "string"}, "start_before": {"type": "string"}}, "required": ["query"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_event", "description": "Get a single event by id with full details.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}}, "required": ["event_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "create_event", "description": "Create a single calendar event.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "start_time": {"type": "string"}, "end_time": {"type": "string"}, "description": {"type": "string"}, "location": {"type": "string"}, "attendees": {"type": "array"}, "reminders": {"type": "array"}}, "required": ["title", "start_time", "end_time"]}, "annotations": {"mutating": True}},
-    {"name": "update_event", "description": "Update at least one supported field of an existing event (preserves identity).", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "fields": {"type": "object", "properties": {"title": {"type": "string"}, "start_time": {"type": "string"}, "end_time": {"type": "string"}, "description": {"type": "string"}, "location": {"type": "string"}, "attendees": {"type": "array"}, "reminders": {"type": "array"}}, "additionalProperties": False, "minProperties": 1}}, "required": ["event_id", "fields"], "additionalProperties": False}, "annotations": {"mutating": True}},
+    {"name": "create_event", "description": "Create a single calendar event. Attendees must be deliverable email addresses, not display names.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "start_time": {"type": "string"}, "end_time": {"type": "string"}, "description": {"type": "string"}, "location": {"type": "string"}, "attendees": _EMAILS_SCHEMA, "reminders": {"type": "array"}}, "required": ["title", "start_time", "end_time"]}, "annotations": {"mutating": True}},
+    {"name": "update_event", "description": "Update at least one supported field of an existing event (preserves identity). Attendees must be deliverable email addresses, not display names.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "fields": {"type": "object", "properties": {"title": {"type": "string"}, "start_time": {"type": "string"}, "end_time": {"type": "string"}, "description": {"type": "string"}, "location": {"type": "string"}, "attendees": _EMAILS_SCHEMA, "reminders": {"type": "array"}}, "additionalProperties": False, "minProperties": 1}}, "required": ["event_id", "fields"], "additionalProperties": False}, "annotations": {"mutating": True}},
     {"name": "delete_event", "description": "Delete an event by id.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}}, "required": ["event_id"]}, "annotations": {"mutating": True}},
-    {"name": "create_recurring", "description": "Create a recurring event with an RRULE-style rule. When recurrence contains BYDAY, start_time must fall on one of those weekdays.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "start_time": {"type": "string"}, "end_time": {"type": "string"}, "recurrence": {"type": "string"}, "attendees": {"type": "array"}, "until": {"type": "string"}, "count": {"type": "integer", "minimum": 1}}, "required": ["title", "start_time", "end_time", "recurrence"]}, "annotations": {"mutating": True}},
-    {"name": "add_attendee", "description": "Add an attendee to an event and optionally set the initial invitation response.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": {"type": "string"}, "response_status": {"type": "string", "enum": ["accepted", "declined", "tentative"]}}, "required": ["event_id", "email"]}, "annotations": {"mutating": True}},
-    {"name": "remove_attendee", "description": "Remove an attendee from an event.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": {"type": "string"}}, "required": ["event_id", "email"]}, "annotations": {"mutating": True}},
-    {"name": "get_free_busy", "description": "Get free/busy slots for attendees in a time range.", "input_schema": {"type": "object", "properties": {"emails": {"type": "array"}, "start_time": {"type": "string"}, "end_time": {"type": "string"}}, "required": ["emails", "start_time", "end_time"]}, "annotations": {"readonly": True, "mutating": False}},
+    {"name": "create_recurring", "description": "Create a recurring event with an RRULE-style rule. When recurrence contains BYDAY, start_time must fall on one of those weekdays. Attendees must be deliverable email addresses.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "start_time": {"type": "string"}, "end_time": {"type": "string"}, "recurrence": {"type": "string"}, "attendees": _EMAILS_SCHEMA, "until": {"type": "string"}, "count": {"type": "integer", "minimum": 1}}, "required": ["title", "start_time", "end_time", "recurrence"]}, "annotations": {"mutating": True}},
+    {"name": "add_attendee", "description": "Add an attendee by exact email address and optionally set the initial invitation response.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": _EMAIL_SCHEMA, "response_status": {"type": "string", "enum": ["accepted", "declined", "tentative"]}}, "required": ["event_id", "email"]}, "annotations": {"mutating": True}},
+    {"name": "remove_attendee", "description": "Remove an attendee by exact email address.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": _EMAIL_SCHEMA}, "required": ["event_id", "email"]}, "annotations": {"mutating": True}},
+    {"name": "get_free_busy", "description": "Get free/busy slots for exact attendee email addresses in a time range.", "input_schema": {"type": "object", "properties": {"emails": {**_EMAILS_SCHEMA, "minItems": 1}, "start_time": {"type": "string"}, "end_time": {"type": "string"}}, "required": ["emails", "start_time", "end_time"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "check_conflicts", "description": "Check if a proposed event conflicts with existing events.", "input_schema": {"type": "object", "properties": {"start_time": {"type": "string"}, "end_time": {"type": "string"}, "exclude_event_id": {"type": "string"}}, "required": ["start_time", "end_time"]}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "set_reminder", "description": "Set a reminder for an event.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "minutes_before": {"type": "integer", "minimum": 1, "description": "Positive number of minutes before the event."}, "method": {"type": "string"}}, "required": ["event_id", "minutes_before"]}, "annotations": {"mutating": True}},
     {"name": "get_working_hours", "description": "Get working hours for specified working days.", "input_schema": {"type": "object", "properties": {"date": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "change_timezone", "description": "Change the calendar timezone preference. Existing event timestamps remain stored as supplied.", "input_schema": {"type": "object", "properties": {"timezone": {"type": "string"}}, "required": ["timezone"]}, "annotations": {"mutating": True}},
-    {"name": "respond_to_event", "description": "Record an invitation response for an email that is already in the event's current attendees list.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": {"type": "string", "description": "Exact attendee email already present on this event."}, "response": {"type": "string", "enum": ["accepted", "declined", "tentative"]}}, "required": ["event_id", "email", "response"]}, "annotations": {"mutating": True}},
+    {"name": "respond_to_event", "description": "Record an invitation response for an email that is already in the event's current attendees list.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}, "email": _EMAIL_SCHEMA, "response": {"type": "string", "enum": ["accepted", "declined", "tentative"]}}, "required": ["event_id", "email", "response"]}, "annotations": {"mutating": True}},
     {"name": "export_calendar", "description": "Export events in a date range to iCal/JSON format.", "input_schema": {"type": "object", "properties": {"start_date": {"type": "string"}, "end_date": {"type": "string"}, "format": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_recurring_info", "description": "Get recurrence metadata for a recurring event.", "input_schema": {"type": "object", "properties": {"event_id": {"type": "string"}}, "required": ["event_id"]}, "annotations": {"readonly": True, "mutating": False}},
 ]
@@ -36,6 +50,22 @@ class CalendarServer(StatefulToolServer):
         self.handlers = {t["name"]: getattr(self, t["name"]) for t in TOOLS}
 
     def _eid(self, state): eid = f"evt_{state['next_event_num']:03d}"; state["next_event_num"] += 1; return eid
+    @staticmethod
+    def _email(value: Any, field: str = "email") -> str:
+        email = str(value)
+        if not _EMAIL_PATTERN.fullmatch(email):
+            raise KeyError(f"{field} must be a valid email address")
+        return email
+
+    @classmethod
+    def _emails(cls, value: Any, field: str = "attendees") -> list[str]:
+        if not isinstance(value, list):
+            raise KeyError(f"{field} must be an array of email addresses")
+        emails = [cls._email(item, field) for item in value]
+        if len(set(emails)) != len(emails):
+            raise KeyError(f"{field} must not contain duplicate email addresses")
+        return emails
+
     @staticmethod
     def _datetime(value: Any, field: str) -> datetime:
         try:
@@ -98,8 +128,9 @@ class CalendarServer(StatefulToolServer):
 
     def create_event(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         self._time_range(arguments["start_time"], arguments["end_time"])
+        attendees = self._emails(arguments.get("attendees", []))
         state = self._state(session_id); eid = self._eid(state)
-        event = {"event_id": eid, "title": arguments["title"], "start_time": arguments["start_time"], "end_time": arguments["end_time"], "description": arguments.get("description", ""), "location": arguments.get("location", ""), "attendees": list(arguments.get("attendees", [])), "reminders": list(arguments.get("reminders", [])), "recurrence": None}
+        event = {"event_id": eid, "title": arguments["title"], "start_time": arguments["start_time"], "end_time": arguments["end_time"], "description": arguments.get("description", ""), "location": arguments.get("location", ""), "attendees": attendees, "reminders": list(arguments.get("reminders", [])), "recurrence": None}
         state["events"][eid] = event
         return _result(True, {"event": event}, None, "", True)
 
@@ -112,6 +143,8 @@ class CalendarServer(StatefulToolServer):
         start_time = fields.get("start_time", evt["start_time"])
         end_time = fields.get("end_time", evt["end_time"])
         self._time_range(start_time, end_time)
+        if "attendees" in fields:
+            fields = {**fields, "attendees": self._emails(fields["attendees"])}
         changed = False
         for k, v in fields.items():
             if k in ALLOWED_FIELDS and evt.get(k) != v:
@@ -127,16 +160,16 @@ class CalendarServer(StatefulToolServer):
     def create_recurring(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         self._time_range(arguments["start_time"], arguments["end_time"])
         self._recurrence_start(arguments["start_time"], arguments["recurrence"])
+        attendees = self._emails(arguments.get("attendees", []))
         if arguments.get("count") is not None and arguments["count"] < 1:
             raise KeyError("count must be at least 1")
         state = self._state(session_id); eid = self._eid(state)
-        event = {"event_id": eid, "title": arguments["title"], "start_time": arguments["start_time"], "end_time": arguments["end_time"], "description": "", "location": "", "attendees": list(arguments.get("attendees", [])), "reminders": [], "recurrence": arguments["recurrence"], "recurrence_until": arguments.get("until"), "recurrence_count": arguments.get("count")}
+        event = {"event_id": eid, "title": arguments["title"], "start_time": arguments["start_time"], "end_time": arguments["end_time"], "description": "", "location": "", "attendees": attendees, "reminders": [], "recurrence": arguments["recurrence"], "recurrence_until": arguments.get("until"), "recurrence_count": arguments.get("count")}
         state["events"][eid] = event
         return _result(True, {"event": event, "recurrence": arguments["recurrence"]}, None, "", True)
 
     def add_attendee(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        evt = self._evt(self._state(session_id), arguments["event_id"]); email = arguments["email"]
-        if not email.strip(): raise KeyError("email must be non-empty")
+        evt = self._evt(self._state(session_id), arguments["event_id"]); email = self._email(arguments["email"])
         if email in evt.setdefault("attendees", []):
             old = evt.setdefault("responses", {}).get(email)
             response = arguments.get("response_status")
@@ -151,8 +184,7 @@ class CalendarServer(StatefulToolServer):
 
     def remove_attendee(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         evt = self._evt(self._state(session_id), arguments["event_id"])
-        email = arguments["email"]
-        if not email.strip(): raise KeyError("email must be non-empty")
+        email = self._email(arguments["email"])
         attendees = evt.get("attendees", [])
         if email not in attendees:
             return _result(True, {"event_id": evt["event_id"], "attendees": attendees}, None, "", False)
@@ -161,7 +193,8 @@ class CalendarServer(StatefulToolServer):
         return _result(True, {"event_id": evt["event_id"], "attendees": evt["attendees"]}, None, "", True)
 
     def get_free_busy(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); emails = arguments["emails"]; st, et = arguments["start_time"], arguments["end_time"]
+        state = self._state(session_id); emails = self._emails(arguments["emails"], "emails"); st, et = arguments["start_time"], arguments["end_time"]
+        if not emails: raise KeyError("emails must contain at least one email address")
         busy = {}
         for email in emails:
             busy[email] = []
@@ -196,8 +229,7 @@ class CalendarServer(StatefulToolServer):
         return _result(True, {"timezone": tz, "message": f"timezone changed to {tz}"}, None, "", old != tz)
 
     def respond_to_event(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        evt = self._evt(self._state(session_id), arguments["event_id"]); email = arguments["email"]; resp = arguments["response"]
-        if not email.strip(): raise KeyError("email must be non-empty")
+        evt = self._evt(self._state(session_id), arguments["event_id"]); email = self._email(arguments["email"]); resp = arguments["response"]
         if email not in evt.get("attendees", []): raise KeyError(f"attendee not found: {email}")
         if resp not in ("accepted", "declined", "tentative"): raise KeyError(f"invalid response: {resp}")
         old = evt.setdefault("responses", {}).get(email)

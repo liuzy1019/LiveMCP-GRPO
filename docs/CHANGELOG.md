@@ -58,6 +58,15 @@
 
 ### Fixed
 
+- Payments invoice lifecycle now rejects `pay_invoice` unless the invoice is
+  genuinely unpaid (`pending` or `overdue`) and has no open dispute; a dispute
+  can no longer be silently overwritten by a later payment while the dispute
+  remains open.
+- Calendar attendee-bearing tools now expose email-shaped JSON schemas and
+  enforce the same email validation in handlers.  Names such as `"Sarah"`
+  cannot be stored as deliverable attendees or queried as free/busy identities;
+  the caller must first obtain an actual email address.
+
 - Teacher launcher 的最终 Parquet 门禁改为直接调用权威
   `scripts/audit_generated_data.py`，删除重复的内联 pandas/reward parser 实现。定向 smoke
   曾在内联检查已打印 `Parquet validation PASSED` 后于解释器关闭阶段触发 SIGABRT，导致
