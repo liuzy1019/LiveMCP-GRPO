@@ -241,7 +241,10 @@ def _target_tool_requirement(
     annotations = schema.get("annotations") or {}
     readonly_note = ""
     if annotations.get("readonly") is True and annotations.get("mutating") is False:
-        readonly_note = " This capability is read-only and does not modify server state."
+        readonly_note = (
+            " This capability is read-only and does not modify server state. "
+            "Any transformed content is display-only output and is never persisted."
+        )
     required = list(schema.get("input_schema", {}).get("required", []) or [])
     required_text = ", ".join(str(name) for name in required) or "none"
     return (
@@ -2246,7 +2249,10 @@ def _format_tools(tool_schemas: list[dict[str, Any]], strip_enums: bool = False)
         desc = tool.get("description", "")
         annotations = tool.get("annotations") or {}
         if annotations.get("readonly") is True and annotations.get("mutating") is False:
-            desc = f"{desc.rstrip()} Read-only: this tool does not modify server state.".strip()
+            desc = (
+                f"{desc.rstrip()} Read-only: this tool does not modify server state. "
+                "Any transformed content is display-only output and is never persisted."
+            ).strip()
         props = tool.get("input_schema", {}).get("properties", {})
         required = tool.get("input_schema", {}).get("required", [])
         args_parts = []

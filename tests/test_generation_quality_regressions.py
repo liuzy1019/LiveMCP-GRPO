@@ -32,6 +32,8 @@ from scripts.generate_data import (
 )
 from scripts.merge_generation_shards import (
     _capacity_weighted_domain_quotas, _dedup_jaccard,
+    _deterministic_label_issue,
+    _drop_quarantined_tasks, _load_quarantined_task_ids,
     _domain_unique_chain_capacity, _frozen_allocation_capacity,
     _quality_issue, _row_fingerprint,
     _initial_query_key, _isolate_initial_queries, _suggest_topup_count,
@@ -2597,6 +2599,291 @@ def test_merge_allows_readonly_retry_with_different_target() -> None:
         }],
     }
     assert _unresolved_failure_issue(extra) == ""
+
+
+def test_deterministic_label_quarantine_rejects_mutating_weekday_mismatch() -> None:
+    extra = {
+        "domain": "banking",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "schedule it for next Friday, August 8th",
+            "oracle_calls": [
+                {
+                    "action": "tool_call",
+                    "tool_name": "schedule_transfer",
+                    "arguments": {"execute_date": "2026-08-08"},
+                },
+                {"action": "final_answer"},
+            ],
+            "execution_history": [],
+        }],
+    }
+    assert _deterministic_label_issue(extra).startswith(
+        "deterministic_label_quarantine:weekday_mismatch:"
+    )
+
+
+def test_deterministic_label_quarantine_reads_iso_datetime_weekday() -> None:
+    extra = {
+        "domain": "calendar",
+        "teacher_round_trace": [{
+            "user_query": "schedule it for next Monday at 10am",
+            "oracle_calls": [
+                {
+                    "action": "tool_call",
+                    "tool_name": "create_event",
+                    "arguments": {"start_time": "2026-06-23T10:00:00Z"},
+                },
+                {"action": "final_answer"},
+            ],
+            "execution_history": [],
+        }],
+    }
+    assert _deterministic_label_issue(extra).startswith(
+        "deterministic_label_quarantine:weekday_mismatch:"
+    )
+
+
+def test_deterministic_label_quarantine_allows_matching_weekday() -> None:
+    extra = {
+        "domain": "banking",
+        "teacher_round_trace": [{
+            "user_query": "schedule it for next Friday",
+            "oracle_calls": [
+                {
+                    "action": "tool_call",
+                    "tool_name": "schedule_transfer",
+                    "arguments": {"execute_date": "2026-08-07"},
+                },
+                {"action": "final_answer"},
+            ],
+            "execution_history": [],
+        }],
+    }
+    assert _deterministic_label_issue(extra) == ""
+
+
+def test_deterministic_label_quarantine_skips_multiple_weekday_contexts() -> None:
+    extra = {
+        "domain": "crm",
+        "teacher_round_trace": [{
+            "user_query": "make it due Sunday for the meeting on Monday",
+            "oracle_calls": [
+                {
+                    "action": "tool_call",
+                    "tool_name": "create_task",
+                    "arguments": {"due_date": "2026-08-09"},
+                },
+                {"action": "final_answer"},
+            ],
+            "execution_history": [],
+        }],
+    }
+    assert _deterministic_label_issue(extra) == ""
+
+
+def test_deterministic_label_quarantine_rejects_question_placeholder_mutation() -> None:
+    extra = {
+        "domain": "crm",
+        "teacher_round_trace": [{
+            "user_query": "fix the company on contact_s1",
+            "oracle_calls": [{"action": "ask_clarification"}],
+            "execution_history": [{
+                "tool_name": "update_contact",
+                "arguments": {
+                    "contact_id": "contact_s1",
+                    "fields": {"company": "What is the correct company name?"},
+                },
+                "success": True,
+                "state_changed": True,
+            }],
+        }],
+    }
+    assert _deterministic_label_issue(extra).startswith(
+        "deterministic_label_quarantine:question_placeholder_mutation:"
+    )
+
+
+def test_deterministic_label_quarantine_allows_user_requested_question_text() -> None:
+    extra = {
+        "domain": "crm",
+        "teacher_round_trace": [{
+            "user_query": "set the company field to 'What is Acme?'",
+            "oracle_calls": [{"action": "ask_clarification"}],
+            "execution_history": [{
+                "tool_name": "update_contact",
+                "arguments": {
+                    "contact_id": "contact_s1",
+                    "fields": {"company": "What is Acme?"},
+                },
+                "success": True,
+                "state_changed": True,
+            }],
+        }],
+    }
+    assert _deterministic_label_issue(extra) == ""
+
+
+def test_deterministic_label_quarantine_does_not_generalize_question_to_report_error() -> None:
+    extra = {
+        "domain": "food_delivery",
+        "teacher_round_trace": [{
+            "user_query": "contact support, then try to refund it",
+            "oracle_calls": [{"action": "report_error"}],
+            "execution_history": [{
+                "tool_name": "contact_support",
+                "arguments": {
+                    "order_id": "ord_1",
+                    "issue_type": "refund",
+                    "description": "Why was this order charged twice?",
+                },
+                "success": True,
+                "state_changed": True,
+            }],
+        }],
+    }
+    assert _deterministic_label_issue(extra) == ""
+
+
+def test_deterministic_label_quarantine_rejects_crm_create_as_update() -> None:
+    extra = {
+        "domain": "crm",
+        "teacher_round_trace": [{
+            "user_query": "make task_0001 high priority and due tomorrow",
+            "oracle_calls": [{"action": "report_error"}],
+            "execution_history": [{
+                "tool_name": "create_task",
+                "arguments": {"title": "duplicate"},
+                "success": True,
+                "state_changed": True,
+            }],
+        }],
+    }
+    assert _deterministic_label_issue(extra).startswith(
+        "deterministic_label_quarantine:create_as_update:"
+    )
+
+
+def test_deterministic_label_quarantine_allows_explicit_create_prefix() -> None:
+    extra = {
+        "domain": "crm",
+        "teacher_round_trace": [{
+            "user_query": "create a new task and then update task_0001",
+            "oracle_calls": [{"action": "report_error"}],
+            "execution_history": [{
+                "tool_name": "create_task",
+                "arguments": {"title": "requested"},
+                "success": True,
+                "state_changed": True,
+            }],
+        }],
+    }
+    assert _deterministic_label_issue(extra) == ""
+
+
+def test_deterministic_label_quarantine_rejects_readonly_persistence() -> None:
+    extra = {
+        "domain": "filesystem",
+        "teacher_round_trace": [{
+            "user_query": "remove all duplicate lines from /home/user/notes.txt",
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [{
+                "tool_name": "uniq",
+                "arguments": {"path": "/home/user/notes.txt"},
+                "success": True,
+                "state_changed": False,
+            }],
+        }],
+    }
+    assert _deterministic_label_issue(extra).startswith(
+        "deterministic_label_quarantine:readonly_persistence:"
+    )
+
+
+def test_deterministic_label_quarantine_allows_display_only_sort() -> None:
+    extra = {
+        "domain": "filesystem",
+        "teacher_round_trace": [{
+            "user_query": "sort the file contents for me",
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [{
+                "tool_name": "sort",
+                "arguments": {"path": "/home/user/notes.txt"},
+                "success": True,
+                "state_changed": False,
+            }],
+        }],
+    }
+    assert _deterministic_label_issue(extra) == ""
+
+
+def test_deterministic_label_quarantine_rejects_food_size_downgrade() -> None:
+    extra = {
+        "domain": "food_delivery",
+        "teacher_round_trace": [{
+            "user_query": "order a large pepperoni pizza",
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [
+                {
+                    "tool_name": "create_order",
+                    "arguments": {"items": [{"name": "large pepperoni pizza"}]},
+                    "success": False,
+                },
+                {
+                    "tool_name": "create_order",
+                    "arguments": {"items": [{"name": "Pepperoni Pizza"}]},
+                    "success": True,
+                    "state_changed": True,
+                },
+            ],
+        }],
+    }
+    assert _deterministic_label_issue(extra).startswith(
+        "deterministic_label_quarantine:food_size_downgrade:"
+    )
+
+
+def test_deterministic_label_quarantine_allows_food_case_normalization() -> None:
+    extra = {
+        "domain": "food_delivery",
+        "teacher_round_trace": [{
+            "user_query": "order a large pepperoni pizza",
+            "oracle_calls": [{"action": "final_answer"}],
+            "execution_history": [
+                {
+                    "tool_name": "create_order",
+                    "arguments": {"items": [{"name": "large pepperoni pizza"}]},
+                    "success": False,
+                },
+                {
+                    "tool_name": "create_order",
+                    "arguments": {"items": [{"name": "Large Pepperoni Pizza"}]},
+                    "success": True,
+                    "state_changed": True,
+                },
+            ],
+        }],
+    }
+    assert _deterministic_label_issue(extra) == ""
+
+
+def test_manual_quarantine_manifest_drops_only_named_task_ids(tmp_path: Path) -> None:
+    manifest = tmp_path / "quarantine.json"
+    manifest.write_text(json.dumps({
+        "samples": [
+            {"task_id": "drop_1", "reason": "unsupported terminal claim"},
+            "drop_2",
+        ],
+    }))
+    task_ids = _load_quarantined_task_ids(manifest)
+    frame = pd.DataFrame([
+        {"extra_info": {"task_id": "keep"}},
+        {"extra_info": {"task_id": "drop_1"}},
+        {"extra_info": {"task_id": "drop_2"}},
+    ])
+    kept, removed = _drop_quarantined_tasks(frame, task_ids)
+    assert removed == 2
+    assert [item["task_id"] for item in kept["extra_info"]] == ["keep"]
 
 
 def test_merge_rejects_unrelated_team_chat_reaction_criteria() -> None:

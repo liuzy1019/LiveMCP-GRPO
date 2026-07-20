@@ -116,6 +116,15 @@ Query Teacher 只强制最终 mutating target 的 query 原文授权片段；内
 
 过滤边界：fresh replay、sensitive-parameter provenance 和 Jaccard 0.70 是论文公开 corpus gates。Parquet schema、显式 terminal、round contracts、hidden-tool 不泄漏与 dependency-edge 索引是本项目 rollout/reward 的结构合同。位置感知 Jaccard 和按公开 corpus 数量反推的 missing-function 采样率属于本地工程选择，必须在实验 metadata 中记录，不能写成论文公布的实现细节。
 
+最终训练标签另经过本地 deterministic quarantine。它只拒绝由持久化 factual trace 可直接证明
+会污染 GT tool name/arguments 的矛盾：mutating call 日期与 query 的单一目标星期不一致、
+clarification/report-error 前把问题句写入业务字段、CRM 用 `create_task` 代替对明确已有 task 的
+更新、filesystem 仅执行只读文本变换却宣告持久化修改，以及 food-delivery retry 静默删除用户
+明确指定的尺寸规格。该层不是 PROVE 公开 corpus gate，不要求 exact source chain，也不使用
+LLM-as-judge；无法确定的自然语言业务解释只进入审计诊断，不据此自动删除样本。
+人工确认的诊断样本可通过 global merge 的 `--quarantine-task-ids` JSON manifest 显式排除；
+该文件只记录 task ID 和人工原因，排除数写入 deficit report，不改变自动 hard gate 定义。
+
 实体初始状态中的可变字段必须逐实体复制，禁止多个实体共享同一个 `list`/`dict` 对象；否则一次合法 mutation 会产生无关资源的 state delta，并污染 success criteria。环境合同测试必须覆盖 email labels、team-chat reactions 等集合字段的对象隔离。
 
 Reversible 最终目标优先绑定可发现的既有实体：banking 通过 `list_scheduled_transfers` 暴露可取消 transfer，payments seeder/list_webhooks 暴露可删除 webhook，shopping wishlist 暴露可移除 product；冻结账户和 settled payment 同样由 live state 提供。`create -> delete` 等 source chain 仍只是 query seed，不要求 Action Teacher执行内部 setup mutation。

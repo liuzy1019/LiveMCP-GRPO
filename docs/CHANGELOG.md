@@ -8,6 +8,16 @@
 
 ### Contract boundary
 
+- Global merge 增加独立的本地 deterministic label quarantine：只隔离可由当前
+  query、Teacher execution history 和公开 tool semantics 直接证明的日期/星期冲突、
+  clarification 前问题占位值写入、CRM 对已有 task 的 create-as-update、filesystem
+  只读文本变换冒充持久化修改，以及 food-delivery recovery 静默丢弃显式尺寸规格。
+  该层保护 PROVE `R_coverage/R_name/R_arg` 消费的 GT tool calls/arguments，不改变论文公开的
+  fresh replay、sensitive provenance 和 Jaccard 0.70 corpus gates，也不引入通用自然语言 judge。
+- Teacher-visible readonly capability 说明明确：文本变换只返回 display-only output，不会持久化
+  文件修改。无 observation/schema 依据的 terminal 业务解释仍作为人工审计诊断，不进入
+  `prove_baseline` 的 GT tool-step hard gate；global merge 可通过显式 task-id quarantine manifest
+  隔离这类人工确认样本，manifest exclusions 单独计数，不伪装成 PROVE 拒绝原因。
 - 最终 corpus 取消十域均匀配额：每域保留可配置最低 train/val 覆盖，剩余名额按真实候选中
   live-state feasible、位置感知 Jaccard-unique 的 dependency-chain 容量分配。初始 shard 的均匀
   candidate exploration 仅用于估计容量，不再被描述为 PROVE 分布要求。

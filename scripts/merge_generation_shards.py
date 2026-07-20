@@ -8,8 +8,10 @@ import hashlib
 import json
 import math
 import os
+import re
 import sys
 from collections.abc import Hashable
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
@@ -26,7 +28,10 @@ from src.live_mcp.observation import (
     OBSERVATION_PROJECTION_VERSION,
     compute_server_schema_hash,
 )
-from src.live_mcp.tool_semantics import unresolved_failed_tool_names
+from src.live_mcp.tool_semantics import (
+    is_mutating_tool,
+    unresolved_failed_tool_names,
+)
 
 DOMAINS_ALL = [
     "banking", "calendar", "crm", "email", "filesystem",
@@ -104,6 +109,264 @@ def _unresolved_failure_issue(extra: dict[str, Any]) -> str:
                 f"unresolved_failed_action_final_answer:round={round_idx}:"
                 f"tools={sorted(unresolved)}"
             )
+    return ""
+
+
+_WEEKDAY_INDEX = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
+}
+_TARGET_WEEKDAY_RE = re.compile(
+    r"\b(?:next|this|on|for|every|by|due)\s+"
+    r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    r"|\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+    r"\s*,",
+    re.IGNORECASE,
+)
+_ANY_WEEKDAY_RE = re.compile(
+    r"\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+    re.IGNORECASE,
+)
+_ISO_DATE_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})(?=T|\b)")
+_ACTION_DATE_FIELDS = frozenset({
+    "date", "due_date", "execute_date", "scheduled_date", "start_time",
+})
+_QUESTION_VALUE_RE = re.compile(
+    r"^(?:what|which|who|where|when|how|can you|could you|would you|"
+    r"please (?:provide|tell|confirm|specify))\b|\?$",
+    re.IGNORECASE,
+)
+_FILESYSTEM_PERSISTENCE_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\bremove\b.+\bfrom\s+(?:/|the file\b|this file\b)",
+        r"\breplace\b.+\b(?:in|inside)\s+(?:/|it\b|them\b|the file\b)",
+        r"\breverse\s+the\s+sort\s+order\s+of\b",
+        r"\bchange\s+the\s+line\s+in\b",
+        r"\badd\s+a\s+line\s+to\b",
+    )
+)
+_FOOD_SIZE_WORDS = frozenset({
+    "small", "medium", "large", "xl", "xxl",
+})
+
+
+def _nested_strings(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        return [item for child in value.values() for item in _nested_strings(child)]
+    if isinstance(value, (list, tuple)) or hasattr(value, "tolist"):
+        raw = value.tolist() if hasattr(value, "tolist") else value
+        return [item for child in raw for item in _nested_strings(child)]
+    return [str(value)] if isinstance(value, str) else []
+
+
+def _action_dates(arguments: dict[str, Any]) -> list[str]:
+    found: list[str] = []
+
+    def visit(value: Any, field: str = "") -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                visit(child, str(key))
+            return
+        if isinstance(value, (list, tuple)) or hasattr(value, "tolist"):
+            raw = value.tolist() if hasattr(value, "tolist") else value
+            for child in raw:
+                visit(child, field)
+            return
+        if field in _ACTION_DATE_FIELDS:
+            found.extend(_ISO_DATE_RE.findall(str(value)))
+
+    visit(arguments)
+    return found
+
+
+def _round_terminal(round_trace: dict[str, Any]) -> str:
+    return next(
+        (
+            str(call.get("action") or "")
+            for call in reversed(_as_json_list(round_trace.get("oracle_calls", [])))
+            if isinstance(call, dict)
+            and str(call.get("action") or "tool_call") != "tool_call"
+        ),
+        "",
+    )
+
+
+def _deterministic_label_issue(extra: dict[str, Any]) -> str:
+    """Return a local, fact-provable GT label defect.
+
+    PROVE's public corpus gates remain replay, sensitive provenance, and
+    Jaccard deduplication.  These narrow checks quarantine only contradictions
+    that are directly visible in the persisted query/execution trace and would
+    otherwise make tool names or arguments incorrect RL ground truth.
+    """
+    domain = str(extra.get("domain") or "")
+    rounds = _as_json_list(extra.get("teacher_round_trace", []))
+    for round_pos, round_trace in enumerate(rounds):
+        if not isinstance(round_trace, dict):
+            continue
+        round_idx = int(round_trace.get("round_idx", round_pos))
+        query = str(
+            round_trace.get("user_query")
+            or round_trace.get("query")
+            or ""
+        )
+        query_normalized = " ".join(query.lower().split())
+        oracle_calls = [
+            call for call in _as_json_list(round_trace.get("oracle_calls", []))
+            if isinstance(call, dict)
+        ]
+        history = [
+            event for event in _as_json_list(
+                round_trace.get("execution_history", [])
+            )
+            if isinstance(event, dict)
+        ]
+        terminal = _round_terminal(round_trace)
+
+        mentioned_weekdays = {
+            (match.group(1) or match.group(2)).lower()
+            for match in _TARGET_WEEKDAY_RE.finditer(query)
+        }
+        all_weekdays = {
+            match.group(1).lower() for match in _ANY_WEEKDAY_RE.finditer(query)
+        }
+        if len(mentioned_weekdays) == 1 and len(all_weekdays) == 1:
+            expected_weekday = _WEEKDAY_INDEX[next(iter(mentioned_weekdays))]
+            for call in oracle_calls:
+                if str(call.get("action") or "tool_call") != "tool_call":
+                    continue
+                tool_name = str(call.get("tool_name") or "")
+                try:
+                    mutating = is_mutating_tool(tool_name, domain)
+                except ValueError:
+                    continue
+                if not mutating:
+                    continue
+                arguments = call.get("arguments") or {}
+                if not isinstance(arguments, dict):
+                    continue
+                for iso_date in _action_dates(arguments):
+                    try:
+                        actual_weekday = date.fromisoformat(iso_date).weekday()
+                    except ValueError:
+                        continue
+                    if actual_weekday != expected_weekday:
+                        return (
+                            "deterministic_label_quarantine:weekday_mismatch:"
+                            f"round={round_idx}:tool={tool_name}:date={iso_date}"
+                        )
+
+        if terminal == "ask_clarification":
+            for event in history:
+                if event.get("success") is not True or event.get("state_changed") is not True:
+                    continue
+                tool_name = str(event.get("tool_name") or "")
+                try:
+                    mutating = is_mutating_tool(tool_name, domain)
+                except ValueError:
+                    continue
+                if not mutating:
+                    continue
+                for value in _nested_strings(event.get("arguments") or {}):
+                    normalized_value = " ".join(value.lower().split())
+                    if (
+                        _QUESTION_VALUE_RE.search(value.strip())
+                        and normalized_value not in query_normalized
+                    ):
+                        return (
+                            "deterministic_label_quarantine:question_placeholder_"
+                            f"mutation:round={round_idx}:tool={tool_name}"
+                        )
+
+        if domain == "crm" and terminal in {"ask_clarification", "report_error"}:
+            existing_task = re.search(r"\btask[_-][a-z0-9]+\b", query, re.IGNORECASE)
+            update_intent = re.search(
+                r"\b(?:update|change|set|make|mark|assign|priority|due)\b",
+                query,
+                re.IGNORECASE,
+            )
+            create_intent = re.search(
+                r"\b(?:create|add|new)\b.{0,20}\btask\b",
+                query,
+                re.IGNORECASE,
+            )
+            created_task = any(
+                event.get("tool_name") == "create_task"
+                and event.get("success") is True
+                and event.get("state_changed") is True
+                for event in history
+            )
+            if existing_task and update_intent and not create_intent and created_task:
+                return (
+                    "deterministic_label_quarantine:create_as_update:"
+                    f"round={round_idx}:tool=create_task"
+                )
+
+        if domain == "filesystem" and terminal == "final_answer" and any(
+            pattern.search(query) for pattern in _FILESYSTEM_PERSISTENCE_PATTERNS
+        ):
+            successful = [event for event in history if event.get("success") is True]
+            if successful:
+                mutation_seen = False
+                semantics_known = True
+                for event in successful:
+                    try:
+                        mutation_seen = mutation_seen or is_mutating_tool(
+                            str(event.get("tool_name") or ""), domain,
+                        )
+                    except ValueError:
+                        semantics_known = False
+                        break
+                if semantics_known and not mutation_seen:
+                    return (
+                        "deterministic_label_quarantine:readonly_persistence:"
+                        f"round={round_idx}"
+                    )
+
+        if domain == "food_delivery" and terminal == "final_answer":
+            failed_orders = [
+                event for event in history
+                if event.get("tool_name") == "create_order"
+                and event.get("success") is False
+            ]
+            successful_orders = [
+                event for event in history
+                if event.get("tool_name") == "create_order"
+                and event.get("success") is True
+            ]
+            for failed in failed_orders:
+                failed_names = {
+                    " ".join(str(item.get("name") or "").lower().split())
+                    for item in (failed.get("arguments") or {}).get("items", [])
+                    if isinstance(item, dict)
+                }
+                for successful in successful_orders:
+                    successful_names = {
+                        " ".join(str(item.get("name") or "").lower().split())
+                        for item in (successful.get("arguments") or {}).get("items", [])
+                        if isinstance(item, dict)
+                    }
+                    for failed_name in failed_names:
+                        failed_tokens = set(re.findall(r"[a-z0-9]+", failed_name))
+                        explicit_sizes = failed_tokens & _FOOD_SIZE_WORDS
+                        if not explicit_sizes:
+                            continue
+                        if all(
+                            not explicit_sizes.issubset(
+                                set(re.findall(r"[a-z0-9]+", successful_name))
+                            )
+                            for successful_name in successful_names
+                        ):
+                            return (
+                                "deterministic_label_quarantine:food_size_"
+                                f"downgrade:round={round_idx}:tool=create_order"
+                            )
     return ""
 
 
@@ -261,6 +524,10 @@ def _quality_issue(row: pd.Series) -> str:
     failure_issue = _unresolved_failure_issue(extra)
     if failure_issue:
         return failure_issue
+
+    deterministic_issue = _deterministic_label_issue(extra)
+    if deterministic_issue:
+        return deterministic_issue
 
     # Rows generated before mutable email label templates were isolated can
     # contain state criteria for unrelated emails: add_label mutated every
@@ -828,6 +1095,49 @@ def _dedup_task_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return df.loc[keep].reset_index(drop=True), removed
 
 
+def _load_quarantined_task_ids(path: Path | None) -> set[str]:
+    if path is None:
+        return set()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    raw_samples: Any
+    if isinstance(payload, list):
+        raw_samples = payload
+    elif isinstance(payload, dict):
+        raw_samples = payload.get("samples", [])
+    else:
+        raise ValueError(f"invalid quarantine manifest root: {type(payload).__name__}")
+    if not isinstance(raw_samples, list):
+        raise ValueError("quarantine manifest samples must be a list")
+    task_ids: set[str] = set()
+    for index, sample in enumerate(raw_samples):
+        if isinstance(sample, str):
+            task_id = sample.strip()
+        elif isinstance(sample, dict):
+            task_id = str(sample.get("task_id") or "").strip()
+        else:
+            raise ValueError(
+                f"quarantine manifest samples[{index}] must be string or object"
+            )
+        if not task_id:
+            raise ValueError(f"quarantine manifest samples[{index}] has empty task_id")
+        if task_id in task_ids:
+            raise ValueError(f"duplicate quarantine task_id: {task_id}")
+        task_ids.add(task_id)
+    return task_ids
+
+
+def _drop_quarantined_tasks(
+    df: pd.DataFrame,
+    task_ids: set[str],
+) -> tuple[pd.DataFrame, int]:
+    if not task_ids or df.empty:
+        return df.reset_index(drop=True), 0
+    quarantined = df["extra_info"].map(
+        lambda value: str(_as_extra(value).get("task_id") or "") in task_ids
+    )
+    return df.loc[~quarantined].reset_index(drop=True), int(quarantined.sum())
+
+
 def _row_tool_sequence(row: pd.Series) -> list[str]:
     extra = _as_extra(row["extra_info"])
     primary_domain = str(extra.get("domain") or "")
@@ -879,6 +1189,7 @@ def merge_shards(
     deficits_output: Path | None = None,
     min_domain_train: int | None = None,
     min_domain_val: int | None = None,
+    quarantine_task_ids: set[str] | None = None,
 ) -> int:
     """Globally deduplicate candidates before final train/val truncation."""
     train_path = output_dir / "train.parquet"
@@ -893,6 +1204,9 @@ def merge_shards(
         return 1
 
     pool = pd.concat([train_candidates, val_candidates], ignore_index=True)
+    pool, quarantine_removed = _drop_quarantined_tasks(
+        pool, quarantine_task_ids or set(),
+    )
     pool, tid_removed = _dedup_task_ids(pool)
     if pool.empty:
         if domains:
@@ -915,6 +1229,7 @@ def merge_shards(
                 ),
             }
         deficit_report.update({
+            "quarantine_removed": quarantine_removed,
             "task_id_removed": tid_removed,
             "exact_removed": 0,
             "jaccard_removed": 0,
@@ -975,6 +1290,7 @@ def merge_shards(
             "deficits": {"__all__": required - len(pool)} if len(pool) < required else {},
         }
     deficit_report.update({
+        "quarantine_removed": quarantine_removed,
         "task_id_removed": tid_removed,
         "exact_removed": exact_removed,
         "jaccard_removed": jaccard_removed,
@@ -985,7 +1301,8 @@ def merge_shards(
     if len(pool) < required:
         print(
             f"  FATAL: global unique candidates={len(pool)}, need {required} "
-            f"(task_id_removed={tid_removed}, exact_removed={exact_removed}, "
+            f"(quarantine_removed={quarantine_removed}, "
+            f"task_id_removed={tid_removed}, exact_removed={exact_removed}, "
             f"jaccard_removed={jaccard_removed})"
         )
         return 1
@@ -1010,6 +1327,7 @@ def merge_shards(
     print(f"  {val_path}: {len(val_df)} rows (target={val_count})")
     print(
         f"  merge ok: {len(train_df)} train + {len(val_df)} val, "
+        f"quarantine_removed={quarantine_removed}, "
         f"task_id_removed={tid_removed}, exact_removed={exact_removed}, "
         f"jaccard_removed={jaccard_removed}"
     )
@@ -1026,6 +1344,7 @@ def main() -> int:
     parser.add_argument("--deficits-output")
     parser.add_argument("--min-domain-train", type=int)
     parser.add_argument("--min-domain-val", type=int)
+    parser.add_argument("--quarantine-task-ids", type=Path)
     args = parser.parse_args()
 
     domains = (
@@ -1044,6 +1363,7 @@ def main() -> int:
         deficits_output=Path(args.deficits_output) if args.deficits_output else None,
         min_domain_train=args.min_domain_train,
         min_domain_val=args.min_domain_val,
+        quarantine_task_ids=_load_quarantined_task_ids(args.quarantine_task_ids),
     )
 
 
