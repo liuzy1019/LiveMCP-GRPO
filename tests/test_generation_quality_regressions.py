@@ -34,6 +34,7 @@ from scripts.merge_generation_shards import (
     _capacity_weighted_domain_quotas, _dedup_jaccard,
     _deterministic_label_issue,
     _drop_quarantined_tasks, _load_quarantined_task_ids,
+    _availability_constrained_split_quotas,
     _domain_unique_chain_capacity, _frozen_allocation_capacity,
     _quality_issue, _row_fingerprint,
     _initial_query_key, _isolate_initial_queries, _suggest_topup_count,
@@ -2111,6 +2112,38 @@ def test_capacity_weighted_quota_keeps_floor_and_uses_unique_chains() -> None:
     ) == {"calendar": 1, "filesystem": 3}
 
 
+def test_availability_constrained_quotas_reassign_only_above_floors() -> None:
+    train, val, changed = _availability_constrained_split_quotas(
+        4,
+        2,
+        ["calendar", "filesystem"],
+        {"calendar": 3, "filesystem": 1},
+        {"calendar": 3, "filesystem": 3},
+        {"calendar": 3, "filesystem": 1},
+        {"calendar": 1, "filesystem": 1},
+    )
+    assert changed is True
+    assert train == {"calendar": 2, "filesystem": 2}
+    assert val == {"calendar": 1, "filesystem": 1}
+
+
+def test_availability_constrained_quotas_fail_closed_below_floor() -> None:
+    original_train = {"calendar": 3, "filesystem": 1}
+    original_val = {"calendar": 1, "filesystem": 1}
+    train, val, changed = _availability_constrained_split_quotas(
+        4,
+        2,
+        ["calendar", "filesystem"],
+        {"calendar": 3, "filesystem": 1},
+        {"calendar": 5, "filesystem": 1},
+        original_train,
+        original_val,
+    )
+    assert changed is False
+    assert train == original_train
+    assert val == original_val
+
+
 def test_topup_reuses_first_merge_allocation_capacity(tmp_path: Path) -> None:
     report = tmp_path / "merge_deficits.json"
     report.write_text(json.dumps({
@@ -2165,6 +2198,49 @@ def test_global_merge_uses_capacity_weighted_final_distribution(
     ).value_counts().to_dict() == {"calendar": 1, "filesystem": 1}
 
 
+def test_global_merge_rebalances_unavailable_exact_quota(tmp_path: Path) -> None:
+    shard_dir = tmp_path / "shards"
+    output_dir = tmp_path / "out"
+    shard_dir.mkdir()
+    rows = []
+    for domain in ("calendar", "filesystem"):
+        for index in range(3):
+            row = _row(f"{domain}-{index}", f"{domain}-{index}", domain)
+            row["extra_info"]["source_chain_seed"] = (
+                ["list_events", "get_event", str(index)]
+                if domain == "calendar"
+                else ["find", "cat", str(index)]
+            )
+            rows.append(row)
+    pd.DataFrame(rows[:3]).to_parquet(
+        shard_dir / "shard_0_train.parquet", index=False,
+    )
+    pd.DataFrame(rows[3:]).to_parquet(
+        shard_dir / "shard_0_val.parquet", index=False,
+    )
+    deficits_path = tmp_path / "deficits.json"
+    deficits_path.write_text(json.dumps({
+        "allocation_capacity_by_domain": {
+            "calendar": 3, "filesystem": 1,
+        },
+    }))
+
+    assert merge_shards(
+        shard_dir,
+        output_dir,
+        count=4,
+        val_count=2,
+        domains=["calendar", "filesystem"],
+        deficits_output=deficits_path,
+    ) == 0
+    report = json.loads(deficits_path.read_text())
+    assert report["quota_rebalanced"] is True
+    assert report["deficits"] == {}
+    assert report["required_by_domain"] == {
+        "calendar": 3, "filesystem": 3,
+    }
+
+
 def test_global_merge_fails_when_one_domain_cannot_meet_quota(tmp_path: Path) -> None:
     shard_dir = tmp_path / "shards"
     output_dir = tmp_path / "out"
@@ -2212,6 +2288,33 @@ def test_global_merge_reports_retention_aware_topup_size(tmp_path: Path) -> None
     assert report["candidate_by_domain"] == {"calendar": 2}
     assert report["jaccard_retention_by_domain"] == {"calendar": 1.0}
     assert report["suggested_topup_by_domain"] == {"calendar": 3}
+
+
+def test_global_merge_fails_fast_on_uniform_environment_incompatibility(
+    tmp_path: Path,
+) -> None:
+    shard_dir = tmp_path / "shards"
+    output_dir = tmp_path / "out"
+    shard_dir.mkdir()
+    rows = [_row(f"calendar-{index}", f"calendar-{index}", "calendar") for index in range(2)]
+    for row in rows:
+        row["extra_info"]["reward_fingerprint"] = "stale-reward"
+    pd.DataFrame(rows).to_parquet(
+        shard_dir / "shard_0_train.parquet", index=False,
+    )
+    pd.DataFrame([]).to_parquet(
+        shard_dir / "shard_0_val.parquet", index=False,
+    )
+
+    deficits_path = tmp_path / "deficits.json"
+    assert merge_shards(
+        shard_dir, output_dir, count=2, val_count=0,
+        domains=["calendar"], deficits_output=deficits_path,
+    ) == 2
+    report = json.loads(deficits_path.read_text())
+    assert report["deficits"] == {}
+    assert report["suggested_topup_by_domain"] == {}
+    assert sum(report["fatal_integrity_errors"].values()) == 2
 
 
 def test_topup_size_scales_with_observed_jaccard_retention() -> None:
@@ -4220,6 +4323,13 @@ def test_launcher_does_not_spawn_zero_quota_shards() -> None:
     assert source.count('if [ $((SHARD_TRAIN + SHARD_VAL)) -eq 0 ]; then') == 2
     assert 'Waiting for ${ACTIVE_GEN_CLIENTS} active generation processes...' in source
     assert 'ERROR: ${FAILED}/${ACTIVE_GEN_CLIENTS} active generation processes failed' in source
+
+
+def test_launcher_can_resume_preserved_candidates_without_regenerating_base() -> None:
+    source = Path("scripts/generate_data.sh").read_text()
+    assert 'GENERATION_RESUME_CANDIDATE_DIR="${GENERATION_RESUME_CANDIDATE_DIR:-}"' in source
+    assert "Resuming global merge/top-up from preserved candidates" in source
+    assert 'if [ -z "${GENERATION_RESUME_CANDIDATE_DIR}" ]; then' in source
 
 
 def test_enum_stripping_removes_nested_enums() -> None:

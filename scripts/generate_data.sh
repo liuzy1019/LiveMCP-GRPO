@@ -16,6 +16,7 @@
 #   OUTPUT_DIR=data  GPU_COUNT=8  VLLM_PORT_START=8001
 #   VLLM_CLIENTS_PER_INSTANCE=4  VLLM_MAX_NUM_SEQS=16
 #   GENERATION_WORKERS_PER_PROCESS=2  DEPENDENCY_CACHE_PREWARM=1
+#   GENERATION_RESUME_CANDIDATE_DIR=data/runs/<run>/candidates
 
 set -euo pipefail
 
@@ -87,6 +88,7 @@ SEED=42
 OUTPUT_DIR="${OUTPUT_DIR:-data}"
 GEN_OVERSAMPLE_PCT="${GEN_OVERSAMPLE_PCT:-10}"  # 10% oversample; set GEN_OVERSAMPLE_PCT env var to override
 RUN_ID="${RUN_ID:-$(date +%m%d_%H%M)}"
+GENERATION_RESUME_CANDIDATE_DIR="${GENERATION_RESUME_CANDIDATE_DIR:-}"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -276,6 +278,18 @@ merge_vllm_with_topups() {
             echo "ERROR: global merge still has deficits after ${topup_round} top-up round(s)" >&2
             return 1
         fi
+        local fatal_integrity
+        fatal_integrity=$("${PYTHON_BIN}" -c '
+import json, sys
+report = json.load(open(sys.argv[1], encoding="utf-8"))
+errors = report.get("fatal_integrity_errors", {})
+if errors:
+    print(json.dumps(errors, sort_keys=True))
+' "${deficits_path}")
+        if [ -n "${fatal_integrity}" ]; then
+            echo "ERROR: global merge found non-recoverable integrity errors; refusing top-up: ${fatal_integrity}" >&2
+            return 2
+        fi
         topup_round=$((topup_round + 1))
         local -a topup_deficits=()
         mapfile -t topup_deficits < <("${PYTHON_BIN}" -c '
@@ -376,6 +390,10 @@ export OVAL_SUITE_PATH="${SUITE}"
     REM_GPU_TRAIN=$(( GEN_COUNT % GPU_COUNT ))
     BASE_GPU_VAL=$(( GEN_VAL_COUNT / GPU_COUNT ))
     REM_GPU_VAL=$(( GEN_VAL_COUNT % GPU_COUNT ))
+    if [ -n "${GENERATION_RESUME_CANDIDATE_DIR}" ]; then
+        echo "ERROR: preserved-candidate resume currently requires the vLLM API generation path" >&2
+        exit 1
+    fi
     TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
     mkdir -p "${TMPDIR_SHARD}"
 
@@ -552,7 +570,15 @@ print(tp)
     REM_CLIENT_TRAIN=$(( GEN_COUNT % TOTAL_GEN_CLIENTS ))
     BASE_CLIENT_VAL=$(( GEN_VAL_COUNT / TOTAL_GEN_CLIENTS ))
     REM_CLIENT_VAL=$(( GEN_VAL_COUNT % TOTAL_GEN_CLIENTS ))
-    TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
+    if [ -n "${GENERATION_RESUME_CANDIDATE_DIR}" ]; then
+        if [ ! -d "${GENERATION_RESUME_CANDIDATE_DIR}" ]; then
+            echo "ERROR: resume candidate directory not found: ${GENERATION_RESUME_CANDIDATE_DIR}" >&2
+            exit 1
+        fi
+        TMPDIR_SHARD="$(cd "${GENERATION_RESUME_CANDIDATE_DIR}" && pwd)"
+    else
+        TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
+    fi
     mkdir -p "${TMPDIR_SHARD}"
 
     # Start vLLM instances
@@ -662,61 +688,68 @@ print(tp)
             --suite "${SUITE}"
     fi
 
-    # Generate
-    echo ""
-    echo "Generating data (${NUM_INSTANCES} instance(s) in parallel)..."
+    if [ -n "${GENERATION_RESUME_CANDIDATE_DIR}" ]; then
+        echo ""
+        echo "Resuming global merge/top-up from preserved candidates: ${TMPDIR_SHARD}"
+    else
+        # Generate the initial candidate shards.
+        echo ""
+        echo "Generating data (${NUM_INSTANCES} instance(s) in parallel)..."
 
-    GEN_PIDS=()
-    for ((inst=0; inst<NUM_INSTANCES; inst++)); do
-        PORT=$(( PORT_START + inst ))
-        for ((client=0; client<VLLM_CLIENTS_PER_INSTANCE; client++)); do
-            CLIENT_ID=$(( inst * VLLM_CLIENTS_PER_INSTANCE + client ))
-            SHARD_SEED=$((SEED + CLIENT_ID * GENERATION_CLIENT_SEED_STRIDE))
-            SHARD_TRAIN=$(( BASE_CLIENT_TRAIN + (CLIENT_ID < REM_CLIENT_TRAIN ? 1 : 0) ))
-            SHARD_VAL=$(( BASE_CLIENT_VAL + (CLIENT_ID < REM_CLIENT_VAL ? 1 : 0) ))
+        GEN_PIDS=()
+        for ((inst=0; inst<NUM_INSTANCES; inst++)); do
+            PORT=$(( PORT_START + inst ))
+            for ((client=0; client<VLLM_CLIENTS_PER_INSTANCE; client++)); do
+                CLIENT_ID=$(( inst * VLLM_CLIENTS_PER_INSTANCE + client ))
+                SHARD_SEED=$((SEED + CLIENT_ID * GENERATION_CLIENT_SEED_STRIDE))
+                SHARD_TRAIN=$(( BASE_CLIENT_TRAIN + (CLIENT_ID < REM_CLIENT_TRAIN ? 1 : 0) ))
+                SHARD_VAL=$(( BASE_CLIENT_VAL + (CLIENT_ID < REM_CLIENT_VAL ? 1 : 0) ))
 
-            echo "  Instance ${inst}/client ${client}: train=${SHARD_TRAIN}, val=${SHARD_VAL}, seed=${SHARD_SEED}"
+                echo "  Instance ${inst}/client ${client}: train=${SHARD_TRAIN}, val=${SHARD_VAL}, seed=${SHARD_SEED}"
 
-            if [ $((SHARD_TRAIN + SHARD_VAL)) -eq 0 ]; then
-                echo "  Instance ${inst}/client ${client}: skipped (zero quota)"
-                continue
-            fi
+                if [ $((SHARD_TRAIN + SHARD_VAL)) -eq 0 ]; then
+                    echo "  Instance ${inst}/client ${client}: skipped (zero quota)"
+                    continue
+                fi
 
-            "${PYTHON_BIN}" scripts/generate_data.py \
-                --count "${SHARD_TRAIN}" \
-                --val-count "${SHARD_VAL}" \
-                --seed "${SHARD_SEED}" \
-                --domain "${DOMAIN}" \
-                --model "${SERVED_MODEL}" \
-                --api-base "http://localhost:${PORT}/v1" \
-                --suite "${SUITE}" \
-                --shard-mode \
-                --pool-oversample-pct 0 \
-                --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
-                --checkpoint-path "${TMPDIR_SHARD}/shard_${inst}_${client}_checkpoint.json" \
-                --output "${TMPDIR_SHARD}/shard_${inst}_${client}_train.parquet" \
-                --val-output "${TMPDIR_SHARD}/shard_${inst}_${client}_val.parquet" \
-                --log-file "${TMPDIR_SHARD}/shard_${inst}_${client}.log" \
-                > "${TMPDIR_SHARD}/shard_${inst}_${client}.stdout" 2>&1 &
-            GEN_PIDS+=($!)
+                "${PYTHON_BIN}" scripts/generate_data.py \
+                    --count "${SHARD_TRAIN}" \
+                    --val-count "${SHARD_VAL}" \
+                    --seed "${SHARD_SEED}" \
+                    --domain "${DOMAIN}" \
+                    --model "${SERVED_MODEL}" \
+                    --api-base "http://localhost:${PORT}/v1" \
+                    --suite "${SUITE}" \
+                    --shard-mode \
+                    --pool-oversample-pct 0 \
+                    --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
+                    --checkpoint-path "${TMPDIR_SHARD}/shard_${inst}_${client}_checkpoint.json" \
+                    --output "${TMPDIR_SHARD}/shard_${inst}_${client}_train.parquet" \
+                    --val-output "${TMPDIR_SHARD}/shard_${inst}_${client}_val.parquet" \
+                    --log-file "${TMPDIR_SHARD}/shard_${inst}_${client}.log" \
+                    > "${TMPDIR_SHARD}/shard_${inst}_${client}.stdout" 2>&1 &
+                GEN_PIDS+=($!)
+            done
         done
-    done
 
-    echo ""
-    ACTIVE_GEN_CLIENTS=${#GEN_PIDS[@]}
-    echo "Waiting for ${ACTIVE_GEN_CLIENTS} active generation processes..."
-    FAILED=0
-    for i in "${!GEN_PIDS[@]}"; do
-        wait "${GEN_PIDS[$i]}" || { echo "  [Instance $i] FAILED" >&2; FAILED=$((FAILED + 1)); }
-    done
+        echo ""
+        ACTIVE_GEN_CLIENTS=${#GEN_PIDS[@]}
+        echo "Waiting for ${ACTIVE_GEN_CLIENTS} active generation processes..."
+        FAILED=0
+        for i in "${!GEN_PIDS[@]}"; do
+            wait "${GEN_PIDS[$i]}" || { echo "  [Instance $i] FAILED" >&2; FAILED=$((FAILED + 1)); }
+        done
 
-    if [ "$FAILED" -gt 0 ]; then
-        echo "ERROR: ${FAILED}/${ACTIVE_GEN_CLIENTS} active generation processes failed" >&2
-        exit 1
+        if [ "$FAILED" -gt 0 ]; then
+            echo "ERROR: ${FAILED}/${ACTIVE_GEN_CLIENTS} active generation processes failed" >&2
+            exit 1
+        fi
     fi
 
     merge_vllm_with_topups
-    rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
+    if [ -z "${GENERATION_RESUME_CANDIDATE_DIR}" ]; then
+        rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
+    fi
 fi
 
 # ── Update symlinks & print stats ──────────────────────────────────

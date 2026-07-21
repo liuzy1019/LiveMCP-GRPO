@@ -3,29 +3,24 @@
 Supports three backends:
 - local:  transformers pipeline on a single device (default: cuda:0)
 - openai: OpenAI-compatible API (vLLM server or external)
-- local_pool: multi-process data-parallel across GPUs (for batch generation)
 
 Multi-GPU modes:
 1. Tensor Parallel (TP) — vLLM server with --tensor-parallel-size N
    → use mode="openai", api_base="http://localhost:8000/v1"
-2. Data Parallel (DP) — N independent model copies on N GPUs
-   → use LLMClientPool(mode="local_dp", gpu_ids=[0,1,2,3])
-3. Device assignment — pin local mode to a specific GPU
+2. Device assignment — pin local mode to a specific GPU
    → use LLMClient(mode="local", device=2)
 """
 
 from __future__ import annotations
 
-import json
 import os
 import threading
 import re
-import multiprocessing as mp
 from typing import Any
 
 from loguru import logger
 
-from src.utils import extract_json, strip_think_tags
+from src.utils import extract_json
 
 
 _CONTEXT_LENGTH_ERROR_RE = re.compile(
@@ -60,13 +55,6 @@ def _remaining_context_output_budget(
 
 # Lazy imports to avoid hard dependency on model packages
 _HAS_TRANSFORMERS = False
-_HAS_TORCH = False
-try:
-    import torch  # noqa: F401
-    _HAS_TORCH = True
-except ImportError:
-    pass
-
 try:
     from transformers import pipeline  # noqa: F401
     _HAS_TRANSFORMERS = True
@@ -265,164 +253,3 @@ class LLMClient:
         from src.utils import strip_think_tags
         text = strip_think_tags(result[0]["generated_text"])
         return text
-
-
-class LLMClientPool:
-    """Data-parallel inference pool across multiple GPUs.
-
-    Each GPU runs an independent model copy. Tasks are distributed
-    via multiprocessing.Queue. Use when you have many tasks to generate
-    and want to saturate all GPUs.
-
-    Usage:
-        pool = LLMClientPool(
-            model_path="models/Qwen/Qwen3-8B",
-            gpu_ids=[0, 1, 2, 3],   # or "auto" to use CUDA_VISIBLE_DEVICES
-        )
-        results = pool.generate_batch(prompts=["prompt1", "prompt2", ...])
-        pool.shutdown()
-    """
-
-    def __init__(
-        self,
-        model_path: str,
-        gpu_ids: list[int] | str = "auto",
-        temperature: float = 0.7,
-        max_tokens: int = 1024,
-    ):
-        self.model_path = model_path
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-
-        if gpu_ids == "auto":
-            n_gpus = int(os.environ.get("GPU_COUNT", torch.cuda.device_count()))
-            visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-            if visible:
-                gpu_ids = [int(x) for x in visible.split(",")]
-            else:
-                gpu_ids = list(range(n_gpus))
-
-        if not gpu_ids:
-            raise ValueError("No GPUs available for LLMClientPool")
-
-        self.gpu_ids = gpu_ids
-        logger.info(f"LLMClientPool: {len(gpu_ids)} GPUs → {gpu_ids}")
-
-    def generate_batch(
-        self,
-        prompts: list[str],
-        batch_size: int | None = None,
-    ) -> list[str]:
-        """Generate responses for a list of prompts using all GPUs in parallel.
-
-        Args:
-            prompts: List of prompt strings
-            batch_size: Chunks per GPU (auto-computed if None)
-
-        Returns:
-            List of generated responses in the same order as prompts
-        """
-        if not prompts:
-            return []
-
-        n_gpus = len(self.gpu_ids)
-        if batch_size is None:
-            # Split evenly across GPUs
-            batch_size = max(1, len(prompts) // n_gpus)
-
-        # Split prompts into chunks for each GPU
-        chunks = [prompts[i::n_gpus] for i in range(n_gpus)]
-
-        # Launch one worker per GPU
-        ctx = mp.get_context("spawn")
-        manager = ctx.Manager()
-        result_queue = manager.Queue()
-
-        workers = []
-        for gpu_idx, chunk in enumerate(chunks):
-            if not chunk:
-                continue
-            p = ctx.Process(
-                target=_gpu_worker,
-                args=(
-                    gpu_idx, self.gpu_ids[gpu_idx], self.model_path,
-                    chunk, self.temperature, self.max_tokens, result_queue,
-                    n_gpus,
-                ),
-            )
-            p.start()
-            workers.append(p)
-
-        # Collect results
-        results: dict[int, str] = {}
-        for _ in range(len(prompts)):
-            idx, text = result_queue.get()
-            results[idx] = text
-
-        for p in workers:
-            p.join()
-
-        # Reconstruct original order
-        return [results[i] for i in range(len(prompts))]
-
-    def shutdown(self):
-        """No-op for now; workers are cleaned up after each generate_batch call."""
-        pass
-
-
-def _gpu_worker(
-    gpu_idx: int,
-    device_id: int,
-    model_path: str,
-    prompts: list[str],
-    temperature: float,
-    max_tokens: int,
-    result_queue: mp.Queue,
-    n_gpus: int,
-) -> None:
-    """Worker function that loads model on one GPU and processes prompts."""
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(device_id)
-    # Re-import after CUDA_VISIBLE_DEVICES is set
-    import torch
-    from transformers import pipeline, AutoTokenizer
-
-    logger.info(f"[GPU {device_id}] Loading model: {model_path}")
-    pipe = pipeline(
-        "text-generation",
-        model=model_path,
-        trust_remote_code=True,
-        device_map={"": "cuda:0"},  # CUDA_VISIBLE_DEVICES remaps → always cuda:0 in child
-        torch_dtype=torch.bfloat16,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-
-    for i, prompt in enumerate(prompts):
-        # prompts are interleaved: chunk[gpu_idx][i] = all_prompts[gpu_idx + i * n_gpus]
-        global_idx = gpu_idx + i * n_gpus
-        try:
-            if tokenizer.chat_template:
-                formatted = tokenizer.apply_chat_template(
-                    [{"role": "user", "content": prompt}],
-                    tokenize=False, add_generation_prompt=True,
-                    enable_thinking=False,
-                )
-            else:
-                formatted = prompt
-
-            result = pipe(
-                formatted,
-                max_new_tokens=max_tokens,
-                temperature=temperature,
-                do_sample=temperature > 0,
-                top_p=0.95,
-                return_full_text=False,
-            )
-            text = strip_think_tags(result[0]["generated_text"])
-            logger.debug(f"[GPU {device_id}] {i}/{len(prompts)} done")
-        except Exception as e:
-            logger.error(f"[GPU {device_id}] Error on prompt {i}: {e}")
-            text = ""
-
-        result_queue.put((global_idx, text))
-
-    logger.info(f"[GPU {device_id}] Done ({len(prompts)} prompts)")

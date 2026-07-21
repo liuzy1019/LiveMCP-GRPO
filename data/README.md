@@ -12,6 +12,10 @@ data/
 │   └── {domain}_{hash}.json        # 单个 domain 的拓扑依赖图
 ├── runs/                           # 每次生成的带版本子目录（gitignored）
 │   └── {MMDD_HHMM}/                # 单次生成目录，命名与日志一致
+│       ├── candidates/              # 未完成 run 的可恢复 shard 候选（仅在补采期间保留）
+│       ├── survivor_pool.parquet    # 未达目标时固化的全局过滤 survivor
+│       ├── merge_report.partial.json# 未达目标时的缺额/保留率报告
+│       ├── survivor_manifest.json   # survivor、来源 shard 与环境身份
 │       ├── train.parquet
 │       └── val.parquet
 ├── train.parquet -> runs/{MMDD_HHMM}/train.parquet   # 完整 run 验收后建立
@@ -23,7 +27,9 @@ data/
 
 - `runs/{MMDD_HHMM}/` — 与 `logs/{MMDD_HHMM}_gen_{N}.log` 时间戳对应，方便追溯
 - `data/train.parquet` 和 `data/val.parquet` 只在 train/val 均完整产出并通过生成门禁后更新；失败或零验证集 smoke 不得覆盖入口
-- 每次正式生成使用独立 run 目录；只保留需要训练或复核的当前 run
+- 每次正式生成使用独立 run 目录；只保留需要训练、联合合并或复核的 run
+- 未完成 run 不得把 `survivor_pool.parquet` 冒充正式 train/val；恢复补采时从保存的
+  `candidates/` 重新执行同一全局过滤，最终成功后再写 train/val
 - vLLM 运行日志写到 `logs/`，生成成功后自动删除；失败时保留用于排查
 
 ---
@@ -36,10 +42,21 @@ data/
 ### 当前验收状态
 
 当前轨迹合同为 `live-mcp-canonical-replay-trajectory-v1`。十域 strict dependency cache
-均匹配当前 schema、Teacher 与 classifier contract。旧 Parquet 已清理，当前没有可训练数据。
-重新生成后的每行必须同时通过生产 parser、Teacher/attempt replay、canonical replay、
-环境 metadata 与公开 corpus hard gates；结构门禁仍不替代自然语言语义审查。生成后使用
-`python scripts/audit_generated_data.py <train.parquet> <val.parquet>` 逐行复核。
+均匹配当前 schema、Teacher 与 classifier contract。`data/runs/0717_mcpfix_1000_200/` 中保留
+920 train + 200 val 当前合同候选；`audit_generated_data.py` 对两份 Parquet 的 diagnostics 均为空，
+merge report 记录 global pool 1,178、Jaccard 移除 1,111、人工 quarantine 移除 7、最终 quota
+无 deficit。该批次未达到最初 1,000 train 目标，因此没有建立 `data/train.parquet` 和
+`data/val.parquet` 活动符号链接。
+
+第二轮 `0720_mcpfix_round2_1000_200_topup` 已从保存的候选完成补采和最终 merge，形成 1,000
+train + 200 val；最终 pool 为 1,200 条全局 Jaccard-unique 数据，两份 Parquet 的逐行生产合同
+审计 diagnostics 均为空。calendar/CRM 合计 7 条不可实现的冻结权重精确配额在各域最低覆盖
+满足后由其他域合格余量吸收，没有放宽 replay、provenance 或 Jaccard 门槛。该 run 已独立保存，
+但尚未发布活动 symlink。独立 seed 的 `0721_mcpfix_round3_1000_200` 正在生成；完成后必须把
+两轮候选放入同一个 global merge，重新执行跨 run task-id/exact/Jaccard 去重、确定性与人工
+隔离、split 隔离和逐行自然语言/工具逻辑复核，不能简单拼接两个已选 split。只有联合结果通过
+生产 parser、Teacher/attempt replay、canonical replay、环境 metadata 与公开 corpus hard gates
+后才发布活动训练入口。结构门禁仍不替代自然语言语义审查。
 
 ### Step 1 — 自动发现依赖图（Auto-Discovered Dependency Graph）
 
@@ -209,9 +226,18 @@ irrelevance:
   2. Clarification / abstention trajectories — missing-function 与 irrelevance 变体
 ```
 
-**生成策略**：全局只计算一次候选预算；shard 子进程不重复增加固定 oversample floor。初始 candidate sampling 可均匀探索十域，但这不是最终 corpus 的均匀分配要求。Global merge 对每域保留最低 train/val 覆盖，剩余名额按通过 live-state feasibility 且对 dependency-chain sequence 做位置感知 Jaccard 0.70 去重后的容量加权分配；首次 global merge 的 allocation capacity 在同一 run 的 deficit report 中冻结，后续 top-up 只更新观测容量和缺口，不移动最终配额。`generate_many` 按 candidate domain 增量提交任务，达到本轮探索 quota 后停止创建新 future；不足时 recovery 只补最终加权配额的缺口，经 replay、provenance、Jaccard 去重和训练合约过滤后取精确 N 条。recovery 默认最多 3 轮；可通过 `--max-recovery-rounds` 显式调整，但该值属于本地工程产出参数并须记录到实验配置，不能表述为 PROVE 公开算法参数。长任务应指定 `--checkpoint-path`：每轮完成后原子保存候选 `LiveTask`、下一轮缺口请求和配置指纹；用相同配置重启时只补剩余 domain，不重复首轮。
+**十域规模目标**：PROVE 的 20 环境训练集包含 12,395 条原生 MCP/clarification 数据和
+1,122 条外部 abstention 数据。当前十域不导入外部数据，正式第一版以约 **6,200 train +
+500--600 val** 为目标；`(10,895 + 1,500) * 10 / 20 ~= 6,200` 只是本地容量基准，不是
+论文公开的缩放规则。当前多轮 1,000+200 run 在跨 run 全局过滤与审计后先形成训练 smoke pool，
+通过 Policy rollout/reward/显存验证后再以不同 seed 增量补产。任何阶段都不能为达到目标数量而
+降低 replay、sensitive provenance 或 Jaccard 0.70 门槛；容量不足时扩展环境/工具/依赖链。
+严格论文节奏的首版训练使用 batch size 16、350 steps；若使用项目默认 batch size 32，必须记录
+训练行会被重复抽样，不能把它表述成 PROVE 的原始数据消费配置。
 
-Teacher JSON stage 使用独立输出预算，避免短 JSON 响应按通用 1024-token 上限占用 vLLM KV cache。action loop 对完全重复且无状态变化的调用只注入 no-progress 反馈，后续替代动作或 terminal 仍必须由 Teacher 产生。multi-shard merge 会输出逐域 deficit、Jaccard 前候选数、实际保留率和建议补样数；launcher 保留已生成 shard，只为缺口 domain 追加 top-up shard，再重新执行全局 Jaccard 与 train/val split。建议补样数按该域累计保留率反推并增加 20% 有限裕量，再在现有 generation client 槽位内均匀切片，避免单个 deficit domain 串行占满整个补量阶段；这些设置只影响生成预算和调度，不放宽 replay、provenance 或 Jaccard 门槛。
+**生成策略**：全局只计算一次候选预算；shard 子进程不重复增加固定 oversample floor。初始 candidate sampling 可均匀探索十域，但这不是最终 corpus 的均匀分配要求。Global merge 对每域保留最低 train/val 覆盖，剩余名额按通过 live-state feasibility 且对 dependency-chain sequence 做位置感知 Jaccard 0.70 去重后的容量加权分配；首次 global merge 的 allocation capacity 权重在同一 run 的 deficit report 中冻结，后续 top-up 不重算权重。冻结权重只稳定分配基准，不把逐域精确条数升级为 hard gate：全局合格总量达到目标且最低覆盖可满足时，最终 merge 可把不可实现的少量域配额重分配给仍有合格余量的域。`generate_many` 按 candidate domain 增量提交任务，达到本轮探索 quota 后停止创建新 future；不足时 recovery 只补尚不能由合格余量吸收的缺口，经 replay、provenance、Jaccard 去重和训练合约过滤后取精确 N 条。recovery 默认最多 3 轮；可通过 `--max-recovery-rounds` 显式调整，但该值属于本地工程产出参数并须记录到实验配置，不能表述为 PROVE 公开算法参数。长任务应指定 `--checkpoint-path`：每轮完成后原子保存候选 `LiveTask`、下一轮缺口请求和配置指纹；用相同配置重启时只补剩余 domain，不重复首轮。
+
+Teacher JSON stage 使用独立输出预算，避免短 JSON 响应按通用 1024-token 上限占用 vLLM KV cache。action loop 对完全重复且无状态变化的调用只注入 no-progress 反馈，后续替代动作或 terminal 仍必须由 Teacher 产生。multi-shard merge 会输出逐域 deficit、Jaccard 前候选数、实际保留率和建议补样数；launcher 保留已生成 shard，只为缺口 domain 追加 top-up shard，再重新执行全局 Jaccard 与 train/val split。建议补样数按该域累计保留率反推并增加 20% 有限裕量，再在现有 generation client 槽位内均匀切片，避免单个 deficit domain 串行占满整个补量阶段；这些设置只影响生成预算和调度，不放宽 replay、provenance 或 Jaccard 门槛。若非空 shard split 的全部候选被同一种 environment contract incompatibility 拒绝，merge 把它记录为 `fatal_integrity_errors` 并停止；launcher 不得把这种代码/数据身份失配转换成 top-up 缺额。
 
 多 shard 边界：`--shard-mode` 子进程只保证输出通过 replay 与训练结构合同的 eligible 候选，不执行 shard-local Jaccard，也不要求每个 shard 独立满足十域比例。子进程按 eligible 行数恢复局部生成短缺；所有 shard 汇总后，global merge 才执行跨 shard Jaccard 0.70、最低域覆盖 + unique-chain 容量加权的 train/val quota 与 split 隔离。最终 split 将全域规范化后的相同首轮 user query 绑定到同一 split，同时保持计算出的逐域 train/val quota，防止跨 domain 的 irrelevant/query 模板泄漏；该分组不删除候选、不改变 PROVE corpus gate。Top-up 的部分有效结果必须保留并交给下一次 global merge，只有全局 top-up 轮次耗尽后仍存在 domain 缺口才 fail-closed。
 

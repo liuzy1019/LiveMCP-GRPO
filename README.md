@@ -7,6 +7,18 @@
 > **基于 PROVE 框架的多步 MCP 工具调用 GRPO 训练**：状态机数据合成 + 实时执行验证 + 多组件可编程奖励。
 > 当前覆盖 **10 个 MCP domain、190 个工具**，在 session-scoped state isolation 下做 live-execution RL。
 
+## 当前状态（2026-07-20）
+
+| 范围 | 状态 | 已核实事实 |
+|------|------|------------|
+| 代码与环境合同 | 已验证 | ARL 环境下全量测试 278 passed；10 域 190 个工具、其中 103 个 mutating tools 的语义审计无失败 |
+| Teacher 数据 | 联合验收中 | `0720_mcpfix_round2_1000_200_topup` 已形成 1,000 train + 200 val，逐行生产合同审计无诊断；独立 seed 的 `0721_mcpfix_round3_1000_200` 正在生成，完成后再做跨 run 全局过滤与语义复核 |
+| 默认训练入口 | 未发布 | `data/train.parquet` 与 `data/val.parquet` 尚未建立；必须等待跨 run 全局去重、隔离和逐行质量复核完成 |
+| Policy / GRPO | 尚未端到端验证 | verl 导入、runtime validator 和 estimator 注册已通过；真实 Policy rollout 与完整 350-step GRPO 尚未运行 |
+
+“代码验证通过”“Teacher 候选可消费”和“正式训练数据已发布”是三个不同状态。项目不会用
+单元测试替代数据语义审计，也不会用单轮 Parquet 成功替代 Policy rollout/训练验收。
+
 ## 核心方法
 
 本项目实现了 PROVE（Programmatic Rewards On Verified Environments）框架的三个组件：
@@ -48,7 +60,6 @@ Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
 │   ├── audit_tool_semantics.py     # 实体验证
 │   ├── merge_generation_shards.py # 生成分片合并（含质量门禁）
 │   ├── audit_generated_data.py # 正式 Parquet 逐行生产合同审计
-│   ├── serve_policy_model.sh   # 独立策略模型 vLLM 服务
 │   └── bench_vllm_throughput.py # vLLM 吞吐量基准
 ├── configs/
 │   ├── live_mcp/               # 各 domain 与 ten_domain_suite.yaml
@@ -56,8 +67,8 @@ Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
 ├── data/
 │   ├── dependency_graphs/      # 各 domain 工具依赖图缓存
 │   ├── runs/                   # 生成产出（每次运行独立子目录）
-│   ├── train.parquet           # 成功生成后指向最新 run 的符号链接
-│   ├── val.parquet             # 成功生成后指向最新 run 的符号链接
+│   ├── train.parquet           # 正式 corpus 验收发布后才存在的活动符号链接
+│   ├── val.parquet             # 正式 corpus 验收发布后才存在的活动符号链接
 │   └── README.md               # 数据合同与生成说明
 ├── reference/                  # 参考论文（PROVE / COVERT）
 ├── tests/                      # pytest 测试

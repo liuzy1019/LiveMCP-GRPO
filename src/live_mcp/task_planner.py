@@ -20,7 +20,6 @@ Pipeline per task:
 
 from __future__ import annotations
 
-import copy
 import datetime as _datetime
 import fcntl
 import hashlib

@@ -24,7 +24,7 @@ LiveMCP 统一超参配置 — 单点真源（Single Source of Truth）。
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from typing import ClassVar
 
 

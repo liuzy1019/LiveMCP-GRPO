@@ -197,7 +197,7 @@ Teacher 推理性能优化必须保持上述语义合同不变：
 1. Query、action、continuation、clarification、recovery 采用各自的有限 JSON 输出预算；预算只约束结构化响应长度，不裁剪 candidate schemas、live-state provenance 或 execution history；
 2. 同一 conversation round 内若出现完全相同的 tool name、arguments、observation 且 `state_changed=false`，下一次 Teacher 决策必须收到显式 no-progress 提示，由 Teacher 自行选择替代动作或合法 terminal；生成器不得伪造 terminal，也不得把该诊断升级为论文之外的 corpus hard gate；
 3. shard 子进程只负责输出通过 replay 和训练结构合同的 eligible 候选，不在本地执行 Jaccard 去重或最终逐域配额门禁；多 shard global merge 才在统一候选池执行 Jaccard 0.70、逐域最低覆盖与 split 隔离。最低覆盖之外的 train/val 名额按“live-state feasible 且位置感知 Jaccard-unique 的 dependency-chain 容量”加权分配，不再要求十域均匀；最终 split 还必须保证相同 domain 下规范化后的首轮 user query 不跨 train/val，这只是评测隔离合同，不作为候选删除或 PROVE corpus hard gate；
-4. global merge 若因某个 domain 的 Jaccard-unique 候选不足而失败，必须保留已有 shard，只对 deficit domain 增量补样并重新执行同一 global dedup/split；首次 merge 的 allocation capacity 必须在本次 run 内冻结，避免 top-up 后权重重算造成配额移动。top-up 数量根据该域当前候选经全局 Jaccard 后的实际保留率估计，并增加有限采样裕量，再在当前 generation client 槽位内切成独立小 shard 并行生成；预算估计和并行切分只改变候选数量与调度，不改变过滤规则。top-up 子进程的局部同质化或部分短缺不得使已生成候选和其他成功 top-up 整批失效；不得因单域少量缺口重新生成全部 domain；
+4. global merge 若因某个 domain 的 Jaccard-unique 候选不足而失败，必须保留已有 shard，只对 deficit domain 增量补样并重新执行同一 global dedup/split；首次 merge 的 allocation capacity 权重必须在本次 run 内冻结，避免 top-up 后权重重算造成目标持续移动，但冻结权重不等于把逐域精确条数变成 hard gate。当全局合格候选总数已达到目标、各域 train/val 最低覆盖均可满足时，最终 merge 应在冻结权重下把不可实现的少量域配额重分配给仍有 Jaccard-unique 余量的域，而不是继续为精确配额补产。top-up 数量根据该域当前候选经全局 Jaccard 后的实际保留率估计，并增加有限采样裕量，再在当前 generation client 槽位内切成独立小 shard 并行生成；预算估计和并行切分只改变候选数量与调度，不改变过滤规则。top-up 子进程的局部同质化或部分短缺不得使已生成候选和其他成功 top-up 整批失效；不得因单域少量缺口重新生成全部 domain。若一个非空 split 的全部候选被同一种 environment contract incompatibility 拒绝，global merge 必须把它报告为不可恢复的完整性错误并停止，不能把代码/数据身份失配换算成 Jaccard retention 后自动重生成整批数据；
 5. 上述优化不得取消 fresh replay、provenance、全局 Jaccard，也不得只向 Teacher 暴露 sampled oracle chain。性能验收同时报告 LLM request count、prompt tokens、generation tokens、domain deficit/recovery 和最终语义质量。
 
 实体引用若由 handler 要求使用 opaque ID，MCP tool surface 必须提供只读发现路径并在 schema 中明确参数类型。例如 issue tracker 的 assignee 必须通过 member discovery 获得 `user_id`，不能要求 Teacher 从自然语言姓名臆造内部 ID，也不能把 sampler 私有 state 直接注入 Action Teacher。chain feasibility 只接受 live MCP observation 已公开或前序工具可创建的实体。这是 Step 2 provenance/grounding 的接口完整性，不增加论文之外的 corpus hard gate。
@@ -311,7 +311,10 @@ Parquet/checkpoint/rollout metadata 语义。生成、merge、训练预检、rol
 - `trajectory_schema_version` 只标识轨迹序列化结构，当前值为
   `live-mcp-canonical-replay-trajectory-v1`；它不是 PROVE 算法版本。
 - `environment_fingerprint` 由 tool schema、handler/seeder transition、initial state、
-  observation/projection 和 reward 事实计算；不用手写版本字符串代替 hash。
+  observation/projection 和 reward 事实计算；不用手写版本字符串代替 hash。Reward 部分使用
+  去除未引用 import 的语义 AST：实际参与 reward/runtime 行为的 import 与代码变化必须改变
+  fingerprint，纯未使用 import 整理不得使已生成数据失效。Fingerprint 算法迁移可保留一个
+  绑定到精确语义摘要的旧值映射，但不得无条件接受历史 fingerprint。
 - 工具业务分类与 mutation footprint 统一使用 `tool_semantics`；`contract` 一词只用于
   真正的跨组件输入/输出不变量。
 - 十域 subprocess 组合配置命名为 `ten_domain_suite.yaml`；verl rollout 注册配置命名为
@@ -505,6 +508,39 @@ PROVE 的关键环境事实：
 5. 同一组 live environments 同时用于数据合成和 RL training；
 6. 数据包含 multi-turn MCP conversations、missing-function clarification、abstention/no-tool。
 ```
+
+#### 1.6.1 十域训练 corpus 规模决策
+
+PROVE 的正式训练集共 13,517 条：10,895 条 multi-turn MCP conversations、1,500 条
+missing-function clarification，以及 806 条 When2Call 和 316 条 xLAM-Irrelevance 外部
+abstention 样本；覆盖 20 个 live MCP environments。其训练配置为 350 GRPO steps、
+train batch size 16、rollout group size 16，即训练期间抽取 5,600 个 prompt groups。
+
+当前项目只有十域，且不导入上述 1,122 条外部 abstention 数据。因此首版正式十域 corpus
+目标定义为约 **6,200 条 Jaccard-unique train + 500--600 条 held-out val**：
+
+```text
+PROVE 原生 MCP 数据 = 10,895 + 1,500 = 12,395
+十域容量基准         = 12,395 * 10 / 20 = 6,197.5 ~= 6,200 train rows
+paper-aligned draws   = 350 steps * batch 16 = 5,600 prompt groups
+```
+
+该线性折算只用于本项目的工程规模决策，不是 PROVE 公布的按域缩放公式，也不要求域内或域间
+均匀分配。最终名额仍按通过 live-state feasibility 且位置感知 Jaccard-unique 的 dependency-chain
+容量加权，并为每域保留最低覆盖。约 12.1% missing-function 和 5% irrelevance 继续由生成机制
+采样，不转换成会放宽或替代 replay、provenance、Jaccard 的事后凑数配额。
+
+产出和训练分阶段执行：当前独立 1,000+200 轮次先做跨 run 全局去重、隔离和逐行审计，目标是
+形成约 1,500--2,000 量级的端到端训练 smoke pool；实际数量只以联合 merge report 为准。
+Smoke 通过后再用不同 seed 补产至约 6,200 train。
+若十域的可行且 Jaccard-unique 容量在达到目标前饱和，必须扩充真实环境、工具或依赖链，不能
+降低 0.70 去重阈值、放松 corpus gates 或复制同质样本。只有扩展到接近论文的 20 个环境并纳入
+可比 abstention 来源时，才把 12,000--13,500 条作为论文规模复现实验目标。
+
+严格对照 PROVE 的首版训练显式使用 batch size 16；当前代码默认值 32 是可覆盖的本地运行默认值。
+若保持 batch size 32，350 steps 会产生 11,200 个 prompt-group 抽样位置，6,200 条 train row
+平均被抽取约 1.8 次。每次抽取仍生成新的 rollout group，因此允许重复读取，但必须在实验配置和
+结果报告中标明它不等于论文的数据消费节奏。
 
 因此 OVAL-MCP 的泛化对象是 domain adapter，而不是某个具体工具集合。
 

@@ -8,6 +8,18 @@
 
 ### Contract boundary
 
+- 修正 global merge 对容量权重冻结的解释：冻结首次 merge 的 capacity weights 以避免 top-up
+  目标漂移，但当全局 Jaccard-unique 总量已经达标且各域最低 train/val 覆盖可满足时，允许在
+  冻结权重下把不可实现的少量精确域配额重分配给仍有合格余量的域；该调整不改变 PROVE
+  replay、provenance 或 Jaccard hard gates。
+- 项目状态文档同步到当前 checkout：记录 278 tests、10 域 190 tools / 103 mutating tools 的
+  验证结果；把 `0717_mcpfix_1000_200` 的 920+200 候选与尚未发布的 active symlink 分开表述，
+  并将进行中的 `0720_mcpfix_round2_1000_200` 定位为跨 run 联合验收输入。修正文档中仍引用
+  0716 50+10 gray、50% oversample 和“当前没有候选数据”的过时描述。
+- 记录十域正式训练 corpus 的本地规模决策：首版目标约为 6,200 train + 500--600 val，来源是
+  PROVE 12,395 条原生 MCP/clarification 数据按当前 10/20 环境数的工程折算；1,122 条外部
+  abstention 不计入本地原生数据。该数字不是论文公开的按域缩放公式，不改变容量加权分配或
+  replay、provenance、Jaccard 0.70 门槛；当前独立 1,000+200 轮次先用于联合过滤后的训练 smoke。
 - Global merge 增加独立的本地 deterministic label quarantine：只隔离可由当前
   query、Teacher execution history 和公开 tool semantics 直接证明的日期/星期冲突、
   clarification 前问题占位值写入、CRM 对已有 task 的 create-as-update、filesystem
@@ -67,6 +79,12 @@
 - 删除 shell 错误提示中的机器绝对环境路径；运行时继续通过 `PYTHON_BIN` 注入解释器。
 
 ### Fixed
+
+- Reward fingerprint 改为过滤未引用 import 的语义 AST，并用精确语义摘要兼容当前
+  `5e1e1767567070a0` 数据身份；纯 import 清理不再使整批 Parquet 失效，实际参与 reward/runtime
+  行为的 import 或代码变化仍会产生新 fingerprint。Global merge 在非空 split 全部被同一种
+  environment contract incompatibility 拒绝时写出 `fatal_integrity_errors` 并停止，launcher
+  不再把全局 fingerprint 失配当作普通 Jaccard 缺额启动整批 top-up。
 
 - Payments invoice lifecycle now rejects `pay_invoice` unless the invoice is
   genuinely unpaid (`pending` or `overdue`) and has no open dispute; a dispute

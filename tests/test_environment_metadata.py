@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -26,6 +27,7 @@ from src.live_mcp.observation import (
     serialize_tool_result,
 )
 from src.live_mcp.environment_metadata import (
+    _semantic_ast_without_unused_imports,
     build_environment_metadata,
     compute_reward_fingerprint,
     compute_transition_fingerprint,
@@ -72,6 +74,32 @@ DOMAINS = (
     "calendar", "shopping", "banking", "email", "filesystem",
     "payments", "crm", "issue_tracker", "team_chat", "food_delivery",
 )
+
+
+def test_reward_fingerprint_ignores_only_unused_import_maintenance(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline.py"
+    with_unused = tmp_path / "with_unused.py"
+    used_import_changed = tmp_path / "used_import_changed.py"
+    baseline.write_text("import json\n\ndef render(value):\n    return json.dumps(value)\n")
+    with_unused.write_text(
+        "import json\nimport pathlib\n\ndef render(value):\n    return json.dumps(value)\n"
+    )
+    used_import_changed.write_text(
+        "import yaml as json\n\ndef render(value):\n    return json.dumps(value)\n"
+    )
+
+    assert _semantic_ast_without_unused_imports(
+        baseline,
+    ) == _semantic_ast_without_unused_imports(with_unused)
+    assert _semantic_ast_without_unused_imports(
+        baseline,
+    ) != _semantic_ast_without_unused_imports(used_import_changed)
+
+
+def test_current_reward_fingerprint_preserves_audited_corpus_identity() -> None:
+    assert compute_reward_fingerprint() == "5e1e1767567070a0"
 
 
 def _result(**overrides) -> ToolExecutionResult:

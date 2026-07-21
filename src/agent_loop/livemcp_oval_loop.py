@@ -31,7 +31,6 @@ from src.live_mcp.observation import (
     TRAJECTORY_SCHEMA_VERSION,
     OBSERVATION_SCHEMA_VERSION,
     OBSERVATION_PROJECTION_VERSION,
-    compute_server_schema_hash,
     serialize_execution_error,
     serialize_tool_result,
 )
@@ -181,16 +180,6 @@ def _get_oval_ctx(
             _oval_ctx_started = True
             logger.info("[oval] OvalMCPWorkerContext started (process-level singleton)")
     return _oval_ctx
-
-
-def shutdown_oval_ctx() -> None:
-    """关闭进程级 OvalMCPWorkerContext（用于测试清理，线程安全）。"""
-    global _oval_ctx, _oval_ctx_started
-    with _oval_ctx_lock:
-        if _oval_ctx is not None and _oval_ctx_started:
-            _oval_ctx.stop()
-            _oval_ctx_started = False
-            logger.info("[oval] OvalMCPWorkerContext stopped")
 
 
 @register("livemcp_oval")

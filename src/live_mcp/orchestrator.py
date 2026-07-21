@@ -36,10 +36,6 @@ from src.live_mcp.environment_metadata import build_environment_metadata
 from src.live_mcp.manager import LiveMCPManager
 from src.live_mcp.state_seeder import StateSeeder
 from src.live_mcp.observation import (
-    TRAJECTORY_SCHEMA_VERSION,
-    OBSERVATION_SCHEMA_VERSION,
-    OBSERVATION_PROJECTION_VERSION,
-    compute_server_schema_hash,
     tool_result_envelope,
 )
 from src.live_mcp.types import LiveTask, OracleCall, OracleProgram, to_plain

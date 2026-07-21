@@ -25,7 +25,6 @@ from src.live_mcp.orchestrator import (
     _tool_relevant_entity_types,
 )
 from src.live_mcp.types import OracleCall
-from src.live_mcp.task_planner import _SELF_CONTAINED_WRITE_TOOLS
 from src.live_mcp.tool_semantics import is_mutating_tool
 
 # ── Parse all server TOOLS ──
@@ -53,12 +52,6 @@ def parse_domain_tools() -> tuple[dict[str, set[str]], dict[str, dict[str, dict]
     return domain_names, domain_anns
 
 FAIL = 0
-
-def check(cond: bool, msg: str) -> None:
-    global FAIL
-    if not cond:
-        print(f"  ❌ {msg}")
-        FAIL += 1
 
 def section(title: str) -> None:
     print(f"\n{'='*70}\n{title}\n{'='*70}")

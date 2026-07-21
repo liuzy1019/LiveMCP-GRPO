@@ -38,6 +38,19 @@ DOMAINS_ALL = [
     "food_delivery", "issue_tracker", "payments", "shopping", "team_chat",
 ]
 
+
+class FatalShardIntegrityError(RuntimeError):
+    """A whole non-empty shard split is incompatible with this runtime."""
+
+    def __init__(self, pattern: str, row_count: int, issue: str) -> None:
+        self.pattern = pattern
+        self.row_count = row_count
+        self.issue = issue
+        super().__init__(
+            f"all {row_count} rows from {pattern} failed the same "
+            f"environment contract: {issue}"
+        )
+
 _LEAK_MARKERS = (
     "oracle_calls",
     "success_criteria",
@@ -738,6 +751,116 @@ def _capacity_weighted_domain_quotas(
     return quotas
 
 
+def _minimum_domain_coverage(
+    target: int,
+    domain_count: int,
+    configured: int | None,
+) -> int:
+    if configured is not None:
+        return max(0, int(configured))
+    return max(1, target // (2 * domain_count)) if target >= domain_count else 0
+
+
+def _add_weighted_with_caps(
+    quotas: dict[str, int],
+    maximums: dict[str, int],
+    weights: dict[str, int],
+    amount: int,
+) -> bool:
+    """Add units proportionally to frozen weights without exceeding caps."""
+    added = {domain: 0 for domain in quotas}
+    for _ in range(amount):
+        eligible = [
+            domain for domain in quotas
+            if quotas[domain] < maximums.get(domain, 0)
+        ]
+        if not eligible:
+            return False
+        domain = min(
+            eligible,
+            key=lambda item: (
+                (added[item] + 1) / max(1, int(weights.get(item, 0))),
+                item,
+            ),
+        )
+        quotas[domain] += 1
+        added[domain] += 1
+    return True
+
+
+def _availability_constrained_split_quotas(
+    count: int,
+    val_count: int,
+    domains: list[str],
+    capacities: dict[str, int],
+    available: dict[str, int],
+    train_quotas: dict[str, int],
+    val_quotas: dict[str, int],
+    *,
+    min_domain_train: int | None = None,
+    min_domain_val: int | None = None,
+) -> tuple[dict[str, int], dict[str, int], bool]:
+    """Fit frozen-weight quotas to the eligible pool while preserving floors.
+
+    Capacity weights remain frozen across top-up rounds, but their exact
+    apportionment is not a corpus hard gate.  If total eligible supply is
+    sufficient, a domain-local shortage is reassigned to domains with spare
+    Jaccard-unique rows.  Separate train/validation floors remain mandatory.
+    """
+    if not domains:
+        return train_quotas, val_quotas, False
+    train_floor = _minimum_domain_coverage(
+        count, len(domains), min_domain_train,
+    )
+    val_floor = _minimum_domain_coverage(
+        val_count, len(domains), min_domain_val,
+    )
+    combined_floor = train_floor + val_floor
+    if any(available.get(domain, 0) < combined_floor for domain in domains):
+        return train_quotas, val_quotas, False
+    if sum(available.get(domain, 0) for domain in domains) < count + val_count:
+        return train_quotas, val_quotas, False
+
+    desired_total = {
+        domain: train_quotas[domain] + val_quotas[domain]
+        for domain in domains
+    }
+    total_quotas = {
+        domain: min(desired_total[domain], available[domain])
+        for domain in domains
+    }
+    missing_total = count + val_count - sum(total_quotas.values())
+    if missing_total and not _add_weighted_with_caps(
+        total_quotas, available, capacities, missing_total,
+    ):
+        return train_quotas, val_quotas, False
+
+    adjusted_val = {
+        domain: min(
+            max(val_floor, val_quotas[domain]),
+            total_quotas[domain] - train_floor,
+        )
+        for domain in domains
+    }
+    missing_val = val_count - sum(adjusted_val.values())
+    if missing_val < 0:
+        return train_quotas, val_quotas, False
+    val_maximums = {
+        domain: total_quotas[domain] - train_floor
+        for domain in domains
+    }
+    if missing_val and not _add_weighted_with_caps(
+        adjusted_val, val_maximums, capacities, missing_val,
+    ):
+        return train_quotas, val_quotas, False
+    adjusted_train = {
+        domain: total_quotas[domain] - adjusted_val[domain]
+        for domain in domains
+    }
+    changed = adjusted_train != train_quotas or adjusted_val != val_quotas
+    return adjusted_train, adjusted_val, changed
+
+
 def _dependency_chain_sequence(row: pd.Series) -> list[str]:
     """Return the live-feasible dependency seed, falling back for old rows."""
     extra = _as_extra(row["extra_info"])
@@ -1052,6 +1175,10 @@ def merge_split(
     if dropped_quality:
         quality_counts = merged.loc[bad_mask, "_quality_issue"].value_counts().to_dict()
         print(f"  quality: dropped {dropped_quality} rows: {quality_counts}")
+        if dropped_quality == len(merged) and len(quality_counts) == 1:
+            only_issue = str(next(iter(quality_counts)))
+            if only_issue.startswith("environment_metadata_invalid:"):
+                raise FatalShardIntegrityError(pattern, len(merged), only_issue)
     merged = merged.loc[~bad_mask].drop(columns=["_quality_issue"]).reset_index(drop=True)
 
     before_dedup = len(merged)
@@ -1194,12 +1321,28 @@ def merge_shards(
     """Globally deduplicate candidates before final train/val truncation."""
     train_path = output_dir / "train.parquet"
     val_path = output_dir / "val.parquet"
-    ok_train, train_candidates = merge_split(
-        tmpdir, "shard_*_train.parquet", train_path, 0, write_output=False,
-    )
-    ok_val, val_candidates = merge_split(
-        tmpdir, "shard_*_val.parquet", val_path, 0, write_output=False,
-    )
+    try:
+        ok_train, train_candidates = merge_split(
+            tmpdir, "shard_*_train.parquet", train_path, 0, write_output=False,
+        )
+        ok_val, val_candidates = merge_split(
+            tmpdir, "shard_*_val.parquet", val_path, 0, write_output=False,
+        )
+    except FatalShardIntegrityError as exc:
+        report = {
+            "pool_size": 0,
+            "required_total": count + val_count,
+            "available_by_domain": {},
+            "required_by_domain": {},
+            "deficits": {},
+            "suggested_topup_by_domain": {},
+            "fatal_integrity_errors": {
+                exc.issue: exc.row_count,
+            },
+        }
+        _write_deficit_report(deficits_output, report)
+        print(f"  FATAL: {exc}")
+        return 2
     if not ok_train or (val_count > 0 and not ok_val):
         return 1
 
@@ -1272,6 +1415,29 @@ def merge_shards(
             val_count, domains, allocation_capacity,
             minimum_per_domain=min_domain_val,
         )
+        frozen_train_quotas = dict(train_quotas)
+        frozen_val_quotas = dict(val_quotas)
+        available_by_domain = {
+            domain: int(
+                pool["extra_info"].map(
+                    lambda value: str(_as_extra(value).get("domain", "")) == domain
+                ).sum()
+            )
+            for domain in domains
+        }
+        train_quotas, val_quotas, quota_rebalanced = (
+            _availability_constrained_split_quotas(
+                count,
+                val_count,
+                domains,
+                allocation_capacity,
+                available_by_domain,
+                train_quotas,
+                val_quotas,
+                min_domain_train=min_domain_train,
+                min_domain_val=min_domain_val,
+            )
+        )
         deficit_report = _domain_deficit_report(
             pool, count, val_count, domains,
             candidate_by_domain=candidate_by_domain,
@@ -1280,6 +1446,9 @@ def merge_shards(
             unique_chain_capacity=observed_chain_capacity,
         )
         deficit_report["allocation_capacity_by_domain"] = allocation_capacity
+        deficit_report["frozen_train_quota_by_domain"] = frozen_train_quotas
+        deficit_report["frozen_val_quota_by_domain"] = frozen_val_quotas
+        deficit_report["quota_rebalanced"] = quota_rebalanced
     else:
         required = count + val_count
         deficit_report = {
