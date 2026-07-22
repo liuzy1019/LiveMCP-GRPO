@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task generation for GRPO training via PROVE-style state-machine teacher.
+"""Task generation for GRPO training with a state-machine teacher.
 
 The teacher uses LLM-in-the-loop at every turn: the LLM sees the full domain
 context (tools, live state, execution history) and decides the next action
@@ -10,14 +10,14 @@ Deployment modes:
   1. Local transformers:  --model models/Qwen/Qwen3-8B
   2. vLLM server:         --model Qwen3-8B --api-base http://localhost:8000/v1
 
-PROVE-aligned defaults:
+Generation defaults:
 - Difficulty mix: complete=60%, missing=20%, minimal=20%
   - Irrelevance ratio: 5%
   - Distractor rate: 40% (injects 3-8 irrelevant tools)
   - Missing function rate: 20% (hides one required tool)
   - Enum stripping: 30% per domain
   - Jaccard dedup threshold: 0.70
-  - Conversation rounds: 2-3 (turn-decay schedule, PROVE min_turns=2 max_turns=3)
+  - Conversation rounds: 2-3 (turn-decay schedule)
   - Personas: 10 role templates, reference dates: 10 anchors
   - Recovery: explicit retry_same / retry_alt / give_up states
 """
@@ -62,7 +62,7 @@ def _irrelevance_ratio_for_round(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Generate PROVE-style GRPO training data with LLM teacher"
+        description="Generate GRPO training data with an LLM teacher"
     )
     p.add_argument("--count", type=int, default=500,
                     help="Number of training tasks to generate")
@@ -678,11 +678,8 @@ def _task_scenario(task) -> str:
     explicit = task.metadata.get("scenario_type") if task.metadata else None
     if explicit:
         return str(explicit)
-    # PROVE Step-3 missing-function variant produces clarification trajectories
-    # (paper §3.2 Training Data: "1,500 clarification trajectories generated
-    # by the missing-function variant of Step 3"). Abstention (report_error)
-    # is reserved for the internal `irrelevant` scenario and the externally
-    # sourced When2Call + xLAM-Irrelevance slice (G = ∅).
+    # Missing-function variants produce clarification trajectories. Abstention
+    # is reserved for the `irrelevant` scenario and imported irrelevance rows.
     if task.task_type == "missing_function":
         return "clarification_required"
     if task.task_type == "irrelevant":
@@ -939,9 +936,8 @@ def _minimum_action_budget(
 ) -> int:
     """Minimum model actions needed to reproduce a multi-round reference.
 
-    PROVE's 2--3 continuation turns are conversation rounds.  The rollout
-    action loop also spends one iteration on every tool call and on the
-    terminal that closes each round, so its engineering cap must cover both.
+    The rollout loop spends one iteration on every tool call and on the
+    terminal that closes each conversation round.
     """
     n_tool_calls = sum(
         1 for call in oracle_calls_serialized
@@ -975,7 +971,7 @@ def _validate_task_training_contract(task) -> None:
         if call.get("action", "tool_call") == "tool_call"
     ]
     scenario_type = _task_scenario(task)
-    # PROVE alignment:
+    # Export contract:
     #   missing_function variant (Step 3)   → ask_clarification (1,500 traj.)
     #   irrelevance queries + external      → report_error (1,122 abstention)
     #   normal / recovery / dependency      → final_answer (main slice)
@@ -996,7 +992,7 @@ def _validate_task_training_contract(task) -> None:
         )
 
     # ── P1-2(now P0): tool tasks must be chain-seeded ──
-    # PROVE baseline: every normal MCP conversation is a dependency-graph
+    # Normal MCP conversations require a dependency-graph seed.
     # chain-seed query (§3.2 Step 2).  Unseeded fallback data pollutes the
     # training distribution — reject before Parquet.
     if not is_no_tool and not is_optional_tool:
@@ -1025,7 +1021,7 @@ def _validate_task_training_contract(task) -> None:
                              if is_mutating_tool(t, task.target_servers[0])
                              and t not in _SELF_CONTAINED_WRITE_TOOLS]
             if state_changing:
-                # PROVE does NOT reject tasks with empty criteria: R_coverage
+                # Empty criteria remain valid; R_coverage
                 # operates on tool-call sequences, not state diffs (§3.3).
                 # Rejecting here conflicts with the oracle length [1,8] gate
                 # above (which already accepted the task) and causes ~50% yield
@@ -1047,7 +1043,7 @@ def _validate_task_training_contract(task) -> None:
     if scenario_type == "tool_error_recovery":
         criteria = _task_success_criteria(task)
         if not criteria:
-            # PROVE does NOT reject tasks with empty criteria (§3.3).
+            # Empty criteria remain valid.
             # tool_error_recovery classification is based on execution
             # history heuristics, not ground truth.  An empty-criteria
             # recovery task still has a valid oracle trace; R_coverage
@@ -1263,10 +1259,10 @@ def _stratified_task_split(
     import random
     from collections import defaultdict
 
-    # Jaccard 0.70 dedup on tool-call sequences (PROVE corpus dedup §3.3).
+    # Jaccard 0.70 deduplication on tool-call sequences.
     # Position-aware: {(index, tool_name)} — order and repeat count matter,
     # arguments are ignored (dedup.py/jaccard_similarity).
-    # All surviving conversations share one dedup pool; PROVE does not publish
+    # All surviving conversations share one dedup pool.
     # a domain exemption.
     unique = dedup_tasks(tasks, threshold=0.70)
     # Assign fingerprints after dedup for downstream cross-shard exact dedup.
@@ -1305,7 +1301,7 @@ def _stratified_task_split(
             val.extend(candidates[train_quotas[domain]:quota])
         return train, val
 
-    # Domain quotas are enforced during generation. PROVE does not require
+    # Domain quotas are enforced during generation.
     # every domain/scenario label to appear in both small disjoint splits, and
     # deleting singleton strata wastes valid replay-checked candidates.
     return _fallback_task_split(unique, train_count, val_count, rng)
@@ -1460,8 +1456,6 @@ def _compute_dependency_edges(
 ) -> list[list[int]]:
     """Compute dependency edges E by aligning chain_seed to oracle_calls.
 
-    PROVE eq.(1): o(g) = Π_{(j,g)∈E} ⊮[μ(j) < μ(g)] requires explicit edges.
-
     Algorithm:
       1. Map every tool_call in oracle_calls to its index, grouped by tool_name.
       2. Walk chain_seed left-to-right, consuming the next occurrence after the
@@ -1583,7 +1577,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         )
 
         # One row always starts from reset(session_seed).  Teacher tool calls
-        # are never exposed in the initial prompt.  For PROVE continuation
+        # are never exposed in the initial prompt. For continuation
         # data, the rollout loop injects conversation_queries[1:] after
         # intermediate terminal actions in the same live MCP session.
         prompt = [
@@ -1596,7 +1590,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         has_distractors = task.metadata.get("has_distractors", False)
         has_missing_func = task.metadata.get("has_missing_function", False)
 
-        # perturbation_level encodes the PROVE information level, not the
+        # perturbation_level encodes query information completeness, not the
         # robustness knob. Keep difficulty intact; expose knob status via the
         # separate scenario_type/has_* fields.
         perturbation_level = task.difficulty
@@ -1642,7 +1636,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             if c.get("action", "tool_call") == "tool_call"
         ]
 
-        # ── Dependency edges (PROVE eq.(1) o(g) requires E) ──
+        # ── Dependency edges used by coverage scoring ──
         chain_seed = task.metadata.get("chain_seed", []) if task.metadata else []
         dependency_edges = _compute_dependency_edges(oracle_calls_serialized, chain_seed)
         dependency_edges_json = json.dumps(dependency_edges, ensure_ascii=False)
@@ -1734,7 +1728,7 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "query_chain_supported": bool(
                 task.metadata.get("query_chain_supported", False)
             ),
-            # Preserve the completed Teacher conversation sequence for PROVE
+            # Preserve the completed Teacher conversation sequence for rollout.
             # Jaccard dedup even when the required RL oracle omits an execution-
             # tagged no-progress repeat.
             "teacher_trace_tool_sequence": [

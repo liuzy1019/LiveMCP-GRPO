@@ -45,6 +45,7 @@ from src.live_mcp.config import load_suite_config
 from src.live_mcp.orchestrator import (
     TaskOrchestrator,
     _CREATED_ENTITY_BY_TOOL,
+    _DEPENDENCY_TOOL_OUTPUT_FIELDS,
     _DOMAIN_TOOL_OUTPUT_ENTITY_TYPES,
     _DOMAIN_TOOL_REQUIREMENTS,
     _chain_respects_state_preconditions,
@@ -156,6 +157,11 @@ def _strict_cache_issue(
         return "缺少 classifier_contract_hash"
     if not data.get("teacher_model_id") or not data.get("classifier_prompt_sha256"):
         return "缺少 Teacher/classifier prompt provenance"
+    if (
+        TaskOrchestrator._dependency_output_field_contract_hash(domain)
+        and not data.get("output_field_contract_sha256")
+    ):
+        return "缺少 classifier output-field provenance"
     return ""
 
 
@@ -222,14 +228,23 @@ def _semantic_pair_diagnostics(
 ) -> tuple[list[str], list[str]]:
     """Return read-only local-contract diagnostics for Teacher pair labels.
 
-    These findings never rewrite or reject the PROVE LLM-classified graph.
-    They only expose labels that deserve human review against handler facts.
+    These findings do not rewrite or reject the graph. They expose labels that
+    need review against handler facts.
     """
+    tools_by_name = {
+        tool["name"]: tool for tool in _load_server_tools(domain)
+    }
+
     def outputs(tool_name: str) -> set[str]:
         return set(
             _DOMAIN_TOOL_OUTPUT_ENTITY_TYPES.get(domain, {}).get(
                 tool_name, _CREATED_ENTITY_BY_TOOL.get(tool_name, set()),
             )
+        )
+
+    def output_fields(tool_name: str) -> set[str]:
+        return set(
+            _DEPENDENCY_TOOL_OUTPUT_FIELDS.get(domain, {}).get(tool_name, ())
         )
 
     def requirements(tool_name: str) -> set[str]:
@@ -246,15 +261,27 @@ def _semantic_pair_diagnostics(
         if relation == "none":
             for source, target in ((left, right), (right, left)):
                 shared = outputs(source) & requirements(target)
-                if shared:
+                target_required = set(
+                    (tools_by_name[target].get("input_schema") or {}).get(
+                        "required"
+                    ) or []
+                )
+                shared_fields = output_fields(source) & target_required
+                if shared or shared_fields:
                     possible_false_negatives.append(
-                        f"{source}->{target} shared={sorted(shared)}"
+                        f"{source}->{target} shared_types={sorted(shared)} "
+                        f"shared_fields={sorted(shared_fields)}"
                     )
         elif relation == "explicit":
             source = str(entry.get("source") or "")
             target = str(entry.get("target") or "")
             shared = outputs(source) & requirements(target)
-            if not shared:
+            target_required = set(
+                (tools_by_name[target].get("input_schema") or {}).get("required")
+                or []
+            )
+            shared_fields = output_fields(source) & target_required
+            if not shared and not shared_fields:
                 weak_explicit_positives.append(
                     f"{source}->{target} output={sorted(outputs(source))} "
                     f"requires={sorted(requirements(target))}"

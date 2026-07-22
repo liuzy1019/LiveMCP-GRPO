@@ -57,6 +57,9 @@
     },
     "list_channels": {
       "explicit": [
+        "archive_channel",
+        "create_thread",
+        "get_channel",
         "react_message",
         "search_messages",
         "send_message"
@@ -134,9 +137,9 @@
         "archive_channel",
         "list_channels"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_channels",
+      "target": "archive_channel",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -287,9 +290,9 @@
         "create_thread",
         "list_channels"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_channels",
+      "target": "create_thread",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -350,9 +353,9 @@
         "get_channel",
         "list_channels"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_channels",
+      "target": "get_channel",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -580,9 +583,10 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "531d4d4c8f3c82ac",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "744a4ab4f3c72b0f739ae14063274ba8cb3f2e80792be3ac4e66fa9c6baa27e7",
   "tool_count": 11,
   "expected_pair_count": 55,
   "classified_pair_count": 55,

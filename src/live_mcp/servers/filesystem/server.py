@@ -1,4 +1,4 @@
-"""Stateful filesystem server — 40 tools (PROVE-aligned).
+"""Stateful filesystem server with 40 tools.
 Deepest state: files, dirs, permissions. Full POSIX-like operations.
 Safety: protected paths, permission escalation detection, symlink constraints.
 """

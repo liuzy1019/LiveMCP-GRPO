@@ -70,6 +70,12 @@
     },
     "list_inbox": {
       "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
         "mark_read",
         "mark_unread",
         "move_to_thread",
@@ -100,6 +106,17 @@
     },
     "search_emails": {
       "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email",
         "send_email"
       ],
       "implicit": []
@@ -187,9 +204,9 @@
         "add_label",
         "list_inbox"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_inbox",
+      "target": "add_label",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -241,9 +258,9 @@
         "add_label",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "add_label",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -322,9 +339,9 @@
         "archive_email",
         "list_inbox"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_inbox",
+      "target": "archive_email",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -376,9 +393,9 @@
         "archive_email",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "archive_email",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -673,9 +690,9 @@
         "forward_email",
         "list_inbox"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_inbox",
+      "target": "forward_email",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -727,9 +744,9 @@
         "forward_email",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "forward_email",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -772,9 +789,9 @@
         "get_attachments",
         "list_inbox"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_inbox",
+      "target": "get_attachments",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -826,9 +843,9 @@
         "get_attachments",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "get_attachments",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -862,9 +879,9 @@
         "get_email",
         "list_inbox"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_inbox",
+      "target": "get_email",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -916,9 +933,9 @@
         "get_email",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "get_email",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -943,9 +960,9 @@
         "get_thread",
         "list_inbox"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_inbox",
+      "target": "get_thread",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -997,9 +1014,9 @@
         "get_thread",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "get_thread",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1186,9 +1203,9 @@
         "mark_read",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "mark_read",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1231,9 +1248,9 @@
         "mark_unread",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "mark_unread",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1267,9 +1284,9 @@
         "move_to_thread",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "move_to_thread",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1294,9 +1311,9 @@
         "remove_label",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "remove_label",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1312,9 +1329,9 @@
         "reply_email",
         "search_emails"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_emails",
+      "target": "reply_email",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1335,9 +1352,10 @@
       "relation": "explicit"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "9546157e313f4ec9",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "b3fb46955e0bf20c23ec282b379573eeef98411863666a3253e361389030719a",
   "tool_count": 17,
   "expected_pair_count": 136,
   "classified_pair_count": 136,

@@ -83,8 +83,8 @@ class TrainerConfig:
     top_p: float = 0.95
     log_prob_micro_batch: int = 1
 
-    # ── Multi-turn Rollout (PROVE §4) ──
-    # PROVE explicitly bounds rollouts at 5 user turns and 10 assistant turns.
+    # ── Multi-turn rollout ──
+    # Default rollout caps: 5 user turns and 10 assistant turns.
     # verl multi-turn config drives both the sglang tool loop AND our custom
     # LiveMCPOvalLoop (see src/agent_loop/livemcp_oval_loop.py:__init__).
     max_assistant_turns: int = 10
@@ -125,7 +125,7 @@ class TrainerConfig:
     agent_loop: str = "livemcp_oval"
     reward_fn_path: str = "src/reward/oval_reward_fn.py"
     reward_fn_name: str = "compute_score"
-    # from_env() binds this to the reward profile: PROVE uses standard GRPO;
+    # from_env() binds the estimator to the selected reward profile.
     # oval_full uses the audited LiveMCP extension.
     adv_estimator: str = "livemcp_grpo"
 
@@ -240,7 +240,7 @@ class TrainerConfig:
             f"actor_rollout_ref.rollout.agent.default_agent_loop={self.agent_loop}",
             "actor_rollout_ref.rollout.agent.agent_loop_config_path=configs/livemcp_rollout.yaml",
             f"actor_rollout_ref.rollout.agent.num_workers={self.devices}",
-            # Multi-turn caps (PROVE §4: 5 user turns, 10 assistant turns)
+            # Multi-turn caps: 5 user turns, 10 assistant turns.
             f"actor_rollout_ref.rollout.multi_turn.max_assistant_turns={self.max_assistant_turns}",
             f"actor_rollout_ref.rollout.multi_turn.max_user_turns={self.max_user_turns}",
             # Algorithm

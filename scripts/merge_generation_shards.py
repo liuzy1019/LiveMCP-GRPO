@@ -86,8 +86,8 @@ def _oracle_calls(extra: dict[str, Any]) -> list[dict[str, Any]]:
 def _unresolved_failure_issue(extra: dict[str, Any]) -> str:
     """Reject a round that claims success with an unresolved failed action.
 
-    PROVE permits execution errors up to its replay threshold, so the failure
-    itself is not a corpus defect.  The structural defect is a ``final_answer``
+    A failed attempt may remain in an accepted replay trace. The structural
+    defect is a ``final_answer``
     after the failed capability was never successfully retried on the same
     explicit mutation target: that terminal presents an unresolved action as
     completed.  ``report_error`` and ``ask_clarification`` remain valid
@@ -213,10 +213,8 @@ def _round_terminal(round_trace: dict[str, Any]) -> str:
 def _deterministic_label_issue(extra: dict[str, Any]) -> str:
     """Return a local, fact-provable GT label defect.
 
-    PROVE's public corpus gates remain replay, sensitive provenance, and
-    Jaccard deduplication.  These narrow checks quarantine only contradictions
-    that are directly visible in the persisted query/execution trace and would
-    otherwise make tool names or arguments incorrect RL ground truth.
+    These checks quarantine contradictions directly visible in the persisted
+    query/execution trace that would make tool names or arguments incorrect GT.
     """
     domain = str(extra.get("domain") or "")
     rounds = _as_json_list(extra.get("teacher_round_trace", []))
@@ -524,7 +522,7 @@ def _quality_issue(row: pd.Series) -> str:
             return f"stale_server_schema:{stale_domains}"
     scenario = str(row.get("scenario_type") or extra.get("scenario_type") or "")
     calls = _oracle_calls(extra)
-    # PROVE filters completed traces by replay error rate, provenance, and
+    # Filter completed traces by replay error rate, provenance, and
     # sequence similarity. Scenario labels are metadata, not a rejection gate;
     # recovery may legitimately end in final_answer or graceful report_error.
 

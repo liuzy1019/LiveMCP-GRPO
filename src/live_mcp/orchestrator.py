@@ -1,10 +1,10 @@
-"""PROVE-style state-machine task generation.
+"""State-machine task generation over live MCP servers.
 
 Per environment:
   1. Auto-discover tool dependency graph via live MCP probing
   2. State machine alternating LLM decisions and tool execution
      against a live MCP server
-  3. Robustness knobs applied BEFORE Teacher processing (PROVE §3.2 Figure 2)
+  3. Robustness knobs applied before Teacher processing
   4. Replay-validate each perturbed conversation before conversion
 """
 
@@ -44,7 +44,7 @@ from src.utils import extract_json as _extract_json
 
 
 class FSMStateGroup(str, Enum):
-    """The five state groups published in PROVE §3.2."""
+    """State groups persisted for each generated conversation."""
 
     QUERY = "query"
     TURN = "turn"
@@ -55,7 +55,7 @@ class FSMStateGroup(str, Enum):
 
 @dataclass
 class ConversationFSM:
-    """Auditable PROVE state-machine state for one synthesized conversation."""
+    """Auditable state-machine state for one synthesized conversation."""
 
     state: FSMStateGroup = FSMStateGroup.QUERY
     transitions: list[dict[str, Any]] = field(default_factory=list)
@@ -154,10 +154,9 @@ def _zero_tool_terminal_is_valid(
 ) -> bool:
     """Return whether a zero-tool normal candidate has a legal terminal.
 
-    Missing/minimal user messages may legitimately require clarification.
-    PROVE graceful give-up also permits ``report_error`` when the visible
-    schema/state already proves that no available tool can satisfy the goal;
-    it must not be forced to manufacture an execution failure first.
+    Missing or minimal messages may require clarification. ``report_error`` is
+    valid when the visible schema and state show that no tool can satisfy the
+    goal; an artificial execution failure is not required first.
     """
     actions = {
         getattr(call, "action", "tool_call") for call in oracle_calls
@@ -251,10 +250,10 @@ def _build_teacher_visible_tools(
 
 
 class TaskOrchestrator:
-    """PROVE-style state-machine task generator.
+    """State-machine task generator for live MCP environments.
 
     1. Auto-discover dependency graph (cached per domain)
-    2. Sample robustness plan BEFORE state machine (PROVE §3.2 Figure 2)
+    2. Sample robustness plan before state-machine execution
     3. State machine: Teacher operates on perturbed schemas
        (LLM-in-the-loop at every turn, against live MCP server)
     4. Replay-validate the final perturbed conversation against fresh session
@@ -266,7 +265,7 @@ class TaskOrchestrator:
         tasks = orch.generate_many("all", count=100, seed=42)
     """
 
-    # PROVE refreshes compact context every k conversations. This repository's
+    # Refresh compact context after the configured number of conversations.
     # seeded sessions can contain different entity IDs, so cross-session reuse
     # is unsafe: the cache is invalidated on session change and force-refreshed
     # after in-session writes. K only bounds reuse inside an unchanged session.
@@ -297,7 +296,7 @@ class TaskOrchestrator:
         self._domain_chains: dict[tuple[str, str, str], list] = {}
         self._dependency_graph_lock = threading.RLock()
         self._dependency_graph_failures: dict[tuple[str, str, str], tuple[float, str]] = {}
-        # PROVE §3.2 Step 2: sampling context cache per domain.
+        # Sampling-context cache per domain.
         # Each entry: {"context": dict, "call_count": int, "session_id": str}
         self._sampling_context_cache: dict[str, dict] = {}
 
@@ -773,7 +772,7 @@ class TaskOrchestrator:
                                 )
                 _turn += 1
                 attempt += 1
-                # PROVE §3.2 multi-round schedule: after recovery added an
+                # After recovery adds an ask_clarification terminal,
                 # oracle call, check if we hit the per-round tool-call limit.
                 if max_calls_this_round > 0:
                     real_this_round = sum(
@@ -783,7 +782,7 @@ class TaskOrchestrator:
                         break
                 continue
 
-            # PROVE exposes PARTIAL_SUCCESS as a distinct execution outcome.
+            # Preserve PARTIAL_SUCCESS as a distinct execution outcome.
             # It is not a recovery failure, but the next Teacher decision sees
             # the exact outcome in execution_history instead of a folded SUCCESS.
             execution_history.append(
@@ -880,12 +879,11 @@ class TaskOrchestrator:
         max_turns: int = 8,
         robustness_plan: RobustnessPlan | None = None,
     ) -> LiveTask:
-        """PROVE-style state-machine generation with LLM-in-the-loop.
+        """Generate one task with an LLM-driven state machine.
 
-        1. Sample dependency chain seed (PROVE §6 step 2)
-        2. Apply robustness plan to Teacher-visible schemas BEFORE Teacher
-           processing (PROVE §3.2 Figure 2: knobs are inside state machine)
-        3. LLM generates user_query with persona + reference_date (PROVE §4)
+        1. Sample a dependency-chain seed
+        2. Apply the robustness plan to Teacher-visible schemas
+        3. Generate a user query with persona and reference date
         4. State-machine loop: LLM decides next action → execute → recovery →
            record.  The inner step budget is ``max_turns`` (default 8).
         5. Derive success criteria from state delta
@@ -907,26 +905,25 @@ class TaskOrchestrator:
 
         rng = random.Random(seed)
 
-        # ── Sample diversity injectors (PROVE §4) ──
+        # ── Sample diversity injectors ──
         persona = _PERSONA_TEMPLATES[seed % len(_PERSONA_TEMPLATES)]
         reference_date = reference_date_for_seed(seed)
 
-        # ── Sample dependency chain seed (PROVE §6 step 2) ──
-        # PROVE §3.2 Step 2 guard: defer chain selection until live state is
-        # available so we can filter out chains whose first step has no entity.
+        # ── Sample dependency-chain seed ──
+        # Defer chain selection until live state is available so chains with
+        # unsatisfied first-step entity requirements can be removed.
 
         # ── Conversation-level continuation ──
         # The dependency chain is one atomic initial user goal and is not split
-        # into later turns. PROVE continuation samples a related follow-up from
+        # into later turns. Continuation samples a related follow-up from
         # refreshed live state after that round; it does not bind the new user
         # request to another hidden dependency-chain node.
 
         # ── Defensive initialisation (all variables reused after the retry loop).
         # Candidate-level regeneration is intentionally one-shot by default.
-        # PROVE performs recovery inside the state machine, then filters the
-        # completed candidate with replay/provenance. Re-generating the whole
-        # conversation several times hides rejection rates and wastes Teacher
-        # requests; pool-level oversampling/recovery replaces it.
+        # Recovery runs inside the state machine. Replay and provenance filter
+        # the completed candidate; pool-level oversampling replaces rejected
+        # candidates.
         try:
             max_task_attempts = max(
                 1, int(os.environ.get("LIVEMCP_TASK_GENERATION_ATTEMPTS", "1")),
@@ -1000,7 +997,7 @@ class TaskOrchestrator:
             all_tools = self.manager.discover_tools(session_id)
             server_tools = self.manager.registry.server_tools(server_name)
 
-            # ── Robustness plan (PROVE §3.2 Figure 2) ──
+            # ── Robustness plan ──
             # Sampled once per retry; applied BEFORE Teacher processing so
             # the Teacher operates on the perturbed schemas and the resulting
             # conversation is replay-validated as-is.
@@ -1072,9 +1069,8 @@ class TaskOrchestrator:
                     chain_seed = local_rng.choice(feasible_chains)
                 elif all_chains:
                     # Feasible chains exist but none passed live-state filter.
-                    # Retry with a fresh session/state (PROVE: Step 2 requires
-                    # executable chains). Optional candidate regeneration is
-                    # controlled explicitly; default is one attempt.
+                    # Optional candidate regeneration retries with a fresh
+                    # session; the default is one attempt.
                     if retry_attempt + 1 < max_task_attempts:
                         logger.debug(
                             f"No feasible chain for {server_name} "
@@ -1107,9 +1103,8 @@ class TaskOrchestrator:
                     )
                     if source_chain_seed else {}
                 )
-                # PROVE Step 2: the query generator must see the same
-                # chain-specific, handler-feasible entity view used for
-                # grounding.  Passing the full live state here lets it select
+                # The query generator uses the chain-specific, handler-feasible
+                # state view. Passing the full live state here could select
                 # an entity that _extract_chain_context deliberately excluded
                 # (for example an overdue invoice for refund_invoice).
                 query_visible_context = {
@@ -1148,10 +1143,9 @@ class TaskOrchestrator:
                     query_chain_context=query_chain_context,
                     query_grounding_state=query_grounding_state,
                 )
-                # PROVE Step 1/3: the complete 2--5 step dependency chain seeds
-                # one grounded task.  Continuation is a later interaction
-                # mechanism; it must not be used to turn individual chain nodes
-                # into separate user requests.
+                # The complete 2--5 step chain seeds one grounded initial query.
+                # Continuation does not turn individual chain nodes into new
+                # user requests.
                 query_generation_chain = source_chain_seed
                 generated_query = teacher.generate_query(
                     # Robustness is sampled before Teacher processing. At this
@@ -1213,7 +1207,7 @@ class TaskOrchestrator:
                     ],
                 )
 
-                # Accumulators across conversation rounds (PROVE CONTINUATION)
+                # Accumulators across conversation rounds.
                 # (re-assigned each retry; types declared before the loop)
                 all_oracle_calls = []
                 all_execution_history = []
@@ -1370,9 +1364,8 @@ class TaskOrchestrator:
                             )
 
                     # Preserve the successful oracle emitted by the state
-                    # machine. PROVE deduplicates conversations by Jaccard; it
-                    # does not delete repeated reads/calls inside recovery or a
-                    # later user round.
+                    # machine. Conversation-level Jaccard does not remove
+                    # repeated calls inside recovery or later user rounds.
                     filtered_round_ocs = list(round_ocs)
                     filtered_round_obs = list(round_obs)
 
@@ -1435,7 +1428,7 @@ class TaskOrchestrator:
                     ):
                         break
 
-                    # PROVE §3.2 continuation is a conversation-level decision,
+                    # Continuation is sampled after completing a conversation round,
                     # not a mechanism for splitting dependency-chain nodes. Once
                     # the initial chain goal is complete, the refreshed live state
                     # and prior conversation still ground a natural follow-up.
@@ -1508,9 +1501,8 @@ class TaskOrchestrator:
                             f"Teacher completed the bound user goal without the full "
                             f"seed chain for {server_name} task {task_id}: "
                             f"{completed_chain_steps}/{len(chain_seed)}. Keeping "
-                            f"source_chain_seed for audit and omitting OVAL dependency "
-                            f"edges; PROVE does not publish full-chain coverage as a "
-                            f"corpus rejection gate."
+                            f"source_chain_seed for audit and omitting dependency "
+                            f"edges because the executed trace did not realize them."
                         )
 
                 distractor_names = {
@@ -1565,7 +1557,7 @@ class TaskOrchestrator:
                     requirements_resolver=_tool_existing_entity_requirements,
                 )
 
-# ── Replay validate (PROVE: ≤30% error rate tolerance) ──
+                # ── Replay validation: schema/execution error rate ≤30% ──
                 valid, error_rate, num_errors, num_calls, criteria_ok, criteria_failed = replay_validate(
                     oracle_calls=all_attempt_calls,
                     manager=self.manager,
@@ -1597,7 +1589,7 @@ class TaskOrchestrator:
                         f"{num_errors}/{num_calls} errors ({error_rate:.0%})"
                     )
                 # Criteria quality gate (independent of tool-error 30% filter).
-                # PROVE does NOT merge criteria into replay error rate.
+                # Success criteria do not contribute to replay error rate.
                 if not criteria_ok:
                     logger.warning(
                         f"Replay criteria check failed for {server_name} "
@@ -1605,7 +1597,7 @@ class TaskOrchestrator:
                         f"Accepting — R_coverage uses pure tool-call matching."
                     )
 
-                # ── Provenance check (PROVE §3.2 Step 5: sensitive params) ──
+                # ── Sensitive-parameter provenance check ──
                 prov_ok, prov_violations = provenance_check(
                     oracle_calls=all_attempt_calls,
                     user_query=conversation_queries[0],
@@ -1664,7 +1656,7 @@ class TaskOrchestrator:
                 # readonly tools, or because a mutating call didn't change
                 # tracked state (e.g. cancel already-cancelled order).
                 #
-                # PROVE does NOT reject these: R_coverage is based on matching
+                # Empty criteria remain valid; coverage is based on matching
                 # oracle tool-call sequences, not on state-diff criteria (§3.3).
                 # Empty success_criteria means the coverage reward operates in
                 # pure tool-call-match mode, which is correct.
@@ -1712,7 +1704,7 @@ class TaskOrchestrator:
 
         # ── Final guard: ensure the oracle matches the task type ──
         # Exception: difficulty="missing" expects clarification-only behavior
-        # (PROVE missing-required information level). If the oracle has at
+        # (missing-required information level). If the oracle has at
         # least one ask_clarification, that's a valid task — don't raise.
         real_calls = [c for c in all_oracle_calls
                       if getattr(c, "action", "tool_call") == "tool_call"]
@@ -1819,8 +1811,8 @@ class TaskOrchestrator:
             "query_target_capability": generated_query.target_capability,
             "query_chain_supported": generated_query.chain_supported,
             "generation_mode": "chain_seeded",
-            # P0-3: data quality signals from replay validation.
-            # paper_replay_valid = schema/execution error rate ≤30% (PROVE §3.2 Step 5).
+            # Replay and final-state validation signals.
+            # paper_replay_valid records schema/execution error rate <= 30%.
             # project_outcome_valid = all success_criteria satisfied on fresh session.
             "paper_replay_valid": valid,
             "project_outcome_valid": criteria_ok,
@@ -1862,7 +1854,7 @@ class TaskOrchestrator:
                 for round_idx, round_calls in enumerate(oracle_calls_per_round)
             ],
             "criteria_failed": criteria_failed,
-            # PROVE §3.2 provenance is a corpus gate. Persist the accepted
+            # Persist accepted sensitive-parameter provenance evidence.
             # result so Parquet/readback audits can verify it directly instead
             # of inferring it from task acceptance.
             "provenance_valid": prov_ok,
@@ -1878,7 +1870,7 @@ class TaskOrchestrator:
             "distractor_count": len(plan.distractor_tools),
             "strip_enums": plan.strip_enums,
             "has_missing_function": plan.missing_function,
-            # P1-3: continuation decision schedule (local defaults, not PROVE-published)
+            # Continuation-decision schedule.
             "continuation_min_rounds": ContinuationPolicy.MIN_CONVERSATION_ROUNDS,
             "continuation_max_rounds": ContinuationPolicy.MAX_CONVERSATION_ROUNDS,
             "continuation_clarification_prob": ContinuationPolicy.CLARIFICATION_PROB,
@@ -2117,10 +2109,10 @@ class TaskOrchestrator:
         )
         if n_paper_invalid or n_outcome_invalid:
             logger.warning(
-                f"Data quality: {n_paper_invalid} tasks failed paper replay, "
+                f"Data quality: {n_paper_invalid} tasks failed replay, "
                 f"{n_outcome_invalid} tasks failed outcome criteria "
                 f"(out of {len(tasks)} total). "
-                f"Recommend filtering by paper_replay_valid for baseline; "
+                f"Filter by paper_replay_valid before export; "
                 f"outcome-invalid tasks should be isolated for analysis."
             )
 
@@ -2138,8 +2130,7 @@ class TaskOrchestrator:
         """Thread-safe single-task generation.
 
         Samples a robustness plan from seed, then passes it to generate_one
-        so all perturbations are applied BEFORE Teacher processing and
-        Replay validation (PROVE §3.2 Figure 2).
+        so all perturbations are applied before Teacher processing and replay.
 
         Returns None if generate_one raises, so the caller can count failures
         and retry with a new seed.
@@ -2203,7 +2194,7 @@ class TaskOrchestrator:
         """Generate tasks whose query is unrelated to any available tool.
 
         The expected model behavior is to ``report_error`` (cannot be done).
-        Goes through unified Replay + Provenance pipeline (PROVE §3.2).
+        Uses the same replay and provenance pipeline as tool-required tasks.
         """
         if n <= 0:
             return []
@@ -2292,7 +2283,7 @@ class TaskOrchestrator:
             ]
             # The completed oracle must not claim a useful tool action for an
             # impossible request. Failed Teacher attempts remain in the replay
-            # trace and are governed by PROVE's 30% error-rate gate; do not add
+            # trace and contribute to the 30% schema/execution error-rate limit.
             # a stricter unpublished zero-attempt corpus filter.
             if real_calls or len(terminals) != 1:
                 logger.warning(
@@ -2302,7 +2293,7 @@ class TaskOrchestrator:
                 )
                 continue
 
-            # ── Replay + Provenance (PROVE §3.2 unified pipeline) ──
+            # ── Replay and provenance ──
             # The Teacher emitted a zero-tool terminal, so replay/provenance are
             # still run through the same completed-conversation pipeline.
             _valid, _err_rate, _n_err, n_calls, _criteria_ok, _criteria_failed = (
@@ -2494,9 +2485,8 @@ class TaskOrchestrator:
     ) -> str:
         """Hash tool schemas plus dependency-classification semantics.
 
-        PROVE caches the pairwise LLM graph against the tool schema. Handler
-        implementation changes affect live feasibility/execution, not the
-        cached classifier output.
+        Handler implementation changes affect live feasibility and execution,
+        not the cached classifier output.
         """
         schema_payload = []
         for tool in sorted(server_tools, key=lambda t: str(t.get("name", ""))):
@@ -2544,20 +2534,41 @@ class TaskOrchestrator:
             "- Only mark implicit if there is a genuine required state dependency."
         )
 
-    def _classifier_contract_payload(self) -> dict[str, Any]:
+    @staticmethod
+    def _dependency_output_field_contract_hash(server_name: str = "") -> str:
+        """Hash factual handler-output fields exposed only to Step-1 classification."""
+        output_fields = _DEPENDENCY_TOOL_OUTPUT_FIELDS.get(server_name, {})
+        if not output_fields:
+            return ""
+        raw = json.dumps(
+            output_fields,
+            sort_keys=True,
+            ensure_ascii=True,
+        )
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _classifier_contract_payload(
+        self, server_name: str = "",
+    ) -> dict[str, Any]:
         model_id = str(getattr(self.client, "model_path", "unknown"))
         prompt = self._dependency_classifier_system_prompt()
-        return {
+        payload = {
             "teacher_model_id": model_id,
             "classifier_prompt_sha256": hashlib.sha256(
                 prompt.encode("utf-8")
             ).hexdigest(),
             "dependency_semantics_version": self.DEPENDENCY_SEMANTICS_VERSION,
         }
+        output_contract_hash = self._dependency_output_field_contract_hash(
+            server_name
+        )
+        if output_contract_hash:
+            payload["output_field_contract_sha256"] = output_contract_hash
+        return payload
 
-    def _classifier_contract_hash(self) -> str:
+    def _classifier_contract_hash(self, server_name: str = "") -> str:
         raw = json.dumps(
-            self._classifier_contract_payload(),
+            self._classifier_contract_payload(server_name),
             sort_keys=True,
             ensure_ascii=True,
         )
@@ -2584,7 +2595,7 @@ class TaskOrchestrator:
         return (
             server_name,
             self._tool_schema_hash(tools, server_name),
-            self._classifier_contract_hash(),
+            self._classifier_contract_hash(server_name),
         )
 
     @staticmethod
@@ -2731,7 +2742,37 @@ class TaskOrchestrator:
     ) -> str | None:
         """Return a deterministic contradiction with the classifier contract."""
         relation = entry.get("relation")
+        domain = server_name or str(
+            next(
+                (
+                    tool.get("_server_name")
+                    for tool in tools_by_name.values()
+                    if tool.get("_server_name")
+                ),
+                "",
+            )
+        )
         if relation == "none":
+            pair = entry.get("pair") or []
+            if isinstance(pair, (list, tuple)) and len(pair) == 2:
+                for source_name, target_name in (pair, tuple(reversed(pair))):
+                    output_fields = set(
+                        _DEPENDENCY_TOOL_OUTPUT_FIELDS.get(domain, {}).get(
+                            str(source_name), ()
+                        )
+                    )
+                    target = tools_by_name.get(str(target_name), {})
+                    required = set(
+                        (target.get("input_schema") or {}).get("required") or []
+                    )
+                    overlap = output_fields & required
+                    if overlap:
+                        return (
+                            "none contradicts known source output fields matching "
+                            f"target required inputs: {sorted(overlap)}; classify "
+                            f"{source_name} as source, {target_name} as target, "
+                            "and relation as explicit"
+                        )
             return None
         source = tools_by_name.get(str(entry.get("source") or ""), {})
         target = tools_by_name.get(str(entry.get("target") or ""), {})
@@ -2739,11 +2780,9 @@ class TaskOrchestrator:
             required = (target.get("input_schema") or {}).get("required") or []
             if not required:
                 return "explicit target has no required input"
-            # PROVE defines an explicit edge as source output supplying a
-            # required target input.  When the live domain contract tells us
-            # both resource types, reject only a direct contradiction and let
-            # the Teacher retry this pair; do not rewrite the relation.
-            domain = server_name or str(
+            # An explicit edge supplies a required target input. Reject a
+            # direct entity-type contradiction and retry the pair.
+            domain = domain or str(
                 source.get("_server_name") or target.get("_server_name") or ""
             )
             source_name = str(entry.get("source") or "")
@@ -2848,7 +2887,7 @@ class TaskOrchestrator:
         schema_hash: str,
         server_tools: list[dict],
     ) -> dict | None:
-        """Load the schema-hash dependency graph cache used by PROVE Step 1."""
+        """Load a dependency graph cache matching the current schema contract."""
         cache_path = self._graph_cache_path(server_name, schema_hash)
         if not cache_path.exists():
             return None
@@ -2869,7 +2908,7 @@ class TaskOrchestrator:
                 if pair_classifications is not None
                 else None
             )
-            classifier_contract = self._classifier_contract_payload()
+            classifier_contract = self._classifier_contract_payload(server_name)
             classification_complete = bool(
                 isinstance(payload, dict)
                 and payload.get("cache_version") == self.DEPENDENCY_CACHE_VERSION
@@ -2881,12 +2920,10 @@ class TaskOrchestrator:
                 and pair_classifications is not None
                 and len(pair_classifications) == expected_pair_count
             )
-            cache_contract_matches = bool(
+            base_cache_contract_matches = bool(
                 isinstance(payload, dict)
                 and payload.get("schema_hash") == schema_hash
                 and payload.get("server_name") == server_name
-                and payload.get("classifier_contract_hash")
-                    == self._classifier_contract_hash()
                 and payload.get("teacher_model_id")
                     == classifier_contract["teacher_model_id"]
                 and payload.get("classifier_prompt_sha256")
@@ -2896,6 +2933,13 @@ class TaskOrchestrator:
                 and classification_complete
                 and self._valid_cached_graph(graph, expected_tool_names)
                 and graph == derived_graph
+            )
+            cache_contract_matches = bool(
+                base_cache_contract_matches
+                and payload.get("classifier_contract_hash")
+                    == self._classifier_contract_hash(server_name)
+                and payload.get("output_field_contract_sha256")
+                    == classifier_contract.get("output_field_contract_sha256")
             )
             semantic_issues = (
                 self._pair_classification_contract_issues(
@@ -2927,6 +2971,32 @@ class TaskOrchestrator:
                     "only those pairs will be reclassified"
                 )
                 return None
+            # A cache without output-field provenance may reuse compatible
+            # labels only when its model, prompt, schema and ledger match.
+            # Non-empty output-contract hash changes invalidate the full cache.
+            legacy_output_contract = bool(
+                base_cache_contract_matches
+                and payload.get("output_field_contract_sha256") is None
+                and classifier_contract.get("output_field_contract_sha256")
+            )
+            if legacy_output_contract and pair_classifications is not None:
+                migration_issues = self._pair_classification_contract_issues(
+                    pair_classifications, server_tools, server_name,
+                )
+                invalid_pairs = {
+                    tuple(issue["pair"]) for issue in migration_issues
+                }
+                repairs[repair_key] = [
+                    entry for entry in pair_classifications
+                    if tuple(entry["pair"]) not in invalid_pairs
+                ]
+                logger.warning(
+                    f"Migrating legacy dependency graph cache {cache_path}: "
+                    f"preserving {len(repairs[repair_key])} classifications "
+                    f"and retrying {len(invalid_pairs)} output-contract "
+                    "contradiction(s)"
+                )
+                return None
             repairs.pop(repair_key, None)
             logger.warning(
                 f"Ignoring stale or incomplete dependency graph cache: {cache_path}; "
@@ -2944,7 +3014,7 @@ class TaskOrchestrator:
         graph: dict,
         pair_classifications: list[dict[str, Any]],
     ) -> None:
-        """Persist PROVE's per-environment graph cache keyed by tool schema."""
+        """Persist a per-environment graph cache keyed by tool schema."""
         expected_tool_names = sorted(t.get("name", "") for t in server_tools)
         pair_classifications = self._validate_pair_classifications(
             pair_classifications, expected_tool_names,
@@ -2978,7 +3048,7 @@ class TaskOrchestrator:
         graph = derived_graph
         cache_path = self._graph_cache_path(server_name, schema_hash)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        classifier_contract = self._classifier_contract_payload()
+        classifier_contract = self._classifier_contract_payload(server_name)
         expected_pair_count = len(pair_classifications)
         payload = {
             "cache_version": self.DEPENDENCY_CACHE_VERSION,
@@ -2988,7 +3058,7 @@ class TaskOrchestrator:
             "tool_names": expected_tool_names,
             "graph": graph,
             "pair_classifications": pair_classifications,
-            "classifier_contract_hash": self._classifier_contract_hash(),
+            "classifier_contract_hash": self._classifier_contract_hash(server_name),
             **classifier_contract,
             "tool_count": len(expected_tool_names),
             "expected_pair_count": expected_pair_count,
@@ -3019,7 +3089,7 @@ class TaskOrchestrator:
         logger.info(f"Saved dependency graph cache: {cache_path}")
 
     def _get_or_build_dependency_graph(self, server_name: str) -> dict:
-        """PROVE Step 1: auto-discover tool dependencies.
+        """Load or build the dependency graph for one MCP server.
 
         Probe the live MCP server for tool schemas, load the schema-hash graph
         cache when available, and otherwise ask the teacher LLM to classify
@@ -3044,7 +3114,7 @@ class TaskOrchestrator:
             if cached is not None:
                 return cached
 
-            classifier_contract_hash = self._classifier_contract_hash()
+            classifier_contract_hash = self._classifier_contract_hash(server_name)
             failure_key = (server_name, schema_hash, classifier_contract_hash)
             failures = getattr(self, "_dependency_graph_failures", None)
             if failures is None:
@@ -3104,7 +3174,7 @@ class TaskOrchestrator:
         server_name: str,
         initial_classifications: list[dict[str, Any]] | None = None,
     ) -> tuple[dict, list[dict[str, Any]]] | None:
-        """PROVE §3.2 Step 1: LLM-based pairwise tool relationship classification.
+        """Classify pairwise tool relationships with the teacher LLM.
 
         Sends each unordered C(n,2) tool pair to the LLM once. The LLM selects
         source and target when the relationship is directed, then classifies it
@@ -3123,6 +3193,9 @@ class TaskOrchestrator:
         for t in server_tools:
             name = t["name"]
             desc = t.get("description", "")
+            output_fields = _DEPENDENCY_TOOL_OUTPUT_FIELDS.get(
+                server_name, {}
+            ).get(name, ())
             props = t.get("input_schema", {}).get("properties", {})
             required = t.get("input_schema", {}).get("required", [])
             param_lines = []
@@ -3132,10 +3205,15 @@ class TaskOrchestrator:
                 pdesc = pv.get("description", "")
                 param_lines.append(f"    {pk}{req_mark} ({ptype}){': ' + pdesc if pdesc else ''}")
             params_str = "\n".join(param_lines) if param_lines else "    (none)"
+            output_fields_str = (
+                f"\n  Known output fields: {', '.join(output_fields)}"
+                if output_fields else ""
+            )
             tool_descs.append(
                 f"Tool: {name}\n"
                 f"  Description: {desc}\n"
                 f"  Parameters:\n{params_str}"
+                f"{output_fields_str}"
             )
 
         tool_desc_by_name = {
@@ -3154,8 +3232,7 @@ class TaskOrchestrator:
         )
 
         # Batch pairs to fit LLM context and bound single-request decode time.
-        # This remains PROVE-style pairwise LLM classification over all C(n,2)
-        # pairs; each request carries only the schemas for its batch.
+        # Classify all C(n,2) pairs; each request carries one schema batch.
         BATCH_SIZE = self.DEPENDENCY_PAIR_BATCH_SIZE
         directed_classifications: dict[
             tuple[str, str], tuple[str, str, str]
@@ -3238,18 +3315,17 @@ class TaskOrchestrator:
                 if pair_key not in valid_pairs or pair_key in classified_pairs:
                     continue
 
-                if relation == "none":
-                    classified_pairs.add(pair_key)
-                    continue
-
                 if source not in tool_desc_by_name or target not in tool_desc_by_name:
-                    continue
-                if source == target or _canonical_pair(source, target) != pair_key:
+                    if relation != "none":
+                        continue
+                if relation != "none" and (
+                    source == target or _canonical_pair(source, target) != pair_key
+                ):
                     continue
                 candidate = {
                     "pair": list(pair_key),
-                    "source": source,
-                    "target": target,
+                    "source": source if relation != "none" else "",
+                    "target": target if relation != "none" else "",
                     "relation": relation,
                 }
                 issue = self._pair_classification_contract_issue(
@@ -3263,7 +3339,10 @@ class TaskOrchestrator:
                     )
                     continue
                 classified_pairs.add(pair_key)
-                directed_classifications[pair_key] = (source, target, relation)
+                if relation != "none":
+                    directed_classifications[pair_key] = (
+                        source, target, relation,
+                    )
 
         for batch_start in range(0, len(pairs), BATCH_SIZE):
             batch_pairs = pairs[batch_start:batch_start + BATCH_SIZE]
@@ -3289,9 +3368,35 @@ class TaskOrchestrator:
                     for name in pending_tool_names
                     if name in tool_desc_by_name
                 )
+                def _display_pair_direction(
+                    pair: tuple[str, str],
+                ) -> tuple[str, str]:
+                    supported: list[tuple[str, str]] = []
+                    for candidate_source, candidate_target in (
+                        pair, tuple(reversed(pair)),
+                    ):
+                        output_fields = set(
+                            _DEPENDENCY_TOOL_OUTPUT_FIELDS.get(
+                                server_name, {}
+                            ).get(candidate_source, ())
+                        )
+                        required = set(
+                            (
+                                tools_by_name.get(candidate_target, {}).get(
+                                    "input_schema"
+                                ) or {}
+                            ).get("required") or []
+                        )
+                        if output_fields & required:
+                            supported.append((candidate_source, candidate_target))
+                    return supported[0] if len(supported) == 1 else pair
+
                 pending_pairs_text = "\n".join(
-                    f"{i + 1}. {a_name} → {b_name}"
-                    for i, (a_name, b_name) in enumerate(pending_pairs)
+                    f"{i + 1}. {display_source} → {display_target}"
+                    for i, pair in enumerate(pending_pairs)
+                    for display_source, display_target in [
+                        _display_pair_direction(pair)
+                    ]
                 )
                 retry_feedback = "\n".join(
                     f"- {a_name} → {b_name}: previous response rejected because {reason}."
@@ -3393,7 +3498,7 @@ class TaskOrchestrator:
         return graph, pair_classifications
 
     def _extract_dependency_chains(self, server_name: str) -> list[list[str]]:
-        """PROVE §6 step 2: extract length-2 to length-5 tool chains from dependency graph.
+        """Extract length-2 to length-5 tool chains from the dependency graph.
 
         Depth-first search through the dependency graph to find all valid tool chains.
         """
@@ -3423,7 +3528,7 @@ class TaskOrchestrator:
         for start_node in graph:
             _dfs(start_node, [start_node], {start_node})
 
-        # Exact dedup only. PROVE extracts length-2 to length-5 paths from the
+        # Exact chain deduplication after extracting length-2 to length-5 paths.
         # discovered graph; do not add local caps or relation-preference ranking
         # that would bias the sampled chain distribution.
         deduped: list[list[str]] = []
@@ -3454,7 +3559,7 @@ class TaskOrchestrator:
         server_name: str,
         server_tools: list[dict],
     ) -> dict[str, Any]:
-        """PROVE §3.2 Step 2: enumerate real entities through read-only tools.
+        """Enumerate real entities through read-only tools.
 
         This is intentionally separate from ``debug/get_state``.  The sampler
         should only expose entities that a policy could discover through the
@@ -3636,7 +3741,7 @@ class TaskOrchestrator:
         server_name: str,
         live_context: dict[str, Any],
     ) -> list[list[str]]:
-        """PROVE §3.2 Step 2 guard: keep only chains executable in live state.
+        """Keep only chains executable in the current live state.
 
         The chain seed is not just a hint for prompt text. It determines which
         IDs the teacher can ground tool arguments on, so an infeasible chain must
@@ -3722,7 +3827,7 @@ class TaskOrchestrator:
         server_tools: list[dict],
         force_refresh: bool = False,
     ) -> dict[str, Any]:
-        """PROVE §3.2 Step 2: return sampling context for the current session.
+        """Return sampling context for the current session.
 
         Each session has its own seed-determined initial state, so the context
         MUST be probed per-session.  We cache within the same session_id to
@@ -3857,9 +3962,8 @@ def _attribute_success_criteria(
 ) -> list[dict[str, Any]]:
     """Link each state criterion to factual successful-call delta paths.
 
-    This is audit metadata, not a PROVE corpus gate.  Prefix overlap handles
-    semantic helper criteria such as ``messages_count`` whose verifier path is
-    a projection of the concrete ``messages`` container mutation.
+    Prefix overlap handles helper criteria such as ``messages_count`` whose
+    verifier path projects a concrete ``messages`` container mutation.
     """
     successful_events = [
         event for event in execution_history
@@ -3986,7 +4090,7 @@ def _classify_scenario(
            for step in execution_history):
         return "tool_error_recovery"
 
-    # PROVE permits graceful give-up without first manufacturing a failed tool
+    # Graceful give-up does not require a preceding failed tool call.
     # call.  Such a terminal is valid, but it is not a normal successful task.
     if terminal_action == "report_error":
         return (
@@ -4015,7 +4119,7 @@ def _classify_scenario(
 def _detect_duplicate_side_effect(
     oracle_calls: list[OracleCall], server_name: str = "",
 ) -> bool:
-    """Detect delete+create duplicate pattern (PROVE unsafe shortcut).
+    """Detect a delete-then-create duplicate pattern.
 
     Pattern: the oracle trace deletes/removes/cancels a *specific* entity and
     then creates/adds a similar entity — functionally a "recreate" shortcut
@@ -4341,7 +4445,7 @@ _CREATED_ENTITY_BY_TOOL: dict[str, set[str]] = {
     "create_webhook": {"webhook"},
     # NOTE: send_email intentionally omitted. It produces an outgoing message,
     # not an inbox email that subsequent tools (get_email/reply/archive/mark_read/…)
-    # can operate on. Including it here caused the PROVE filter to accept
+    # can operate on. Including it would create invalid outgoing-message edges.
     # send_email → {get_email, reply_email, forward_email, …} edges which are
     # semantically reversed. Chains needing "send then observe" are not
     # expressible in this domain's tool surface.
@@ -4372,6 +4476,47 @@ _CREATED_ENTITY_BY_TOOL: dict[str, set[str]] = {
     "send_dm": {"dm"},
     "contact_support": {"ticket"},
 }
+
+# Verified handler-output fields supplied only to dependency classification.
+# They do not change the Teacher/Policy-visible MCP schemas.
+_DEPENDENCY_TOOL_OUTPUT_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
+    "banking": {
+        "list_accounts": ("account_id",),
+    },
+    "calendar": {
+        "export_calendar": ("event_id",),
+        "list_events": ("event_id",),
+    },
+    "crm": {
+        "list_deals": ("contact_id", "deal_id", "lead_id"),
+        "list_leads": ("contact_id", "lead_id"),
+    },
+    "email": {
+        "list_inbox": ("email_id", "thread_id"),
+        "search_emails": ("email_id", "thread_id"),
+    },
+    "food_delivery": {
+        "list_orders": ("order_id", "restaurant_id"),
+        "list_restaurants": ("restaurant_id",),
+    },
+    "issue_tracker": {
+        "list_issues": ("issue_id", "sprint_id"),
+    },
+    "payments": {
+        "list_invoices": ("invoice_id", "payment_id", "refund_id"),
+        "list_webhooks": ("webhook_id",),
+    },
+    "shopping": {
+        "get_recommendations": ("product_id",),
+        "get_wishlist": ("product_id",),
+        "list_orders": ("order_id", "product_id"),
+        "search_products": ("product_id",),
+    },
+    "team_chat": {
+        "list_channels": ("channel_id",),
+    },
+}
+
 
 # Conservative typed output/reference contracts used only to detect a direct
 # contradiction in an LLM-classified explicit edge.  These include foreign-key
@@ -5303,7 +5448,7 @@ def _chain_is_feasible(
     for idx, tool_name in enumerate(chain):
         tool = tool_name.lower()
         requirements = _tool_existing_entity_requirements(tool, server_name)
-        # PROVE §3.2 Step 2: chain is feasible if live_context already has
+        # A chain is feasible when live_context contains its required entities.
         # the required entities (probed via read-only discovery tools).
         # A chain can start with a mutating tool (e.g., update_event) as
         # long as the entity exists in the live state.
@@ -5373,7 +5518,7 @@ def _extract_chain_context(
     server_name: str,
     live_context: dict[str, Any],
 ) -> dict[str, Any]:
-    """PROVE §3.2 Step 2: extract chain-relevant IDs from live read-only probes.
+    """Extract chain-relevant IDs from live read-only probes.
 
     This provides a compact, chain-aligned subset of the live state that the teacher
     LLM can use as grounded reference for parameter generation.  The anti-hallucination

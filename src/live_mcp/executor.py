@@ -181,7 +181,7 @@ class LiveMCPExecutor:
         state_changed: bool,
         metadata: dict[str, Any] | None = None,
     ) -> ToolExecutionResult:
-        # PROVE §3.2 Step 3: classify execution into SUCCESS / PARTIAL_SUCCESS / FAILURE.
+        # Classify execution into SUCCESS / PARTIAL_SUCCESS / FAILURE.
         # PARTIAL_SUCCESS: tool returned success=True but observation signals partial
         # results (empty list, empty dict, or explicit "partial"/"warning" keys).
         if not success:
@@ -208,7 +208,7 @@ class LiveMCPExecutor:
 
 
 def _is_partial_observation(observation: Any, tool_name: str = "") -> bool:
-    """PROVE §3.2 Step 3: detect PARTIAL_SUCCESS from observation content.
+    """Detect PARTIAL_SUCCESS from observation content.
 
     A successful tool call is PARTIAL_SUCCESS when:
     - The observation is an empty list (no results found) — only for read/list tools.

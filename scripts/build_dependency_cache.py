@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build PROVE dependency-graph caches via pairwise LLM classification.
+"""Build dependency-graph caches via pairwise LLM classification.
 
 Usage:
   # Live: probe servers with LLM to build dependency graphs
@@ -85,7 +85,7 @@ def build_dependency_caches(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build PROVE dependency-graph caches.",
+        description="Build dependency-graph caches.",
     )
     parser.add_argument("--domain", default="all",
                         help="Domain name, all, or comma-separated list.")

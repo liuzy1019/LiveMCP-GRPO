@@ -1,4 +1,4 @@
-"""Stateful team chat server — 11 tools (PROVE-aligned).
+"""Stateful team chat server with 11 tools.
 Append-only: channels, messages, threads, reactions, DMs, search, user status.
 """
 

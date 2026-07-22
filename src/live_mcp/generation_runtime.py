@@ -58,7 +58,7 @@ class TeacherGenerationRuntime:
         distractor_rate: float = 0.40,
         missing_function_rate: float = 1500 / (10895 + 1500),
     ) -> list[LiveTask]:
-        """Generate tasks with PROVE-style two-phase teacher."""
+        """Generate tasks with the two-phase teacher."""
         self._require_started()
         assert self.executor is not None
 

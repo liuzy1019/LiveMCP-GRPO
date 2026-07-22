@@ -1,8 +1,6 @@
 """Deterministic state seeders for the ten-domain LiveMCP environment.
 
-PROVE §3.2 Step 2: each domain must produce 20+ entities with seed-driven
-variations so that teacher trajectories reference a diverse, non-memorizable
-space of real entity IDs.  The original 4-entity pools were too small for GRPO.
+Each domain produces at least 20 seed-varying entities for generated tasks.
 """
 
 from __future__ import annotations
@@ -259,7 +257,7 @@ def _calendar_state(seed: int) -> dict[str, Any]:
             location = f"Room {100 + idx}"
         event_date = reference_date + _datetime.timedelta(days=(idx % 9) - 4)
         hour = 9 + (idx + rng.randint(0, 3)) % 6
-        # PROVE §3.2: seed-scoped ID prevents GRPO from memorising a fixed
+        # Seed-scoped IDs vary entity identities across generated tasks.
         # evt_001..evt_016 namespace across seeds.  Different seeds produce
         # disjoint ID spaces (e.g., seed=42 → evt_aa3_001, seed=137 → evt_1f7_001).
         eid = _seed_scoped_id("evt", seed, idx, width=3)

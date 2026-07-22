@@ -163,6 +163,7 @@ def test_stage1_strict_cache_rejects_stale_tool_schema() -> None:
         "classifier_contract_hash": "contract",
         "teacher_model_id": "teacher",
         "classifier_prompt_sha256": "prompt",
+        "output_field_contract_sha256": "output-fields",
     }
     assert _strict_cache_issue("probe", payload, names) == ""
     issue = _strict_cache_issue("probe", payload, ["a", "b", "c"])
@@ -447,9 +448,9 @@ def test_export_raises_row_budget_to_reproducible_minimum() -> None:
     assert "evt_1 (event): {'title': 'Planning'}" in system_prompt
 
 
-def test_completed_dependency_chain_reaches_prove_continuation_decision() -> None:
+def test_completed_dependency_chain_reaches_continuation_decision() -> None:
     source = Path("src/live_mcp/orchestrator.py").read_text()
-    continuation_block = source[source.index("# PROVE §3.2 continuation"):]
+    continuation_block = source[source.index("# Continuation is sampled"):]
     continuation_block = continuation_block[:continuation_block.index("# If we broke out")]
     assert "sample_continuation_decision" in continuation_block
     assert "completed_chain_progress >= len(chain_seed)" not in continuation_block

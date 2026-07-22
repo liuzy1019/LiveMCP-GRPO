@@ -3,138 +3,163 @@
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.10](https://img.shields.io/badge/PyTorch-2.10-red.svg)](https://pytorch.org/)
 [![veRL 0.6.1](https://img.shields.io/badge/veRL-0.6.1-orange.svg)](https://github.com/volcengine/verl)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](LICENSE)
 
-> **基于 PROVE 框架的多步 MCP 工具调用 GRPO 训练**：状态机数据合成 + 实时执行验证 + 多组件可编程奖励。
-> 当前覆盖 **10 个 MCP domain、190 个工具**，在 session-scoped state isolation 下做 live-execution RL。
+> **面向长程、多工具任务的可执行数据生成与 GRPO 训练系统。**
+>
+> LiveMCP-GRPO 在有状态 MCP 环境中生成用户任务、执行 Teacher 工具链、重放验证轨迹，
+> 并使用可编程奖励训练 Policy。
 
-## 当前状态（2026-07-20）
+## Problem
 
-| 范围 | 状态 | 已核实事实 |
-|------|------|------------|
-| 代码与环境合同 | 已验证 | ARL 环境下全量测试 278 passed；10 域 190 个工具、其中 103 个 mutating tools 的语义审计无失败 |
-| Teacher 数据 | 联合验收中 | `0720_mcpfix_round2_1000_200_topup` 已形成 1,000 train + 200 val，逐行生产合同审计无诊断；独立 seed 的 `0721_mcpfix_round3_1000_200` 正在生成，完成后再做跨 run 全局过滤与语义复核 |
-| 默认训练入口 | 未发布 | `data/train.parquet` 与 `data/val.parquet` 尚未建立；必须等待跨 run 全局去重、隔离和逐行质量复核完成 |
-| Policy / GRPO | 尚未端到端验证 | verl 导入、runtime validator 和 estimator 注册已通过；真实 Policy rollout 与完整 350-step GRPO 尚未运行 |
+长程工具调用数据不仅要在文本上看起来合理，还必须满足四个执行条件：
 
-“代码验证通过”“Teacher 候选可消费”和“正式训练数据已发布”是三个不同状态。项目不会用
-单元测试替代数据语义审计，也不会用单轮 Parquet 成功替代 Policy rollout/训练验收。
+1. 参数能够从用户输入或此前 observation 中获得；
+2. 工具调用在隔离的真实状态中可执行；
+3. 失败、恢复和终止行为与执行事实一致；
+4. 训练端能够复现生成时使用的 schema、状态和 reward contract。
 
-## 核心方法
+仅由语言模型直接生成 tool-call JSON，无法保证这些条件。LiveMCP-GRPO 将任务生成、真实执行、
+fresh replay、provenance 和训练消费校验放在同一条流水线中。
 
-本项目实现了 PROVE（Programmatic Rewards On Verified Environments）框架的三个组件：
+## Method
 
-| 组件 | 描述 | 对应模块 |
-|------|------|----------|
-| **Live MCP Environments** | 带 session-scoped 状态隔离的 MCP 服务器库，数据合成和 RL 训练共用 | `src/live_mcp/` |
-| **Grounded State-Machine Data Synthesis** | 自动发现工具依赖图 → 实时状态采样 grounding → 状态机编排生成多轮对话 → 重放验证 + Jaccard 去重 | `scripts/generate_data.py` |
-| **Multi-Component Programmatic Reward** | 五组件奖励：R_validity + R_coverage + R_efficiency + R_name + R_arg，无需外部 judge 模型 | `src/reward/oval_reward_fn.py` |
-
-### 数据合成五步（PROVE §3.2）
-
-```
-Step 1. Auto-Discovered Dependency Graph（自动发现工具依赖图）
-Step 2. Live-State Sampling（实时状态采样，grounded query generation）
-Step 3. State-Machine Orchestrator（状态机编排器，5 组状态驱动）
-Step 4. Robustness Knobs（鲁棒性注入：distractor/enum-strip/irrelevance/missing-func）
-Step 5. Replay Validation & Dedup（重放验证 + Jaccard 0.70 去重）
+```mermaid
+flowchart LR
+    A[Dependency Graph] --> B[Live-State Sampling]
+    B --> C[State-Machine Teacher]
+    C --> D[Robustness Injection]
+    D --> E[Fresh Replay + Provenance]
+    E --> F[Jaccard Deduplication]
+    F --> G[Parquet + GRPO]
 ```
 
----
+### Live MCP Environments
 
-## 🏗️ Project Structure
+- 每个任务使用独立 session 和确定性初始状态；
+- Teacher、Replay 和 Policy rollout 共用 MCP handler；
+- mutation 记录真实 state delta，异常调用回滚当前事务；
+- schema、transition、initial state 和 reward 均保存可验证指纹。
 
-```
-📦 livemcp-grpo/
-├── src/
-│   ├── live_mcp/          # Data synthesis + MCP servers（state-machine teacher, state seeder, oracle）
-│   ├── agent_loop/         # verl Agent Loop（single-call + initial-state hash + final-state evidence）
-│   ├── oval_mcp/           # OVAL envs + reward components
-│   ├── reward/             # verl reward entry（oval_reward_fn.py: R_val + R_cov + R_eff + R_name + R_arg）
-│   └── training/           # verl training components（GRPO estimator, hooks, trainer config）
-├── scripts/
-│   ├── generate_data.sh       # 数据生成 shell 入口（自动管理 vLLM + GPU 自适应）
-│   ├── generate_data.py       # 数据生成 Python 入口（5 步状态机管线）
-│   ├── train_grpo.sh          # GRPO 训练 shell 入口
-│   ├── build_dependency_cache.py # 构建依赖图缓存（C(n,2) 无序 pair）
-│   ├── validate_generation_pipeline.py   # 端到端管线验证
-│   ├── audit_tool_semantics.py     # 实体验证
-│   ├── merge_generation_shards.py # 生成分片合并（含质量门禁）
-│   ├── audit_generated_data.py # 正式 Parquet 逐行生产合同审计
-│   └── bench_vllm_throughput.py # vLLM 吞吐量基准
-├── configs/
-│   ├── live_mcp/               # 各 domain 与 ten_domain_suite.yaml
-│   └── livemcp_rollout.yaml    # LiveMCP rollout 注册
-├── data/
-│   ├── dependency_graphs/      # 各 domain 工具依赖图缓存
-│   ├── runs/                   # 生成产出（每次运行独立子目录）
-│   ├── train.parquet           # 正式 corpus 验收发布后才存在的活动符号链接
-│   ├── val.parquet             # 正式 corpus 验收发布后才存在的活动符号链接
-│   └── README.md               # 数据合同与生成说明
-├── reference/                  # 参考论文（PROVE / COVERT）
-├── tests/                      # pytest 测试
-├── verl/                       # verl 0.6.1（vendored, editable install）
-├── pyproject.toml
-└── requirements.txt
+### Grounded State-Machine Synthesis
+
+- 对 domain 内全部无序工具 pair 分类并构建依赖图；
+- 从 live state 中采样真实实体，约束 query 和 tool arguments；
+- Teacher 在多轮状态机中选择 tool call、恢复动作或 terminal；
+- distractor、enum stripping、missing function 和 irrelevance 在 Teacher 执行前固定。
+
+### Replay-Verified Ground Truth
+
+- 在 fresh session 中重新执行轨迹；
+- 检查 sensitive-parameter provenance；
+- 验证 terminal、round contract、hidden tools 和 success criteria；
+- 按位置感知的 tool-call sequence Jaccard 0.70 全局去重。
+
+### Programmatic Reward
+
+任务奖励由五个可解释组件组成：
+
+```text
+R_task = w_val * R_validity
+       + w_cov * R_coverage
+       + w_eff * R_efficiency
+       + w_name * R_name
+       + w_arg * R_argument
 ```
 
-正式训练入口为 `bash scripts/train_grpo.sh`，其唯一 Python 委托目标是
-`src/training/run_grpo.py`，不保留第二套兼容训练入口。
+奖励直接消费执行事件和 GT workflow，不依赖外部 judge 模型。
 
----
+## Data
 
-## 🚀 Quick Start
+数据目录结构、Parquet 字段合同、生成参数和审计方法见 [data/README.md](data/README.md)。
 
-### Activate the verified environment
+## Quick Start
+
+### 1. Environment
+
+运行环境要求 Python 3.11，并需要根据本机 CUDA 安装兼容的 PyTorch 与 vLLM。
+建议使用独立 Conda 环境：
 
 ```bash
-export ARL_ENV=/mnt/data2/liuzhanyi/envs/arl
-conda activate "$ARL_ENV"
-export PYTHON_BIN="$ARL_ENV/bin/python"
+git clone https://github.com/liuzy1019/LiveMCP-GRPO.git
+cd LiveMCP-GRPO
+
+conda create -n livemcp python=3.11 -y
+conda activate livemcp
+
+# 按本机 CUDA 版本安装 PyTorch 和 vLLM，然后安装项目依赖。
+python -m pip install -r requirements.txt
+python -m pip install -e ./verl
+python -m pip install -e .
 ```
 
-也可以用统一运行时入口完成 prefix、CUDA/FlashInfer JIT 路径注入和依赖检查：
+本地 Teacher 和 Policy 权重不随仓库分发，需要分别放入 `models/` 或通过脚本参数指定。
+
+### 2. Generate Data
 
 ```bash
-bash scripts/run_in_runtime_environment.sh --check
-bash scripts/run_in_runtime_environment.sh -- bash scripts/generate_data.sh --count 50 --val-count 10
-```
-
-本机的 Conda 名称索引仍把 `arl` 指向已不存在的 `/mnt/data1/.../envs/arl`，因此当前不要使用 `conda activate arl`。生成和训练脚本均支持显式解释器变量。
-
-### Install
-
-```bash
-pip install -e ./verl
-pip install -e ".[train,rl]"
-```
-
-### Generate Training Data
-
-```bash
-# 默认使用本地 Gemma-4-31B-it
+# 生成 500 条 train 和 100 条 validation 数据。
 bash scripts/generate_data.sh --count 500 --val-count 100
+
+# 限制可见 GPU 数量。
+GPU_COUNT=4 bash scripts/generate_data.sh --count 500 --val-count 100
 ```
 
-### Train
+### 3. Validate Data
+
+```bash
+python scripts/validate_generation_pipeline.py --stages 1,2
+python scripts/audit_generated_data.py data/train.parquet data/val.parquet
+python -m pytest tests/
+```
+
+### 4. Train
 
 ```bash
 bash scripts/train_grpo.sh
 bash scripts/train_grpo.sh --gpus 0,1,2,3 --total-steps 300
 ```
 
-### Validate
+训练脚本自动解析 GPU 数量和运行配置；GPU、batch size、micro batch 和 tensor parallel size
+均可通过命令行、环境变量或 Hydra override 注入。
 
-```bash
-python scripts/validate_generation_pipeline.py --stages 1,2
-python -m compileall src scripts tests
+## Project Structure
+
+```text
+livemcp-grpo/
+├── configs/                 # MCP suite 与 rollout 配置
+├── data/                    # 依赖图缓存、生成合同和本地数据入口
+├── scripts/                 # 数据生成、审计、合并和训练入口
+├── src/
+│   ├── live_mcp/            # 有状态 MCP 环境与生成状态机
+│   ├── agent_loop/          # veRL multi-turn agent loop
+│   ├── oval_mcp/            # verifier、reward components 与训练状态
+│   ├── reward/              # veRL reward entry
+│   └── training/            # GRPO 配置、estimator 与启动逻辑
+├── tests/                   # 单元、合同与对抗性回归测试
+└── verl/                    # vendored veRL 0.6.1 source
 ```
 
-> **Hardware（当前环境）**: 8×A10 22GB（也支持 4×A10，`generate_data.sh` 自动检测）。Teacher: 本地 Gemma-4-31B-it。Policy: Qwen3-4B (vLLM local)。脚本自动检测 GPU，不绑定特定硬件。
+## Reproducibility
 
----
+- 数据生成依赖本地 Teacher 推理，吞吐和保留率会随模型、GPU 和 seed 变化；
+- dependency cache 只消除 pair-classification 成本，不消除 Teacher rollout、replay 和去重成本；
+- 生成任务时应记录模型 revision、seed、schema fingerprint 和 reward fingerprint。
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-- [veRL](https://github.com/volcengine/verl) 0.6.1 · vLLM 0.19.1 · FlashInfer · GRPO
-- Teacher: 本地 Gemma-4-31B-it（对齐 PROVE 论文 Teacher）· Policy: Qwen3-4B（vLLM local serving）
-- Multi-component programmatic reward: R_validity + R_coverage + R_efficiency + R_name + R_arg（论文 §3.3）
+- Training: [veRL](https://github.com/volcengine/verl) 0.6.1 + GRPO
+- Inference: vLLM 0.19.1 + FlashInfer
+- Teacher: Gemma-4-31B-it
+- Policy: Qwen3-4B
+- Data: PyArrow / Parquet
+
+## Acknowledgements
+
+- [veRL](https://github.com/volcengine/verl) 提供分布式 RL 训练基础设施；
+- PROVE 提供 verified environment 和多组件任务奖励的研究参考；
+- Gemma 与 Qwen 系列模型用于 Teacher 和 Policy 实验。
+
+## License
+
+本项目使用 [Apache License 2.0](LICENSE)。vendored 依赖仍遵循其各自许可证。

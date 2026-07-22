@@ -39,7 +39,7 @@ class ToolExecutionResult:
     state_changed: bool
     latency_ms: int
     metadata: dict[str, Any] = field(default_factory=dict)
-    # PROVE §3.2 Step 3: three-way execution status classification.
+    # Three-way execution status classification.
     # SUCCESS: tool executed and returned complete results.
     # PARTIAL_SUCCESS: tool executed but returned partial/empty results (not an error).
     # FAILURE: tool failed (schema error, execution error, or server error).
@@ -84,7 +84,7 @@ class LiveTask:
     task_type: str = ""
     hidden_tools: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
-    conversation_queries: list[str] = field(default_factory=list)  # PROVE CONTINUATION: all user queries across rounds
+    conversation_queries: list[str] = field(default_factory=list)  # All user queries across conversation rounds.
     oracle_calls_per_round: list[list] = field(default_factory=list)  # per-round oracle calls for prompt construction
     execution_history_per_round: list[list] = field(default_factory=list)  # per-round execution results
 

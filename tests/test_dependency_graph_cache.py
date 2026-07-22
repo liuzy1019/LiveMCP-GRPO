@@ -108,6 +108,25 @@ class _ReverseDirectedClient:
         })
 
 
+class _CaptureBankingClient:
+    model_path = "test-teacher"
+
+    def __init__(self):
+        self.messages = []
+
+    def generate_chat(self, messages, **_kwargs) -> str:
+        self.messages.append(messages)
+        relation = "none" if len(self.messages) == 1 else "explicit"
+        return json.dumps({
+            "classifications": [{
+                "pair": "get_balance → list_accounts",
+                "source": "" if relation == "none" else "list_accounts",
+                "target": "" if relation == "none" else "get_balance",
+                "relation": relation,
+            }],
+        })
+
+
 class _Registry:
     def server_tools(self, _server_name: str) -> list[dict]:
         return TOOLS
@@ -499,6 +518,184 @@ def test_classifier_prompt_does_not_contradict_preexisting_state_rule() -> None:
     assert "schedule_transfer → cancel_transfer" not in prompt
     assert "reversal" in prompt
     assert "pre-existing server state" in prompt
+
+
+def test_classifier_receives_factual_discovery_output_fields() -> None:
+    tools = [
+        {
+            "name": "list_accounts",
+            "description": "List accounts.",
+            "input_schema": {"type": "object", "properties": {}, "required": []},
+            "annotations": {"readonly": True, "mutating": False},
+        },
+        {
+            "name": "get_balance",
+            "description": "Get an account balance.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"account_id": {"type": "string"}},
+                "required": ["account_id"],
+            },
+            "annotations": {"readonly": True, "mutating": False},
+        },
+    ]
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.client = _CaptureBankingClient()
+
+    classification = orchestrator._classify_edges_llm(tools, "banking")
+
+    assert classification is not None
+    user_prompt = orchestrator.client.messages[0][1]["content"]
+    assert "Tool: list_accounts" in user_prompt
+    assert "Known output fields: account_id" in user_prompt
+    assert "list_accounts → get_balance" in user_prompt
+    assert len(orchestrator.client.messages) == 2
+    assert "Contract Feedback" in orchestrator.client.messages[1][1]["content"]
+
+
+def test_none_relation_rejects_known_output_to_required_input() -> None:
+    tools = {
+        "list_accounts": {
+            "name": "list_accounts",
+            "input_schema": {"type": "object", "required": []},
+            "annotations": {"readonly": True, "mutating": False},
+        },
+        "get_balance": {
+            "name": "get_balance",
+            "input_schema": {
+                "type": "object", "required": ["account_id"],
+            },
+            "annotations": {"readonly": True, "mutating": False},
+        },
+    }
+    issue = TaskOrchestrator._pair_classification_contract_issue(
+        {
+            "pair": ["get_balance", "list_accounts"],
+            "source": "",
+            "target": "",
+            "relation": "none",
+        },
+        tools,
+        "banking",
+    )
+
+    assert issue is not None
+    assert "account_id" in issue
+    assert "list_accounts as source" in issue
+    assert "get_balance as target" in issue
+    assert "relation as explicit" in issue
+
+
+def test_output_field_contract_invalidates_only_classifier_cache(monkeypatch) -> None:
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.client = _NoneRelationClient()
+    schema_hash = orchestrator._tool_schema_hash(TOOLS, "probe")
+    classifier_hash = orchestrator._classifier_contract_hash("probe")
+    expanded = {
+        **orchestrator_module._DEPENDENCY_TOOL_OUTPUT_FIELDS,
+        "probe": {"tool_a": ("value_id",)},
+    }
+
+    monkeypatch.setattr(
+        orchestrator_module, "_DEPENDENCY_TOOL_OUTPUT_FIELDS", expanded,
+    )
+
+    assert orchestrator._tool_schema_hash(TOOLS, "probe") == schema_hash
+    assert orchestrator._classifier_contract_hash("probe") != classifier_hash
+
+
+def test_legacy_cache_migration_preserves_unaffected_pair_labels(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        TaskOrchestrator,
+        "DEPENDENCY_CACHE_ROOT",
+        tmp_path / "data" / "dependency_graphs",
+    )
+    tools = [
+        DEPENDENT_TOOLS[0],
+        DEPENDENT_TOOLS[1],
+        {
+            "name": "tool_c",
+            "description": "Read C.",
+            "input_schema": {"type": "object", "properties": {}, "required": []},
+            "annotations": {"readonly": True},
+        },
+    ]
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.client = _NoneRelationClient()
+    schema_hash = orchestrator._tool_schema_hash(tools, "probe")
+    graph = {
+        tool["name"]: {"explicit": [], "implicit": []} for tool in tools
+    }
+    pairs = orchestrator._pair_classifications_from_graph(
+        graph, [tool["name"] for tool in tools],
+    )
+    orchestrator._save_dependency_cache(
+        "probe", schema_hash, tools, graph, pairs,
+    )
+
+    expanded = {
+        **orchestrator_module._DEPENDENCY_TOOL_OUTPUT_FIELDS,
+        "probe": {"tool_a": ("value",)},
+    }
+    monkeypatch.setattr(
+        orchestrator_module, "_DEPENDENCY_TOOL_OUTPUT_FIELDS", expanded,
+    )
+
+    assert orchestrator._load_dependency_cache(
+        "probe", schema_hash, tools,
+    ) is None
+    preserved = orchestrator._dependency_graph_repairs[("probe", schema_hash)]
+    assert {tuple(entry["pair"]) for entry in preserved} == {
+        ("tool_a", "tool_c"),
+        ("tool_b", "tool_c"),
+    }
+
+
+def test_nonempty_output_contract_change_does_not_use_legacy_migration(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        TaskOrchestrator,
+        "DEPENDENCY_CACHE_ROOT",
+        tmp_path / "data" / "dependency_graphs",
+    )
+    first_contract = {
+        **orchestrator_module._DEPENDENCY_TOOL_OUTPUT_FIELDS,
+        "probe": {"tool_a": ("unrelated",)},
+    }
+    monkeypatch.setattr(
+        orchestrator_module, "_DEPENDENCY_TOOL_OUTPUT_FIELDS", first_contract,
+    )
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.client = _NoneRelationClient()
+    schema_hash = orchestrator._tool_schema_hash(DEPENDENT_TOOLS, "probe")
+    graph = {
+        tool["name"]: {"explicit": [], "implicit": []}
+        for tool in DEPENDENT_TOOLS
+    }
+    pairs = orchestrator._pair_classifications_from_graph(
+        graph, [tool["name"] for tool in DEPENDENT_TOOLS],
+    )
+    orchestrator._save_dependency_cache(
+        "probe", schema_hash, DEPENDENT_TOOLS, graph, pairs,
+    )
+
+    changed_contract = {
+        **first_contract,
+        "probe": {"tool_a": ("value",)},
+    }
+    monkeypatch.setattr(
+        orchestrator_module, "_DEPENDENCY_TOOL_OUTPUT_FIELDS", changed_contract,
+    )
+
+    assert orchestrator._load_dependency_cache(
+        "probe", schema_hash, DEPENDENT_TOOLS,
+    ) is None
+    assert ("probe", schema_hash) not in getattr(
+        orchestrator, "_dependency_graph_repairs", {},
+    )
 
 
 def test_production_cache_path_is_project_root_anchored(tmp_path, monkeypatch) -> None:

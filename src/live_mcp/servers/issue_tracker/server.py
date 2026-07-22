@@ -1,4 +1,4 @@
-"""Stateful issue tracker — 21 tools (PROVE-aligned).
+"""Stateful issue tracker with 21 tools.
 Workflow transitions: open→in_progress→in_review→resolved→closed.
 Features: sprints, labels, watchers, subtasks, time tracking, milestones.
 """

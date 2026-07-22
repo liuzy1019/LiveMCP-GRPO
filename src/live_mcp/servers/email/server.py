@@ -1,4 +1,4 @@
-"""Stateful email server — 17 tools (PROVE-aligned).
+"""Stateful email server with 17 tools.
 Append-only: inbox, drafts, sent, threads, labels, filters, attachments, forwarding.
 """
 

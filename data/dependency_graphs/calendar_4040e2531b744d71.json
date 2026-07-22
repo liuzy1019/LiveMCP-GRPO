@@ -69,10 +69,14 @@
     },
     "export_calendar": {
       "explicit": [
+        "add_attendee",
+        "delete_event",
         "get_event",
         "get_recurring_info",
         "remove_attendee",
-        "respond_to_event"
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
@@ -94,6 +98,10 @@
     },
     "list_events": {
       "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
         "remove_attendee",
         "respond_to_event",
         "set_reminder",
@@ -176,9 +184,9 @@
         "add_attendee",
         "export_calendar"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "export_calendar",
+      "target": "add_attendee",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -221,9 +229,9 @@
         "add_attendee",
         "list_events"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_events",
+      "target": "add_attendee",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -761,9 +769,9 @@
         "delete_event",
         "export_calendar"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "export_calendar",
+      "target": "delete_event",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -806,9 +814,9 @@
         "delete_event",
         "list_events"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_events",
+      "target": "delete_event",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -932,18 +940,18 @@
         "export_calendar",
         "set_reminder"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "export_calendar",
+      "target": "set_reminder",
+      "relation": "explicit"
     },
     {
       "pair": [
         "export_calendar",
         "update_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "export_calendar",
+      "target": "update_event",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -977,9 +985,9 @@
         "get_event",
         "list_events"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_events",
+      "target": "get_event",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1112,9 +1120,9 @@
         "get_recurring_info",
         "list_events"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_events",
+      "target": "get_recurring_info",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1351,9 +1359,10 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "7eab8ce10a28fa67",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "60074105dcf459c8978317ff76474ec83371afecc280db0a5fdd7c52480fc311",
   "tool_count": 17,
   "expected_pair_count": 136,
   "classified_pair_count": 136,

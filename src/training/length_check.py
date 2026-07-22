@@ -11,8 +11,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -49,6 +51,47 @@ def _percentile(sorted_xs: list[int], pct: float) -> int:
 from src.utils import iter_prompt_messages
 
 
+def _encoded_token_length(encoded: Any) -> int:
+    """返回单条 chat template 编码结果的 token 数。
+
+    Transformers 5 的 ``apply_chat_template`` 可能返回 BatchEncoding；对它
+    直接调用 ``len`` 得到的是字段数（通常为 2），而不是 input_ids 长度。
+    这里只接受单条序列，意外的多 batch 返回值交给调用方按预检失败处理。
+    """
+    if isinstance(encoded, Mapping):
+        if "input_ids" not in encoded:
+            raise TypeError("chat template encoding is missing input_ids")
+        encoded = encoded["input_ids"]
+
+    shape = getattr(encoded, "shape", None)
+    if shape is not None:
+        dimensions = tuple(int(value) for value in shape)
+        if len(dimensions) == 1:
+            return dimensions[0]
+        if len(dimensions) == 2 and dimensions[0] == 1:
+            return dimensions[1]
+        raise ValueError(
+            "chat template must encode exactly one conversation; "
+            f"got shape={dimensions}"
+        )
+
+    if hasattr(encoded, "tolist"):
+        encoded = encoded.tolist()
+    if not isinstance(encoded, (list, tuple)):
+        raise TypeError(
+            "unsupported chat template encoding type: "
+            f"{type(encoded).__name__}"
+        )
+    if encoded and isinstance(encoded[0], (list, tuple)):
+        if len(encoded) != 1:
+            raise ValueError(
+                "chat template must encode exactly one conversation; "
+                f"got batch_size={len(encoded)}"
+            )
+        encoded = encoded[0]
+    return len(encoded)
+
+
 def check_split_length(
     parquet_path: str | Path,
     tokenizer_path: str,
@@ -69,8 +112,12 @@ def check_split_length(
     n_template_fail = 0
     for messages in iter_prompt_messages(records):
         try:
-            ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
-            lens.append(len(ids))
+            encoded = tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+            )
+            lens.append(_encoded_token_length(encoded))
         except Exception:
             n_template_fail += 1
             lens.append(max_prompt_length + 1)  # 标记为溢出

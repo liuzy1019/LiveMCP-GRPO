@@ -1,6 +1,6 @@
-"""Task Reward: R_task per PROVE §3.3.
+"""Five-component trajectory task reward.
 
-Trajectory-level R_task composed of (PROVE eq. 5):
+Trajectory-level reward:
   R_task = w_val*R_validity + w_cov*R_coverage + w_eff*R_efficiency
            + w_name*R_name + w_arg*R_arg
 
@@ -37,7 +37,7 @@ class TaskRewardResult:
 
     r_task: float = 0.0
     r_validity: float = 0.0
-    # 三级分项（各占 1/3，对齐论文 §4.2）
+    # 三级分项，各占 1/3
     r_name_exists: float = 0.0    # level-1: function name 在 schema 中存在
     r_args_present: float = 0.0   # level-2: 必需参数存在且类型兼容
     r_execution: float = 0.0      # level-3: live 执行成功
@@ -131,7 +131,7 @@ class TaskReward:
         n_calls = len(tool_events)
         result.n_model_calls = n_calls
 
-        # 1. R_validity: 三级等权平均（对齐论文 §4.2）
+        # 1. R_validity: 三级等权平均
         #    level-1 (1/3): function name 在 candidate schema 中存在
         #    level-2 (1/3): 所有必需参数存在且 JSON 类型兼容
         #    level-3 (1/3): live 执行成功无错
@@ -143,18 +143,18 @@ class TaskReward:
         result.r_execution = r_execution
         result.r_validity = (r_name_exists + r_args_present + r_execution) / 3.0
 
-        # Terminal-action penalties are an OVAL extension, not part of PROVE's
+        # Terminal-action penalties are enabled only by the oval_full profile.
         # three-level validity definition. The reward profile sets this flag
-        # explicitly so prove_baseline has no extra multiplier.
+        # prove_baseline applies no terminal multiplier.
         if (
             task.get("apply_terminal_validity_penalty", False)
             and not self._check_terminal_predicate(event_log, task)
         ):
             result.r_validity *= 0.5
 
-        # 2. R_coverage: PROVE eq.(1) — dependency-ordered GT step coverage.
+        # 2. R_coverage: dependency-ordered GT step coverage.
         #    R_cov = (1/|G|) * Σ m(g)*o(g)
-        #    |G| = len(required_tool_calls)，即 GT steps 数量，对齐论文公式(1)。
+        #    |G| = len(required_tool_calls)，即 GT steps 数量。
         #    m(g) = 1 if GT step g is matched in model output
         #    o(g) = 1 if all dependency predecessors of g are matched earlier
         #    When dependency_edges are available, use partial-order matching:
@@ -191,7 +191,7 @@ class TaskReward:
             result.r_coverage = 0.0
 
         # 3. R_name: precision — fraction of model calls whose name is in GT
-        #    PROVE §4.2: R_name = |{c ∈ Ĉ : c.name ∈ GT_names}| / |Ĉ|
+        #    R_name = |{c ∈ Ĉ : c.name ∈ GT_names}| / |Ĉ|
         required_names = self._required_tool_names(required_tool_calls)
         model_names = self._model_tool_names(tool_events)
         if n_calls == 0:
@@ -210,7 +210,7 @@ class TaskReward:
         result.n_required_calls = n_required
         result.r_efficiency = self._compute_efficiency(n_calls, n_required)
 
-        # R_task: PROVE eq.(5) — direct weighted sum, no normalisation.
+        # R_task is a direct weighted sum without normalisation.
         #   R_task = w_val*R_val + w_cov*R_cov + w_eff*R_eff + w_name*R_name + w_arg*R_arg
         # Max ≈ 1.3 (R_eff=0) or 1.45 (R_eff=1, impossible in practice).
         # GRPO uses group-relative advantage so absolute scale is irrelevant.

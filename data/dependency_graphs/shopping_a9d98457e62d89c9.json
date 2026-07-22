@@ -99,7 +99,14 @@
     },
     "get_recommendations": {
       "explicit": [
-        "get_reviews"
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
       ],
       "implicit": []
     },
@@ -113,7 +120,13 @@
     },
     "get_wishlist": {
       "explicit": [
-        "remove_from_wishlist"
+        "add_review",
+        "add_to_cart",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
       ],
       "implicit": []
     },
@@ -123,9 +136,17 @@
     },
     "list_orders": {
       "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
         "get_order",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
         "return_order",
-        "track_order"
+        "track_order",
+        "update_cart_quantity"
       ],
       "implicit": []
     },
@@ -143,8 +164,13 @@
     },
     "search_products": {
       "explicit": [
+        "add_review",
         "add_to_cart",
+        "add_to_wishlist",
         "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
         "update_cart_quantity"
       ],
       "implicit": []
@@ -254,9 +280,9 @@
         "add_review",
         "get_recommendations"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_recommendations",
+      "target": "add_review",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -281,9 +307,9 @@
         "add_review",
         "get_wishlist"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_wishlist",
+      "target": "add_review",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -299,9 +325,9 @@
         "add_review",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "add_review",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -335,9 +361,9 @@
         "add_review",
         "search_products"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_products",
+      "target": "add_review",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -443,9 +469,9 @@
         "add_to_cart",
         "get_recommendations"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_recommendations",
+      "target": "add_to_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -470,9 +496,9 @@
         "add_to_cart",
         "get_wishlist"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_wishlist",
+      "target": "add_to_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -488,9 +514,9 @@
         "add_to_cart",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "add_to_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -623,9 +649,9 @@
         "add_to_wishlist",
         "get_recommendations"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_recommendations",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -668,9 +694,9 @@
         "add_to_wishlist",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -704,9 +730,9 @@
         "add_to_wishlist",
         "search_products"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_products",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1739,9 +1765,9 @@
         "get_product",
         "get_recommendations"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_recommendations",
+      "target": "get_product",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1766,9 +1792,9 @@
         "get_product",
         "get_wishlist"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_wishlist",
+      "target": "get_product",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1784,9 +1810,9 @@
         "get_product",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "get_product",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1892,18 +1918,18 @@
         "get_recommendations",
         "remove_from_cart"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_recommendations",
+      "target": "remove_from_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
         "get_recommendations",
         "remove_from_wishlist"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_recommendations",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1937,9 +1963,9 @@
         "get_recommendations",
         "update_cart_quantity"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_recommendations",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2036,9 +2062,9 @@
         "get_reviews",
         "get_wishlist"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_wishlist",
+      "target": "get_reviews",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2054,9 +2080,9 @@
         "get_reviews",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "get_reviews",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2090,9 +2116,9 @@
         "get_reviews",
         "search_products"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_products",
+      "target": "get_reviews",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2135,9 +2161,9 @@
         "get_wishlist",
         "remove_from_cart"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_wishlist",
+      "target": "remove_from_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2180,9 +2206,9 @@
         "get_wishlist",
         "update_cart_quantity"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "get_wishlist",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2252,18 +2278,18 @@
         "list_orders",
         "remove_from_cart"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "remove_from_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
         "list_orders",
         "remove_from_wishlist"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2297,9 +2323,9 @@
         "list_orders",
         "update_cart_quantity"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2324,9 +2350,9 @@
         "remove_from_cart",
         "search_products"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_products",
+      "target": "remove_from_cart",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2360,9 +2386,9 @@
         "remove_from_wishlist",
         "search_products"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "search_products",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2437,9 +2463,10 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "56d871b0be9609aa",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "f3c647462b36b74802e101f6255fbf0ec78ad8bbe330dcc55be65aebce39c264",
   "tool_count": 23,
   "expected_pair_count": 253,
   "classified_pair_count": 253,

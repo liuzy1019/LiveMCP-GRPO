@@ -81,12 +81,22 @@
     },
     "list_deals": {
       "explicit": [
-        "update_deal"
+        "convert_lead",
+        "delete_contact",
+        "delete_lead",
+        "get_deal",
+        "update_contact",
+        "update_deal",
+        "update_lead"
       ],
       "implicit": []
     },
     "list_leads": {
       "explicit": [
+        "convert_lead",
+        "delete_contact",
+        "delete_lead",
+        "update_contact",
         "update_lead"
       ],
       "implicit": []
@@ -440,18 +450,18 @@
         "convert_lead",
         "list_deals"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_deals",
+      "target": "convert_lead",
+      "relation": "explicit"
     },
     {
       "pair": [
         "convert_lead",
         "list_leads"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_leads",
+      "target": "convert_lead",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -890,18 +900,18 @@
         "delete_contact",
         "list_deals"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_deals",
+      "target": "delete_contact",
+      "relation": "explicit"
     },
     {
       "pair": [
         "delete_contact",
         "list_leads"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_leads",
+      "target": "delete_contact",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -953,18 +963,18 @@
         "delete_lead",
         "list_deals"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_deals",
+      "target": "delete_lead",
+      "relation": "explicit"
     },
     {
       "pair": [
         "delete_lead",
         "list_leads"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_leads",
+      "target": "delete_lead",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1007,9 +1017,9 @@
         "get_deal",
         "list_deals"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_deals",
+      "target": "get_deal",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1079,9 +1089,9 @@
         "list_deals",
         "update_contact"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_deals",
+      "target": "update_contact",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1097,9 +1107,9 @@
         "list_deals",
         "update_lead"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_deals",
+      "target": "update_lead",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1115,9 +1125,9 @@
         "list_leads",
         "update_contact"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_leads",
+      "target": "update_contact",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1192,9 +1202,10 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "da18b5e1c876e706",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "8303d7c31172a3c0a17855b0f80ab3555e3d9d8c0fe5ffb9f9cbbb71c8b71f0f",
   "tool_count": 16,
   "expected_pair_count": 120,
   "classified_pair_count": 120,

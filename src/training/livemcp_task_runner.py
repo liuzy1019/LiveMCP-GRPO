@@ -21,7 +21,7 @@ from verl.trainer.main_ppo import TaskRunner
 
 
 class LiveMCPTaskRunner(TaskRunner):
-    """Register the OVAL estimator in Ray; leave PROVE GRPO untouched."""
+    """Register the OVAL estimator in the Ray driver process."""
 
     def run(self, config):
         """注册 estimator 后执行标准训练流程。"""

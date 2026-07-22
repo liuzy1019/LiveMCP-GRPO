@@ -73,9 +73,16 @@
     },
     "list_orders": {
       "explicit": [
+        "add_tip",
+        "cancel_order",
         "contact_support",
+        "create_order",
+        "filter_by_dietary",
         "get_estimated_time",
+        "get_menu",
         "get_order",
+        "get_popular_items",
+        "get_restaurant",
         "rate_order",
         "reorder",
         "track_rider",
@@ -85,7 +92,11 @@
     },
     "list_restaurants": {
       "explicit": [
-        "filter_by_dietary"
+        "create_order",
+        "filter_by_dietary",
+        "get_menu",
+        "get_popular_items",
+        "get_restaurant"
       ],
       "implicit": []
     },
@@ -200,9 +211,9 @@
         "add_tip",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "add_tip",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -335,9 +346,9 @@
         "cancel_order",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "cancel_order",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -578,18 +589,18 @@
         "create_order",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "create_order",
+      "relation": "explicit"
     },
     {
       "pair": [
         "create_order",
         "list_restaurants"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_restaurants",
+      "target": "create_order",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -686,9 +697,9 @@
         "filter_by_dietary",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "filter_by_dietary",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -875,18 +886,18 @@
         "get_menu",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "get_menu",
+      "relation": "explicit"
     },
     {
       "pair": [
         "get_menu",
         "list_restaurants"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_restaurants",
+      "target": "get_menu",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1028,18 +1039,18 @@
         "get_popular_items",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "get_popular_items",
+      "relation": "explicit"
     },
     {
       "pair": [
         "get_popular_items",
         "list_restaurants"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_restaurants",
+      "target": "get_popular_items",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1091,18 +1102,18 @@
         "get_restaurant",
         "list_orders"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_orders",
+      "target": "get_restaurant",
+      "relation": "explicit"
     },
     {
       "pair": [
         "get_restaurant",
         "list_restaurants"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_restaurants",
+      "target": "get_restaurant",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1339,9 +1350,10 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "03c9c30b8d8f6105",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "849419b000b8ab5e867c2e34daf1668cc580f775b626c5c529661f67f861d038",
   "tool_count": 17,
   "expected_pair_count": 136,
   "classified_pair_count": 136,

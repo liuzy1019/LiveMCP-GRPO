@@ -1,8 +1,4 @@
-"""Jaccard-based deduplication for LLM teacher generated tasks.
-
-PROVE uses Jaccard similarity threshold of 0.70 on oracle call sequences
-to remove near-duplicate training tasks. This improves data diversity.
-"""
+"""Jaccard deduplication for LLM-generated task traces."""
 
 from __future__ import annotations
 
@@ -14,8 +10,8 @@ from src.live_mcp.types import LiveTask
 def jaccard_similarity(a: LiveTask, b: LiveTask) -> float:
     """Jaccard similarity between two tasks' oracle tool-call sequences.
 
-    PROVE deduplicates on tool-call sequences.  Each task is represented as an
-    ordered list of tool names from its oracle program. Position is included so:
+    Each task is represented as an ordered list of oracle tool names. Position
+    is included so:
       * [a, b] vs [b, a]    -> distinguishable
       * [a, b] vs [a, a, b] -> distinguishable
 
@@ -29,9 +25,9 @@ def jaccard_similarity(a: LiveTask, b: LiveTask) -> float:
     sigs_b = _call_sequence(b)
 
     if not sigs_a and not sigs_b:
-        # PROVE publishes Jaccard on tool-call sequences, not a query-text
-        # fallback. Empty sequences therefore provide no positive similarity
-        # evidence and must not collapse clarification/abstention examples.
+        # Jaccard is computed on tool-call sequences, not query text.
+        # Empty sequences provide no positive similarity evidence and must not
+        # collapse clarification or abstention examples.
         return 0.0
     if not sigs_a or not sigs_b:
         return 0.0
@@ -73,8 +69,8 @@ def dedup_tasks(
 def _call_sequence(task: LiveTask) -> list[str]:
     """Build the ordered tool-name sequence from oracle calls.
 
-    Uses list (not set) to preserve call order and repeat count. Arguments are
-    ignored to match PROVE's sequence-level Jaccard deduplication.
+    Uses list (not set) to preserve call order and repeat count. Argument values
+    are omitted so deduplication measures the tool-call sequence.
     """
     calls = task.oracle_program.calls
     primary_domain = str(task.target_servers[0]) if task.target_servers else ""

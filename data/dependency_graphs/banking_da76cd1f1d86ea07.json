@@ -70,7 +70,12 @@
       "explicit": [
         "apply_loan",
         "bill_pay",
+        "deposit",
+        "freeze_account",
         "get_account_info",
+        "get_balance",
+        "get_history",
+        "get_statement",
         "schedule_transfer",
         "transfer",
         "unfreeze_account",
@@ -607,9 +612,9 @@
         "deposit",
         "list_accounts"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_accounts",
+      "target": "deposit",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -724,9 +729,9 @@
         "freeze_account",
         "list_accounts"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_accounts",
+      "target": "freeze_account",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -931,9 +936,9 @@
         "get_balance",
         "list_accounts"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_accounts",
+      "target": "get_balance",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1102,9 +1107,9 @@
         "get_history",
         "list_accounts"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_accounts",
+      "target": "get_history",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1174,9 +1179,9 @@
         "get_statement",
         "list_accounts"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_accounts",
+      "target": "get_statement",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1494,9 +1499,10 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "918244c4dab36995",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "d572efaae7f770c0766074a2bdb0f1598fbbb3d67ad94ac24fe8d4f7301ee6bb",
   "tool_count": 18,
   "expected_pair_count": 153,
   "classified_pair_count": 153,

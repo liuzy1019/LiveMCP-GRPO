@@ -1,4 +1,4 @@
-"""Stateful payments server — 10 tools (PROVE-aligned).
+"""Stateful payments server with 10 tools.
 Transactional state: invoices, payments, refunds, webhooks, disputes.
 Safety: double-payment, refund-without-payment, dispute constraints.
 """

@@ -95,7 +95,13 @@
     },
     "list_issues": {
       "explicit": [
+        "add_label",
         "add_to_sprint",
+        "add_watcher",
+        "assign_issue",
+        "comment_issue",
+        "create_subtask",
+        "get_issue",
         "list_subtasks",
         "remove_from_sprint",
         "remove_label",
@@ -242,9 +248,9 @@
         "add_label",
         "list_issues"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_issues",
+      "target": "add_label",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -575,9 +581,9 @@
         "add_watcher",
         "list_issues"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_issues",
+      "target": "add_watcher",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -728,9 +734,9 @@
         "assign_issue",
         "list_issues"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_issues",
+      "target": "assign_issue",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -872,9 +878,9 @@
         "comment_issue",
         "list_issues"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_issues",
+      "target": "comment_issue",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1250,9 +1256,9 @@
         "create_subtask",
         "list_issues"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_issues",
+      "target": "create_subtask",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -1358,9 +1364,9 @@
         "get_issue",
         "list_issues"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_issues",
+      "target": "get_issue",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -2047,9 +2053,10 @@
       "relation": "none"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "4b1ac24ad6b7c3d6",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "d0eb9b49daf4252756f951ea992c853088545874ed9bd84e774df6cc403eec33",
   "tool_count": 21,
   "expected_pair_count": 210,
   "classified_pair_count": 210,

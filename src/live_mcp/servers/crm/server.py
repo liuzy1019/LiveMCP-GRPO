@@ -1,4 +1,4 @@
-"""Stateful CRM server — 16 tools (PROVE-aligned).
+"""Stateful CRM server with 16 tools.
 Relational state: leads, contacts, deals, tasks, notes.
 Safety: identity_policy=preserve, reference integrity.
 """

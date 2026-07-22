@@ -1,4 +1,4 @@
-"""Stateful calendar server — 17 tools (PROVE-aligned).
+"""Stateful calendar server with 17 tools.
 Features: events, recurring rules, attendees, reminders, free/busy, timezone, conflicts.
 """
 

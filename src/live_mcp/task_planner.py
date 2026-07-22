@@ -1,4 +1,4 @@
-"""PROVE-style state-machine task generation.
+"""State-machine task generation for live MCP environments.
 
 LLM-in-the-loop at every turn: the LLM sees domain + tool schemas + live state
 + full execution history, and decides the next action (tool_call with arguments,
@@ -154,7 +154,7 @@ DIFFICULTY_DESCRIPTIONS: dict[str, str] = {
 
 @dataclass(frozen=True)
 class GeneratedQuery:
-    """Auditable result of PROVE chain-seeded query synthesis."""
+    """Auditable result of chain-seeded query synthesis."""
 
     user_query: str
     target_capability: str
@@ -165,8 +165,8 @@ class GeneratedQuery:
 def _chain_goal_phrase(final_tool: str) -> str:
     """Natural-language outcome hint for chain-seeded query generation.
 
-    This keeps PROVE's chain-seeded query idea without exposing tool names or
-    forcing the user prompt to list internal workflow steps.
+    The hint guides the user goal without exposing tool names or forcing the
+    prompt to list internal workflow steps.
     """
     name = final_tool.lower()
     explicit: dict[str, str] = {
@@ -254,7 +254,7 @@ def _target_tool_requirement(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Persona templates & reference dates (PROVE §4 diversity injection)
+# Persona templates and reference dates.
 # ═══════════════════════════════════════════════════════════════════════
 
 _PERSONA_TEMPLATES: list[str] = [
@@ -304,38 +304,37 @@ def reference_datetime_for_seed(seed: int) -> _datetime.datetime:
     )
 
 # ═══════════════════════════════════════════════════════════════════════
-# Turn-decay schedule (PROVE §3.2 Step 3.5:
+# Turn-decay schedule:
 #   min_turns=2, max_turns=3 for CONVERSATION ROUNDS — i.e. user turns)
 #
 # NOTE ON TERMINOLOGY (avoids confusion with _run_turn_loop's max_turns=8):
 #   * MIN/MAX_CONVERSATION_ROUNDS (this file)  = # of user turns per task
-#     PROVE-aligned bounds: 2..3.
+#     Conversation-round bounds: 2..3.
 #   * max_turns argument in orchestrator._run_turn_loop / generate_one
 #     = # of teacher decision STEPS inside a single conversation round
-#       (tool_call attempts + retries + terminal), unrelated to PROVE §3.2
+#       (tool-call attempts + retries + terminal),
 #       Step 3.5.  It only bounds the state-machine's inner loop so it
 #       terminates on stuck LLMs.  RL rollout uses a verified per-row action
 #       budget for generated data; the configured max is only a runtime default
-#       and is unrelated to PROVE §3.2 conversation rounds.
+#       independent of conversation-round count.
 # ═══════════════════════════════════════════════════════════════════════
 
 class ContinuationPolicy:
-    """PROVE-style turn-decay schedule for deciding when to end a conversation.
+    """Turn-decay schedule for deciding when to end a conversation.
 
-    PROVE §3.2 Step 3.5: min_turns=2, max_turns=3 for conversation rounds
-    (user follow-up turns).  A dependency chain seeds one complete user goal;
-    follow-up turns continue the live conversation after that goal instead of
+    Normal tasks use two to three conversation rounds. A dependency chain seeds
+    one complete user goal; follow-up turns continue that goal instead of
     exposing individual internal chain nodes as separate user requests.
 
     Perturbations (intermittent errors, pagination) may add 1-2 extra turns.
     """
 
-    # PROVE §3.2 Step 3.5 explicitly requires min_turns=2 (i.e., conversations
+    # min_turns=2 means at least two conversation rounds for normal success.
     # must span at least two user turns with at least one follow-up).
     MIN_CONVERSATION_ROUNDS = 2
     MAX_CONVERSATION_ROUNDS = 3
     # P1-3: Per-turn turn-decay probabilities for middle rounds.
-    # These are NOT published PROVE parameters — the paper does not disclose
+    # Local continuation probabilities:
     # the exact turn-decay schedule.  These are local defaults configurable via
     # experiment metadata.
     CLARIFICATION_PROB: float = 0.10   # probability of clarification at middle rounds
@@ -346,7 +345,7 @@ class ContinuationPolicy:
         rounds_done: int,
         rng: random.Random,
     ) -> str:
-        """PROVE §3.2 Step 3.5: per-turn continuation decision.
+        """Sample the continuation decision for one conversation round.
 
         Returns one of {"end", "follow_up", "clarification"}.
 
@@ -429,7 +428,7 @@ def _final_answer_requests_user_input(text: str) -> bool:
 
 
 class TaskPlanner:
-    """PROVE-style state-machine teacher.
+    """State-machine teacher for query and action generation.
 
     The LLM is called at EVERY turn with full context (domain, tools, live state,
     execution history) and decides the next action.  Parameters come from the LLM's
@@ -574,14 +573,12 @@ class TaskPlanner:
     ) -> GeneratedQuery:
         """LLM generates a natural-language user query grounded in live state.
 
-        PROVE §4: injects persona (character role) and reference_date (temporal anchor)
-        to increase query diversity. chain_seed guides the query toward a
-        realistic dependency chain without making that chain the only valid
-        tool trajectory.
+        Persona and reference_date increase query diversity. chain_seed guides
+        the query toward a realistic dependency chain without making that
+        chain the only valid tool trajectory.
 
-        chain_context (PROVE §3.2 Step 2): a compact, chain-aligned subset of
-        live-state entity IDs extracted by _extract_chain_context().  The
-        anti-hallucination constraint uses this to prevent ID invention.
+        chain_context is a compact subset of live-state entity IDs extracted by
+        _extract_chain_context(). The grounding constraint prevents ID invention.
         """
         difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(
             difficulty, DIFFICULTY_DESCRIPTIONS["complete"]
@@ -637,7 +634,7 @@ class TaskPlanner:
             "follow the difficulty for WHAT to include, but keep the persona's VOICE and TONE."
         )
 
-        # ── PROVE §3.2: the complete dependency chain seeds one task. ──
+        # ── The complete dependency chain seeds one task. ──
         chain_goal_block = ""
         if chain_seed:
             final_tool = chain_seed[-1]
@@ -696,7 +693,7 @@ class TaskPlanner:
                     f"{chain_fact_note}\n"
                 )
 
-        # ── Anti-hallucination constraint (PROVE §3.2 Step 2) ──
+        # ── Grounded-entity constraint ──
         # Chain-aligned entity context: only these IDs are known to exist
         # in the live state.  The teacher MUST reference only these, never
         # invent IDs.  Without this constraint, the LLM hallucinates entity
@@ -858,7 +855,7 @@ capabilities must not appear in mutation_evidence.
                 )
         raise RuntimeError(f"Failed to generate query for {self.domain}")
 
-    # ── Step 1b: generate follow-up user message (PROVE CONTINUATION) ──
+    # ── Generate a follow-up user message ──
 
     def generate_followup(
         self,
@@ -876,12 +873,11 @@ capabilities must not appear in mutation_evidence.
     ) -> str:
         """Generate a follow-up user message from the user's perspective.
 
-        PROVE §3.2 Step 3.5: the user continues the conversation without
-        knowing what tools the assistant called internally. The follow-up
-        is grounded in the refreshed live server state (real entity IDs), not
-        in hidden oracle execution details.  The initial request already owns
-        the complete dependency-chain goal; a follow-up continues that user
-        intent instead of exposing an internal chain node as a new request.
+        The user continues without knowing which tools the assistant called.
+        The follow-up is grounded in refreshed live state rather than hidden
+        oracle details. The initial request owns the complete dependency-chain
+        goal; a follow-up continues that intent instead of exposing an internal
+        chain node as a new request.
 
         Passing execution_history to the follow-up generator was wrong: it
         caused the LLM to adopt the assistant's confirmation tone ("Got it,
@@ -1030,7 +1026,7 @@ Return only:
         previous_response: str = "",
         conversation_context: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Generate a user clarification question (PROVE §3.2 Step 3.5).
+        """Generate a user clarification question.
 
         Unlike generate_followup (which drives the task forward), this
         generates a natural user question seeking clarification or more detail
@@ -1217,7 +1213,7 @@ Return only:
             if reference_date else ""
         )
 
-        # ── Live-state grounding constraint (PROVE §3.2 Step 2) ──
+        # ── Live-state grounding constraint ──
         # The initial round receives a chain-aligned subset. Continuation rounds
         # receive a refreshed live-state snapshot, so the planner must not treat
         # the initial subset as an exhaustive list of server entities.
@@ -1451,7 +1447,7 @@ Output one JSON object:
         )
 
 
-    # ── Recovery module (PROVE §6 step 5a: explicit retry states) ──
+    # ── Recovery module ──
 
     def decide_recovery(
         self,
@@ -1461,7 +1457,7 @@ Output one JSON object:
         tool_schemas: list[dict[str, Any]],
         execution_history: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """PROVE-style recovery decision after a failed tool call.
+        """Choose a recovery action after a failed tool call.
 
         Returns one of:
           - {"action": "retry_same", "corrected_args": {...}}  — retry with tweaked params
@@ -1866,15 +1862,13 @@ def replay_validate(
 ) -> tuple[bool, float, int, int, bool, int]:
     """Replay oracle trace against a fresh session to verify it's reproducible.
 
-    Counts only schema-level and execution errors (not empty-result responses).
-    PROVE's corpus filter permits up to 30% replay errors; use the same
-    threshold here. Training export still applies a separate contract filter
-    for terminal shape and tool-call budget.
+    Counts only schema-level and execution errors, not empty-result responses.
+    The default threshold is 30%. Training export separately validates terminal
+    shape and tool-call budget.
 
     Returns:
         (passed, error_rate, num_errors, num_calls, criteria_ok, criteria_failed)
-        - passed: True if error_rate <= max_error_rate (default 0.30)
-          ONLY counts schema/execution errors — paper-definition aligned.
+        - passed: True if schema/execution error_rate <= max_error_rate
         - error_rate: fraction of tool calls that failed
         - num_errors: count of schema/execution errors only
         - num_calls: total tool calls replayed
@@ -1954,26 +1948,21 @@ def replay_validate(
                         state_changed=bool(getattr(result, "state_changed", False)),
                     )
                 # Later calls would observe a state that the Teacher trajectory
-                # never produced.  Stop instead of allowing the paper's 30%
-                # schema/execution threshold to absorb a different trajectory.
+                # never produced, so replay stops at this mismatch.
                 break
             if not result.success or not result.schema_valid:
-                # Count only schema/execution errors, not empty-result responses.
-                # PROVE: "We count only schema-level and execution errors
-                # (not empty-result responses)."
-                #
+                # Count schema/execution errors, not successful empty results.
                 # Schema validation failures (schema_valid=False) are ALWAYS
                 # counted as errors — the observation dict may lack an "error"
                 # key, containing only validation details.
                 # A failed execution is an execution error regardless of its
-                # message text. PROVE exempts successful empty-result responses,
-                # not precondition/schema failures such as "entity not found".
+                # message text. Precondition failures such as "entity not found"
+                # remain execution errors.
                 num_errors += 1
 
         # ── Criteria check (independent of tool-error-rate) ──
-        # PROVE's 30% threshold applies ONLY to schema/execution errors.
-        # Criteria validation is a separate quality signal — NOT merged
-        # into num_errors so it does not pollute the paper's error_rate.
+        # The 30% threshold applies only to schema/execution errors.
+        # Criteria validation is separate from num_errors.
         if success_criteria:
             from src.live_mcp.oracle import criterion_satisfied
 
@@ -1989,10 +1978,10 @@ def replay_validate(
                     f"failed in fresh session — criteria_ok=False"
                 )
         else:
-            # Project-specific quality gate (NOT part of PROVE / OVAL-MCP §5.0):
+            # Outcome-criteria diagnostics:
             # Mutating tool calls with empty success_criteria are suspicious
             # (e.g. teacher called update_* but state was already at target).
-            # PROVE does NOT reject these — R_coverage falls back to pure
+            # Empty outcome criteria remain valid; coverage falls back to
             # tool-call matching.  We log a diagnostic warning but accept
             # the task so the teacher retry budget isn't wasted.
             tool_call_count = sum(1 for c in oracle_calls if c.action == "tool_call")
@@ -2039,10 +2028,10 @@ def replay_validate(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sensitive parameter provenance check (PROVE §3.2 Step 5)
+# Sensitive-parameter provenance check.
 # ═══════════════════════════════════════════════════════════════════════
 
-# Parameter names indicative of sensitive data (PROVE: passwords, tokens, etc.)
+# Parameter names indicative of sensitive data.
 # Recognised terminal action types (must match the prompt format).
 _VALID_TERMINALS: tuple[str, ...] = ("final_answer", "report_error", "ask_clarification")
 
@@ -2070,7 +2059,7 @@ def provenance_check(
     user_queries: list[str] | None = None,
     call_round_indices: list[int] | None = None,
 ) -> tuple[bool, list[dict[str, Any]]]:
-    """PROVE §3.2 Step 5: check that sensitive parameters are traceable.
+    """Check that sensitive parameters are traceable.
 
     Sensitive parameters (passwords, tokens, API keys, etc.) must appear ONLY
     when traceable to prior user turns or tool outputs. Parameters that appear
@@ -2303,7 +2292,7 @@ def _schema_type_hint(schema: dict[str, Any]) -> str:
 
 
 def _format_state_compact(state: dict[str, Any], max_entities: int = 20) -> str:
-    """Format grounded state as compact entity summaries (PROVE §4 sampling context).
+    """Format grounded state as compact entity summaries.
 
     Instead of dumping full JSON (which can exceed teacher attention window),
     output one line per entity with key fields only.

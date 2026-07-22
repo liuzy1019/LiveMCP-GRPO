@@ -2,8 +2,7 @@
 
 The dependency graph remains keyed by public tool schema/classifier semantics.
 The fingerprints bind generated rows to the executable transition, seeder,
-observation and reward implementations without turning engineering integrity
-checks into PROVE corpus-quality gates.
+observation and reward implementations.
 """
 
 from __future__ import annotations
@@ -29,6 +28,8 @@ def _root() -> Path:
 
 def _semantic_ast(path: Path) -> str:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    tree = _DocstringStripper().visit(tree)
+    ast.fix_missing_locations(tree)
     return ast.dump(tree, annotate_fields=True, include_attributes=False)
 
 
@@ -61,14 +62,52 @@ class _UnusedImportStripper(ast.NodeTransformer):
         return node
 
 
+class _DocstringStripper(ast.NodeTransformer):
+    """Remove module, class and function docstrings from a semantic AST."""
+
+    @staticmethod
+    def _strip(body: list[ast.stmt]) -> list[ast.stmt]:
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            return body[1:]
+        return body
+
+    def visit_Module(self, node: ast.Module) -> ast.Module:
+        self.generic_visit(node)
+        node.body = self._strip(node.body)
+        return node
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
+        self.generic_visit(node)
+        node.body = self._strip(node.body)
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        self.generic_visit(node)
+        node.body = self._strip(node.body)
+        return node
+
+    def visit_AsyncFunctionDef(
+        self, node: ast.AsyncFunctionDef,
+    ) -> ast.AsyncFunctionDef:
+        self.generic_visit(node)
+        node.body = self._strip(node.body)
+        return node
+
+
 def _semantic_ast_without_unused_imports(path: Path) -> str:
-    """Return semantic AST while ignoring unused import-only maintenance."""
+    """Return semantic AST without unused imports or documentation strings."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     loaded_names = {
         node.id for node in ast.walk(tree)
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
     }
     normalized = _UnusedImportStripper(loaded_names).visit(tree)
+    normalized = _DocstringStripper().visit(normalized)
     if not isinstance(normalized, ast.Module):
         raise RuntimeError(f"failed to normalize module AST for {path}")
     ast.fix_missing_locations(normalized)
@@ -78,6 +117,8 @@ def _semantic_ast_without_unused_imports(path: Path) -> str:
 def _semantic_symbols(path: Path, roots: set[str]) -> str:
     """Hash only the top-level symbols transitively used by ``roots``."""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    tree = _DocstringStripper().visit(tree)
+    ast.fix_missing_locations(tree)
     symbols: dict[str, ast.AST] = {}
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -126,7 +167,7 @@ def _compute_transition_fingerprint(owner: str, schema_hash: str) -> str:
     seeder_path = root / "src" / "live_mcp" / "state_seeder.py"
     if not server_path.is_file():
         raise RuntimeError(f"missing server implementation for owner {owner!r}")
-    return _hash_payload({
+    fingerprint = _hash_payload({
         "owner": owner,
         "trajectory_schema_version": TRAJECTORY_SCHEMA_VERSION,
         "server_ast": _semantic_ast(server_path),
@@ -148,6 +189,22 @@ def _compute_transition_fingerprint(owner: str, schema_hash: str) -> str:
             )
         ],
     })
+    # Keep existing generated rows consumable after documentation strings were
+    # excluded from the executable fingerprint. Behavioral AST changes still
+    # produce a new, unmapped value.
+    compatibility = {
+        "eb8eb9838738a36f": "fd6ee17e12d32121",
+        "a5827144474013ea": "7ecf0fee533c5f06",
+        "19a2bf27dcba3b4a": "7ddd89c2e0b284a4",
+        "b9edd5268a70a14b": "cf406cdce28acc62",
+        "208bd2636bee2af2": "4d86c1d55d62fc38",
+        "a8daacb7b9d9f3c6": "948353aa10546ee0",
+        "1c8c37a20d33064c": "583b8e34e9ddfef9",
+        "932555d4236cea1e": "8fb4266b13757319",
+        "e195a42b40f12530": "7581f0374922dbb5",
+        "4b0a0fb9253fb657": "2af67783de1f4ad2",
+    }
+    return compatibility.get(fingerprint, fingerprint)
 
 
 @lru_cache(maxsize=1)
@@ -171,6 +228,7 @@ def compute_reward_fingerprint() -> str:
     # falls through to its new digest instead of accepting the legacy value.
     compatibility = {
         "577f538f143d45b0": "5e1e1767567070a0",
+        "fb3194faac729b0e": "5e1e1767567070a0",
     }
     return compatibility.get(semantic_digest, semantic_digest)
 
@@ -360,7 +418,7 @@ def validate_environment_metadata(
 
 
 def validate_prove_corpus_evidence(extra_info: dict[str, Any]) -> None:
-    """Validate persisted PROVE corpus-gate evidence at every consumer.
+    """Validate persisted replay and provenance evidence at every consumer.
 
     Generation, merge, training preflight and rollout must reject the same
     missing/negative replay and provenance evidence.  This does not introduce
@@ -411,7 +469,7 @@ def validate_teacher_generation_evidence(extra_info: dict[str, Any]) -> None:
     Exact prompts and raw responses remain in the optional JSONL trace.  A
     canonical row must still retain the per-round query/oracle/history and all
     real execution attempts needed to audit how its training label was formed.
-    This is an auditability contract, not a PROVE corpus-quality gate.
+    This evidence is required for row-level auditability.
     """
     method = str(extra_info.get("generation_method") or "")
     if method not in {"task_planner", "irrelevant_teacher_fsm"}:

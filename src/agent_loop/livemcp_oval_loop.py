@@ -338,7 +338,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
 
         # A generated row must be structurally executable even before model
         # exploration: one action per reference tool call plus one terminal per
-        # conversation round.  This is a rollout contract, not a PROVE corpus
+        # conversation round. This is enforced by the rollout contract.
         # quality gate.
         minimum_action_budget = len(required_tools) + max(1, n_conversation_rounds)
         try:
@@ -519,7 +519,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
         )
 
         # The row-level action budget is authoritative for generated data.
-        # PROVE's 2--3 ``turns`` are conversation rounds, while this loop spends
+        # The 2--3 turn setting counts conversation rounds; this loop spends
         # one iteration on each tool call and each per-round terminal.  Using
         # the configured default as a smaller hard cap can make a verified
         # reference trajectory impossible to reproduce.
@@ -664,7 +664,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
                         break
 
                 # Per-round required_tools describe the reference trace.  They
-                # are diagnostic only: PROVE allows equivalent tool paths, so
+                # are diagnostic only; equivalent executable tool paths remain valid.
                 # an exact-name miss must not truncate the conversation.
                 contract_required = (
                     current_contract.get("required_tools", [])

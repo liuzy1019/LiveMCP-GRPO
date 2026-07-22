@@ -1,4 +1,4 @@
-"""Stateful food delivery server — 17 tools (PROVE-aligned).
+"""Stateful food delivery server with 17 tools.
 Lifecycle state: placed→confirmed→preparing→delivering→delivered / cancelled.
 Features: restaurants, menus, orders, tracking, rating, tip, reorder, support.
 """

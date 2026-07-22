@@ -18,7 +18,7 @@
 # TRITON_ATTN。flashinfer-python 保留用于 sampling/JIT 路径。
 
 # 核心
-numpy==1.26.4
+numpy>=2.0,<2.3
 PyYAML==6.0.3
 pydantic==2.12.5
 loguru==0.7.3
@@ -50,7 +50,6 @@ wandb==0.26.0
 # RL（vLLM 及其依赖已在步骤2安装，此处只声明不随 vLLM 变化的包）
 ray==2.54.1
 tensordict==0.10.0
-xformers==0.0.32.post1
 deepspeed==0.19.2
 lm-format-enforcer==0.11.3
 

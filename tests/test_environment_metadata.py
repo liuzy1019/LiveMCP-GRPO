@@ -27,6 +27,7 @@ from src.live_mcp.observation import (
     serialize_tool_result,
 )
 from src.live_mcp.environment_metadata import (
+    _semantic_ast,
     _semantic_ast_without_unused_imports,
     build_environment_metadata,
     compute_reward_fingerprint,
@@ -76,15 +77,22 @@ DOMAINS = (
 )
 
 
-def test_reward_fingerprint_ignores_only_unused_import_maintenance(
+def test_reward_fingerprint_ignores_nonfunctional_source_maintenance(
     tmp_path: Path,
 ) -> None:
     baseline = tmp_path / "baseline.py"
     with_unused = tmp_path / "with_unused.py"
+    with_docstrings = tmp_path / "with_docstrings.py"
     used_import_changed = tmp_path / "used_import_changed.py"
     baseline.write_text("import json\n\ndef render(value):\n    return json.dumps(value)\n")
     with_unused.write_text(
         "import json\nimport pathlib\n\ndef render(value):\n    return json.dumps(value)\n"
+    )
+    with_docstrings.write_text(
+        '"""Module documentation."""\n'
+        "import json\n\ndef render(value):\n"
+        '    """Function documentation."""\n'
+        "    return json.dumps(value)\n"
     )
     used_import_changed.write_text(
         "import yaml as json\n\ndef render(value):\n    return json.dumps(value)\n"
@@ -95,7 +103,23 @@ def test_reward_fingerprint_ignores_only_unused_import_maintenance(
     ) == _semantic_ast_without_unused_imports(with_unused)
     assert _semantic_ast_without_unused_imports(
         baseline,
+    ) == _semantic_ast_without_unused_imports(with_docstrings)
+    assert _semantic_ast_without_unused_imports(
+        baseline,
     ) != _semantic_ast_without_unused_imports(used_import_changed)
+
+
+def test_transition_fingerprint_ast_ignores_docstrings(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline.py"
+    documented = tmp_path / "documented.py"
+    baseline.write_text("def value():\n    return 1\n")
+    documented.write_text(
+        '"""Module documentation."""\n\n'
+        "def value():\n"
+        '    """Function documentation."""\n'
+        "    return 1\n"
+    )
+    assert _semantic_ast(baseline) == _semantic_ast(documented)
 
 
 def test_current_reward_fingerprint_preserves_audited_corpus_identity() -> None:

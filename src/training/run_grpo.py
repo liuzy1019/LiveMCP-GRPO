@@ -93,7 +93,7 @@ def main() -> None:
     logger.info("Agent loop LiveMCPOvalLoop 已注册")
 
     # Only the OVAL extension needs the custom estimator and non-tensor bridge.
-    # Strict PROVE baseline uses verl's standard GRPO implementation unchanged.
+    # The prove_baseline profile uses verl's standard GRPO implementation.
     if estimator_name == "livemcp_grpo":
         from src.training.register_estimator import register_livemcp_estimator
         if not register_livemcp_estimator():

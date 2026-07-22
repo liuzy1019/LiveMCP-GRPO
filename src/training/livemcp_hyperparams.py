@@ -32,8 +32,7 @@ from typing import ClassVar
 class LiveMCPHyperparams:
     """LiveMCP 训练的所有超参，单点定义默认值。"""
 
-    # oval_full preserves the existing OVAL objective. Set prove_baseline for
-    # the paper-compatible five-component task reward only.
+    # Select prove_baseline for the five-component task reward.
     reward_profile: str = "oval_full"
 
     # ── 奖励消融开关 ──────────────────────────────────────────────
@@ -77,8 +76,8 @@ class LiveMCPHyperparams:
     w_eff: float = 0.15
     w_name: float = 0.2
     w_arg: float = 0.1
-    alpha_eff: float = 0.5   # PROVE §4.1: α = 0.5
-    beta_budget: float = 0.5  # PROVE §4.1: β = 0.5
+    alpha_eff: float = 0.5   # Efficiency penalty coefficient.
+    beta_budget: float = 0.5  # Adaptive budget coefficient.
 
     # ── P_process 上限 ───────────────────────────────────────────
     p_max: float = 0.3

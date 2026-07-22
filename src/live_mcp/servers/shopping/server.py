@@ -1,4 +1,4 @@
-"""Stateful shopping server — 23 tools (PROVE-aligned).
+"""Stateful shopping server with 23 tools.
 Commerce: catalog, cart, checkout, orders, reviews, wishlist, coupons, returns, tracking.
 Safety: stock consistency, empty cart checkout.
 """

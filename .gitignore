@@ -25,15 +25,15 @@ env/
 Thumbs.db
 
 # Logs
-logs/*
-!logs/.gitkeep
+/logs/*
+!/logs/.gitkeep
 
 # Data output (keep directory structure, ignore generated data)
-data/*.parquet
-data/*.json
-data/*.log
-data/*.csv
-data/runs/
+/data/*.parquet
+/data/*.json
+/data/*.log
+/data/*.csv
+/data/runs/
 
 # Training artifacts
 checkpoints/
@@ -54,24 +54,26 @@ wandb/
 
 # Misc
 tmp_*
+/.runtime_cache/
 
 # Internal project docs (not for public repo)
-AGENTS.md
-CLAUDE.md
+/AGENTS.md
+/CLAUDE.md
+/docs/
 修复记录.MD
 *.修复记录.*
 
 # Reference papers (not needed for running)
-reference/
+/reference/
 
 # Models (downloaded separately, not committed)
-models/
+/models/
 
 # Dependency graph lock files (runtime artifacts)
 *.json.lock
 
 # Experiment outputs
-experiments/
+/experiments/
 
 # Model cache / temp files
 *.msc

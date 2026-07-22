@@ -210,7 +210,7 @@ def _build_task_dict(extra_info: dict) -> dict:
     if is_abstain_task:
         required_tool_calls = []
     elif is_missing_function_terminal and not real_oracle_calls:
-        # PROVE graceful give-up permits a missing-function trajectory to end
+        # Missing-function trajectories may end without a preceding failed call.
         # with ask_clarification or report_error without first manufacturing a
         # failed tool call. Visible-prefix calls, when present, are preserved
         # by the real_oracle_calls branch below.
@@ -399,9 +399,8 @@ def _apply_round_contract_penalty(
 ) -> tuple[float, float, float, float]:
     """Reject incomplete local trajectories before profile-specific scoring.
 
-    This is a structural eligibility gate, not a sixth PROVE reward component:
-    valid trajectories keep the five-component score unchanged in every
-    profile; invalid terminal/round protocols receive no positive task signal.
+    Valid trajectories keep the five-component score unchanged in every
+    profile. Invalid terminal or round protocols receive no positive signal.
     """
     if round_contract_ok:
         return components
@@ -476,7 +475,7 @@ def compute_score(
     # P0-2: validate per-round terminals against round_contracts.
     r_round_ok, r_round_details = _validate_round_contracts(audit_events, task_dict)
     # An incomplete local conversation is not a valid trajectory for either
-    # profile.  Valid trajectories retain the unchanged PROVE formula.
+    # profile. Valid trajectories retain the selected reward formula.
     r_task, r_validity, r_coverage, r_efficiency = (
         _apply_round_contract_penalty(
             (r_task, r_validity, r_coverage, r_efficiency),

@@ -49,13 +49,18 @@
     },
     "list_invoices": {
       "explicit": [
+        "cancel_payment",
+        "dispute_invoice",
+        "get_invoice",
         "pay_invoice",
         "refund_invoice"
       ],
       "implicit": []
     },
     "list_webhooks": {
-      "explicit": [],
+      "explicit": [
+        "delete_webhook"
+      ],
       "implicit": []
     },
     "pay_invoice": {
@@ -120,9 +125,9 @@
         "cancel_payment",
         "list_invoices"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_invoices",
+      "target": "cancel_payment",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -318,9 +323,9 @@
         "delete_webhook",
         "list_webhooks"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_webhooks",
+      "target": "delete_webhook",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -354,9 +359,9 @@
         "dispute_invoice",
         "list_invoices"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_invoices",
+      "target": "dispute_invoice",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -390,9 +395,9 @@
         "get_invoice",
         "list_invoices"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "list_invoices",
+      "target": "get_invoice",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -476,9 +481,10 @@
       "relation": "implicit"
     }
   ],
-  "classifier_contract_hash": "b007d5c5e1d59b2b",
+  "classifier_contract_hash": "e2f86294351ce564",
   "teacher_model_id": "Gemma-4-31B-it",
   "classifier_prompt_sha256": "dfc6f23c99edafb224357c9b0ae4ea61f0b6111b94d866c9bcfbb8350aa5ec61",
+  "output_field_contract_sha256": "816282846e3177c496e727e714be3034d96a053b5b52db5bc50723a7f23b82f0",
   "tool_count": 10,
   "expected_pair_count": 45,
   "classified_pair_count": 45,
