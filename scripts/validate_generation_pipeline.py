@@ -1,38 +1,16 @@
 #!/usr/bin/env python3
-"""Domain Validation Pipeline —— 三阶段统一验证入口。
-
-Stage 1 — 拓扑级：验证 dependency graph JSON 结构
-    • 边引用的 tool 是否存在于 tool_names
-    • 孤立节点检测（无入边也无出边）
-    • 链长分布统计 + 环路诊断
-
-Stage 2 — 逻辑级：Server tool schema 交叉验证
-    • Config tools 分类 vs Server TOOLS 一致性
-    • SchemaRegistry 注册与解析正确性
-    • Handler 完整性（每个 TOOLS 中的 tool 都有对应 handler）
-    • 跨 domain tool 名冲突检测
-
-Stage 3 — 生成冒烟：逐个 domain 小规模 data generation 测试
-    • 调用 generate_data.py --domain X --count N
-    • 检查运行时错误、parquet 产出
-
-用法：
-    python scripts/validate_generation_pipeline.py                     # 全部三步
-    python scripts/validate_generation_pipeline.py --stages 1,2        # 仅拓扑+逻辑（无需 LLM）
-    python scripts/validate_generation_pipeline.py --stages 3 --domain banking --model gemini-2.5-flash --api-base https://your-proxy/v1
-    python scripts/validate_generation_pipeline.py --model gemini-2.5-flash --api-base https://your-proxy/v1 --count 5
-"""
+"""Three-stage dependency, schema, and generation validation entry point."""
 
 from __future__ import annotations
 
 import argparse
-import datetime
 import importlib
 import json
 import subprocess
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -40,17 +18,13 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-# ── 项目内部依赖 ────────────────────────────────────────────────
 from src.live_mcp.config import load_suite_config
-from src.live_mcp.orchestrator import (
-    TaskOrchestrator,
-    _CREATED_ENTITY_BY_TOOL,
-    _DEPENDENCY_TOOL_OUTPUT_FIELDS,
-    _DOMAIN_TOOL_OUTPUT_ENTITY_TYPES,
-    _DOMAIN_TOOL_REQUIREMENTS,
-    _chain_respects_state_preconditions,
-)
-from src.live_mcp.schema_registry import SchemaRegistry
+from src.live_mcp.contracts.chain_simulator import simulate_symbolic_chain
+from src.live_mcp.contracts.factory import build_contract_registry
+from src.live_mcp.dependency_chain_policy import chain_contract_issue
+from src.live_mcp.orchestrator import TaskOrchestrator
+from src.live_mcp.registry.schemas import SchemaRegistry
+from src.live_mcp.prompt_profiles import resolve_prompt_profile
 
 DOMAINS_ALL = [
     "banking", "calendar", "crm", "email", "filesystem",
@@ -59,9 +33,6 @@ DOMAINS_ALL = [
 
 CACHE_DIR = ROOT / "data" / "dependency_graphs"
 
-# ═══════════════════════════════════════════════════════════════════
-# 结果收集
-# ═══════════════════════════════════════════════════════════════════
 _results: dict[str, list[str]] = {"pass": [], "fail": [], "warn": []}
 
 def _ok(stage: str, msg: str) -> None:
@@ -91,29 +62,61 @@ def _resolve_domains(domain_arg: str) -> list[str]:
     return domains
 
 
-def _load_cached_graphs(domains: list[str]) -> dict[str, dict]:
-    """Load only strict caches matching each current server tool schema.
+def _cache_contract_orchestrator(
+    teacher_model_id: str,
+    prompt_profile: str,
+) -> TaskOrchestrator:
+    """Build the minimum read-only object needed by the runtime cache contract."""
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.client = SimpleNamespace(
+        contract_model_id=teacher_model_id,
+        model_path=teacher_model_id,
+    )
+    orchestrator.prompt_profile = resolve_prompt_profile(prompt_profile)
+    return orchestrator
 
-    Historical files for the same domain are not evidence for the current
-    checkout.  Runtime cache lookup is schema-hash keyed, so validation must
-    use the identical key instead of allowing the last globbed JSON to win.
+
+def _load_cached_graphs(
+    domains: list[str],
+    *,
+    teacher_model_id: str,
+    prompt_profile: str,
+) -> tuple[dict[str, tuple[Path, dict]], dict[str, str]]:
+    """Load caches through the same schema/profile contract as runtime.
+
+    Historical files and caches produced by another Teacher identity are not
+    evidence for the requested contract.  Runtime cache lookup is keyed by
+    schema and classifier contract, so validation must use the identical key.
     """
-    graphs: dict[str, dict] = {}
+    graphs: dict[str, tuple[Path, dict]] = {}
+    issues: dict[str, str] = {}
     if not CACHE_DIR.exists():
-        return graphs
+        return graphs, issues
+    orchestrator = _cache_contract_orchestrator(
+        teacher_model_id, prompt_profile,
+    )
     for domain in domains:
         try:
             tools = _load_server_tools(domain)
             schema_hash = TaskOrchestrator._tool_schema_hash(tools, domain)
-            path = CACHE_DIR / f"{domain}_{schema_hash}.json"
+            contract_hash = orchestrator._classifier_contract_hash(domain)
+            path = TaskOrchestrator._graph_cache_path(
+                domain, schema_hash, contract_hash,
+            )
             if not path.exists():
                 continue
             data = json.loads(path.read_text(encoding="utf-8"))
-            if data.get("server_name") == domain and data.get("schema_hash") == schema_hash:
-                graphs[domain] = data
-        except Exception:
-            pass
-    return graphs
+            if (
+                data.get("server_name") == domain
+                and data.get("schema_hash") == schema_hash
+                and orchestrator._load_dependency_cache(
+                    domain, schema_hash, tools,
+                ) is not None
+            ):
+                graphs[domain] = (path, data)
+        except Exception as exc:
+            issues[domain] = f"cache contract 检查异常: {type(exc).__name__}: {exc}"
+    return graphs, issues
 
 
 def _strict_cache_issue(
@@ -121,6 +124,8 @@ def _strict_cache_issue(
     data: dict,
     tool_names: list[str],
     server_tools: list[dict] | None = None,
+    *,
+    paper_baseline: bool = False,
 ) -> str:
     expected_names = sorted(tool_names)
     expected_pair_count = len(expected_names) * (len(expected_names) - 1) // 2
@@ -141,18 +146,58 @@ def _strict_cache_issue(
         return "classified_pair_count 不正确"
     if data.get("classification_complete") is not True:
         return "classification_complete 未确认"
+    if server_tools is None:
+        return "缺少 server_tools，无法核验 pair/relation audit"
+    raw_graph = data.get("raw_graph")
+    if not TaskOrchestrator._valid_cached_graph(raw_graph, expected_names):
+        return "raw_graph 结构或 tool 引用无效"
+    derived_raw = TaskOrchestrator._graph_from_pair_classifications(
+        ledger, expected_names,
+    )
+    if raw_graph != derived_raw:
+        return "raw_graph 与 pair ledger 重建结果不一致"
+
+    if paper_baseline:
+        if data.get("graph_source") != "local_relation_audit_supported_subset":
+            return "paper baseline eligible graph_source 不正确"
+        if data.get("review_policy") != "not_required_for_paper_baseline":
+            return "paper baseline review_policy 不正确"
+    else:
+        pair_audits = TaskOrchestrator._validate_dependency_pair_audits(
+            data.get("pair_audits"), ledger, server_tools, domain,
+        )
+        if pair_audits is None:
+            return "pair_audits 缺失或与当前工具合同不一致"
+        if data.get("audited_pair_count") != expected_pair_count:
+            return "audited_pair_count 不正确"
+        if data.get("audit_complete") is not True:
+            return "audit_complete 未确认"
+
+    relation_audits = TaskOrchestrator._validate_local_relation_audits(
+        data.get("relation_audits"), ledger, server_tools, domain,
+    )
+    if relation_audits is None:
+        return "relation_audits 缺失或与当前事实合同不一致"
+    if data.get("relation_audited_pair_count") != expected_pair_count:
+        return "relation_audited_pair_count 不正确"
+    if data.get("relation_audit_complete") is not True:
+        return "relation_audit_complete 未确认"
+    relation_counts = dict(Counter(
+        audit["verdict"] for audit in relation_audits
+    ))
+    if data.get("relation_audit_counts") != relation_counts:
+        return "relation_audit_counts 与 relation_audits 不一致"
+    if not paper_baseline and relation_counts.get("insufficient_evidence", 0):
+        return "relation_audits 仍含 insufficient_evidence"
+
     graph = data.get("graph")
     if not TaskOrchestrator._valid_cached_graph(graph, expected_names):
         return "graph 结构或 tool 引用无效"
-    derived = TaskOrchestrator._graph_from_pair_classifications(ledger, expected_names)
+    derived = TaskOrchestrator._eligible_graph_from_relation_audits(
+        ledger, relation_audits, expected_names,
+    )
     if graph != derived:
-        return "graph 与 pair ledger 重建结果不一致"
-    if server_tools is not None:
-        semantic_issues = TaskOrchestrator._pair_classification_contract_issues(
-            ledger, server_tools, domain,
-        )
-        if semantic_issues:
-            return f"pair ledger 含 {len(semantic_issues)} 条关系定义冲突"
+        return "graph 与 relation audit 的 eligible 子集不一致"
     if not data.get("classifier_contract_hash"):
         return "缺少 classifier_contract_hash"
     if not data.get("teacher_model_id") or not data.get("classifier_prompt_sha256"):
@@ -226,29 +271,37 @@ def _extract_chains(graph: dict[str, dict], max_len: int = 5) -> list[list[str]]
 def _semantic_pair_diagnostics(
     domain: str, pair_classifications: list[dict[str, Any]],
 ) -> tuple[list[str], list[str]]:
-    """Return read-only local-contract diagnostics for Teacher pair labels.
+    """Return local-contract diagnostics for immutable raw Teacher labels.
 
-    These findings do not rewrite or reject the graph. They expose labels that
-    need review against handler facts.
+    The relation-audited ``graph`` is the executable topology.  These findings
+    describe only ``pair_classifications`` (the preserved raw ledger), so the
+    caller must not present them as defects in the eligible graph.
     """
     tools_by_name = {
         tool["name"]: tool for tool in _load_server_tools(domain)
     }
+    registry = build_contract_registry({domain: tools_by_name.values()})
 
     def outputs(tool_name: str) -> set[str]:
-        return set(
-            _DOMAIN_TOOL_OUTPUT_ENTITY_TYPES.get(domain, {}).get(
-                tool_name, _CREATED_ENTITY_BY_TOOL.get(tool_name, set()),
-            )
-        )
+        return {
+            binding.entity_type
+            for binding in registry.get(domain, tool_name).output_entities
+        }
 
     def output_fields(tool_name: str) -> set[str]:
-        return set(
-            _DEPENDENCY_TOOL_OUTPUT_FIELDS.get(domain, {}).get(tool_name, ())
-        )
+        return set(registry.get(domain, tool_name).output_fields)
 
     def requirements(tool_name: str) -> set[str]:
-        return set(_DOMAIN_TOOL_REQUIREMENTS.get(domain, {}).get(tool_name, set()))
+        contract = registry.get(domain, tool_name)
+        required = set(contract.required_entity_types)
+        required.update(
+            predicate.subject.entity_type
+            for group in contract.precondition_groups
+            for predicate in group
+            if predicate.subject.source == "argument"
+            and predicate.observed_entity_required
+        )
+        return required
 
     possible_false_negatives: list[str] = []
     weak_explicit_positives: list[str] = []
@@ -289,36 +342,55 @@ def _semantic_pair_diagnostics(
     return possible_false_negatives, weak_explicit_positives
 
 
-def stage1_topology(domains: list[str]) -> None:
+def stage1_topology(
+    domains: list[str],
+    *,
+    teacher_model_id: str,
+    prompt_profile: str,
+) -> None:
     """Stage 1: 拓扑级验证。"""
     print("\n" + "=" * 70)
     print("STAGE 1 — 拓扑级：Dependency Graph JSON 结构验证")
     print("=" * 70)
 
-    cached = _load_cached_graphs(domains)
+    cached, cache_load_issues = _load_cached_graphs(
+        domains,
+        teacher_model_id=teacher_model_id,
+        prompt_profile=prompt_profile,
+    )
+    paper_baseline = resolve_prompt_profile(prompt_profile).paper_baseline
 
     for domain in domains:
         print(f"\n── {domain} ──")
 
         # ── 1a. 检查是否有缓存 ──
         if domain not in cached:
-            _fail("S1", f"{domain}: 无匹配当前 tool-schema hash 的 strict cache")
+            detail = cache_load_issues.get(
+                domain,
+                "无匹配当前 schema、Teacher identity 与 prompt profile 的 cache",
+            )
+            _fail("S1", f"{domain}: {detail}")
             continue
 
-        data = cached[domain]
+        cache_path, data = cached[domain]
+        # Runtime scheduling always consumes the relation-audited eligible
+        # graph.  raw_graph is immutable Teacher provenance and must never be
+        # substituted into the executable topology report.
         graph: dict[str, dict] = data.get("graph", {})
         tool_names: list[str] = data.get("tool_names", [])
         server_tools = _load_server_tools(domain)
         current_names = [tool["name"] for tool in server_tools]
         cache_issue = _strict_cache_issue(
             domain, data, current_names, server_tools,
+            paper_baseline=paper_baseline,
         )
         if cache_issue:
             _fail("S1", f"{domain}: {cache_issue}")
             continue
         _ok(
             "S1",
-            f"{domain}: 当前 schema key 匹配、provenance 字段存在且 "
+            f"{domain}: {cache_path.name} 与当前 schema/profile 匹配，"
+            "provenance 字段存在且 "
             "C(n,2) ledger 完整",
         )
 
@@ -360,9 +432,15 @@ def stage1_topology(domains: list[str]) -> None:
 
         # ── 1e. 链提取与分布 ──
         chains = _extract_chains(graph)
+        contract_registry = build_contract_registry({
+            domain: _load_server_tools(domain),
+        })
         feasible_chains = [
             chain for chain in chains
-            if _chain_respects_state_preconditions(domain, chain)
+            if chain_contract_issue(domain, chain) is None
+            and not simulate_symbolic_chain(
+                contract_registry, domain, chain,
+            )[1]
         ]
         dist = Counter(len(c) for c in chains)
         feasible_dist = Counter(len(c) for c in feasible_chains)
@@ -370,9 +448,10 @@ def stage1_topology(domains: list[str]) -> None:
         feasible_dist_str = " ".join(
             f"{k}:{v}" for k, v in sorted(feasible_dist.items())
         )
+        graph_label = "eligible_graph"
         print(
-            f"     raw_graph_chains={len(chains)} dist=[{dist_str}]  "
-            f"state_precondition_feasible_chains={len(feasible_chains)} "
+            f"     {graph_label}_chains={len(chains)} dist=[{dist_str}]  "
+            f"static_task_feasible_chains={len(feasible_chains)} "
             f"dist=[{feasible_dist_str}]"
         )
 
@@ -382,14 +461,22 @@ def stage1_topology(domains: list[str]) -> None:
         if false_negatives:
             _warn(
                 "S1",
-                f"{domain}: {len(false_negatives)} 个 none label 与本地 "
+                f"{domain}: raw classifier 有 {len(false_negatives)} 个 none label 与本地 "
                 f"producer/requirement 合同有重叠；样例: {false_negatives[:5]}",
             )
         if weak_positives:
             _warn(
                 "S1",
-                f"{domain}: {len(weak_positives)} 个 explicit label 缺少本地 "
+                f"{domain}: raw classifier 有 {len(weak_positives)} 个 explicit label 缺少本地 "
                 f"typed-output 支撑；样例: {weak_positives[:5]}",
+            )
+        if false_negatives or weak_positives:
+            counts = data.get("relation_audit_counts") or {}
+            print(
+                "     raw-label diagnostics 仅描述 immutable provenance；"
+                "runtime 仍只消费 relation-audited eligible graph "
+                f"(supported={counts.get('supported', 0)} "
+                f"contradicted={counts.get('contradicted', 0)})"
             )
 
         # ── 1f. 边统计 ──
@@ -512,7 +599,7 @@ def _stage3_output_issue(
 ) -> str:
     total = count * len(domains)
     if not output_path.exists():
-        return "generate_data 返回成功但未生成 train parquet"
+        return "corpus shard 返回成功但未生成 train parquet"
     try:
         frame = pd.read_parquet(output_path)
     except Exception as exc:
@@ -536,24 +623,37 @@ def _stage3_output_issue(
         )
     return ""
 
-def stage3_smoke(domains: list[str], model: str, count: int, api_base: str | None, device: int | None) -> None:
+def stage3_smoke(
+    domains: list[str],
+    model: str,
+    count: int,
+    api_base: str | None,
+    device: int | None,
+    *,
+    teacher_model_id: str,
+    prompt_profile: str,
+    semantic_gate_profile: str,
+) -> None:
     """Stage 3: 一次性 data generation smoke test（避免重复加载模型）。"""
     total = count * len(domains)
     print("\n" + "=" * 70)
     print(f"STAGE 3 — 生成冒烟：{len(domains)} domains × {count} = {total} 条，单次调用（避免重复加载模型）")
     print("=" * 70)
 
-    script = ROOT / "scripts" / "generate_data.py"
     domains_str = ",".join(domains)
 
     cmd = [
-        sys.executable, str(script),
+        sys.executable, "-m", "src.live_mcp.corpus.shard",
         "--domain", domains_str,
         "--count", str(total),
         "--val-count", "0",
         "--model", model,
+        "--teacher-model-id", teacher_model_id,
+        "--prompt-profile", prompt_profile,
+        "--semantic-gate-profile", semantic_gate_profile,
         "--seed", "42",
         "--output", "/tmp/generation_pipeline_smoke.parquet",
+        "--val-output", "/tmp/generation_pipeline_smoke_val.parquet",
     ]
     if api_base:
         cmd += ["--api-base", api_base]
@@ -567,28 +667,22 @@ def stage3_smoke(domains: list[str], model: str, count: int, api_base: str | Non
             cwd=str(ROOT),
         )
         if result.returncode != 0:
-            _fail("S3", f"generate_data 返回码 {result.returncode}")
+            _fail("S3", f"corpus shard 返回码 {result.returncode}")
         else:
             output_path = Path("/tmp/generation_pipeline_smoke.parquet")
             issue = _stage3_output_issue(output_path, domains, count)
             if issue:
                 _fail("S3", issue)
             else:
-                _ok("S3", f"generate_data 成功，行数和 domain 配额通过 ({total} 条)")
+                _ok("S3", f"corpus shard 成功，行数和 domain 配额通过 ({total} 条)")
     except subprocess.TimeoutExpired:
-        _fail("S3", f"generate_data 超时 (>{3600}s)")
+        _fail("S3", f"corpus shard 超时 (>{3600}s)")
     except Exception as e:
-        _fail("S3", f"generate_data 异常: {e}")
+        _fail("S3", f"corpus shard 异常: {e}")
 
-    # 归档临时文件到 logs/ 供后续分析
-    import shutil
-    tmp = Path("/tmp/generation_pipeline_smoke.parquet")
-    if tmp.exists():
-        archive_dir = ROOT / "logs"
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        archive_name = f"generation_pipeline_smoke_{datetime.datetime.now():%Y%m%d_%H%M%S}.parquet"
-        shutil.copy2(tmp, archive_dir / archive_name)
-        tmp.unlink()
+    # Keep the exact runtime artifact in /tmp for inspection. Cleanup is an
+    # explicit caller-owned action; validation must not silently archive one
+    # copy under the repository and delete another.
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -603,11 +697,11 @@ def build_parser() -> argparse.ArgumentParser:
 示例：
   python scripts/validate_generation_pipeline.py --model gemini-2.5-flash --api-base https://your-proxy/v1
   python scripts/validate_generation_pipeline.py --stages 1,2
-  python scripts/validate_generation_pipeline.py --stages 3 --domain banking --model gemini-2.5-flash --api-base https://your-proxy/v1
-        """,
+  python scripts/validate_generation_pipeline.py --stages 1,2,3 --domain banking --model gemini-2.5-flash --api-base https://your-proxy/v1
+""",
     )
-    p.add_argument("--stages", default="1,2,3",
-                   help="执行的阶段，逗号分隔 (默认: 1,2,3)")
+    p.add_argument("--stages", default="1,2",
+                   help="执行的阶段，逗号分隔 (默认: 1,2)")
     p.add_argument("--domain", default="all",
                    help="目标 domain，all 或逗号分隔列表 (默认: all)")
     p.add_argument("--model", default=None,
@@ -618,6 +712,22 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Stage 3 OpenAI-compatible API base URL")
     p.add_argument("--device", type=int, default=None,
                    help="Stage 3 GPU device ID")
+    p.add_argument(
+        "--teacher-model-id",
+        default="models/Google/Gemma-4-31B-it",
+        help="Stage 1 cache provenance identity",
+    )
+    p.add_argument(
+        "--prompt-profile",
+        default="paper_generation_baseline_v1",
+        help="Stage 1 cache acceptance profile",
+    )
+    p.add_argument(
+        "--semantic-gate-profile",
+        default="deterministic_v1",
+        choices=("diagnostic_only", "deterministic_v1"),
+        help="Stage 3 completed-trace semantic gate",
+    )
     return p
 
 
@@ -635,13 +745,26 @@ def main() -> int:
     print(f"  model={args.model or '(n/a)'}  count={args.count}")
 
     if 1 in stages:
-        stage1_topology(domains)
+        stage1_topology(
+            domains,
+            teacher_model_id=args.teacher_model_id,
+            prompt_profile=args.prompt_profile,
+        )
 
     if 2 in stages:
         stage2_logic(domains)
 
     if 3 in stages:
-        stage3_smoke(domains, args.model, args.count, args.api_base, args.device)
+        stage3_smoke(
+            domains,
+            args.model,
+            args.count,
+            args.api_base,
+            args.device,
+            teacher_model_id=args.teacher_model_id,
+            prompt_profile=args.prompt_profile,
+            semantic_gate_profile=args.semantic_gate_profile,
+        )
 
     # ── 汇总 ──
     print("\n" + "=" * 70)

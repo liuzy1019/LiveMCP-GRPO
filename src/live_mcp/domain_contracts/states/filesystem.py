@@ -1,0 +1,126 @@
+"""Filesystem state facts audited against its handler implementation."""
+
+from src.live_mcp.domain_contracts.states.common import arg, facts, out
+
+
+def _exists(name: str = "path"):
+    return arg("file", name, "filesystem.exists")
+
+
+def _type(name: str, value: str):
+    return arg("file", name, "filesystem.type", value)
+
+
+def _target(name: str, slot: str):
+    return arg("file", name, slot, observed=False)
+
+
+_FILE_READERS = {
+    "cat", "head", "tail", "wc", "sort", "uniq", "cut", "sed", "awk",
+    "md5sum", "sha256sum", "file_info", "xxd", "truncate", "split",
+}
+
+
+FILESYSTEM_STATE_FACTS = {
+    "ls": facts(),
+    "cd": facts(pre=(_exists(), _type("path", "dir"))),
+    "pwd": facts(),
+    "stat": facts(pre=(_exists(),)),
+    "find": facts(),
+    "grep": facts(),
+    "tree": facts(),
+    "mkdir": facts(
+        pre=(_target("path", "filesystem.target_creatable"),),
+        post=(
+            out("file", "path", "filesystem.exists"),
+            out("file", "path", "filesystem.type", "dir"),
+        ),
+    ),
+    "touch": facts(
+        pre=(_target("path", "filesystem.target_writable"),),
+        post=(
+            out("file", "path", "filesystem.exists"),
+            out("file", "path", "filesystem.type", "file"),
+        ),
+    ),
+    "mv": facts(
+        pre=(
+            _exists("source"),
+            arg("file", "source", "filesystem.protected", False),
+            _target("target", "filesystem.target_creatable"),
+        ),
+        post=(
+            arg("file", "source", "filesystem.exists", False),
+            out("file", "target", "filesystem.exists"),
+        ),
+    ),
+    "cp": facts(
+        pre=(
+            _exists("source"),
+            arg("file", "source", "filesystem.protected", False),
+            _target("target", "filesystem.target_creatable"),
+        ),
+        post=(out("file", "target", "filesystem.exists"),),
+    ),
+    "rm": facts(
+        pre=(
+            _exists(),
+            arg("file", "path", "filesystem.deletable"),
+        ),
+        post=(arg("file", "path", "filesystem.exists", False),),
+    ),
+    "chmod": facts(pre=(
+        _exists(), arg("file", "path", "filesystem.protected", False),
+    )),
+    "chown": facts(pre=(
+        _exists(), arg("file", "path", "filesystem.ownership_change_allowed"),
+    )),
+    "umask": facts(),
+    "du": facts(),
+    "df": facts(),
+    "symlink": facts(
+        pre=(_target("link_path", "filesystem.target_creatable"),),
+        post=(
+            out("file", "link_path", "filesystem.exists"),
+            out("file", "link_path", "filesystem.type", "symlink"),
+        ),
+    ),
+    "readlink": facts(pre=(_exists(), _type("path", "symlink"))),
+    "tar_create": facts(
+        pre=(_target("archive", "filesystem.target_creatable"),),
+        post=(
+            out("file", "archive", "filesystem.exists"),
+            out("file", "archive", "filesystem.type", "file"),
+            out("file", "archive", "filesystem.archive", True),
+        ),
+    ),
+    "tar_extract": facts(pre=(
+        arg("file", "archive", "filesystem.exists"),
+        arg("file", "archive", "filesystem.archive", True),
+    )),
+    "zip": facts(
+        pre=(_target("archive", "filesystem.target_creatable"),),
+        post=(
+            out("file", "archive", "filesystem.exists"),
+            out("file", "archive", "filesystem.type", "file"),
+            out("file", "archive", "filesystem.archive", True),
+        ),
+    ),
+    "unzip": facts(pre=(
+        arg("file", "archive", "filesystem.exists"),
+        arg("file", "archive", "filesystem.archive", True),
+    )),
+    "diff": facts(pre=(
+        _exists("file1"), _type("file1", "file"),
+        _exists("file2"), _type("file2", "file"),
+    )),
+    "join": facts(pre=(
+        _exists("file1"), _type("file1", "file"),
+        _exists("file2"), _type("file2", "file"),
+    )),
+}
+
+FILESYSTEM_STATE_FACTS.update({
+    name: facts(pre=(_exists(), _type("path", "file")))
+    for name in _FILE_READERS
+})

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 import asyncio
+import datetime
+import hashlib
 import json
 import os
 import subprocess
@@ -14,35 +16,50 @@ import src.reward.oval_reward_fn as reward_module
 
 from src.agent_loop.livemcp_oval_loop import (
     LiveMCPOvalLoop,
+    _derive_sampling_seed,
+    _next_identical_action_count,
+    _parse_tool_calls_json,
+    _resolve_terminal_type,
+    _single_conversation_token_ids,
+    _unknown_tool_audit_event,
+    _invalid_mixed_action_audit_event,
     _validate_environment_metadata,
 )
-from src.agent_loop.oval_mcp_worker import OvalMCPWorkerContext
+from src.agent_loop.livemcp_oval_worker import OvalMCPWorkerContext
 from src.live_mcp import errors
 from src.live_mcp.executor import LiveMCPExecutor
-from src.live_mcp.observation import (
+from src.live_mcp.protocol.observation import (
     TRAJECTORY_SCHEMA_VERSION,
     OBSERVATION_SCHEMA_VERSION,
     OBSERVATION_PROJECTION_VERSION,
     compute_server_schema_hash,
     serialize_tool_result,
 )
-from src.live_mcp.environment_metadata import (
-    _semantic_ast,
-    _semantic_ast_without_unused_imports,
+from src.live_mcp.registry.environment_metadata import (
     build_environment_metadata,
+    compute_initial_state_hashes,
     compute_reward_fingerprint,
     compute_transition_fingerprint,
+    normalize_state_profiles,
+    state_profiles_for_suite,
 )
-from src.live_mcp.orchestrator import (
-    _attribute_success_criteria,
-    _detect_duplicate_side_effect,
-    _detect_missing_dependency,
+from src.live_mcp.corpus.shard_row_projection import _tool_owner_domains
+from src.live_mcp.registry.environment_metadata import validate_tool_owner_contract
+from src.live_mcp.dependency_value_flow import _field_values
+from src.live_mcp.generation.scenario import (
+    detect_duplicate_side_effect as _detect_duplicate_side_effect,
+    detect_missing_dependency as _detect_missing_dependency,
+)
+from src.live_mcp.replay.task_outcome import (
+    attribute_success_criteria as _attribute_success_criteria,
 )
 from src.live_mcp.config import load_suite_config
+from src.live_mcp.protocol.manager import LiveMCPManager
 from src.live_mcp.state_seeder import StateSeeder
 from src.live_mcp.types import OracleCall, ToolCall, ToolExecutionResult
 from src.oval_mcp.envs.domain_adapter import get_adapter
-from src.training.livemcp_hyperparams import LiveMCPHyperparams
+from src.oval_mcp.envs.audit_wrapper import AuditWrapper
+from src.training.hyperparams import LiveMCPHyperparams
 from src.training.trainer_config import TrainerConfig
 from src.training.run_grpo import _bind_profile_estimator
 from src.training.hooks import (
@@ -50,7 +67,6 @@ from src.training.hooks import (
     validate_livemcp_non_tensor_batch,
 )
 from src.reward.oval_reward_fn import (
-    _apply_round_contract_penalty,
     _validate_round_contracts,
 )
 from src.live_mcp.servers.banking.server import BankingServer
@@ -64,9 +80,9 @@ from src.live_mcp.servers.payments.server import PaymentsServer
 from src.live_mcp.servers.shopping.server import ShoppingServer
 from src.live_mcp.servers.team_chat.server import TeamChatServer
 from src.live_mcp.server_base import StatefulToolServer, _result as server_result
-from src.live_mcp.tool_semantics import build_tool_semantics, resolve_tool_operation
-from src.live_mcp.schema_registry import SchemaRegistry
-from src.live_mcp.transport import TransportError
+from src.live_mcp.registry.tool_semantics import build_tool_semantics, resolve_tool_operation
+from src.live_mcp.registry.schemas import SchemaRegistry
+from src.live_mcp.protocol.transport import TransportError
 from src.oval_mcp.training.lambda_state import LambdaState
 from src.oval_mcp.verifier.events import AuditEvent, EventLog
 
@@ -75,55 +91,6 @@ DOMAINS = (
     "calendar", "shopping", "banking", "email", "filesystem",
     "payments", "crm", "issue_tracker", "team_chat", "food_delivery",
 )
-
-
-def test_reward_fingerprint_ignores_nonfunctional_source_maintenance(
-    tmp_path: Path,
-) -> None:
-    baseline = tmp_path / "baseline.py"
-    with_unused = tmp_path / "with_unused.py"
-    with_docstrings = tmp_path / "with_docstrings.py"
-    used_import_changed = tmp_path / "used_import_changed.py"
-    baseline.write_text("import json\n\ndef render(value):\n    return json.dumps(value)\n")
-    with_unused.write_text(
-        "import json\nimport pathlib\n\ndef render(value):\n    return json.dumps(value)\n"
-    )
-    with_docstrings.write_text(
-        '"""Module documentation."""\n'
-        "import json\n\ndef render(value):\n"
-        '    """Function documentation."""\n'
-        "    return json.dumps(value)\n"
-    )
-    used_import_changed.write_text(
-        "import yaml as json\n\ndef render(value):\n    return json.dumps(value)\n"
-    )
-
-    assert _semantic_ast_without_unused_imports(
-        baseline,
-    ) == _semantic_ast_without_unused_imports(with_unused)
-    assert _semantic_ast_without_unused_imports(
-        baseline,
-    ) == _semantic_ast_without_unused_imports(with_docstrings)
-    assert _semantic_ast_without_unused_imports(
-        baseline,
-    ) != _semantic_ast_without_unused_imports(used_import_changed)
-
-
-def test_transition_fingerprint_ast_ignores_docstrings(tmp_path: Path) -> None:
-    baseline = tmp_path / "baseline.py"
-    documented = tmp_path / "documented.py"
-    baseline.write_text("def value():\n    return 1\n")
-    documented.write_text(
-        '"""Module documentation."""\n\n'
-        "def value():\n"
-        '    """Function documentation."""\n'
-        "    return 1\n"
-    )
-    assert _semantic_ast(baseline) == _semantic_ast(documented)
-
-
-def test_current_reward_fingerprint_preserves_audited_corpus_identity() -> None:
-    assert compute_reward_fingerprint() == "5e1e1767567070a0"
 
 
 def _result(**overrides) -> ToolExecutionResult:
@@ -173,6 +140,60 @@ def test_strict_prove_profile_forces_pure_task_reward() -> None:
     assert cfg.objective_formula == "J = R_task"
 
 
+def test_observation_budget_override_and_suite_default_share_one_resolver() -> None:
+    suite_rollout = {"observation_max_chars": 4096}
+    assert LiveMCPHyperparams(
+        max_observation_chars=0,
+    ).resolve_max_observation_chars(suite_rollout) == 4096
+    assert LiveMCPHyperparams(
+        max_observation_chars=8192,
+    ).resolve_max_observation_chars(suite_rollout) == 8192
+
+
+def test_rollout_contract_controls_are_typed_and_exported(monkeypatch) -> None:
+    monkeypatch.setenv("OVAL_PLAIN_FINAL_COMPAT", "1")
+    monkeypatch.setenv("OVAL_LAMBDA_STATE_PATH", "/tmp/audit-lambda.json")
+    cfg = LiveMCPHyperparams.from_env()
+    assert cfg.plain_final_compat is True
+    assert cfg.lambda_state_path == "/tmp/audit-lambda.json"
+
+    cfg.plain_final_compat = False
+    cfg.export_env()
+    assert os.environ["OVAL_PLAIN_FINAL_COMPAT"] == "False"
+    assert cfg.to_dict()["lambda_state_path"] == "/tmp/audit-lambda.json"
+
+
+def test_trainer_defaults_to_available_sdpa_attention_backend() -> None:
+    config = TrainerConfig(train_file="missing.parquet")
+    assert config.attn_implementation == "sdpa"
+    assert config.use_remove_padding is True
+    assert (
+        "+actor_rollout_ref.model.override_config.attn_implementation=sdpa"
+        in config.to_hydra_overrides()
+    )
+    assert (
+        "actor_rollout_ref.model.use_remove_padding=true"
+        in config.to_hydra_overrides()
+    )
+
+
+def test_trainer_can_disable_remove_padding(monkeypatch) -> None:
+    monkeypatch.setenv("OVAL_USE_REMOVE_PADDING", "false")
+    config = TrainerConfig.from_env(train_file="missing.parquet")
+    assert config.use_remove_padding is False
+    assert (
+        "actor_rollout_ref.model.use_remove_padding=false"
+        in config.to_hydra_overrides()
+    )
+
+
+def test_trainer_can_disable_redundant_overlong_filter(monkeypatch) -> None:
+    monkeypatch.setenv("OVAL_FILTER_OVERLONG_PROMPTS", "false")
+    config = TrainerConfig.from_env(train_file="missing.parquet")
+    assert config.filter_overlong_prompts is False
+    assert "data.filter_overlong_prompts=false" in config.to_hydra_overrides()
+
+
 def test_reward_worker_import_honors_strict_prove_profile() -> None:
     env = dict(os.environ)
     env.update({
@@ -183,11 +204,16 @@ def test_reward_worker_import_honors_strict_prove_profile() -> None:
     })
     code = """
 from src.reward import oval_reward_fn as reward
-assert reward._REWARD_PROFILE == 'prove_baseline'
-assert reward._I_SHAPE == 0
-assert reward._I_PROCESS == 0
-assert reward._LAMBDA_SAFE_DEFAULT == 0.0
+runtime = reward.RewardRuntime.from_environment()
+assert runtime.cfg.reward_profile == 'prove_baseline'
+assert runtime.cfg.i_shape == 0
+assert runtime.cfg.i_process == 0
+assert runtime.cfg.lambda_safe_default == 0.0
 result = reward.compute_score('live', '', {}, {
+    'reward_profile': 'prove_baseline',
+    'prompt_profile': 'local_trainable_v1',
+    'semantic_gate_profile': 'deterministic_v1',
+    'artifact_purpose': 'training_candidate',
     'domain': 'calendar',
     'oracle_calls': '[{\"action\":\"tool_call\",\"tool_name\":\"list_events\",\"arguments\":{}}]',
     'success_criteria': '[]',
@@ -233,6 +259,23 @@ def test_three_deterministic_scenario_misclassifications_are_fixed() -> None:
     assert not _detect_duplicate_side_effect(archive_then_label)
 
 
+def test_get_thread_uses_each_domains_registered_output_entities() -> None:
+    email_trace = [
+        OracleCall("get_thread", {}),
+        OracleCall("reply_email", {}),
+    ]
+    team_chat_trace = [
+        OracleCall("get_thread", {}),
+        OracleCall("react_message", {}),
+    ]
+
+    assert not _detect_missing_dependency(email_trace, "email")
+    # team_chat.get_thread publicly returns channel/message identifiers that
+    # can ground react_message. The former same-name exception hid this value
+    # flow even though the handler contract exposes it.
+    assert not _detect_missing_dependency(team_chat_trace, "team_chat")
+
+
 def test_all_formal_tools_use_schema_bound_operations_without_fallback() -> None:
     for domain in DOMAINS:
         module = importlib.import_module(
@@ -253,6 +296,85 @@ def test_all_formal_tools_use_schema_bound_operations_without_fallback() -> None
             adapter.tool_semantics("obsolete_tool", "domain_resource")
 
 
+def test_tool_keyed_domain_contracts_reference_current_schemas_only() -> None:
+    from src.live_mcp.domain_contracts.dependency import (
+        _DEPENDENCY_TOOL_STATE_POSTCONDITIONS,
+        _DEPENDENCY_TOOL_STATE_PRECONDITIONS,
+    )
+    from src.live_mcp.domain_contracts.entities import _TOOL_ENTITY_OVERRIDE
+    from src.live_mcp.domain_contracts.requirements import (
+        _DOMAIN_PROBE_PRIMARY_ENTITY_TYPES,
+        _DOMAIN_TOOL_RELEVANT,
+    )
+
+    all_tool_names: set[str] = set()
+    for domain in DOMAINS:
+        module = importlib.import_module(
+            f"src.live_mcp.servers.{domain}.server"
+        )
+        live_names = {tool["name"] for tool in module.TOOLS}
+        all_tool_names.update(live_names)
+        assert set(_DOMAIN_TOOL_RELEVANT.get(domain, {})) <= live_names
+        assert set(_DOMAIN_PROBE_PRIMARY_ENTITY_TYPES.get(domain, {})) <= live_names
+        assert set(_DEPENDENCY_TOOL_STATE_PRECONDITIONS[domain]) == live_names
+        assert set(_DEPENDENCY_TOOL_STATE_POSTCONDITIONS[domain]) == live_names
+
+    assert set(_TOOL_ENTITY_OVERRIDE) <= all_tool_names
+
+
+def test_shopping_adapter_has_specific_semantics_for_all_public_tools() -> None:
+    module = importlib.import_module("src.live_mcp.servers.shopping.server")
+    adapter = get_adapter("shopping")
+    adapter.register_tool_schemas(module.TOOLS)
+
+    assert set(adapter.TOOL_MAP) == {
+        tool["name"] for tool in module.TOOLS
+    }
+    for tool in module.TOOLS:
+        _operation, target_type = adapter.tool_semantics(
+            tool["name"], "shopping_resource",
+        )
+        assert target_type != "shopping_resource"
+
+    returned = adapter.normalize_event(
+        action_type="tool_call",
+        tool_name="return_order",
+        tool_arguments={"order_id": "ord_s42_0001", "reason": "damaged"},
+        observation={
+            "return": {
+                "return_id": "ret_s42_0003",
+                "order_id": "ord_s42_0001",
+            },
+        },
+        execution_success=True,
+        state_changed=True,
+        before_state=None,
+        after_state=None,
+    )
+    assert returned["target_type"] == "shopping_return"
+    assert returned["target_id"] == "ord_s42_0001"
+    assert returned["created_ids"] == ["ret_s42_0003"]
+
+    reviewed = adapter.normalize_event(
+        action_type="tool_call",
+        tool_name="add_review",
+        tool_arguments={"product_id": "prd_s42_001", "rating": 5, "body": "ok"},
+        observation={
+            "review": {
+                "review_id": "rev_s42_0004",
+                "product_id": "prd_s42_001",
+            },
+        },
+        execution_success=True,
+        state_changed=True,
+        before_state=None,
+        after_state=None,
+    )
+    assert reviewed["target_type"] == "product_review"
+    assert reviewed["target_id"] == "prd_s42_001"
+    assert reviewed["created_ids"] == ["rev_s42_0004"]
+
+
 def _contract_maps(
     tools_by_domain: dict[str, list[dict]],
     *,
@@ -269,6 +391,9 @@ def _contract_maps(
         },
         "initial_state_hashes": {
             domain: f"initial-{domain}" for domain in tools_by_domain
+        },
+        "state_profiles": {
+            domain: "baseline" for domain in tools_by_domain
         },
         "reward_fingerprint": compute_reward_fingerprint(),
         "max_observation_chars": 4096,
@@ -311,6 +436,7 @@ def test_environment_metadata_rejects_unbound_distractor_owner() -> None:
     extra = {
         "server_schema_hash": compute_server_schema_hash(tools),
         **_contract_maps({"calendar": tools}, profiles=["prove_baseline"]),
+        "state_profiles": {"calendar": "baseline", "shopping": "baseline"},
         "observation_schema_version": OBSERVATION_SCHEMA_VERSION,
         "observation_projection_version": OBSERVATION_PROJECTION_VERSION,
         "trajectory_schema_version": TRAJECTORY_SCHEMA_VERSION,
@@ -323,6 +449,45 @@ def test_environment_metadata_rejects_unbound_distractor_owner() -> None:
             current_tools_by_domain={"calendar": tools},
             required_owner_domains={"calendar", "shopping"},
         )
+
+
+def test_policy_visible_tool_owner_contract_is_exact_and_unambiguous() -> None:
+    visible = [
+        {"name": "list_events"},
+        {"name": "search_products", "_server_name": "shopping"},
+    ]
+    owners = _tool_owner_domains(visible, "calendar")
+    extra = {
+        "visible_tool_names": ["list_events", "search_products"],
+        "tool_owner_domains": json.dumps(owners),
+    }
+
+    assert owners == {
+        "list_events": "calendar",
+        "search_products": "shopping",
+    }
+    assert validate_tool_owner_contract(extra) == owners
+
+
+def test_policy_visible_duplicate_or_unbound_tool_owner_fails_closed() -> None:
+    with pytest.raises(RuntimeError, match="ambiguous"):
+        _tool_owner_domains([
+            {"name": "get_order", "_server_name": "shopping"},
+            {"name": "get_order", "_server_name": "food_delivery"},
+        ], "shopping")
+
+    with pytest.raises(RuntimeError, match="exactly cover"):
+        validate_tool_owner_contract({
+            "visible_tool_names": ["list_events", "search_products"],
+            "tool_owner_domains": {"list_events": "calendar"},
+        })
+
+    for owner in (None, 7, ""):
+        with pytest.raises(RuntimeError, match="non-empty strings"):
+            validate_tool_owner_contract({
+                "visible_tool_names": ["list_events"],
+                "tool_owner_domains": {"list_events": owner},
+            })
 
 
 def test_environment_metadata_rejects_distractor_schema_drift() -> None:
@@ -417,20 +582,8 @@ def test_all_task_subtypes_share_environment_metadata_builder() -> None:
     assert metadata["reward_profile_compatibility"] == [
         "prove_baseline", "oval_full",
     ]
-
-
-def test_round_contract_gate_rejects_incomplete_trajectory_in_all_profiles() -> None:
-    components = (0.8, 0.7, 0.6, 0.5)
-    assert _apply_round_contract_penalty(
-        components,
-        round_contract_ok=False,
-        reward_profile="prove_baseline",
-    ) == (0.0, 0.0, 0.0, 0.0)
-    assert _apply_round_contract_penalty(
-        components,
-        round_contract_ok=False,
-        reward_profile="oval_full",
-    ) == (0.0, 0.0, 0.0, 0.0)
+    assert isinstance(metadata["reward_profile_fingerprints"], dict)
+    assert set(metadata["reward_profile_fingerprints"].keys()) == {"prove_baseline", "oval_full"}
 
 
 def test_prove_reward_has_no_formula_external_terminal_or_identity_penalty() -> None:
@@ -454,11 +607,12 @@ def test_prove_reward_has_no_formula_external_terminal_or_identity_penalty() -> 
         "identity_policy": "preserve",
     }
 
-    baseline = reward_module._task_reward.compute(events, task)
+    task_reward = reward_module.TaskReward(reward_profile="prove_baseline")
+    baseline = task_reward.compute(events, task)
     assert baseline.r_validity == 1.0
     assert baseline.r_coverage == 1.0
 
-    oval = reward_module._task_reward.compute(events, {
+    oval = task_reward.compute(events, {
         **task,
         "apply_terminal_validity_penalty": True,
         "apply_identity_coverage_penalty": True,
@@ -468,7 +622,7 @@ def test_prove_reward_has_no_formula_external_terminal_or_identity_penalty() -> 
 
 
 def test_argument_equality_keeps_boolean_and_number_types_distinct() -> None:
-    equal = reward_module._task_reward._args_equal
+    equal = reward_module.TaskReward._args_equal
     assert equal(True, "true") is True
     assert equal(False, "false") is True
     assert equal(True, 1) is False
@@ -486,6 +640,30 @@ def test_reward_profile_binds_the_advantage_estimator(monkeypatch) -> None:
     monkeypatch.setenv("OVAL_ADV_ESTIMATOR", "grpo")
     with pytest.raises(ValueError, match="requires adv_estimator"):
         TrainerConfig.from_env()
+
+
+def test_strict_prove_profile_fails_closed_until_sources_exist(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OVAL_EXPERIMENT_PROFILE", "prove_reproduction_v1")
+    monkeypatch.setenv("OVAL_REWARD_PROFILE", "prove_baseline")
+    with pytest.raises(ValueError, match="is unavailable"):
+        TrainerConfig.from_env()
+
+
+def test_training_run_name_is_injectable_from_environment(monkeypatch) -> None:
+    monkeypatch.setenv("OVAL_RUN_NAME", "smoke_seed_41")
+    assert TrainerConfig.from_env().generate_run_name() == "smoke_seed_41"
+
+
+def test_training_seed_reaches_data_sampler_and_vllm_rollout(monkeypatch) -> None:
+    from verl.workers.config.rollout import RolloutConfig
+
+    monkeypatch.setenv("OVAL_SEED", "41")
+    overrides = TrainerConfig.from_env(train_file="missing.parquet").to_hydra_overrides()
+    assert "data.seed=41" in overrides
+    assert "+actor_rollout_ref.rollout.seed=41" in overrides
+    assert RolloutConfig(name="vllm", seed=41).seed == 41
 
 
 def test_direct_training_entry_binds_and_rejects_estimator_drift() -> None:
@@ -513,6 +691,182 @@ def test_seeded_mutable_entity_fields_do_not_alias() -> None:
         for message in channel["messages"]
     ]
     assert len({id(value) for value in reactions}) == len(reactions)
+
+
+def test_calendar_seed_covers_public_event_state_variants() -> None:
+    events = StateSeeder().seed_state(
+        "calendar", "calendar-state-audit", 42,
+    )["events"].values()
+
+    assert len(events) == 20
+    assert any(event.get("recurrence") for event in events)
+    assert any(not event.get("recurrence") for event in events)
+    assert any(event.get("reminders") for event in events)
+    assert any(not event.get("reminders") for event in events)
+
+    server = CalendarServer()
+    server.handle_request(
+        "session/reset", {"session_id": "calendar-state-audit", "seed": 42},
+    )
+    recurring_id = next(
+        event["event_id"]
+        for event in server.sessions["calendar-state-audit"]["events"].values()
+        if event.get("recurrence")
+    )
+    result = server._call_tool({
+        "session_id": "calendar-state-audit",
+        "name": "get_recurring_info",
+        "arguments": {"event_id": recurring_id},
+    })
+    assert result["success"] is True
+    assert result["observation"]["recurrence"]
+
+
+def test_payments_rare_state_profile_preserves_baseline_and_relations() -> None:
+    seed = 2026072801
+    seeder = StateSeeder()
+    baseline = seeder.seed_state("payments", "baseline-audit", seed)
+    canonical = json.dumps(
+        baseline, sort_keys=True, separators=(",", ":"), default=str,
+    )
+    assert hashlib.sha256(canonical.encode()).hexdigest() == (
+        "357cec88546a4fabfdbf599914a8d317da30da37b85200e8da12e97b5fec3360"
+    )
+    assert len(baseline["invoices"]) == 20
+    assert len(baseline["payments"]) == 5
+    assert len(baseline["refunds"]) == 3
+    assert len(baseline["webhooks"]) == 3
+    assert all(
+        payment["invoice_id"] in baseline["invoices"]
+        for payment in baseline["payments"].values()
+    )
+    assert all(
+        refund["invoice_id"] in baseline["invoices"]
+        for refund in baseline["refunds"].values()
+    )
+
+    rare = seeder.seed_state(
+        "payments", "rare-audit", seed, "payments_rare_state_v1"
+    )
+    assert len(rare["invoices"]) == len(baseline["invoices"]) == 20
+    assert len(rare["payments"]) == 8
+    assert sum(
+        payment["status"] == "pending"
+        for payment in rare["payments"].values()
+    ) == 4
+    assert len(rare["refunds"]) == 3
+    assert len(rare["webhooks"]) == 3
+    partial = next(
+        inv for inv in rare["invoices"].values()
+        if inv["status"] == "partially_refunded"
+    )
+    assert rare["payments"][partial["payment_id"]]["status"] == "settled"
+    assert rare["refunds"][partial["refund_id"]]["invoice_id"] == partial["invoice_id"]
+    for payment in rare["payments"].values():
+        assert payment["invoice_id"] in rare["invoices"]
+
+
+def test_state_profile_is_explicit_and_missing_rows_fail_closed() -> None:
+    owners = {"payments", "calendar"}
+    with pytest.raises(RuntimeError, match="missing state_profiles"):
+        normalize_state_profiles(None, owners)
+    suite = load_suite_config(
+        "configs/live_mcp/ten_domain_suite_payments_rare_state_v1.yaml"
+    )
+    assert state_profiles_for_suite(suite, owners) == {
+        "calendar": "baseline",
+        "payments": "payments_rare_state_v1",
+    }
+    baseline_hashes = compute_initial_state_hashes(owners, 2026072801)
+    rare_hashes = compute_initial_state_hashes(
+        owners,
+        2026072801,
+        state_profiles_for_suite(suite, owners),
+    )
+    assert baseline_hashes["calendar"] == rare_hashes["calendar"]
+    assert baseline_hashes["payments"] != rare_hashes["payments"]
+    manager = LiveMCPManager(suite)
+    assert manager._state_profiles(None)["payments"] == "payments_rare_state_v1"
+    assert manager._state_profiles({})["payments"] == "baseline"
+
+    with pytest.raises(ValueError, match="unsupported state profile"):
+        StateSeeder().seed_state(
+            "calendar", "invalid-profile", 42, "payments_rare_state_v1"
+        )
+
+
+def test_manager_scoped_session_resets_only_bound_environment() -> None:
+    suite = load_suite_config("configs/live_mcp/ten_domain_suite.yaml")
+    manager = LiveMCPManager(suite)
+    calls: list[tuple[str, str, dict]] = []
+
+    def request(server_name, method, params, **_kwargs):
+        calls.append((server_name, method, dict(params)))
+        return {}
+
+    manager._request = request
+    session = manager.create_session(
+        seed=17,
+        server_names=["shopping"],
+    )
+    try:
+        assert session.server_names == ["shopping"]
+        assert session.metadata["state_profiles"] == {"shopping": "baseline"}
+        reset_calls = [call for call in calls if call[1] == "session/reset"]
+        assert [call[0] for call in reset_calls] == ["shopping"]
+        assert reset_calls[0][2]["seed"] == 17
+    finally:
+        manager.close_session(session.session_id)
+
+
+def test_payments_server_rare_state_paths_are_executable() -> None:
+    server = PaymentsServer()
+    session_id = "payments-rare"
+    server.handle_request(
+        "session/reset",
+        {
+            "session_id": session_id,
+            "seed": 2026072801,
+            "state_profile": "payments_rare_state_v1",
+        },
+    )
+    state = server.sessions[session_id]
+    pending = next(
+        payment for payment in state["payments"].values()
+        if payment["status"] == "pending"
+    )
+    cancelled = server._call_tool({
+        "session_id": session_id,
+        "name": "cancel_payment",
+        "arguments": {
+            "payment_id": pending["payment_id"],
+            "reason": "gray audit",
+        },
+    })
+    assert cancelled["success"] is True
+
+    partial = next(
+        invoice for invoice in state["invoices"].values()
+        if invoice["status"] == "partially_refunded"
+    )
+    refunded = server._call_tool({
+        "session_id": session_id,
+        "name": "refund_invoice",
+        "arguments": {
+            "invoice_id": partial["invoice_id"],
+            "amount": 0.01,
+            "reason": "gray audit",
+        },
+    })
+    assert refunded["success"] is True
+
+    webhook_id = next(iter(state["webhooks"]))
+    deleted = server._call_tool({
+        "session_id": session_id,
+        "name": "delete_webhook",
+        "arguments": {"webhook_id": webhook_id},
+    })
+    assert deleted["success"] is True
 
 
 def test_all_seeded_mutable_objects_are_isolated() -> None:
@@ -575,10 +929,11 @@ def test_server_boundary_rolls_back_partial_mutation_and_audits_delta() -> None:
             return server_result(True, {}, None, "", True)
 
     server = ProbeServer(); sid = _reset(server)
+    baseline_transactions = list(server.sessions[sid]["transactions"])
     for name in ("fail_after_write", "wrong_change_flag"):
         result = server._call_tool({"session_id": sid, "name": name, "arguments": {}})
         assert result["success"] is False
-        assert server.sessions[sid]["transactions"] == []
+        assert server.sessions[sid]["transactions"] == baseline_transactions
     valid = server._call_tool({"session_id": sid, "name": "valid_write", "arguments": {}})
     assert valid["success"] is True
     assert valid["state_delta_paths"] == ["transactions"]
@@ -657,7 +1012,11 @@ def test_reversible_targets_are_live_grounded_and_round_trip() -> None:
     )
     assert payments._call_tool({
         "session_id": pay_sid, "name": "pay_invoice",
-        "arguments": {"invoice_id": invoice["invoice_id"], "amount": invoice["amount"]},
+        "arguments": {
+            "invoice_id": invoice["invoice_id"],
+            "amount": invoice["amount"],
+            "method": "card",
+        },
     })["success"]
     assert payments._call_tool({
         "session_id": pay_sid, "name": "refund_invoice",
@@ -784,7 +1143,15 @@ def test_mutating_tools_have_real_footprints() -> None:
     })["state_delta_paths"]
 
     shopping = ShoppingServer(); sid = _reset(shopping)
-    product_id = next(iter(shopping.sessions[sid]["products"]))
+    shopping_state = shopping.sessions[sid]
+    reviewed = set(shopping_state["reviews"])
+    product_id = next(
+        item["product_id"]
+        for order in shopping_state["orders"].values()
+        if order["status"] in {"shipped", "returning", "returned"}
+        for item in order["items"]
+        if item["product_id"] not in reviewed
+    )
     assert shopping._call_tool({
         "session_id": sid, "name": "add_review",
         "arguments": {
@@ -887,6 +1254,63 @@ def test_banking_rejects_self_transfer_and_accepts_user_authorization() -> None:
     assert state["accounts"][frozen_id]["frozen"] is False
 
 
+def test_banking_schedule_respects_freeze_and_verification_minimizes_disclosure() -> None:
+    server = BankingServer()
+    sid = _reset(server)
+    state = server.sessions[sid]
+    frozen_id = next(
+        aid for aid, account in state["accounts"].items() if account["frozen"]
+    )
+    other_id = next(aid for aid in state["accounts"] if aid != frozen_id)
+    future_date = (
+        datetime.date.fromisoformat(state["current_date"])
+        + datetime.timedelta(days=1)
+    ).isoformat()
+
+    blocked = server._call_tool({
+        "session_id": sid,
+        "name": "schedule_transfer",
+        "arguments": {
+            "from_account": frozen_id,
+            "to_account": other_id,
+            "amount": 1,
+            "execute_date": future_date,
+        },
+    })
+    assert blocked["success"] is False
+    assert "account frozen" in blocked["error_message"]
+
+    verification = server._call_tool({
+        "session_id": sid,
+        "name": "verify_account",
+        "arguments": {
+            "account_id": frozen_id,
+            "owner_name": "wrong owner",
+        },
+    })
+    assert verification["success"] is True
+    assert verification["observation"]["verified"] is False
+    assert "owner" not in verification["observation"]
+
+    adapter = get_adapter("banking")
+    normalized = adapter.normalize_event(
+        action_type="tool_call",
+        tool_name="verify_account",
+        tool_arguments={
+            "account_id": frozen_id,
+            "owner_name": "wrong owner",
+        },
+        observation=verification["observation"],
+        execution_success=True,
+        state_changed=False,
+        before_state=None,
+        after_state=None,
+    )
+    assert normalized["identity_violation"] == (
+        "identity_or_provenance_violation"
+    )
+
+
 def test_banking_uses_seed_clock_and_rejects_currency_mismatch() -> None:
     server = BankingServer(); sid = _reset(server, seed=4097)
     state = server.sessions[sid]
@@ -958,13 +1382,57 @@ def test_calendar_attendee_response_and_timezone_are_consistent() -> None:
     email = "audit@example.com"
     added = server._call_tool({
         "session_id": sid, "name": "add_attendee",
+        "arguments": {"event_id": event_id, "email": email},
+    })
+    assert added["success"] is True
+    before_repeat = json.dumps(state, sort_keys=True)
+    repeated = server._call_tool({
+        "session_id": sid, "name": "add_attendee",
+        "arguments": {"event_id": event_id, "email": email},
+    })
+    assert repeated["success"] is True
+    assert repeated["state_changed"] is False
+    assert json.dumps(state, sort_keys=True) == before_repeat
+
+    responded = server._call_tool({
+        "session_id": sid, "name": "add_attendee",
         "arguments": {
             "event_id": event_id, "email": email,
             "response_status": "accepted",
         },
     })
-    assert added["success"] is True
+    assert responded["success"] is True
+    assert responded["state_changed"] is True
     assert state["events"][event_id]["responses"][email] == "accepted"
+
+    first_reminder = server._call_tool({
+        "session_id": sid, "name": "set_reminder",
+        "arguments": {"event_id": event_id, "minutes_before": 15},
+    })
+    assert first_reminder["success"] is True
+    reminder_count = len(state["events"][event_id]["reminders"])
+    updated_reminder = server._call_tool({
+        "session_id": sid, "name": "set_reminder",
+        "arguments": {
+            "event_id": event_id,
+            "minutes_before": 15,
+            "method": "email",
+        },
+    })
+    assert updated_reminder["success"] is True
+    assert updated_reminder["state_changed"] is True
+    assert len(state["events"][event_id]["reminders"]) == reminder_count
+    assert state["events"][event_id]["reminders"][-1]["method"] == "email"
+    unchanged_reminder = server._call_tool({
+        "session_id": sid, "name": "set_reminder",
+        "arguments": {
+            "event_id": event_id,
+            "minutes_before": 15,
+            "method": "email",
+        },
+    })
+    assert unchanged_reminder["success"] is True
+    assert unchanged_reminder["state_changed"] is False
     removed = server._call_tool({
         "session_id": sid, "name": "remove_attendee",
         "arguments": {"event_id": event_id, "email": email},
@@ -1110,6 +1578,41 @@ def test_payments_disputed_invoice_cannot_be_paid() -> None:
     assert json.dumps(state, sort_keys=True) == inconsistent_before
 
 
+def test_payments_require_user_payment_method_and_nonempty_webhook_events() -> None:
+    server = PaymentsServer()
+    sid = _reset(server)
+    state = server.sessions[sid]
+    invoice = next(
+        item for item in state["invoices"].values()
+        if item["status"] in {"pending", "overdue"}
+        and not item.get("payment_id")
+    )
+    before = json.dumps(state, sort_keys=True)
+
+    missing_method = server._call_tool({
+        "session_id": sid,
+        "name": "pay_invoice",
+        "arguments": {
+            "invoice_id": invoice["invoice_id"],
+            "amount": invoice["amount"],
+        },
+    })
+    assert missing_method["success"] is False
+    assert "method" in missing_method["error_message"]
+    assert json.dumps(state, sort_keys=True) == before
+
+    empty_events = server._call_tool({
+        "session_id": sid,
+        "name": "create_webhook",
+        "arguments": {
+            "url": "https://example.com/hook",
+            "events": [],
+        },
+    })
+    assert empty_events["success"] is False
+    assert "events must be non-empty" in empty_events["error_message"]
+
+
 def test_crm_rejects_unlinked_resources_and_noop_update() -> None:
     server = CRMServer(); sid = _reset(server)
     state = server.sessions[sid]
@@ -1249,42 +1752,498 @@ def test_freeship_changes_cart_and_checkout_totals() -> None:
         "session_id": sid, "name": "get_cart", "arguments": {},
     })["observation"]
     assert before["shipping"] > 0
-    assert server._call_tool({
+    coupon_result = server._call_tool({
         "session_id": sid, "name": "apply_coupon",
         "arguments": {"code": "FREESHIP"},
-    })["success"]
+    })
+    assert coupon_result["success"]
+    assert coupon_result["observation"]["discount"] == "free shipping"
     after = server._call_tool({
         "session_id": sid, "name": "get_cart", "arguments": {},
     })["observation"]
     assert after["shipping"] == 0
     assert after["final_total"] < before["final_total"]
-    order = server._call_tool({
+    checkout_order = server._call_tool({
         "session_id": sid, "name": "checkout",
-        "arguments": {"shipping_address": "1 Audit Way", "payment_method": "card"},
+        "arguments": {"shipping_address": "1 Audit Way", "payment_method": "Visa"},
+    })["observation"]["order"]
+    assert set(checkout_order) == {"order_id", "status"}
+    order = server._call_tool({
+        "session_id": sid, "name": "get_order",
+        "arguments": {"order_id": checkout_order["order_id"]},
     })["observation"]["order"]
     assert order["shipping"] == 0
 
 
-def test_track_order_fallback_uses_session_date_without_mutation() -> None:
-    server = ShoppingServer(); sid = _reset(server)
-    state = server.sessions[sid]
-    order = next(iter(state["orders"].values()))
-    order.pop("tracking", None)
+def test_shopping_return_rejects_order_that_has_not_shipped() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    pending = next(
+        order for order in server.sessions[sid]["orders"].values()
+        if order["status"] == "pending"
+    )
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "return_order",
+        "arguments": {
+            "order_id": pending["order_id"],
+            "reason": "damaged",
+        },
+    })
+    assert result["success"] is False
+    assert "only shipped orders can be returned" in result["error_message"]
+
+
+def test_shopping_return_rejects_generic_reason_placeholder() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    shipped = next(
+        order for order in server.sessions[sid]["orders"].values()
+        if order["status"] == "shipped"
+    )
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "return_order",
+        "arguments": {
+            "order_id": shipped["order_id"],
+            "reason": "User requested return",
+        },
+    })
+    assert result["success"] is False
+    assert "concrete user-provided reason" in result["error_message"]
+    assert shipped["status"] == "shipped"
+
+
+def test_shopping_return_validates_item_membership_and_whole_order_semantics() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    shipped = next(
+        order for order in server.sessions[sid]["orders"].values()
+        if order["status"] == "shipped"
+    )
+
+    invalid = server._call_tool({
+        "session_id": sid,
+        "name": "return_order",
+        "arguments": {
+            "order_id": shipped["order_id"],
+            "reason": "damaged",
+            "items": ["prd_missing"],
+        },
+    })
+    assert invalid["success"] is False
+    assert "product not in order" in invalid["error_message"]
+    assert shipped["status"] == "shipped"
+
+    whole_order = server._call_tool({
+        "session_id": sid,
+        "name": "return_order",
+        "arguments": {
+            "order_id": shipped["order_id"],
+            "reason": "damaged",
+        },
+    })
+    assert whole_order["success"] is True
+    assert whole_order["observation"]["return"]["items"] == [
+        item["product_id"] for item in shipped["items"]
+    ]
+    assert whole_order["observation"]["return"]["item_details"] == shipped["items"]
+    assert _field_values(whole_order["observation"], "product_id") == [
+        item["product_id"] for item in shipped["items"]
+    ]
+
+    return_id = whole_order["observation"]["return"]["return_id"]
+    status = server._call_tool({
+        "session_id": sid,
+        "name": "get_return_status",
+        "arguments": {"return_id": return_id},
+    })
+    assert status["success"] is True
+    assert _field_values(status["observation"], "product_id") == [
+        item["product_id"] for item in shipped["items"]
+    ]
+    assert "request has been recorded" in status["observation"]["status_description"]
+    assert "does not expose a shipping label" in status["observation"]["status_description"]
+
+
+def test_shopping_rejects_semantically_incomplete_checkout_and_comparison() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    product_ids = list(server.sessions[sid]["products"])
+    assert server._call_tool({
+        "session_id": sid,
+        "name": "add_to_cart",
+        "arguments": {"product_id": product_ids[0], "quantity": 1},
+    })["success"]
+
+    incomplete_checkout = server._call_tool({
+        "session_id": sid,
+        "name": "checkout",
+        "arguments": {},
+    })
+    assert incomplete_checkout["success"] is False
+    assert "shipping_address" in incomplete_checkout["error_message"]
+
+    blank_address = server._call_tool({
+        "session_id": sid,
+        "name": "checkout",
+        "arguments": {"shipping_address": " ", "payment_method": "card"},
+    })
+    assert blank_address["success"] is False
+    assert "shipping_address must be non-empty" in blank_address["error_message"]
+
+    blank_payment_method = server._call_tool({
+        "session_id": sid,
+        "name": "checkout",
+        "arguments": {"shipping_address": "1 Audit Way", "payment_method": " "},
+    })
+    assert blank_payment_method["success"] is False
+    assert "payment_method must be non-empty" in blank_payment_method["error_message"]
+
+    placeholder_address = server._call_tool({
+        "session_id": sid,
+        "name": "checkout",
+        "arguments": {
+            "shipping_address": "my home address",
+            "payment_method": "Visa card",
+        },
+    })
+    assert placeholder_address["success"] is False
+    assert "unresolved placeholder" in placeholder_address["error_message"]
+
+    placeholder_payment = server._call_tool({
+        "session_id": sid,
+        "name": "checkout",
+        "arguments": {
+            "shipping_address": "1 Audit Way",
+            "payment_method": "card on file",
+        },
+    })
+    assert placeholder_payment["success"] is False
+    assert "unresolved placeholder" in placeholder_payment["error_message"]
+
+    one_product = server._call_tool({
+        "session_id": sid,
+        "name": "compare_products",
+        "arguments": {"product_ids": [product_ids[0]]},
+    })
+    assert one_product["success"] is False
+    assert "at least two distinct" in one_product["error_message"]
+
+    unknown_product = server._call_tool({
+        "session_id": sid,
+        "name": "compare_products",
+        "arguments": {"product_ids": [product_ids[0], "prd_missing"]},
+    })
+    assert unknown_product["success"] is False
+    assert "product not found" in unknown_product["error_message"]
+
+
+def test_shopping_return_rejects_blank_reason_without_mutation() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    shipped = next(
+        order for order in server.sessions[sid]["orders"].values()
+        if order["status"] == "shipped"
+    )
 
     result = server._call_tool({
         "session_id": sid,
-        "name": "track_order",
-        "arguments": {"order_id": order["order_id"]},
+        "name": "return_order",
+        "arguments": {
+            "order_id": shipped["order_id"],
+            "reason": " ",
+        },
+    })
+
+    assert result["success"] is False
+    assert "reason must be non-empty" in result["error_message"]
+    assert shipped["status"] == "shipped"
+
+
+def test_shopping_recommendation_rejects_unknown_explicit_seed() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "get_recommendations",
+        "arguments": {"based_on_product": "prd_missing"},
+    })
+
+    assert result["success"] is False
+    assert "product not found" in result["error_message"]
+
+
+def test_shopping_recommendation_excludes_seed_product() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    state = server.sessions[sid]
+    seed_product = next(iter(state["products"].values()))
+
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "get_recommendations",
+        "arguments": {
+            "based_on_product": seed_product["product_id"],
+            "limit": 20,
+        },
     })
 
     assert result["success"] is True
+    recommendations = result["observation"]["recommendations"]
+    assert all(
+        product["product_id"] != seed_product["product_id"]
+        for product in recommendations
+    )
+    assert all(
+        product["category"] == seed_product["category"]
+        for product in recommendations
+    )
+
+
+def test_shopping_recommendation_preserves_explicit_category_with_seed() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    state = server.sessions[sid]
+    keyboard = next(
+        product for product in state["products"].values()
+        if product["category"] == "keyboard"
+    )
+
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "get_recommendations",
+        "arguments": {
+            "based_on_product": keyboard["product_id"],
+            "category": "mouse",
+            "limit": 20,
+        },
+    })
+
+    assert result["success"] is True
+    recommendations = result["observation"]["recommendations"]
+    assert recommendations
+    assert all(
+        product["category"] == "mouse"
+        for product in recommendations
+    )
+    assert all(
+        product["product_id"] != keyboard["product_id"]
+        for product in recommendations
+    )
+
+
+def test_shopping_rejects_invalid_recommendation_limit_and_unknown_wishlist_id() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+
+    invalid_limit = server._call_tool({
+        "session_id": sid,
+        "name": "get_recommendations",
+        "arguments": {"limit": -1},
+    })
+    assert invalid_limit["success"] is False
+    assert "limit must be between 1 and 20" in invalid_limit["error_message"]
+
+    unknown_product = server._call_tool({
+        "session_id": sid,
+        "name": "remove_from_wishlist",
+        "arguments": {"product_id": "prd_missing"},
+    })
+    assert unknown_product["success"] is False
+    assert "product not found" in unknown_product["error_message"]
+
+
+def test_shopping_reviews_reject_unknown_explicit_sort_mode() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    product_id = next(iter(server.sessions[sid]["products"]))
+
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "get_reviews",
+        "arguments": {"product_id": product_id, "sort_by": "newest"},
+    })
+
+    assert result["success"] is False
+    assert "unsupported review sort" in result["error_message"]
     assert result["state_changed"] is False
-    assert result["state_delta_paths"] == []
-    assert result["observation"]["tracking"] == [{
-        "status": order["status"],
-        "timestamp": state["current_date"],
-        "location": "Warehouse",
-    }]
+
+
+def test_shopping_rejects_reversed_price_range_and_blank_review_body() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    product_id = next(iter(server.sessions[sid]["products"]))
+    reviews_before = json.loads(json.dumps(server.sessions[sid]["reviews"]))
+
+    reversed_range = server._call_tool({
+        "session_id": sid,
+        "name": "search_products",
+        "arguments": {"min_price": 100, "max_price": 10},
+    })
+    assert reversed_range["success"] is False
+    assert "min_price must be less than or equal" in reversed_range["error_message"]
+    assert reversed_range["state_changed"] is False
+
+    blank_review = server._call_tool({
+        "session_id": sid,
+        "name": "add_review",
+        "arguments": {
+            "product_id": product_id,
+            "rating": 5,
+            "body": " ",
+        },
+    })
+    assert blank_review["success"] is False
+    assert "review body must be non-empty" in blank_review["error_message"]
+    assert blank_review["state_changed"] is False
+    assert server.sessions[sid]["reviews"] == reviews_before
+
+
+def test_shopping_dynamic_entity_ids_are_seed_scoped() -> None:
+    server = ShoppingServer()
+    dynamic_ids: list[set[str]] = []
+    for seed in (41, 42):
+        sid = _reset(server, seed=seed)
+        state = server.sessions[sid]
+        reviewed = set(state["reviews"])
+        product_id = next(
+            item["product_id"]
+            for order in state["orders"].values()
+            if order["status"] in {"shipped", "returning", "returned"}
+            for item in order["items"]
+            if item["product_id"] not in reviewed
+        )
+        shipped = next(
+            order for order in state["orders"].values()
+            if order["status"] == "shipped"
+        )
+
+        assert server._call_tool({
+            "session_id": sid,
+            "name": "add_to_cart",
+            "arguments": {"product_id": product_id, "quantity": 1},
+        })["success"]
+        checkout = server._call_tool({
+            "session_id": sid,
+            "name": "checkout",
+            "arguments": {
+                "shipping_address": "1 Audit Way",
+                    "payment_method": "Visa",
+            },
+        })
+        returned = server._call_tool({
+            "session_id": sid,
+            "name": "return_order",
+            "arguments": {
+                "order_id": shipped["order_id"],
+                "reason": "damaged",
+            },
+        })
+        review = server._call_tool({
+            "session_id": sid,
+            "name": "add_review",
+            "arguments": {
+                "product_id": product_id,
+                "rating": 5,
+                "body": "Works well",
+            },
+        })
+        assert checkout["success"] and returned["success"] and review["success"]
+        ids = {
+            checkout["observation"]["order"]["order_id"],
+            returned["observation"]["return"]["return_id"],
+            review["observation"]["review"]["review_id"],
+        }
+        assert all(f"_s{seed}_" in entity_id for entity_id in ids)
+        dynamic_ids.append(ids)
+
+    assert dynamic_ids[0].isdisjoint(dynamic_ids[1])
+
+
+def test_cancel_order_rejects_shipped_status() -> None:
+    server = ShoppingServer(); sid = _reset(server)
+    state = server.sessions[sid]
+    # Find the shipped order
+    shipped = next(o for o in state["orders"].values() if o.get("status") == "shipped")
+
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "cancel_order",
+        "arguments": {"order_id": shipped["order_id"]},
+    })
+
+    assert result["success"] is False
+    assert "only placed or pending orders can be cancelled" in result["error_message"]
+
+
+def test_cancel_order_succeeds_for_placed_order() -> None:
+    server = ShoppingServer(); sid = _reset(server)
+    state = server.sessions[sid]
+    # Find the placed (or pending) order
+    placed = next(
+        o for o in state["orders"].values()
+        if o.get("status") in ("placed", "pending")
+    )
+    old_stock = {
+        item["product_id"]: state["products"][item["product_id"]]["stock"]
+        for item in placed["items"]
+        if item["product_id"] in state["products"]
+    }
+
+    result = server._call_tool({
+        "session_id": sid,
+        "name": "cancel_order",
+        "arguments": {"order_id": placed["order_id"]},
+    })
+
+    assert result["success"] is True
+    assert result["state_changed"] is True
+    assert result["observation"]["order"]["status"] == "cancelled"
+    # Stock should be returned
+    for pid, old_qty in old_stock.items():
+        item = next(i for i in placed["items"] if i["product_id"] == pid)
+        assert state["products"][pid]["stock"] == old_qty + item["quantity"]
+
+
+def test_shopping_discovery_summaries_leave_exact_stock_to_get_product() -> None:
+    server = ShoppingServer()
+    sid = _reset(server)
+    state = server.sessions[sid]
+    product = next(iter(state["products"].values()))
+
+    searched = server._call_tool({
+        "session_id": sid,
+        "name": "search_products",
+        "arguments": {"query": product["name"]},
+    })["observation"]["products"]
+    assert len(searched) == 1
+    assert "stock" not in searched[0]
+    assert searched[0]["product_id"] == product["product_id"]
+
+    recommended = server._call_tool({
+        "session_id": sid,
+        "name": "get_recommendations",
+        "arguments": {"limit": 1},
+    })["observation"]["recommendations"]
+    assert recommended
+    assert "stock" not in recommended[0]
+
+    wishlist = server._call_tool({
+        "session_id": sid,
+        "name": "get_wishlist",
+        "arguments": {},
+    })["observation"]["wishlist"]
+    assert wishlist
+    assert all("stock" not in item for item in wishlist)
+
+    detailed = server._call_tool({
+        "session_id": sid,
+        "name": "get_product",
+        "arguments": {"product_id": product["product_id"]},
+    })["observation"]["product"]
+    assert detailed["stock"] == product["stock"]
 
 
 def test_readonly_handlers_with_session_timestamps_execute() -> None:
@@ -1468,8 +2427,8 @@ def test_round_contract_rejects_missing_single_round_terminal() -> None:
     )
 
 
-def test_task_reward_does_not_match_future_round_call_early() -> None:
-    reward = reward_module.TaskReward()
+def test_oval_task_reward_does_not_match_future_round_call_early() -> None:
+    reward = reward_module.TaskReward(reward_profile="oval_full")
     events = EventLog(events=[
         AuditEvent(
             event_id="round0", session_id="s", step=0, round_idx=0,
@@ -1501,7 +2460,8 @@ def test_reward_exception_fails_closed(monkeypatch) -> None:
     def boom(*args, **kwargs):
         raise RuntimeError("reward contract exploded")
 
-    monkeypatch.setattr(reward_module._task_reward, "compute", boom)
+    monkeypatch.setattr(reward_module.TaskReward, "compute", boom)
+    reward_profile = reward_module.get_config().reward_profile
     with pytest.raises(reward_module.RewardIntegrityError, match="reward contract exploded"):
         reward_module.compute_score(
             "live",
@@ -1510,6 +2470,10 @@ def test_reward_exception_fails_closed(monkeypatch) -> None:
                 "action": "tool_call", "tool_name": "list_accounts", "arguments": {},
             }]), "success_criteria": "[]"},
             {
+                "reward_profile": reward_profile,
+                "prompt_profile": "local_trainable_v1",
+                "semantic_gate_profile": "deterministic_v1",
+                "artifact_purpose": "training_candidate",
                 "domain": "banking",
                 "allowed_terminal_actions": ["final_answer"],
                 "round_contracts": [{
@@ -1528,6 +2492,43 @@ def test_reward_exception_fails_closed(monkeypatch) -> None:
         )
 
 
+def test_rollout_reward_profile_mismatch_fails_before_scoring() -> None:
+    with pytest.raises(
+        reward_module.RewardIntegrityError,
+        match="rollout/reward profile mismatch",
+    ):
+        reward_module.compute_score(
+            "live", "", {}, {"reward_profile": "not-the-loaded-profile"},
+        )
+
+
+def test_rollout_reward_profile_missing_fails_before_scoring() -> None:
+    with pytest.raises(
+        reward_module.RewardIntegrityError,
+        match="missing reward_profile",
+    ):
+        reward_module.compute_score("live", "", {}, {})
+
+
+def test_reward_rejects_paper_audit_artifact_before_scoring() -> None:
+    reward_profile = reward_module.get_config().reward_profile
+    with pytest.raises(
+        reward_module.RewardIntegrityError,
+        match="not training-consumable",
+    ):
+        reward_module.compute_score(
+            "live",
+            "",
+            {},
+            {
+                "reward_profile": reward_profile,
+                "prompt_profile": "paper_generation_baseline_v1",
+                "semantic_gate_profile": "diagnostic_only",
+                "artifact_purpose": "paper_audit",
+            },
+        )
+
+
 def test_optional_reward_components_also_fail_closed(monkeypatch) -> None:
     def boom(*args, **kwargs):
         raise RuntimeError("progress contract exploded")
@@ -1538,7 +2539,8 @@ def test_optional_reward_components_also_fail_closed(monkeypatch) -> None:
         match="progress contract exploded",
     ):
         reward_module._compute_f_gamma(
-            reward_module.EventLog(events=[]), {}, domain_adapter=None,
+            reward_module.EventLog(events=[]), {}, gamma=1.0,
+            domain_adapter=None,
         )
 
 
@@ -1609,6 +2611,416 @@ def test_rollout_closes_session_when_inner_loop_raises(monkeypatch) -> None:
     with pytest.raises(RuntimeError, match="unexpected rollout failure"):
         asyncio.run(loop.run({}))
     assert ctx.closed == ["leaked-session"]
+
+
+def test_rollout_chat_template_tokens_accept_transformers5_batch_encoding() -> None:
+    assert _single_conversation_token_ids({
+        "input_ids": [11, 12, 13],
+        "attention_mask": [1, 1, 1],
+    }) == [11, 12, 13]
+    assert _single_conversation_token_ids({"input_ids": [[21, 22]]}) == [21, 22]
+
+
+def test_rollout_chat_template_tokens_reject_ambiguous_batches() -> None:
+    with pytest.raises(ValueError, match="exactly one conversation"):
+        _single_conversation_token_ids({"input_ids": [[1], [2]]})
+
+
+def test_rollout_infers_plain_final_only_after_round_contract_is_satisfied() -> None:
+    assert _resolve_terminal_type(
+        "The K3 Keyboard costs $82 and has RGB backlighting.",
+        allowed_terminal_actions=["final_answer"],
+        required_tools=["search_products", "get_product"],
+        successful_tool_names=["search_products", "get_product"],
+    ) == ("final_answer", True)
+
+    # Content-based clarification classification (PROVE-aligned): the model
+    # is asking the user for the product ID, so the terminal is
+    # ask_clarification even without XML tags and even when the contract
+    # only lists final_answer.
+    assert _resolve_terminal_type(
+        "Please provide the product ID.",
+        allowed_terminal_actions=["final_answer"],
+        required_tools=["search_products", "get_product"],
+        successful_tool_names=[],
+    ) == ("ask_clarification", False)
+
+    # allow_plain_final=False only gates the *plain final* fallback;
+    # content-marker classification still applies.
+    assert _resolve_terminal_type(
+        "The K3 Keyboard costs $82 and has RGB backlighting.",
+        allowed_terminal_actions=["final_answer"],
+        required_tools=["search_products", "get_product"],
+        successful_tool_names=["search_products", "get_product"],
+        allow_plain_final=False,
+    ) == ("unknown", False)
+
+
+def test_rollout_plain_terminal_fallback_preserves_nonfinal_contracts() -> None:
+    # Content-based report_error classification: "I cannot complete" is a
+    # refusal, resolved by content marker rather than XML tags.
+    assert _resolve_terminal_type(
+        "I cannot complete that request.",
+        allowed_terminal_actions=["report_error"],
+        required_tools=[],
+        successful_tool_names=[],
+    ) == ("report_error", False)
+    # A plain-text request for clarification is NOT coerced into
+    # final_answer — content markers preserve the non-final type.
+    assert _resolve_terminal_type(
+        "Could you clarify which order you mean?",
+        allowed_terminal_actions=["final_answer"],
+        required_tools=[],
+        successful_tool_names=[],
+    ) == ("ask_clarification", False)
+    assert _resolve_terminal_type(
+        "<ask_clarification>Which order?</ask_clarification>",
+        allowed_terminal_actions=["ask_clarification"],
+        required_tools=[],
+        successful_tool_names=[],
+    ) == ("ask_clarification", False)
+
+
+def test_rollout_sampling_seed_is_stable_and_trajectory_specific() -> None:
+    trajectory = {
+        "step": 7,
+        "sample_index": "task-123",
+        "rollout_n": 0,
+        "validate": False,
+    }
+    seed = _derive_sampling_seed(42, trajectory, 0)
+    assert seed == _derive_sampling_seed(42, dict(trajectory), 0)
+    assert 0 <= seed <= 0x7FFFFFFF
+
+    variants = {
+        _derive_sampling_seed(42, trajectory, 1),
+        _derive_sampling_seed(43, trajectory, 0),
+        _derive_sampling_seed(42, {**trajectory, "step": 8}, 0),
+        _derive_sampling_seed(42, {**trajectory, "sample_index": "task-456"}, 0),
+        _derive_sampling_seed(42, {**trajectory, "rollout_n": 1}, 0),
+        _derive_sampling_seed(42, {**trajectory, "validate": True}, 0),
+    }
+    assert seed not in variants
+    assert len(variants) == 6
+
+
+def test_tool_call_parser_rejects_missing_outer_brace() -> None:
+    malformed = (
+        '{"name":"update_event","arguments":{"event_id":"evt_1",'
+        '"fields":{"start_time":"15:00"}}'
+    )
+    assert _parse_tool_calls_json(malformed) == []
+    assert _parse_tool_calls_json(f"{malformed}}}") == [{
+        "name": "update_event",
+        "arguments": {
+            "event_id": "evt_1",
+            "fields": {"start_time": "15:00"},
+        },
+    }]
+
+
+def test_identical_invalid_action_counter_resets_on_action_change() -> None:
+    assert _next_identical_action_count(None, "bad-a", 0) == 1
+    assert _next_identical_action_count("bad-a", "bad-a", 1) == 2
+    assert _next_identical_action_count("bad-a", "bad-b", 2) == 1
+
+
+def test_unknown_model_tool_is_a_scoreable_invalid_call() -> None:
+    event = _unknown_tool_audit_event(
+        session_id="s",
+        turn_idx=2,
+        round_idx=1,
+        tool_name="echo",
+        tool_arguments={"text": "hello"},
+    )
+    parsed = reward_module._parse_audit_events([event])[0]
+    assert parsed.tool_name == "echo"
+    assert parsed.tool_name_known is False
+    assert parsed.schema_valid is False
+    assert parsed.execution_success is False
+    assert event["error_type"] == "unknown_tool"
+
+
+def test_mixed_model_action_is_scoreable_not_an_integrity_exception() -> None:
+    event = _invalid_mixed_action_audit_event(
+        session_id="s", turn_idx=1, round_idx=0,
+    )
+    parsed = reward_module._parse_audit_events([event])[0]
+
+    assert parsed.action_type == "tool_call"
+    assert parsed.tool_name_known is False
+    assert parsed.schema_valid is False
+    assert parsed.execution_success is False
+    assert event["error_type"] == "invalid_mixed_action"
+
+
+@pytest.mark.parametrize("domain", DOMAINS)
+@pytest.mark.parametrize(
+    "action_type", ["final_answer", "report_error", "ask_clarification"],
+)
+def test_every_domain_normalizes_terminal_without_tool_contract(
+    domain: str,
+    action_type: str,
+) -> None:
+    normalized = get_adapter(domain).normalize_event(
+        action_type=action_type,
+        tool_name="",
+        tool_arguments={},
+        observation="done",
+        execution_success=True,
+        state_changed=False,
+        before_state=None,
+        after_state=None,
+    )
+    assert normalized["operation"] == "terminal"
+    assert normalized["target_id"] == ""
+
+
+def test_task_reward_direct_sum_perfect_tool_trajectory_is_one_point_three() -> None:
+    event_log = EventLog(events=[
+        AuditEvent(
+            event_id="tool", session_id="s", step=0, round_idx=0,
+            action_type="tool_call", tool_name="list_accounts",
+            tool_arguments={}, tool_name_known=True, schema_valid=True,
+            execution_success=True,
+        ),
+        AuditEvent(
+            event_id="terminal", session_id="s", step=1, round_idx=0,
+            action_type="final_answer", terminal_action="done",
+            execution_success=True, schema_valid=True,
+        ),
+    ])
+    result = reward_module.TaskReward().compute(event_log, {
+        "required_tool_calls": [{
+            "tool_name": "list_accounts", "arguments": {},
+        }],
+        "required_call_rounds": [0],
+        "allowed_terminal_actions": ["final_answer"],
+    })
+    assert result.r_validity == pytest.approx(1.0)
+    assert result.r_coverage == pytest.approx(1.0)
+    assert result.r_name == pytest.approx(1.0)
+    assert result.r_arg == pytest.approx(1.0)
+    assert result.r_efficiency == pytest.approx(0.0)
+    assert result.r_task == pytest.approx(1.3)
+
+
+def test_task_reward_direct_sum_applies_extra_valid_call_precision_penalty() -> None:
+    events = [
+        AuditEvent(
+            event_id="required", session_id="s", step=0, round_idx=0,
+            action_type="tool_call", tool_name="list_accounts",
+            tool_arguments={}, tool_name_known=True, schema_valid=True,
+            execution_success=True,
+        ),
+        AuditEvent(
+            event_id="extra", session_id="s", step=1, round_idx=0,
+            action_type="tool_call", tool_name="get_balance",
+            tool_arguments={}, tool_name_known=True, schema_valid=True,
+            execution_success=True,
+        ),
+        AuditEvent(
+            event_id="terminal", session_id="s", step=2, round_idx=0,
+            action_type="final_answer", terminal_action="done",
+            execution_success=True, schema_valid=True,
+        ),
+    ]
+    result = reward_module.TaskReward().compute(EventLog(events=events), {
+        "required_tool_calls": [{
+            "tool_name": "list_accounts", "arguments": {},
+        }],
+        "required_call_rounds": [0],
+        "allowed_terminal_actions": ["final_answer"],
+    })
+    assert result.r_name == pytest.approx(0.5)
+    assert result.r_task == pytest.approx(1.2)
+
+
+def test_task_reward_keeps_no_tool_binary_definition() -> None:
+    valid = reward_module.TaskReward().compute(EventLog(events=[AuditEvent(
+        event_id="terminal", session_id="s", step=0, round_idx=0,
+        action_type="report_error", terminal_action="unsupported",
+        execution_success=True, schema_valid=True,
+    )]), {
+        "required_tool_calls": [],
+        "allowed_terminal_actions": ["report_error"],
+    })
+    assert valid.r_task == pytest.approx(1.0)
+
+
+def test_prove_no_tool_reward_ignores_terminal_type() -> None:
+    result = reward_module.TaskReward(
+        reward_profile="prove_baseline",
+    ).compute(EventLog(events=[AuditEvent(
+        event_id="terminal", session_id="s", step=0, round_idx=0,
+        action_type="final_answer", terminal_action="done",
+        execution_success=True, schema_valid=True,
+    )]), {
+        "required_tool_calls": [],
+        "allowed_terminal_actions": ["ask_clarification"],
+    })
+    assert result.r_task == pytest.approx(1.0)
+
+
+def test_oval_no_tool_reward_preserves_terminal_contract() -> None:
+    result = reward_module.TaskReward(
+        reward_profile="oval_full",
+    ).compute(EventLog(events=[AuditEvent(
+        event_id="terminal", session_id="s", step=0, round_idx=0,
+        action_type="final_answer", terminal_action="done",
+        execution_success=True, schema_valid=True,
+    )]), {
+        "required_tool_calls": [],
+        "allowed_terminal_actions": ["ask_clarification"],
+    })
+    assert result.r_task == pytest.approx(0.0)
+
+
+def test_prove_coverage_is_not_execution_gated() -> None:
+    result = reward_module.TaskReward(
+        reward_profile="prove_baseline",
+    ).compute(EventLog(events=[AuditEvent(
+        event_id="tool", session_id="s", step=0, round_idx=0,
+        action_type="tool_call", tool_name="lookup",
+        tool_arguments={"id": "x"}, tool_name_known=True,
+        schema_valid=True, execution_success=False,
+    )]), {
+        "required_tool_calls": [{
+            "tool_name": "lookup", "arguments": {"id": "x"},
+        }],
+        "required_call_rounds": [0],
+        "dependency_edges": [],
+    })
+    assert result.r_validity == pytest.approx(2 / 3)
+    assert result.r_coverage == pytest.approx(1.0)
+    assert result.r_arg == pytest.approx(1.0)
+    assert result.r_task == pytest.approx(17 / 15)
+
+
+def test_prove_coverage_ignores_conversation_round() -> None:
+    result = reward_module.TaskReward(
+        reward_profile="prove_baseline",
+    ).compute(EventLog(events=[AuditEvent(
+        event_id="tool", session_id="s", step=0, round_idx=1,
+        action_type="tool_call", tool_name="lookup",
+        tool_arguments={"id": "x"}, tool_name_known=True,
+        schema_valid=True, execution_success=True,
+    )]), {
+        "required_tool_calls": [{
+            "tool_name": "lookup", "arguments": {"id": "x"},
+        }],
+        "required_call_rounds": [0],
+        "dependency_edges": [],
+    })
+    assert result.r_coverage == pytest.approx(1.0)
+    assert result.r_arg == pytest.approx(1.0)
+    assert result.r_task == pytest.approx(1.3)
+
+
+def test_prove_coverage_allows_reordering_without_dependencies() -> None:
+    events = [
+        AuditEvent(
+            event_id="second", session_id="s", step=0, round_idx=1,
+            action_type="tool_call", tool_name="second",
+            tool_arguments={"value": 2}, tool_name_known=True,
+            schema_valid=True, execution_success=True,
+        ),
+        AuditEvent(
+            event_id="first", session_id="s", step=1, round_idx=1,
+            action_type="tool_call", tool_name="first",
+            tool_arguments={"value": 1}, tool_name_known=True,
+            schema_valid=True, execution_success=True,
+        ),
+    ]
+    result = reward_module.TaskReward(
+        reward_profile="prove_baseline",
+    ).compute(EventLog(events=events), {
+        "required_tool_calls": [
+            {"tool_name": "first", "arguments": {"value": 1}},
+            {"tool_name": "second", "arguments": {"value": 2}},
+        ],
+        "required_call_rounds": [0, 0],
+        "dependency_edges": [],
+    })
+    assert result.r_coverage == pytest.approx(1.0)
+    assert result.r_arg == pytest.approx(1.0)
+    assert result.r_task == pytest.approx(1.3)
+
+
+def test_prove_coverage_still_enforces_dependency_order() -> None:
+    events = [
+        AuditEvent(
+            event_id="dependent-too-early", session_id="s", step=0, round_idx=1,
+            action_type="tool_call", tool_name="second",
+            tool_arguments={"value": 2}, tool_name_known=True,
+            schema_valid=True, execution_success=True,
+        ),
+        AuditEvent(
+            event_id="predecessor", session_id="s", step=1, round_idx=1,
+            action_type="tool_call", tool_name="first",
+            tool_arguments={"value": 1}, tool_name_known=True,
+            schema_valid=True, execution_success=True,
+        ),
+    ]
+    result = reward_module.TaskReward(
+        reward_profile="prove_baseline",
+    ).compute(EventLog(events=events), {
+        "required_tool_calls": [
+            {"tool_name": "first", "arguments": {"value": 1}},
+            {"tool_name": "second", "arguments": {"value": 2}},
+        ],
+        "required_call_rounds": [0, 0],
+        "dependency_edges": [(0, 1)],
+    })
+    assert result.r_coverage == pytest.approx(0.5)
+    assert result.r_arg == pytest.approx(1.0)
+    assert result.aligned_calls == 1
+
+
+def test_oval_coverage_remains_execution_and_round_gated() -> None:
+    result = reward_module.TaskReward(
+        reward_profile="oval_full",
+    ).compute(EventLog(events=[AuditEvent(
+        event_id="tool", session_id="s", step=0, round_idx=1,
+        action_type="tool_call", tool_name="lookup",
+        tool_arguments={"id": "x"}, tool_name_known=True,
+        schema_valid=True, execution_success=True,
+    )]), {
+        "required_tool_calls": [{
+            "tool_name": "lookup", "arguments": {"id": "x"},
+        }],
+        "required_call_rounds": [0],
+        "dependency_edges": [],
+    })
+    assert result.r_coverage == pytest.approx(0.0)
+    assert result.r_arg == pytest.approx(0.0)
+    assert result.r_task == pytest.approx(0.7)
+
+
+def test_task_reward_does_not_clip_excess_call_penalty() -> None:
+    events = [
+        AuditEvent(
+            event_id=f"bad-{index}", session_id="s", step=index, round_idx=0,
+            action_type="tool_call", tool_name="unknown",
+            tool_arguments={}, tool_name_known=False, schema_valid=False,
+            execution_success=False,
+        )
+        for index in range(100)
+    ]
+    events.append(AuditEvent(
+        event_id="terminal", session_id="s", step=100, round_idx=0,
+        action_type="report_error", terminal_action="failed",
+        execution_success=True, schema_valid=True,
+    ))
+    result = reward_module.TaskReward().compute(EventLog(events=events), {
+        "required_tool_calls": [{
+            "tool_name": "list_accounts", "arguments": {},
+        }],
+        "required_call_rounds": [0],
+        "allowed_terminal_actions": ["report_error"],
+    })
+    assert result.r_efficiency < 0
+    assert result.r_task < -0.2
 
 
 def test_malformed_handler_response_rolls_back_state() -> None:
@@ -1703,3 +3115,46 @@ def test_audit_event_roundtrip_preserves_state_evidence_failure() -> None:
     assert restored.state_evidence_errors == [
         "post_state:TimeoutError:timed out"
     ]
+
+
+def test_audit_recreate_detection_can_extract_created_entity() -> None:
+    adapter = get_adapter("payments")
+    adapter.register_tool_schemas(PaymentsServer().tools)
+    wrapper = AuditWrapper(None, None, adapter, "payments")
+    wrapper._deleted_entities["s"] = {"wh_old": {"url": "https://old"}}
+    call = ToolCall(
+        name="create_webhook",
+        arguments={"url": "https://new", "events": ["invoice.paid"]},
+        call_id="c",
+    )
+    result = ToolExecutionResult(
+        success=True,
+        tool_name="create_webhook",
+        canonical_tool_name="create_webhook",
+        call_id="c",
+        session_id="s",
+        observation={
+            "webhook": {
+                "webhook_id": "wh_new",
+                "url": "https://new",
+                "events": ["invoice.paid"],
+            }
+        },
+        error_type=None,
+        error_message="",
+        schema_valid=True,
+        state_changed=True,
+        latency_ms=0,
+        execution_status="SUCCESS",
+    )
+
+    event = wrapper.audit_step_with_state(
+        "s",
+        "tool_call",
+        [call],
+        [result],
+        pre_state={"payments": {"invoices": {}}},
+        post_state={"payments": {"invoices": {}}},
+    )
+
+    assert event.target_id == "https://new"

@@ -147,7 +147,7 @@ class FilesystemServer(StatefulToolServer):
     def stat(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
         node = self._node(session_id, arguments["path"]); p = self._resolve(session_id, arguments["path"])
-        return _result(True, {"path": p, "type": node["type"], "permissions": node["permissions"], "owner": node.get("owner", "unknown"), "size": len(node.get("content", "")), "modified": f"{state['current_date']}T21:40:00"}, None, "", False)
+        return _result(True, {"path": p, "type": node["type"], "permissions": node["permissions"], "owner": node.get("owner", "unknown"), "size": len(node.get("content", "")), "modified": f"{state['current_date']}T21:40:00", "protected": self._is_protected(p), "ownership_change_allowed": node.get("owner") != "root" and not self._is_protected(p), "archive": isinstance(node.get("archive_entries"), dict)}, None, "", False)
 
     # Search
     def find(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:

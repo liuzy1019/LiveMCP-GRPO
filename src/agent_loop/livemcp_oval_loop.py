@@ -18,16 +18,18 @@ verl 集成方式：
 """
 
 import json
+import hashlib
 import os
 import re
+from collections import Counter
+from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
 
 from loguru import logger
 
-from src.agent_loop.oval_mcp_worker import OvalMCPWorkerContext
-from src.live_mcp.observation import (
-    DEFAULT_POLICY_OBSERVATION_CHARS,
+from src.agent_loop.livemcp_oval_worker import OvalMCPWorkerContext
+from src.live_mcp.protocol.observation import (
     TRAJECTORY_SCHEMA_VERSION,
     OBSERVATION_SCHEMA_VERSION,
     OBSERVATION_PROJECTION_VERSION,
@@ -72,6 +74,51 @@ except ImportError:
 logger = logger.opt(colors=True)
 
 
+def _derive_sampling_seed(
+    base_seed: int,
+    trajectory_info: Mapping[str, Any],
+    turn_idx: int,
+) -> int:
+    """Derive one stable vLLM request seed per rollout turn."""
+    payload = {
+        "base_seed": int(base_seed),
+        "step": int(trajectory_info.get("step", -1)),
+        "sample_index": str(trajectory_info.get("sample_index", "")),
+        "rollout_n": int(trajectory_info.get("rollout_n", 0)),
+        "validate": bool(trajectory_info.get("validate", False)),
+        "turn_idx": int(turn_idx),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).digest()
+    return int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
+
+
+def _single_conversation_token_ids(encoded: Any) -> list[int]:
+    """Normalize one chat-template result to a flat token-id list."""
+    if isinstance(encoded, Mapping):
+        if "input_ids" not in encoded:
+            raise TypeError("chat template encoding is missing input_ids")
+        encoded = encoded["input_ids"]
+    if hasattr(encoded, "tolist"):
+        encoded = encoded.tolist()
+    if not isinstance(encoded, (list, tuple)):
+        raise TypeError(
+            "unsupported chat template encoding type: "
+            f"{type(encoded).__name__}"
+        )
+    if encoded and isinstance(encoded[0], (list, tuple)):
+        if len(encoded) != 1:
+            raise ValueError(
+                "chat template must encode exactly one conversation; "
+                f"got batch_size={len(encoded)}"
+            )
+        encoded = encoded[0]
+    if not all(isinstance(token_id, int) for token_id in encoded):
+        raise TypeError("chat template input_ids must contain integers")
+    return list(encoded)
+
+
 def _validate_environment_metadata(
     extra_info: dict[str, Any],
     current_tools: list[dict[str, Any]],
@@ -82,7 +129,7 @@ def _validate_environment_metadata(
     runtime_max_observation_chars: int | None = None,
 ) -> None:
     """Fail before rollout when data and live environment contracts drift."""
-    from src.live_mcp.environment_metadata import (
+    from src.live_mcp.registry.environment_metadata import (
         validate_environment_metadata,
     )
 
@@ -117,6 +164,46 @@ _REPORT_ERROR_PATTERN = re.compile(
 _ASK_CLARIFICATION_PATTERN = re.compile(
     r"<ask_clarification>(.*?)</ask_clarification>", re.DOTALL
 )
+_MAX_IDENTICAL_INVALID_TOOL_CALLS = 2
+
+# — P0-2: fuzzy terminal type fallback patterns ————————————————
+# Qwen3-4B-Instruct-2507 frequently produces plain-text terminals without XML tags.
+# These regexes provide content-based classification when XML parsing
+# returns "unknown".  They are intentionally ordered:
+#   clarification > report_error > answer (most-specific first).
+_CLARIFICATION_MARKER_RE = re.compile(
+    r"\b(?:"
+    r"clarif(?:y|ication|y\s+which|y\s+what)"
+    r"|which\s+(?:one|product|item|order|account|event|email)"
+    r"|can\s+you\s+(?:specify|tell\s+me|provide|clarify|elaborate)"
+    r"|could\s+you\s+(?:specify|tell\s+me|provide|clarify|elaborate|send|share)"
+    r"|please\s+(?:specify|clarify|tell\s+me|provide|give\s+me)"
+    r"|provide\s+(?:me|us)\s+with"
+    r"|do\s+you\s+(?:have|know|mind)"
+    r"|I\s+need\s+(?:more|additional)\s+(?:information|detail|context)"
+    r"|not\s+sure\s+which"
+    r")\b",
+    re.IGNORECASE,
+)
+_ERROR_MARKER_RE = re.compile(
+    r"\b(?:"
+    # explicit inability + action verb (include assist/archive/help — the
+    # abstention-domain verbs observed in real Qwen3-4B-Instruct-2507 output)
+    r"(?:cannot|can't|unable\s+to|won't)\s+(?:complete|process|fulfil|do|find|"
+    r"access|perform|assist|archive|help|provide|recommend|handle|support|suggest)"
+    # capability absence (no-tool / abstention phrasing)
+    r"|(?:no\s+tool|no\s+tools|none\s+of\s+the\s+available\s+tools)\s+"
+    r"(?:is\s+|are\s+)?(?:available|support)"
+    r"|(?:outside\s+the\s+scope|out\s+of\s+scope|not\s+within\s+the\s+scope)"
+    r"|(?:does\s+not\s+support|do\s+not\s+support)"
+    r"|(?:not\s+possible|not\s+available|not\s+supported|no\s+way)"
+    r"|(?:sorry|unfortunately).*(?:cannot|can't|unable|not\s+(?:possible|able))"
+    r"|I\s+(?:don't|do\s+not)\s+have\s+(?:enough|sufficient|the\s+required|access\s+to)"
+    r"|(?:missing|absent|unavailable)\s+(?:tool|function|capability|feature)"
+    r"|report_error"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def _is_terminal_response(text: str) -> bool:
@@ -146,15 +233,156 @@ def _parse_tool_calls_json(text: str) -> list[dict]:
     return []
 
 
+def _next_identical_action_count(
+    previous_signature: str | None,
+    current_signature: str,
+    previous_count: int,
+) -> int:
+    """Count consecutive identical model actions after whitespace normalization."""
+    if previous_signature == current_signature:
+        return previous_count + 1
+    return 1
+
+
+def _unknown_tool_audit_event(
+    *,
+    session_id: str,
+    turn_idx: int,
+    round_idx: int,
+    tool_name: str,
+    tool_arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Record a model-selected tool outside the visible schema as a model error."""
+    return {
+        "event_id": f"unknown_tool_{uuid4().hex[:8]}",
+        "session_id": session_id,
+        "step": turn_idx,
+        "round_idx": round_idx,
+        "action_type": "tool_call",
+        "tool_name": tool_name,
+        "tool_arguments": dict(tool_arguments),
+        "tool_name_known": False,
+        "schema_valid": False,
+        "execution_success": False,
+        "error_type": "unknown_tool",
+        "error_message": f"tool is not in the visible schema: {tool_name}",
+        "state_changed": False,
+    }
+
+
+def _invalid_mixed_action_audit_event(
+    *, session_id: str, turn_idx: int, round_idx: int,
+) -> dict[str, Any]:
+    """Represent a model-format error as scoreable evidence, not infra drift."""
+    return {
+        "event_id": f"invalid_mixed_action_{uuid4().hex[:8]}",
+        "session_id": session_id,
+        "step": turn_idx,
+        "round_idx": round_idx,
+        "action_type": "tool_call",
+        "tool_name": "",
+        "tool_arguments": {},
+        "tool_name_known": False,
+        "schema_valid": False,
+        "execution_success": False,
+        "error_type": "invalid_mixed_action",
+        "error_message": "tool_call and terminal emitted together",
+        "state_changed": False,
+    }
+
+
 def _parse_terminal_type(text: str) -> str:
-    """从模型输出中提取终止动作类型。"""
+    """Extract terminal action type from model output.
+
+    Priority:
+      1. XML tags (``<final_answer>``, ``<report_error>``,
+         ``<ask_clarification>``) — highest confidence.
+      2. Content-based keyword fallback — for Qwen3-4B-Instruct-2507 plain-text
+         terminals that lack XML formatting.
+      3. ``"unknown"`` when the text cannot be classified.
+    """
     if _FINAL_ANSWER_PATTERN.search(text):
         return "final_answer"
     if _REPORT_ERROR_PATTERN.search(text):
         return "report_error"
     if _ASK_CLARIFICATION_PATTERN.search(text):
         return "ask_clarification"
+
+    # — fuzzy content-based fallback (PROVE-aligned) —
+    stripped = text.strip()
+    if not stripped:
+        return "unknown"
+
+    # clarification markers: model is asking the user for more info
+    if _CLARIFICATION_MARKER_RE.search(stripped):
+        return "ask_clarification"
+
+    # error markers: model reports it cannot complete the request
+    if _ERROR_MARKER_RE.search(stripped):
+        return "report_error"
+
     return "unknown"
+
+
+def _resolve_terminal_type(
+    text: str,
+    *,
+    allowed_terminal_actions: list[str] | None,
+    required_tools: list[str],
+    successful_tool_names: list[str],
+    allow_plain_final: bool = True,
+) -> tuple[str, bool]:
+    """Resolve an explicit terminal or a justified plain-text fallback.
+
+    PROVE baseline does not validate terminal semantics (§4, OVAL-MCP.md).
+    The model's terminal classification should be content-based, not gated
+    on XML tag presence.  Qwen3-4B-Instruct-2507 frequently emits plain text without
+    ``<final_answer>`` tags.
+
+    Returns ``(terminal_type, inferred_plain_answer)``.
+    """
+    explicit = _parse_terminal_type(text)
+    if explicit != "unknown":
+        return explicit, False
+
+    # — PROVE-aligned plain-text fallback —
+    # When the model produces non-empty text without <tool_call> tags
+    # and without explicit terminal XML tags, classify by content.
+    if not allow_plain_final:
+        return "unknown", False
+
+    stripped = text.strip()
+    if not stripped:
+        return "unknown", False
+
+    # If all required tools in the round have already succeeded,
+    # plain text is most likely a final answer.
+    allowed = [str(value) for value in (allowed_terminal_actions or [])]
+    missing = Counter(str(value) for value in required_tools) - Counter(
+        str(value) for value in successful_tool_names
+    )
+    if not missing:
+        # Plain text after all required work → final_answer.
+        return "final_answer", True
+
+    # Plain text before completing required tools, but
+    # content-based parsing already tried above.  If the contract
+    # only allows final_answer and the text doesn't match
+    # clarification/error patterns, treat as final_answer anyway
+    # (PROVE baseline doesn't penalize terminal choice).
+    if allowed == ["final_answer"] or not allowed:
+        return "final_answer", True
+
+    # For other contracts (e.g., ["ask_clarification"] only),
+    # fall back to the most permissive terminal the contract allows.
+    if "final_answer" in allowed:
+        return "final_answer", True
+    if "ask_clarification" in allowed:
+        return "ask_clarification", False
+    if "report_error" in allowed:
+        return "report_error", False
+
+    return "unknown", False
 
 
 # ── 进程级 OvalMCPWorkerContext（单例，避免每个 rollout 重启 server） ──
@@ -194,6 +422,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
     """
 
     def __init__(self, **kwargs):
+        max_action_tokens = kwargs.pop("max_action_tokens", 1024)
         super().__init__(**kwargs)
         rollout_cfg = self.config.actor_rollout_ref.rollout
         multi_turn_cfg = rollout_cfg.get("multi_turn", {})
@@ -203,37 +432,38 @@ class LiveMCPOvalLoop(AgentLoopBase):
             or 5
         )
         self.response_length = int(rollout_cfg.response_length)
+        self.max_action_tokens = int(max_action_tokens)
+        if self.max_action_tokens <= 0:
+            raise ValueError("max_action_tokens must be positive")
+        self.max_action_tokens = min(
+            self.max_action_tokens,
+            self.response_length,
+        )
+        self.rollout_seed = int(rollout_cfg.get("seed", 0))
         self.apply_chat_template_kwargs = dict(
             self.config.data.get("apply_chat_template_kwargs", {}) or {}
         )
         self.apply_chat_template_kwargs.setdefault("enable_thinking", False)
 
         # Oval 配置
-        from src.training.livemcp_hyperparams import get_config
+        from src.training.hyperparams import get_config
         cfg = get_config()
+        self.allow_plain_final = bool(cfg.plain_final_compat)
         self.suite_path = (
             os.environ.get("OVAL_SUITE_PATH")
             or cfg.suite_path
             or "configs/live_mcp/ten_domain_suite.yaml"
         )
-        configured_obs_budget = int(
-            cfg.max_observation_chars
-        )
-        if configured_obs_budget <= 0:
-            try:
-                from src.live_mcp.config import load_suite_config
+        try:
+            from src.live_mcp.config import load_suite_config
 
-                configured_obs_budget = int(
-                    load_suite_config(self.suite_path).rollout.get(
-                        "observation_max_chars",
-                        DEFAULT_POLICY_OBSERVATION_CHARS,
-                    )
-                )
-            except Exception as exc:
-                raise RuntimeError(
-                    f"cannot load observation budget from {self.suite_path}: {exc}"
-                ) from exc
-        self.max_obs_length = max(256, configured_obs_budget)
+            self.max_obs_length = cfg.resolve_max_observation_chars(
+                load_suite_config(self.suite_path).rollout
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"cannot resolve observation budget from {self.suite_path}: {exc}"
+            ) from exc
         self.reward_profile = str(
             cfg.reward_profile
         )
@@ -263,18 +493,25 @@ class LiveMCPOvalLoop(AgentLoopBase):
         """运行 live MCP Oval rollout。"""
         raw_prompt = kwargs.get("raw_prompt", [])
         extra_info = kwargs.get("extra_info", {})
+        trajectory_info = kwargs.get("_trajectory_info", {})
+        if not isinstance(trajectory_info, Mapping):
+            raise TypeError("_trajectory_info must be a mapping")
 
         # ── normalize extra_info ──
         from src.utils import normalize_extra_info, normalize_json_field
         extra_info = normalize_extra_info(extra_info)
-        from src.live_mcp.environment_metadata import (
+        from src.live_mcp.registry.environment_metadata import (
             validate_prove_corpus_evidence,
+            validate_semantic_gate_evidence,
             validate_teacher_generation_evidence,
+            validate_training_artifact_evidence,
         )
         validate_prove_corpus_evidence(extra_info)
         validate_teacher_generation_evidence(extra_info)
-        from src.reward.oval_reward_fn import _build_task_dict
-        _build_task_dict(extra_info)
+        validate_semantic_gate_evidence(extra_info)
+        validate_training_artifact_evidence(extra_info)
+        from src.live_mcp.artifact.reward_task import build_reward_task
+        build_reward_task(extra_info)
 
         # ── 获取 task 信息 ──
         task_domain = extra_info.get("target_servers", extra_info.get("domain", ""))
@@ -361,11 +598,10 @@ class LiveMCPOvalLoop(AgentLoopBase):
             )
 
         ctx = self._ctx
-        tool_owner_domains = normalize_json_field(
-            extra_info.get("tool_owner_domains", {}), default={},
+        from src.live_mcp.registry.environment_metadata import (
+            validate_tool_owner_contract,
         )
-        if not isinstance(tool_owner_domains, dict):
-            tool_owner_domains = {}
+        tool_owner_domains = validate_tool_owner_contract(extra_info)
         raw_schema_hashes = normalize_json_field(
             extra_info.get("server_schema_hashes", {}), default={},
         )
@@ -394,7 +630,21 @@ class LiveMCPOvalLoop(AgentLoopBase):
         session_seed = extra_info.get("session_seed", 42)
         if isinstance(session_seed, str):
             session_seed = int(session_seed)
-        session_id = ctx.create_session(seed=session_seed)
+        raw_state_profiles = normalize_json_field(
+            extra_info.get("state_profiles", {}), default={},
+        )
+        if not isinstance(raw_state_profiles, dict):
+            raise RuntimeError(
+                f"Task {task_id}: state_profiles must be a mapping"
+            )
+        session_id = ctx.create_session(
+            seed=session_seed,
+            state_profiles={
+                str(owner): str(profile)
+                for owner, profile in raw_state_profiles.items()
+            },
+            server_names=sorted(required_owner_domains),
+        )
         kwargs["_session_cleanup"].append((ctx, session_id))
 
         # Bind every executable owner, including cross-domain distractors, to
@@ -409,7 +659,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
             actual_initial_hashes[owner] = hashlib.sha256(
                 canonical.encode()
             ).hexdigest()
-        from src.live_mcp.environment_metadata import (
+        from src.live_mcp.registry.environment_metadata import (
             validate_environment_metadata,
         )
         validate_environment_metadata(
@@ -440,11 +690,17 @@ class LiveMCPOvalLoop(AgentLoopBase):
         # missing_function 场景的核心机制是从 prompt 中移除 blocked 工具。
         # 如果 visible_tools 中仍包含 blocked 工具，模型会看到不可用的
         # 工具而产生困惑。
-        visible_tool_names = extra_info.get("visible_tool_names", [])
-        if isinstance(visible_tool_names, str):
-            visible_tool_names = [t.strip() for t in visible_tool_names.split(",")]
+        visible_tool_names = normalize_json_field(
+            extra_info.get("visible_tool_names", []), default=[],
+        )
+        if not isinstance(visible_tool_names, list):
+            raise RuntimeError(
+                f"visible_tool_names must be a list for task={task_id}"
+            )
+        visible_tool_names = [str(name) for name in visible_tool_names]
+        visible_tool_name_set = set(visible_tool_names)
         if blocked_tools and visible_tool_names:
-            still_visible = blocked_tools & set(visible_tool_names)
+            still_visible = blocked_tools & visible_tool_name_set
             if still_visible:
                 raise RuntimeError(
                     f"hidden tools remain visible for task={task_id}: "
@@ -487,7 +743,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
             # Do NOT do a raw string search over the full prompt_text because
             # the user query may legitimately contain the tool name as natural
             # language (e.g. "checkout" in a shopping query).
-            still_visible = blocked_tools & set(visible_tool_names)
+            still_visible = blocked_tools & visible_tool_name_set
             if still_visible:
                 ctx.close_session(session_id)
                 raise RuntimeError(
@@ -496,13 +752,14 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 )
 
         # 编码初始 prompt
-        prompt_ids = await self.loop.run_in_executor(
+        prompt_encoding = await self.loop.run_in_executor(
             None,
             lambda: self.tokenizer.apply_chat_template(
                 messages, add_generation_prompt=True, tokenize=True,
                 **self.apply_chat_template_kwargs,
             ),
         )
+        prompt_ids = _single_conversation_token_ids(prompt_encoding)
 
         all_response_ids: list[int] = []
         all_response_mask: list[int] = []
@@ -512,6 +769,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
         trajectory_integrity_ok = True
         n_model_tool_calls = 0
         n_exec_success = 0
+        sampling_seeds: list[int] = []
 
         logger.debug(
             f"[oval {rid_short}] start | task={task_id} domain={task_domain} "
@@ -531,14 +789,32 @@ class LiveMCPOvalLoop(AgentLoopBase):
         turn_idx = -1  # so turn_idx+1 == 0 if loop never enters
         conversation_round_idx = 0
         round_successful_tool_names: list[str] = []  # P0-2: tools called in current round (preserves multiplicity)
+        last_invalid_tool_call_signature: str | None = None
+        identical_invalid_tool_call_count = 0
 
         for turn_idx in range(effective_max_turns):
             # 1. 模型生成
             try:
+                turn_sampling_params = dict(sampling_params)
+                turn_seed = _derive_sampling_seed(
+                    self.rollout_seed,
+                    trajectory_info,
+                    turn_idx,
+                )
+                turn_sampling_params["seed"] = turn_seed
+                remaining_response_tokens = max(
+                    1,
+                    self.response_length - len(all_response_ids),
+                )
+                turn_sampling_params["max_tokens"] = min(
+                    self.max_action_tokens,
+                    remaining_response_tokens,
+                )
+                sampling_seeds.append(turn_seed)
                 output = await self.server_manager.generate(
                     request_id=request_id,
                     prompt_ids=prompt_ids + all_response_ids,
-                    sampling_params=sampling_params,
+                    sampling_params=turn_sampling_params,
                     image_data=None,
                 )
             except Exception as e:
@@ -565,13 +841,49 @@ class LiveMCPOvalLoop(AgentLoopBase):
 
             # 2. 解析模型输出
             tool_call_matches = list(_TOOL_CALL_PATTERN.finditer(response_text))
+            stop_after_invalid_tool_call = False
 
             if not tool_call_matches:
                 # 无 tool_call → 终止动作
-                terminal_type = _parse_terminal_type(response_text)
+                current_contract = (
+                    round_contracts[conversation_round_idx]
+                    if round_contracts
+                    and conversation_round_idx < len(round_contracts)
+                    else None
+                )
+                contract_allowed = (
+                    current_contract.get("allowed_terminal_actions", [])
+                    if current_contract else None
+                )
+                contract_required = (
+                    current_contract.get("required_tools", [])
+                    if current_contract else []
+                )
+                terminal_type, inferred_plain_final = _resolve_terminal_type(
+                    response_text,
+                    allowed_terminal_actions=contract_allowed,
+                    required_tools=contract_required,
+                    successful_tool_names=round_successful_tool_names,
+                    allow_plain_final=self.allow_plain_final,
+                )
                 logger.debug(
                     f"[oval {rid_short}] turn={turn_idx} terminal: {terminal_type}"
                 )
+                if inferred_plain_final:
+                    logger.debug(
+                        f"[oval {rid_short}] turn={turn_idx} "
+                        "inferred plain final_answer after satisfying the "
+                        "current round contract"
+                    )
+                    trajectory_diagnostics.append({
+                        "event_id": f"inferred_plain_final_{uuid4().hex[:8]}",
+                        "session_id": session_id,
+                        "step": turn_idx,
+                        "action_type": "inferred_plain_final_answer",
+                        "round_idx": conversation_round_idx,
+                        "required_tools": list(contract_required),
+                        "called_tools": list(round_successful_tool_names),
+                    })
                 # 记录终止审计事件
                 try:
                     event = ctx.execute_terminal_with_audit(
@@ -610,24 +922,19 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     })
 
                 # P0-2: validate terminal against round contract.
-                # Only advance to the next conversation round if the terminal
-                # matches the current round's allowed_terminal_actions AND is
-                # a valid progression type (final_answer or paired ask_clarification).
-                current_contract = (
-                    round_contracts[conversation_round_idx]
-                    if round_contracts and conversation_round_idx < len(round_contracts)
-                    else None
-                )
-                contract_allowed = (
-                    current_contract.get("allowed_terminal_actions", [])
-                    if current_contract else None
-                )
-
+                # PROVE baseline (§4, OVAL-MCP.md) does NOT validate terminal
+                # semantics — the reward function scores tool-call quality
+                # independently of terminal choice.  A contract mismatch is
+                # recorded as a diagnostic so that _validate_round_contracts
+                # can produce r_round_ok=False, but the Policy's chosen
+                # terminal drives the actual conversation flow.
+                # The model still receives full credit for successful tool
+                # calls made before the terminal.
                 if contract_allowed is not None and terminal_type not in contract_allowed:
-                    logger.warning(
+                    logger.debug(
                         f"[oval {rid_short}] turn={turn_idx} round={conversation_round_idx} "
                         f"terminal {terminal_type} not in contract {contract_allowed} — "
-                        f"recording contract violation and stopping"
+                        f"diagnostic only (PROVE baseline), continuing with Policy terminal"
                     )
                     trajectory_diagnostics.append({
                         "event_id": f"contract_violation_{uuid4().hex[:8]}",
@@ -638,7 +945,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
                         "terminal_type": terminal_type,
                         "allowed": contract_allowed,
                     })
-                    break
+                    # DO NOT break — PROVE baseline scores the trajectory as-is.
 
                 # report_error always terminates the episode (P0-2 rule 3).
                 if terminal_type == "report_error":
@@ -666,12 +973,7 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 # Per-round required_tools describe the reference trace.  They
                 # are diagnostic only; equivalent executable tool paths remain valid.
                 # an exact-name miss must not truncate the conversation.
-                contract_required = (
-                    current_contract.get("required_tools", [])
-                    if current_contract else []
-                )
                 if contract_required:
-                    from collections import Counter
                     required_counts = Counter(contract_required)
                     called_counts = Counter(round_successful_tool_names)
                     missing_counts = required_counts - called_counts
@@ -721,32 +1023,24 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 break
 
             # 同一 turn 同时输出 tool_call 和 terminal tag → 非法
+            # Count every model action containing a tool tag, including a
+            # scoreable mixed-action format violation.
+            n_model_tool_calls += 1
             if _is_terminal_response(response_text):
                 logger.debug(
                     f"[oval {rid_short}] turn={turn_idx} 同一 turn 同时输出 "
                     f"tool_call 和 terminal tag，视为非法，终止"
                 )
-                trajectory_integrity_ok = False
-                trajectory_errors.append({
-                    "stage": "action_parse",
+                trajectory_diagnostics.append({
+                    "stage": "model_action_format",
                     "turn": turn_idx,
                     "error": "assistant emitted tool_call and terminal in one action",
                 })
-                audit_events.append({
-                    "event_id": f"invalid_mixed_action_{uuid4().hex[:8]}",
-                    "session_id": session_id,
-                    "step": turn_idx,
-                    "round_idx": conversation_round_idx,
-                    "action_type": "tool_call",
-                    "tool_name": "",
-                    "tool_arguments": {},
-                    "tool_name_known": False,
-                    "schema_valid": False,
-                    "execution_success": False,
-                    "error_type": "invalid_mixed_action",
-                    "error_message": "tool_call and terminal emitted together",
-                    "state_changed": False,
-                })
+                audit_events.append(_invalid_mixed_action_audit_event(
+                    session_id=session_id,
+                    turn_idx=turn_idx,
+                    round_idx=conversation_round_idx,
+                ))
                 break
 
             # 3. 处理 tool_call → 真实 MCP 执行
@@ -756,9 +1050,18 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 parsed_list = _parse_tool_calls_json(tc_content)
                 all_parsed_calls.extend(parsed_list)
 
-            n_model_tool_calls += 1
-
             if len(all_parsed_calls) != 1:
+                invalid_signature = re.sub(r"\s+", " ", response_text).strip()
+                identical_invalid_tool_call_count = _next_identical_action_count(
+                    last_invalid_tool_call_signature,
+                    invalid_signature,
+                    identical_invalid_tool_call_count,
+                )
+                last_invalid_tool_call_signature = invalid_signature
+                stop_after_invalid_tool_call = (
+                    identical_invalid_tool_call_count
+                    >= _MAX_IDENTICAL_INVALID_TOOL_CALLS
+                )
                 # JSON 解析失败 → 返回错误 observation
                 error_message = (
                     "Emit exactly one valid <tool_call> per assistant turn; "
@@ -789,7 +1092,22 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     "error_message": error_message,
                     "state_changed": False,
                 })
+                if stop_after_invalid_tool_call:
+                    logger.warning(
+                        f"[oval {rid_short}] turn={turn_idx} repeated identical "
+                        "invalid tool call; stopping recovery"
+                    )
+                    trajectory_diagnostics.append({
+                        "event_id": f"repeated_invalid_tool_call_{uuid4().hex[:8]}",
+                        "session_id": session_id,
+                        "step": turn_idx,
+                        "round_idx": conversation_round_idx,
+                        "action_type": "repeated_invalid_tool_call",
+                        "repeat_count": identical_invalid_tool_call_count,
+                    })
             else:
+                last_invalid_tool_call_signature = None
+                identical_invalid_tool_call_count = 0
                 # 取第一个 tool_call 执行（串行模式）
                 parsed_call = all_parsed_calls[0]
                 tool_call = ToolCall(
@@ -799,72 +1117,94 @@ class LiveMCPOvalLoop(AgentLoopBase):
                     raw_text=tc_content,
                 )
 
-                try:
-                    execution_domain = str(
-                        tool_owner_domains.get(tool_call.name) or task_domain
+                if tool_call.name not in visible_tool_name_set:
+                    error_message = (
+                        f"tool is not in the visible schema: {tool_call.name}"
                     )
-                    event, exec_result = ctx.execute_with_audit(
-                        session_id=session_id,
-                        domain=execution_domain,
-                        tool_call=tool_call,
-                        model_output=response_text,
-                        blocked_tools=blocked_tools,
-                    )
-                    event.round_idx = conversation_round_idx
-                    event.tool_name_known = tool_call.name in set(visible_tool_names)
-                    if execution_domain != task_domain:
-                        event.forbidden_transition = "cross_domain_distractor_call"
-                    audit_events.append(event.to_dict())
-
-                    if event.state_evidence_errors:
-                        trajectory_integrity_ok = False
-                        trajectory_errors.append({
-                            "stage": "tool_state_evidence",
-                            "turn": turn_idx,
-                            "tool_name": tool_call.name,
-                            "errors": list(event.state_evidence_errors),
-                        })
-
-                    if exec_result.success:
-                        n_exec_success += 1
-                        round_successful_tool_names.append(tool_call.name)
-                    observation = serialize_tool_result(
-                        exec_result, self.max_obs_length,
-                    )
-
-                    logger.debug(
-                        f"[oval {rid_short}] turn={turn_idx} exec: "
-                        f"tool={tool_call.name} ok={exec_result.success}"
-                    )
-                except Exception as e:
                     observation = serialize_execution_error(
-                        "rollout_execution_exception",
-                        f"tool execution failed: {e}",
+                        "unknown_tool",
+                        error_message,
                         self.max_obs_length,
                     )
-                    logger.warning(f"[oval {rid_short}] turn={turn_idx} exec 异常: {e}")
-                    trajectory_integrity_ok = False
-                    trajectory_errors.append({
-                        "stage": "tool_execution_audit",
-                        "turn": turn_idx,
-                        "tool_name": tool_call.name,
-                        "error": f"{type(e).__name__}: {e}",
-                    })
-                    audit_events.append({
-                        "event_id": f"execution_audit_error_{uuid4().hex[:8]}",
-                        "session_id": session_id,
-                        "step": turn_idx,
-                        "round_idx": conversation_round_idx,
-                        "action_type": "tool_call",
-                        "tool_name": tool_call.name,
-                        "tool_arguments": dict(tool_call.arguments),
-                        "tool_name_known": tool_call.name in set(visible_tool_names),
-                        "schema_valid": False,
-                        "execution_success": False,
-                        "error_type": "rollout_execution_exception",
-                        "error_message": str(e),
-                        "state_changed": False,
-                    })
+                    logger.warning(
+                        f"[oval {rid_short}] turn={turn_idx} unknown tool: "
+                        f"{tool_call.name}"
+                    )
+                    audit_events.append(_unknown_tool_audit_event(
+                        session_id=session_id,
+                        turn_idx=turn_idx,
+                        round_idx=conversation_round_idx,
+                        tool_name=tool_call.name,
+                        tool_arguments=tool_call.arguments,
+                    ))
+                else:
+                    try:
+                        execution_domain = tool_owner_domains[tool_call.name]
+                        event, exec_result = ctx.execute_with_audit(
+                            session_id=session_id,
+                            domain=execution_domain,
+                            tool_call=tool_call,
+                            model_output=response_text,
+                            blocked_tools=blocked_tools,
+                        )
+                        event.round_idx = conversation_round_idx
+                        event.tool_name_known = True
+                        if execution_domain != task_domain:
+                            event.forbidden_transition = "cross_domain_distractor_call"
+                        audit_events.append(event.to_dict())
+
+                        if event.state_evidence_errors:
+                            trajectory_integrity_ok = False
+                            trajectory_errors.append({
+                                "stage": "tool_state_evidence",
+                                "turn": turn_idx,
+                                "tool_name": tool_call.name,
+                                "errors": list(event.state_evidence_errors),
+                            })
+
+                        if exec_result.success:
+                            n_exec_success += 1
+                            round_successful_tool_names.append(tool_call.name)
+                        observation = serialize_tool_result(
+                            exec_result, self.max_obs_length,
+                        )
+
+                        logger.debug(
+                            f"[oval {rid_short}] turn={turn_idx} exec: "
+                            f"tool={tool_call.name} ok={exec_result.success}"
+                        )
+                    except Exception as e:
+                        observation = serialize_execution_error(
+                            "rollout_execution_exception",
+                            f"tool execution failed: {e}",
+                            self.max_obs_length,
+                        )
+                        logger.warning(f"[oval {rid_short}] turn={turn_idx} exec 异常: {e}")
+                        trajectory_integrity_ok = False
+                        trajectory_errors.append({
+                            "stage": "tool_execution_audit",
+                            "turn": turn_idx,
+                            "tool_name": tool_call.name,
+                            "error": f"{type(e).__name__}: {e}",
+                        })
+                        audit_events.append({
+                            "event_id": f"execution_audit_error_{uuid4().hex[:8]}",
+                            "session_id": session_id,
+                            "step": turn_idx,
+                            "round_idx": conversation_round_idx,
+                            "action_type": "tool_call",
+                            "tool_name": tool_call.name,
+                            "tool_arguments": dict(tool_call.arguments),
+                            "tool_name_known": True,
+                            "schema_valid": False,
+                            "execution_success": False,
+                            "error_type": "rollout_execution_exception",
+                            "error_message": str(e),
+                            "state_changed": False,
+                        })
+
+            if stop_after_invalid_tool_call:
+                break
 
             # 4. 拼接 observation 到 response
             tool_msg = [{"role": "tool", "content": observation}]
@@ -936,16 +1276,19 @@ class LiveMCPOvalLoop(AgentLoopBase):
                 "trajectory_schema_version": TRAJECTORY_SCHEMA_VERSION,
                 "max_observation_chars": self.max_obs_length,
                 "reward_profile": self.reward_profile,
+                "plain_final_compat": self.allow_plain_final,
+                "sampling_seeds": sampling_seeds,
+                "trajectory_info": dict(trajectory_info),
             },
         )
 
     async def _encode_message_tokens(self, add_messages: list[dict]) -> list[int]:
         """编码 tool observation 消息。"""
-        response_ids = await self.loop.run_in_executor(
+        response_encoding = await self.loop.run_in_executor(
             None,
             lambda: self.tokenizer.apply_chat_template(
                 add_messages, add_generation_prompt=True, tokenize=True,
                 **self.apply_chat_template_kwargs,
             ),
         )
-        return list(response_ids)
+        return _single_conversation_token_ids(response_encoding)

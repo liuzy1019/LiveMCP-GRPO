@@ -1,6 +1,6 @@
 """训练回调钩子：lambda_safe 更新 + non_tensor_batch 数据规范化。
 
-从 register_estimator.py 拆分出来的独立职责模块。
+从 estimator.py 拆分出来的独立职责模块。
 lambda_safe 更新通过 LambdaState.atomic_update() 实现跨进程安全。
 """
 
@@ -20,7 +20,7 @@ def update_lambda_safe(non_tensor_batch, batch_size: int) -> bool:
     safety multiplier and returns False.  In ``oval_full`` missing or corrupt
     safety evidence is an integrity error, not a fixed-lambda fallback.
     """
-    from src.training.livemcp_hyperparams import get_config
+    from src.training.hyperparams import get_config
 
     config = get_config()
     if config.reward_profile == "prove_baseline":
@@ -50,6 +50,7 @@ def update_lambda_safe(non_tensor_batch, batch_size: int) -> bool:
 
         state, old_lambda, new_lambda, skipped = LambdaState.atomic_update(
             c_safety_values,
+            path=config.lambda_state_path,
             k_stall=config.k_stall,
             tau_unsafe_stall=config.tau_unsafe_stall,
         )

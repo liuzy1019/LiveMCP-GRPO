@@ -259,6 +259,36 @@ def compute_advantage(
     return data
 
 
+def _build_reward_replay_infos(non_tensor_batch):
+    """Merge immutable row metadata with per-rollout reward evidence."""
+    if "extra_info" not in non_tensor_batch:
+        return []
+    runtime_keys = (
+        "audit_events",
+        "trajectory_integrity_ok",
+        "trajectory_errors",
+        "trajectory_diagnostics",
+        "state_evidence",
+        "final_state",
+        "session_id",
+        "n_model_tool_calls",
+        "n_exec_success",
+        "sampling_seeds",
+        "trajectory_info",
+        "plain_final_compat",
+        "reward_profile",
+    )
+    replay_infos = []
+    for index, raw in enumerate(non_tensor_batch["extra_info"]):
+        merged = dict(raw) if isinstance(raw, dict) else {}
+        for key in runtime_keys:
+            values = non_tensor_batch.get(key)
+            if values is not None:
+                merged[key] = values[index]
+        replay_infos.append(merged)
+    return replay_infos
+
+
 class RayPPOTrainer:
     """Distributed PPO trainer using Ray for scalable reinforcement learning.
 
@@ -470,12 +500,46 @@ class RayPPOTrainer:
             sample_gts = [item.non_tensor_batch.get("reward_model", {}).get("ground_truth", None) for item in batch]
 
             reward_extra_infos_to_dump = reward_extra_infos_dict.copy()
-            if "request_id" in batch.non_tensor_batch:
-                reward_extra_infos_dict.setdefault(
-                    "request_id",
-                    batch.non_tensor_batch["request_id"].tolist(),
+            # A GRPO group is one repeated input row, not all rows whose
+            # decoded initial prompt happens to be identical. Persist the
+            # identifiers used by the estimator so offline saturation audits
+            # can reconstruct the exact training groups.
+            for key in ("uid", "group_id", "task_id", "request_id"):
+                if key in batch.non_tensor_batch:
+                    reward_extra_infos_to_dump[key] = (
+                        batch.non_tensor_batch[key].tolist()
+                    )
+            # Persist the exact evidence consumed by the reward function so a
+            # fixed rollout can be recomputed under prove_baseline/oval_full.
+            # Text plus component diagnostics are insufficient: terminal,
+            # execution, safety, and state predicates depend on these fields.
+            if "extra_info" in batch.non_tensor_batch:
+                reward_extra_infos_to_dump["reward_replay_info"] = (
+                    _build_reward_replay_infos(batch.non_tensor_batch)
                 )
-
+            if "token_level_rewards" in batch.batch:
+                reward_extra_infos_to_dump["post_kl_return"] = (
+                    batch.batch["token_level_rewards"]
+                    .sum(dim=-1)
+                    .detach()
+                    .cpu()
+                    .tolist()
+                )
+            if "advantages" in batch.batch:
+                advantages = batch.batch["advantages"]
+                if "response_mask" in batch.batch:
+                    response_mask = batch.batch["response_mask"].to(
+                        dtype=advantages.dtype,
+                    )
+                    denominator = response_mask.sum(dim=-1).clamp_min(1.0)
+                    trajectory_advantage = (
+                        (advantages * response_mask).sum(dim=-1) / denominator
+                    )
+                else:
+                    trajectory_advantage = advantages.mean(dim=-1)
+                reward_extra_infos_to_dump["trajectory_advantage"] = (
+                    trajectory_advantage.detach().cpu().tolist()
+                )
             self._dump_generations(
                 inputs=inputs,
                 outputs=outputs,
@@ -1292,6 +1356,14 @@ class RayPPOTrainer:
                             config=self.config.algorithm,
                         )
 
+                    # Rollout/reward evidence is an input to optimization, not
+                    # a by-product of a successful optimizer step.  Persist it
+                    # before critic/actor updates so OOMs or optimizer failures
+                    # cannot discard an otherwise complete measured rollout.
+                    rollout_data_dir = self.config.trainer.get("rollout_data_dir", None)
+                    if rollout_data_dir:
+                        self._log_rollout_data(batch, reward_extra_infos_dict, timing_raw, rollout_data_dir)
+
                     # update critic
                     if self.use_critic:
                         with marked_timer("update_critic", timing_raw, color="pink"):
@@ -1307,11 +1379,6 @@ class RayPPOTrainer:
                             actor_output = self.actor_rollout_wg.update_actor(batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                         metrics.update(actor_output_metrics)
-
-                    # Log rollout generations if enabled
-                    rollout_data_dir = self.config.trainer.get("rollout_data_dir", None)
-                    if rollout_data_dir:
-                        self._log_rollout_data(batch, reward_extra_infos_dict, timing_raw, rollout_data_dir)
 
                 # validate
                 if (

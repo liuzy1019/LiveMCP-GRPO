@@ -3,7 +3,7 @@
 
 用法:
     OVAL_REWARD_PROFILE=oval_full python src/training/run_grpo.py \\
-        actor_rollout_ref.model.path=models/Qwen/Qwen3-4B \\
+        actor_rollout_ref.model.path=models/Qwen/Qwen3-4B-Instruct-2507 \\
         ...
 """
 
@@ -66,20 +66,18 @@ def _run_length_precheck() -> None:
 
 def main() -> None:
     # ── P1-9: 从环境变量解析统一配置，导出到 env（Ray worker 继承） ──
-    from src.training.livemcp_hyperparams import LiveMCPHyperparams
+    from src.training.hyperparams import LiveMCPHyperparams
     hp = LiveMCPHyperparams.from_env()
     hp.export_env()
     estimator_name = _bind_profile_estimator(hp.reward_profile, sys.argv)
     _validate_verl_runtime()
     logger.info("LiveMCP 超参配置:\n" + hp.summary())
-    from src.oval_mcp.training.lambda_state import LambdaState, DEFAULT_STATE_PATH
+    from src.oval_mcp.training.lambda_state import LambdaState
     # 将配置保存到 LambdaState 路径相邻位置，供 wandb 等外部工具读取
-    config_dump_path = os.path.join(
-        os.path.dirname(DEFAULT_STATE_PATH),
-        "livemcp_config.json",
-    )
+    lambda_state_dir = os.path.dirname(hp.lambda_state_path) or "."
+    config_dump_path = os.path.join(lambda_state_dir, "livemcp_config.json")
     import json as _json
-    os.makedirs(os.path.dirname(config_dump_path), exist_ok=True)
+    os.makedirs(lambda_state_dir, exist_ok=True)
     with open(config_dump_path, "w") as f:
         _json.dump(hp.to_dict(), f, indent=2, ensure_ascii=False)
 
@@ -95,7 +93,7 @@ def main() -> None:
     # Only the OVAL extension needs the custom estimator and non-tensor bridge.
     # The prove_baseline profile uses verl's standard GRPO implementation.
     if estimator_name == "livemcp_grpo":
-        from src.training.register_estimator import register_livemcp_estimator
+        from src.training.estimator import register_livemcp_estimator
         if not register_livemcp_estimator():
             raise RuntimeError(
                 "LiveMCP estimator registration failed; aborting before Ray startup"
@@ -105,19 +103,23 @@ def main() -> None:
     # 每次训练从干净状态开始（OVAL_KEEP_LAMBDA=1 保留上次状态）
     if (
         hp.reward_profile == "prove_baseline" or not hp.keep_lambda
-    ) and os.path.exists(DEFAULT_STATE_PATH):
-        LambdaState.reset(DEFAULT_STATE_PATH)
+    ) and os.path.exists(hp.lambda_state_path):
+        LambdaState.reset(hp.lambda_state_path)
     if hp.reward_profile == "prove_baseline" or not hp.keep_lambda:
         lambda_state = LambdaState.load_or_default(
+            path=hp.lambda_state_path,
             lambda_safe=hp.lambda_safe_default,
             alpha_lambda=hp.alpha_lambda,
             epsilon=hp.lambda_epsilon,
             lambda_safe_max=hp.lambda_safe_max,
         )
     else:
-        lambda_state = LambdaState.load_or_default()
+        lambda_state = LambdaState.load_or_default(path=hp.lambda_state_path)
     lambda_state.save()
-    logger.info(f"lambda_safe 初始化: {lambda_state.lambda_safe} (path={DEFAULT_STATE_PATH})")
+    logger.info(
+        f"lambda_safe 初始化: {lambda_state.lambda_safe} "
+        f"(path={hp.lambda_state_path})"
+    )
 
     # ray TaskRunner 跑在独立 actor 进程，主进程注册的 dict / monkey-patch 不会带过去。
     # 通过 task_runner_class hook 在 actor 进程里再注册一次。
@@ -125,7 +127,7 @@ def main() -> None:
     import ray
     from verl.trainer.main_ppo import run_ppo
 
-    from src.training.livemcp_task_runner import LiveMCPTaskRunner
+    from src.training.task_runner import LiveMCPTaskRunner
 
     @hydra.main(config_path="../../verl/verl/trainer/config", config_name="ppo_trainer", version_base=None)
     def _entry(config):

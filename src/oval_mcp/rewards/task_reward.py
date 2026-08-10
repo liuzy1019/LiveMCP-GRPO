@@ -1,12 +1,13 @@
 """Five-component trajectory task reward.
 
 Trajectory-level reward:
-  R_task = w_val*R_validity + w_cov*R_coverage + w_eff*R_efficiency
-           + w_name*R_name + w_arg*R_arg
+  R_task = w_val*R_validity + w_cov*R_coverage
+           + w_eff*R_efficiency + w_name*R_name + w_arg*R_arg
 
 Weights: w_val=0.5, w_cov=0.5, w_eff=0.15, w_name=0.2, w_arg=0.1
-Max R_task ≈ 1.3 (when R_eff=0); GRPO uses relative advantage so
-absolute scale does not matter.
+The maximum tool-task reward is 1.3 with the default weights. The lower
+bound depends on the finite rollout action budget because efficiency is not
+clipped by the published formula.
 
 If required_tool_calls = []: binary R_task (no-tool tasks).
 """
@@ -66,16 +67,29 @@ class TaskRewardResult:
             "r_arg": self.r_arg,
             "r_efficiency": self.r_efficiency,
             "n_model_calls": float(self.n_model_calls),
+            "n_required_calls": float(self.n_required_calls),
             "completed_predicates": float(self.completed_predicates),
             "total_predicates": float(self.total_predicates),
+            "aligned_calls": float(self.aligned_calls),
+            "is_no_tool_task": 1.0 if self.is_no_tool_task else 0.0,
         }
 
 
 class TaskReward:
     """Compute R_task from trajectory event log and task definition."""
 
-    def __init__(self, weights: dict[str, float] | None = None):
+    def __init__(
+        self,
+        weights: dict[str, float] | None = None,
+        reward_profile: str = "prove_baseline",
+    ):
+        if reward_profile not in {"prove_baseline", "oval_full"}:
+            raise ValueError(
+                "reward_profile must be 'prove_baseline' or 'oval_full', "
+                f"got {reward_profile!r}"
+            )
         self.w = {**DEFAULT_WEIGHTS, **(weights or {})}
+        self.reward_profile = reward_profile
 
     def compute(
         self,
@@ -103,19 +117,21 @@ class TaskReward:
     ) -> TaskRewardResult:
         """No-tool task: binary R_task.
 
-        R_task = 1.0 if no tool calls AND terminal predicate passes, else 0.0
+        PROVE:
+            R_task = 1.0 if no tool calls, else 0.0.
+
+        OVAL:
+            Preserve the stricter local terminal contract.
         """
         n_calls = len(event_log.tool_call_events)
         result.n_model_calls = n_calls
 
-        # Check if terminal action satisfies task predicate
+        if self.reward_profile == "prove_baseline":
+            result.r_task = 1.0 if n_calls == 0 else 0.0
+            return result
+
         terminal_ok = self._check_terminal_predicate(event_log, task)
-
-        if n_calls == 0 and terminal_ok:
-            result.r_task = 1.0
-        else:
-            result.r_task = 0.0
-
+        result.r_task = 1.0 if n_calls == 0 and terminal_ok else 0.0
         return result
 
     def _compute_with_tools(
@@ -161,22 +177,35 @@ class TaskReward:
         #    non-dependent tools can be called in any order; only dependency
         #    chains enforce ordering constraints.
         dep_edges: list[tuple[int, int]] = task.get("dependency_edges", [])
-        required_call_rounds: list[int] = task.get(
-            "required_call_rounds", [0] * len(required_tool_calls),
-        )
-        if len(required_call_rounds) != len(required_tool_calls):
-            raise ValueError(
-                "required_call_rounds must align with required_tool_calls"
-            )
-        if dep_edges:
+        if self.reward_profile == "prove_baseline":
+            # Published PROVE matching uses name + GT argument keys and only
+            # dependency order. Execution success belongs to R_validity, while
+            # conversation-round alignment is a local OVAL contract.
             aligned_calls = self._match_required_calls_partial_order(
                 tool_events, required_tool_calls, dep_edges,
-                required_call_rounds,
+                required_call_rounds=None,
+                require_execution_success=False,
             )
         else:
-            aligned_calls = self._match_required_calls_in_order(
-                tool_events, required_tool_calls, required_call_rounds,
+            required_call_rounds: list[int] = task.get(
+                "required_call_rounds", [0] * len(required_tool_calls),
             )
+            if len(required_call_rounds) != len(required_tool_calls):
+                raise ValueError(
+                    "required_call_rounds must align with required_tool_calls"
+                )
+            if dep_edges:
+                aligned_calls = self._match_required_calls_partial_order(
+                    tool_events, required_tool_calls, dep_edges,
+                    required_call_rounds=required_call_rounds,
+                    require_execution_success=True,
+                )
+            else:
+                aligned_calls = self._match_required_calls_in_order(
+                    tool_events, required_tool_calls,
+                    required_call_rounds=required_call_rounds,
+                    require_execution_success=True,
+                )
         total_preds = max(len(required_tool_calls), 1)
         completed = len(aligned_calls)
         result.completed_predicates = completed
@@ -210,10 +239,7 @@ class TaskReward:
         result.n_required_calls = n_required
         result.r_efficiency = self._compute_efficiency(n_calls, n_required)
 
-        # R_task is a direct weighted sum without normalisation.
-        #   R_task = w_val*R_val + w_cov*R_cov + w_eff*R_eff + w_name*R_name + w_arg*R_arg
-        # Max ≈ 1.3 (R_eff=0) or 1.45 (R_eff=1, impossible in practice).
-        # GRPO uses group-relative advantage so absolute scale is irrelevant.
+        # Direct weighted sum; no additional normalization or clipping.
         result.r_task = (
             self.w["w_val"] * result.r_validity
             + self.w["w_cov"] * result.r_coverage
@@ -287,21 +313,30 @@ class TaskReward:
         self,
         tool_events: list,
         required_tool_calls: list[dict],
-        required_call_rounds: list[int],
+        required_call_rounds: list[int] | None,
+        require_execution_success: bool,
     ) -> list:
         """Greedily align oracle calls to later successful model events."""
         aligned: list[tuple[Any, dict]] = []
         cursor = 0
-        for required, required_round in zip(
-            required_tool_calls, required_call_rounds, strict=True,
-        ):
+        for required_idx, required in enumerate(required_tool_calls):
+            required_round = (
+                required_call_rounds[required_idx]
+                if required_call_rounds is not None
+                else None
+            )
             required_name = required.get("tool_name", "")
             required_keys = set((required.get("arguments") or {}).keys())
             for idx in range(cursor, len(tool_events)):
                 event = tool_events[idx]
-                if int(getattr(event, "round_idx", -1)) != required_round:
+                if (
+                    required_round is not None
+                    and int(getattr(event, "round_idx", -1)) != required_round
+                ):
                     continue
-                if event.tool_name != required_name or not event.execution_success:
+                if event.tool_name != required_name:
+                    continue
+                if require_execution_success and not event.execution_success:
                     continue
                 if not required_keys.issubset(set((event.tool_arguments or {}).keys())):
                     continue
@@ -315,7 +350,8 @@ class TaskReward:
         tool_events: list,
         required_tool_calls: list[dict],
         dependency_edges: list[tuple[int, int]],
-        required_call_rounds: list[int],
+        required_call_rounds: list[int] | None,
+        require_execution_success: bool,
     ) -> list:
         """P0-3: dependency partial-order coverage matching with temporal validation.
 
@@ -365,16 +401,25 @@ class TaskReward:
 
                 required_name = required.get("tool_name", "")
                 required_keys = set((required.get("arguments") or {}).keys())
-                required_round = required_call_rounds[i]
+                required_round = (
+                    required_call_rounds[i]
+                    if required_call_rounds is not None
+                    else None
+                )
 
                 for idx, event in enumerate(tool_events):
                     if idx in used_events:
                         continue
                     if idx <= min_event_idx:
                         continue  # temporal ordering: must be AFTER predecessors
-                    if int(getattr(event, "round_idx", -1)) != required_round:
+                    if (
+                        required_round is not None
+                        and int(getattr(event, "round_idx", -1)) != required_round
+                    ):
                         continue
-                    if event.tool_name != required_name or not event.execution_success:
+                    if event.tool_name != required_name:
+                        continue
+                    if require_execution_success and not event.execution_success:
                         continue
                     if not required_keys.issubset(set((event.tool_arguments or {}).keys())):
                         continue

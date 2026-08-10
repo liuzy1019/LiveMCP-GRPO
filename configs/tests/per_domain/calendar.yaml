@@ -1,0 +1,22 @@
+schema_version: 1
+domain: calendar
+seed: 43
+generation:
+  model: models/Google/Gemma-4-31B-it
+  suite: configs/live_mcp/ten_domain_suite.yaml
+  count: 30
+  val_count: 10
+  prompt_profile: local_trainable_v1
+  semantic_gate_profile: deterministic_v1
+  checkpoint_interval: 10
+  gpu_count: 4
+  distractor_rate: 0.40
+  irrelevance_ratio: 0.05
+  missing_function_rate: 0.1210165389
+rollout:
+  reward_profile: prove_baseline
+  experiment_profile: custom
+  seeds: "43"
+  steps: 1
+  batch_size: 16
+  rollout_n: 16

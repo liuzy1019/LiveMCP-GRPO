@@ -1,0 +1,4206 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "email",
+  "schema_hash": "3aac0dae91f3e662",
+  "tool_names": [
+    "add_label",
+    "archive_email",
+    "create_draft",
+    "create_filter",
+    "forward_email",
+    "get_attachments",
+    "get_email",
+    "get_thread",
+    "list_filters",
+    "list_inbox",
+    "mark_read",
+    "mark_unread",
+    "move_to_thread",
+    "remove_label",
+    "reply_email",
+    "search_emails",
+    "send_email"
+  ],
+  "graph": {
+    "add_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "archive_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_draft": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_filter": {
+      "explicit": [],
+      "implicit": []
+    },
+    "forward_email": {
+      "explicit": [
+        "get_thread",
+        "move_to_thread"
+      ],
+      "implicit": []
+    },
+    "get_attachments": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_thread": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "get_attachments",
+        "get_email",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
+    },
+    "list_filters": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_inbox": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
+    },
+    "mark_read": {
+      "explicit": [],
+      "implicit": []
+    },
+    "mark_unread": {
+      "explicit": [],
+      "implicit": []
+    },
+    "move_to_thread": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "reply_email": {
+      "explicit": [
+        "move_to_thread"
+      ],
+      "implicit": []
+    },
+    "search_emails": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
+    },
+    "send_email": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
+    }
+  },
+  "raw_graph": {
+    "add_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "archive_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_draft": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": [
+        "send_email"
+      ]
+    },
+    "create_filter": {
+      "explicit": [],
+      "implicit": []
+    },
+    "forward_email": {
+      "explicit": [
+        "get_thread",
+        "move_to_thread"
+      ],
+      "implicit": []
+    },
+    "get_attachments": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_email": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_thread": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "get_attachments",
+        "get_email",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
+    },
+    "list_filters": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_inbox": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email",
+        "send_email"
+      ],
+      "implicit": []
+    },
+    "mark_read": {
+      "explicit": [],
+      "implicit": []
+    },
+    "mark_unread": {
+      "explicit": [],
+      "implicit": []
+    },
+    "move_to_thread": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "reply_email": {
+      "explicit": [
+        "move_to_thread"
+      ],
+      "implicit": []
+    },
+    "search_emails": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "get_thread",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
+    },
+    "send_email": {
+      "explicit": [
+        "add_label",
+        "archive_email",
+        "forward_email",
+        "get_attachments",
+        "get_email",
+        "mark_read",
+        "mark_unread",
+        "move_to_thread",
+        "remove_label",
+        "reply_email"
+      ],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "add_label",
+        "archive_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_draft"
+      ],
+      "source": "create_draft",
+      "target": "add_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_filter"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "forward_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_thread"
+      ],
+      "source": "get_thread",
+      "target": "add_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_inbox"
+      ],
+      "source": "list_inbox",
+      "target": "add_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_label",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "add_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_label",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "add_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "create_draft"
+      ],
+      "source": "create_draft",
+      "target": "archive_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "create_filter"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "forward_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_thread"
+      ],
+      "source": "get_thread",
+      "target": "archive_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "list_inbox"
+      ],
+      "source": "list_inbox",
+      "target": "archive_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "archive_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_email",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "archive_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "create_filter"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "forward_email"
+      ],
+      "source": "create_draft",
+      "target": "forward_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_attachments"
+      ],
+      "source": "create_draft",
+      "target": "get_attachments",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_email"
+      ],
+      "source": "create_draft",
+      "target": "get_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "mark_read"
+      ],
+      "source": "create_draft",
+      "target": "mark_read",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "mark_unread"
+      ],
+      "source": "create_draft",
+      "target": "mark_unread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "move_to_thread"
+      ],
+      "source": "create_draft",
+      "target": "move_to_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "remove_label"
+      ],
+      "source": "create_draft",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "reply_email"
+      ],
+      "source": "create_draft",
+      "target": "reply_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_draft",
+        "send_email"
+      ],
+      "source": "create_draft",
+      "target": "send_email",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "forward_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_filter",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_attachments"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_thread"
+      ],
+      "source": "forward_email",
+      "target": "get_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "list_inbox"
+      ],
+      "source": "list_inbox",
+      "target": "forward_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "move_to_thread"
+      ],
+      "source": "forward_email",
+      "target": "move_to_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "forward_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "forward_email",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "forward_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "get_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "get_thread"
+      ],
+      "source": "get_thread",
+      "target": "get_attachments",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "list_inbox"
+      ],
+      "source": "list_inbox",
+      "target": "get_attachments",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "get_attachments",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "get_attachments",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_email",
+        "get_thread"
+      ],
+      "source": "get_thread",
+      "target": "get_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_email",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "list_inbox"
+      ],
+      "source": "list_inbox",
+      "target": "get_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_email",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_email",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "get_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_email",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "get_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_filters"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_inbox"
+      ],
+      "source": "list_inbox",
+      "target": "get_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "mark_read"
+      ],
+      "source": "get_thread",
+      "target": "mark_read",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "mark_unread"
+      ],
+      "source": "get_thread",
+      "target": "mark_unread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "move_to_thread"
+      ],
+      "source": "get_thread",
+      "target": "move_to_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "remove_label"
+      ],
+      "source": "get_thread",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "reply_email"
+      ],
+      "source": "get_thread",
+      "target": "reply_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "get_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "list_inbox"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "mark_read"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_filters",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "mark_read"
+      ],
+      "source": "list_inbox",
+      "target": "mark_read",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "mark_unread"
+      ],
+      "source": "list_inbox",
+      "target": "mark_unread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "move_to_thread"
+      ],
+      "source": "list_inbox",
+      "target": "move_to_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "remove_label"
+      ],
+      "source": "list_inbox",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "reply_email"
+      ],
+      "source": "list_inbox",
+      "target": "reply_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "search_emails"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "send_email"
+      ],
+      "source": "list_inbox",
+      "target": "send_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "mark_unread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "mark_read",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "mark_read",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "mark_read",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "move_to_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "mark_unread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "mark_unread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "reply_email"
+      ],
+      "source": "reply_email",
+      "target": "move_to_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "move_to_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "move_to_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "reply_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "reply_email",
+        "search_emails"
+      ],
+      "source": "search_emails",
+      "target": "reply_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "reply_email",
+        "send_email"
+      ],
+      "source": "send_email",
+      "target": "reply_email",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "search_emails",
+        "send_email"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "add_label",
+        "archive_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_draft"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "add_label",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_filter"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "forward_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_attachments"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "add_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "add_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "add_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "add_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "add_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "add_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "add_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "add_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "create_draft"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "archive_email",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "create_filter"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "forward_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_attachments"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "archive_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "archive_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "archive_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "archive_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "archive_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "archive_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_email",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "archive_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "archive_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "create_filter"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "forward_email"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "forward_email",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_attachments"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "get_attachments",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_email"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "get_email",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "mark_read",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "mark_unread",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "move_to_thread",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "reply_email",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_draft",
+        "send_email"
+      ],
+      "raw": {
+        "source": "create_draft",
+        "target": "send_email",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "forward_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_attachments"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_filter",
+        "send_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_attachments"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "forward_email",
+        "target": "get_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "forward_email",
+          "get_thread"
+        ],
+        [
+          "get_thread",
+          "forward_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "forward_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "forward_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "forward_email",
+        "target": "move_to_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "forward_email",
+          "move_to_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "forward_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "forward_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "forward_email",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "forward_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "forward_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "get_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "get_attachments",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "get_attachments"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "get_attachments",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "get_attachments"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "get_attachments",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "get_attachments"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_attachments",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "get_attachments",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "get_attachments"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "get_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "get_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "get_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "get_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "get_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "get_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_email",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "get_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "get_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_filters"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "get_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "get_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "mark_read",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "mark_read"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "mark_unread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "mark_unread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "move_to_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "move_to_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "remove_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "reply_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "reply_email"
+        ],
+        [
+          "reply_email",
+          "get_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "get_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "get_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "list_inbox"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_filters",
+        "send_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "mark_read"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "mark_read",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "mark_read"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "mark_unread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "mark_unread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "move_to_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "move_to_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "remove_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "reply_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_inbox",
+          "reply_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_inbox",
+        "send_email"
+      ],
+      "raw": {
+        "source": "list_inbox",
+        "target": "send_email",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_read",
+        "mark_unread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_read",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_read",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_read",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_read",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "mark_read",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "mark_read"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_read",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "mark_read",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "mark_read"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "move_to_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "mark_unread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "mark_unread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "mark_unread",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "mark_unread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "mark_unread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "reply_email",
+        "target": "move_to_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "reply_email",
+          "move_to_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "move_to_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "move_to_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "move_to_thread",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "move_to_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "move_to_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "reply_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "remove_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "remove_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "reply_email",
+        "search_emails"
+      ],
+      "raw": {
+        "source": "search_emails",
+        "target": "reply_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_emails",
+          "reply_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "reply_email",
+        "send_email"
+      ],
+      "raw": {
+        "source": "send_email",
+        "target": "reply_email",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_email",
+          "reply_email"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_emails",
+        "send_email"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "c51a42b20af73204",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "8a0239255c1027d6184bc493acea4a101f18c08693049604c61cf1b1d26b5c27",
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 136,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 124,
+    "contradicted": 12
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:42Z"
+}

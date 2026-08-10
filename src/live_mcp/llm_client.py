@@ -67,20 +67,25 @@ class LLMClient:
 
     Usage:
         # Single-GPU local
-        client = LLMClient(mode="local", model_path="models/Qwen/Qwen3-4B", device=0)
+        client = LLMClient(
+            mode="local", model_path="models/Google/Gemma-4-31B-it", device=0,
+        )
 
-        # Multi-GPU with device_map="auto" (model parallelism for large models)
-        client = LLMClient(mode="local", model_path="models/Qwen/Qwen3-32B")
+        # Multi-GPU with device_map="auto" (model parallelism for the Teacher)
+        client = LLMClient(
+            mode="local", model_path="models/Google/Gemma-4-31B-it",
+        )
 
         # vLLM / OpenAI-compatible server
-        client = LLMClient(mode="openai", model_path="Qwen3-4B",
+        client = LLMClient(mode="openai", model_path="Qwen3-4B-Instruct-2507",
                           api_base="http://localhost:8000/v1")
     """
 
     def __init__(
         self,
         mode: str = "local",
-        model_path: str = "models/Qwen/Qwen3-4B",
+        model_path: str = "models/Google/Gemma-4-31B-it",
+        contract_model_id: str | None = None,
         api_base: str | None = None,
         api_key: str = "not-needed",
         temperature: float = 0.7,
@@ -90,6 +95,10 @@ class LLMClient:
     ):
         self.mode = mode
         self.model_path = model_path
+        # API serving aliases are transport details, not model provenance.
+        # Keep a stable identity for cache contracts even when vLLM is called
+        # through a shorter --served-model-name.
+        self.contract_model_id = contract_model_id or model_path
         self.api_base = api_base or os.environ.get("LLM_API_BASE", "http://localhost:8000/v1")
         self.api_key = api_key or os.environ.get("LLM_API_KEY", "not-needed")
         self.temperature = temperature

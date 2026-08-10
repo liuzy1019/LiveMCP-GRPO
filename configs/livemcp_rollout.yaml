@@ -4,3 +4,6 @@
 # OVAL Live MCP rollout + 审计
 - name: livemcp_oval
   _target_: src.agent_loop.livemcp_oval_loop.LiveMCPOvalLoop
+  # One model action is one XML tool call or one terminal response.  This is
+  # deliberately independent from the 16k whole-trajectory response budget.
+  max_action_tokens: 1024

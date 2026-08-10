@@ -6,15 +6,15 @@ import time
 from typing import Any
 
 from src.live_mcp import errors
-from src.live_mcp.manager import LiveMCPManager
-from src.live_mcp.schema_registry import SchemaRegistry
-from src.live_mcp.transport import TransportError
+from src.live_mcp.protocol.manager import LiveMCPManager
+from src.live_mcp.registry.schemas import SchemaRegistry
+from src.live_mcp.protocol.transport import TransportError
 from src.live_mcp.types import ToolCall, ToolExecutionResult
 
 
 def _format_schema_error(validation, tool_name: str) -> str:
     """Format schema validation errors into an actionable message for the LLM."""
-    from src.live_mcp.schema_registry import SchemaValidationResult
+    from src.live_mcp.registry.schemas import SchemaValidationResult
 
     parts = [f"schema validation failed for '{tool_name}'"]
     if validation.missing_required:

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
 from src.live_mcp.config import SuiteConfig, load_suite_config
 from src.live_mcp.executor import LiveMCPExecutor
-from src.live_mcp.manager import LiveMCPManager
+from src.live_mcp.protocol.manager import LiveMCPManager
 from src.live_mcp.types import LiveTask
+from src.live_mcp.generation.chain_scheduler import chain_fingerprint
 
 
 class TeacherGenerationRuntime:
@@ -18,6 +21,11 @@ class TeacherGenerationRuntime:
         self.manager = LiveMCPManager(suite_config)
         self._started = False
         self.executor: LiveMCPExecutor | None = None
+        # Shared across generate_tasks() recovery calls in this runtime. Shard
+        # processes remain isolated and final diversity is still merge-owned.
+        self._chain_sampling_stats: dict[str, dict[str, dict[str, int]]] = {}
+        self._chain_sampling_sequences: dict[str, dict[str, tuple[str, ...]]] = {}
+        self._chain_sampling_lock = threading.RLock()
 
     @classmethod
     def from_suite(cls, suite_path: str | Path) -> "TeacherGenerationRuntime":
@@ -44,6 +52,32 @@ class TeacherGenerationRuntime:
         self.executor = None
         self._started = False
 
+    def preload_retained_sequences(
+        self, sequences_by_domain: dict[str, list[list[str]]],
+    ) -> None:
+        """Seed scheduling state with sequences retained by the prior merge."""
+        if self._started:
+            raise RuntimeError("retained sequences must be loaded before runtime start")
+        for domain, sequences in sequences_by_domain.items():
+            if domain not in self.manager.server_names:
+                raise ValueError(f"unknown retained-sequence domain: {domain!r}")
+            domain_stats = self._chain_sampling_stats.setdefault(domain, {})
+            domain_sequences = self._chain_sampling_sequences.setdefault(domain, {})
+            for raw_sequence in sequences:
+                if not isinstance(raw_sequence, list) or not raw_sequence or not all(
+                    isinstance(name, str) and name for name in raw_sequence
+                ):
+                    raise ValueError(
+                        f"invalid retained tool sequence for {domain}: {raw_sequence!r}"
+                    )
+                fingerprint = chain_fingerprint(domain, raw_sequence)
+                domain_sequences[fingerprint] = tuple(raw_sequence)
+                domain_stats[fingerprint] = {
+                    "attempted": 1,
+                    "accepted": 1,
+                    "rejected_goal": 0,
+                }
+
     def generate_tasks(
         self,
         *,
@@ -51,12 +85,16 @@ class TeacherGenerationRuntime:
         count: int,
         seed: int,
         difficulty_mix: dict[str, float] | None = None,
-        model_path: str = "models/Qwen/Qwen3-4B",
+        model_path: str = "models/Google/Gemma-4-31B-it",
+        teacher_model_id: str | None = None,
         api_base: str | None = None,
         device: int | None = None,
         irrelevance_ratio: float = 0.05,
+        irrelevance_count: int | None = None,
         distractor_rate: float = 0.40,
         missing_function_rate: float = 1500 / (10895 + 1500),
+        prompt_profile: str = "paper_generation_baseline_v1",
+        progress_callback: Callable[[list[LiveTask]], None] | None = None,
     ) -> list[LiveTask]:
         """Generate tasks with the two-phase teacher."""
         self._require_started()
@@ -67,13 +105,28 @@ class TeacherGenerationRuntime:
 
         if api_base:
             client = LLMClient(
-                mode="openai", model_path=model_path, api_base=api_base,
+                mode="openai",
+                model_path=model_path,
+                contract_model_id=teacher_model_id,
+                api_base=api_base,
             )
         else:
-            client = LLMClient(mode="local", model_path=model_path, device=device)
+            client = LLMClient(
+                mode="local",
+                model_path=model_path,
+                contract_model_id=teacher_model_id,
+                device=device,
+            )
 
         orchestrator = TaskOrchestrator(
-            self.suite_config, self.manager, self.executor, client,
+            self.suite_config,
+            self.manager,
+            self.executor,
+            client,
+            prompt_profile=prompt_profile,
+            chain_sampling_stats=self._chain_sampling_stats,
+            chain_sampling_sequences=self._chain_sampling_sequences,
+            chain_sampling_lock=self._chain_sampling_lock,
         )
         return orchestrator.generate_many(
             server_name=server_name,
@@ -83,6 +136,8 @@ class TeacherGenerationRuntime:
             distractor_rate=distractor_rate,
             missing_function_rate=missing_function_rate,
             irrelevance_ratio=irrelevance_ratio,
+            irrelevance_count=irrelevance_count,
+            progress_callback=progress_callback,
         )
 
     def _require_started(self) -> None:

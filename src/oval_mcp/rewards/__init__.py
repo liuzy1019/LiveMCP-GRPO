@@ -1,1 +1,1 @@
-"""OVAL-MCP reward components; import concrete modules directly."""
+"""OVAL-MCP package."""

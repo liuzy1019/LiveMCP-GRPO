@@ -1,7 +1,7 @@
 """
 分层 advantage 纯函数 — 单一权威来源（Single Source of Truth）。
 
-供 livemcp_grpo_estimator.py 和训练入口共用的权威实现。
+供 grpo_estimator.py 和训练入口共用的权威实现。
 不依赖 verl/Ray/logger，可独立测试。
 """
 

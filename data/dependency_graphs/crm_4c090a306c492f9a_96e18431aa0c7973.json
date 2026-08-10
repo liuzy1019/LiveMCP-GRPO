@@ -1,0 +1,3705 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "crm",
+  "schema_hash": "4c090a306c492f9a",
+  "tool_names": [
+    "add_note",
+    "complete_task",
+    "convert_lead",
+    "create_contact",
+    "create_deal",
+    "create_lead",
+    "create_task",
+    "delete_contact",
+    "delete_lead",
+    "get_deal",
+    "list_deals",
+    "list_leads",
+    "list_tasks",
+    "update_contact",
+    "update_deal",
+    "update_lead"
+  ],
+  "graph": {
+    "add_note": {
+      "explicit": [],
+      "implicit": []
+    },
+    "complete_task": {
+      "explicit": [],
+      "implicit": []
+    },
+    "convert_lead": {
+      "explicit": [
+        "update_contact"
+      ],
+      "implicit": []
+    },
+    "create_contact": {
+      "explicit": [
+        "delete_contact",
+        "update_contact"
+      ],
+      "implicit": []
+    },
+    "create_deal": {
+      "explicit": [
+        "get_deal",
+        "update_deal"
+      ],
+      "implicit": []
+    },
+    "create_lead": {
+      "explicit": [
+        "convert_lead",
+        "delete_lead",
+        "update_lead"
+      ],
+      "implicit": []
+    },
+    "create_task": {
+      "explicit": [
+        "complete_task"
+      ],
+      "implicit": []
+    },
+    "delete_contact": {
+      "explicit": [],
+      "implicit": []
+    },
+    "delete_lead": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_deal": {
+      "explicit": [
+        "delete_contact",
+        "delete_lead",
+        "update_contact",
+        "update_lead"
+      ],
+      "implicit": []
+    },
+    "list_deals": {
+      "explicit": [
+        "get_deal",
+        "update_deal"
+      ],
+      "implicit": []
+    },
+    "list_leads": {
+      "explicit": [
+        "convert_lead",
+        "delete_contact",
+        "delete_lead",
+        "update_contact",
+        "update_lead"
+      ],
+      "implicit": []
+    },
+    "list_tasks": {
+      "explicit": [
+        "complete_task",
+        "delete_contact",
+        "update_contact"
+      ],
+      "implicit": []
+    },
+    "update_contact": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_deal": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_lead": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "raw_graph": {
+    "add_note": {
+      "explicit": [],
+      "implicit": []
+    },
+    "complete_task": {
+      "explicit": [],
+      "implicit": []
+    },
+    "convert_lead": {
+      "explicit": [
+        "create_deal",
+        "create_task",
+        "list_deals",
+        "update_contact"
+      ],
+      "implicit": []
+    },
+    "create_contact": {
+      "explicit": [
+        "create_deal",
+        "create_task",
+        "delete_contact",
+        "list_deals",
+        "update_contact"
+      ],
+      "implicit": []
+    },
+    "create_deal": {
+      "explicit": [
+        "create_task",
+        "get_deal",
+        "list_tasks",
+        "update_deal"
+      ],
+      "implicit": []
+    },
+    "create_lead": {
+      "explicit": [
+        "convert_lead",
+        "create_deal",
+        "delete_lead",
+        "list_deals",
+        "update_lead"
+      ],
+      "implicit": []
+    },
+    "create_task": {
+      "explicit": [
+        "complete_task"
+      ],
+      "implicit": []
+    },
+    "delete_contact": {
+      "explicit": [],
+      "implicit": []
+    },
+    "delete_lead": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_deal": {
+      "explicit": [
+        "delete_contact",
+        "delete_lead",
+        "list_tasks",
+        "update_contact",
+        "update_lead"
+      ],
+      "implicit": []
+    },
+    "list_deals": {
+      "explicit": [
+        "delete_lead",
+        "get_deal",
+        "list_tasks",
+        "update_deal"
+      ],
+      "implicit": []
+    },
+    "list_leads": {
+      "explicit": [
+        "convert_lead",
+        "delete_contact",
+        "delete_lead",
+        "update_contact",
+        "update_lead"
+      ],
+      "implicit": []
+    },
+    "list_tasks": {
+      "explicit": [
+        "complete_task",
+        "delete_contact",
+        "update_contact"
+      ],
+      "implicit": []
+    },
+    "update_contact": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_deal": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_lead": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "add_note",
+        "complete_task"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "convert_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_task"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "delete_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "delete_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "get_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "list_deals"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "list_tasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_note",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "convert_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_task"
+      ],
+      "source": "create_task",
+      "target": "complete_task",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "delete_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "delete_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "get_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "list_deals"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "list_tasks"
+      ],
+      "source": "list_tasks",
+      "target": "complete_task",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "complete_task",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_deal"
+      ],
+      "source": "convert_lead",
+      "target": "create_deal",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_lead"
+      ],
+      "source": "create_lead",
+      "target": "convert_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_task"
+      ],
+      "source": "convert_lead",
+      "target": "create_task",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "delete_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "delete_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "get_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "list_deals"
+      ],
+      "source": "convert_lead",
+      "target": "list_deals",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "list_leads"
+      ],
+      "source": "list_leads",
+      "target": "convert_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "list_tasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "update_contact"
+      ],
+      "source": "convert_lead",
+      "target": "update_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "create_deal"
+      ],
+      "source": "create_contact",
+      "target": "create_deal",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "create_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "create_task"
+      ],
+      "source": "create_contact",
+      "target": "create_task",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "delete_contact"
+      ],
+      "source": "create_contact",
+      "target": "delete_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "delete_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "get_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "list_deals"
+      ],
+      "source": "create_contact",
+      "target": "list_deals",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "list_tasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "update_contact"
+      ],
+      "source": "create_contact",
+      "target": "update_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_contact",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "create_lead"
+      ],
+      "source": "create_lead",
+      "target": "create_deal",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "create_task"
+      ],
+      "source": "create_deal",
+      "target": "create_task",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "delete_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "delete_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "get_deal"
+      ],
+      "source": "create_deal",
+      "target": "get_deal",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "list_deals"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "list_tasks"
+      ],
+      "source": "create_deal",
+      "target": "list_tasks",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "update_deal"
+      ],
+      "source": "create_deal",
+      "target": "update_deal",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_deal",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "create_task"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "delete_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "delete_lead"
+      ],
+      "source": "create_lead",
+      "target": "delete_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "get_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "list_deals"
+      ],
+      "source": "create_lead",
+      "target": "list_deals",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "list_tasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_lead",
+        "update_lead"
+      ],
+      "source": "create_lead",
+      "target": "update_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_task",
+        "delete_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "delete_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "get_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "list_deals"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "list_tasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_task",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "delete_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "get_deal"
+      ],
+      "source": "get_deal",
+      "target": "delete_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "list_deals"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "list_leads"
+      ],
+      "source": "list_leads",
+      "target": "delete_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "list_tasks"
+      ],
+      "source": "list_tasks",
+      "target": "delete_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "get_deal"
+      ],
+      "source": "get_deal",
+      "target": "delete_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "list_deals"
+      ],
+      "source": "list_deals",
+      "target": "delete_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "list_leads"
+      ],
+      "source": "list_leads",
+      "target": "delete_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "list_tasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_deal",
+        "list_deals"
+      ],
+      "source": "list_deals",
+      "target": "get_deal",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_deal",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_deal",
+        "list_tasks"
+      ],
+      "source": "get_deal",
+      "target": "list_tasks",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_deal",
+        "update_contact"
+      ],
+      "source": "get_deal",
+      "target": "update_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_deal",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_deal",
+        "update_lead"
+      ],
+      "source": "get_deal",
+      "target": "update_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_deals",
+        "list_leads"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_deals",
+        "list_tasks"
+      ],
+      "source": "list_deals",
+      "target": "list_tasks",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_deals",
+        "update_contact"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_deals",
+        "update_deal"
+      ],
+      "source": "list_deals",
+      "target": "update_deal",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_deals",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_leads",
+        "list_tasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_leads",
+        "update_contact"
+      ],
+      "source": "list_leads",
+      "target": "update_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_leads",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_leads",
+        "update_lead"
+      ],
+      "source": "list_leads",
+      "target": "update_lead",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_tasks",
+        "update_contact"
+      ],
+      "source": "list_tasks",
+      "target": "update_contact",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_tasks",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_tasks",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "update_contact",
+        "update_deal"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "update_contact",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "update_deal",
+        "update_lead"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "add_note",
+        "complete_task"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "convert_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "create_task"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "delete_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_note",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "convert_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "create_task"
+      ],
+      "raw": {
+        "source": "create_task",
+        "target": "complete_task",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_task",
+          "complete_task"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_task",
+          "complete_task"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "delete_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "list_tasks",
+        "target": "complete_task",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_tasks",
+          "complete_task"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "complete_task",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_deal"
+      ],
+      "raw": {
+        "source": "convert_lead",
+        "target": "create_deal",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "convert_lead",
+          "create_deal"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_lead"
+      ],
+      "raw": {
+        "source": "create_lead",
+        "target": "convert_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_lead",
+          "convert_lead"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_lead",
+          "convert_lead"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "create_task"
+      ],
+      "raw": {
+        "source": "convert_lead",
+        "target": "create_task",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "convert_lead",
+          "create_task"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "delete_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
+      "certified_explicit_directions": [
+        [
+          "convert_lead",
+          "delete_contact"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "convert_lead",
+          "delete_contact"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
+      "certified_explicit_directions": [
+        [
+          "get_deal",
+          "convert_lead"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "convert_lead",
+        "target": "list_deals",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "list_leads",
+        "target": "convert_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_leads",
+          "convert_lead"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "convert_lead",
+        "target": "update_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "convert_lead",
+          "update_contact"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "convert_lead",
+          "update_contact"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "convert_lead",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "create_deal"
+      ],
+      "raw": {
+        "source": "create_contact",
+        "target": "create_deal",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "create_contact",
+          "create_deal"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "create_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "create_task"
+      ],
+      "raw": {
+        "source": "create_contact",
+        "target": "create_task",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "create_contact",
+          "create_task"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "delete_contact"
+      ],
+      "raw": {
+        "source": "create_contact",
+        "target": "delete_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_contact",
+          "delete_contact"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_contact",
+          "delete_contact"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "create_contact",
+        "target": "list_deals",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "create_contact",
+        "target": "update_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_contact",
+          "update_contact"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_contact",
+          "update_contact"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_contact",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "create_lead"
+      ],
+      "raw": {
+        "source": "create_lead",
+        "target": "create_deal",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "create_lead",
+          "create_deal"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "create_task"
+      ],
+      "raw": {
+        "source": "create_deal",
+        "target": "create_task",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "create_deal",
+          "create_task"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "delete_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "create_deal",
+        "target": "get_deal",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_deal",
+          "get_deal"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_deal",
+          "get_deal"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "create_deal",
+        "target": "list_tasks",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "create_deal",
+        "target": "update_deal",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_deal",
+          "update_deal"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_deal",
+          "update_deal"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_deal",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "create_task"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "delete_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "create_lead",
+        "target": "delete_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_lead",
+          "delete_lead"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_lead",
+          "delete_lead"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "create_lead",
+        "target": "list_deals",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_lead",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "create_lead",
+        "target": "update_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_lead",
+          "update_lead"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_lead",
+          "update_lead"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "delete_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_task",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "delete_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "get_deal",
+        "target": "delete_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_deal",
+          "delete_contact"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "list_leads",
+        "target": "delete_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_leads",
+          "delete_contact"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "list_tasks",
+        "target": "delete_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_tasks",
+          "delete_contact"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_contact",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "get_deal"
+      ],
+      "raw": {
+        "source": "get_deal",
+        "target": "delete_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_deal",
+          "delete_lead"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "list_deals",
+        "target": "delete_lead",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "list_leads",
+        "target": "delete_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_leads",
+          "delete_lead"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_lead",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_deal",
+        "list_deals"
+      ],
+      "raw": {
+        "source": "list_deals",
+        "target": "get_deal",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_deals",
+          "get_deal"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_deal",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_deal",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "get_deal",
+        "target": "list_tasks",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_deal",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "get_deal",
+        "target": "update_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_deal",
+          "update_contact"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_deal",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_deal",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "get_deal",
+        "target": "update_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_deal",
+          "update_lead"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_deals",
+        "list_leads"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_deals",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "list_deals",
+        "target": "list_tasks",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_deals",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_deals",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "list_deals",
+        "target": "update_deal",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_deals",
+          "update_deal"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_deals",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_leads",
+        "list_tasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_leads",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "list_leads",
+        "target": "update_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_leads",
+          "update_contact"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_leads",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_leads",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "list_leads",
+        "target": "update_lead",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_leads",
+          "update_lead"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_tasks",
+        "update_contact"
+      ],
+      "raw": {
+        "source": "list_tasks",
+        "target": "update_contact",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_tasks",
+          "update_contact"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_tasks",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_tasks",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "update_contact",
+        "update_deal"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "update_contact",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "update_deal",
+        "update_lead"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "96e18431aa0c7973",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "8dbb13383e457bf966ccd8cdf4c5589821fb1e2282301d2a561a5a1d5bb9e0c9",
+  "tool_count": 16,
+  "expected_pair_count": 120,
+  "classified_pair_count": 120,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 120,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 105,
+    "contradicted": 15
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:48Z"
+}

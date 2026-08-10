@@ -11,7 +11,7 @@
     from src.training.trainer_config import TrainerConfig, ExperimentManager
 
     config = TrainerConfig(
-        model_path="models/Qwen/Qwen3-4B",
+        model_path="models/Qwen/Qwen3-4B-Instruct-2507",
         train_file="data/train.parquet",
         val_file="data/val.parquet",
         total_steps=200,
@@ -38,6 +38,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from loguru import logger
+from src.training.experiment_profiles import (
+    DIAGNOSTIC_OVERRIDE_FIELDS,
+    get_experiment_profile,
+    merge_profile_values,
+    validate_profile_artifacts,
+)
 
 # ── 项目根目录 ──────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -51,12 +57,22 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 class TrainerConfig:
     """训练配置 —— 所有参数集中管理，可被环境变量覆盖。"""
 
+    # ── 实验合同 ──
+    experiment_profile: str = "custom"
+    reward_profile: str = "oval_full"
+    diagnostic_overrides: bool = False
+    diagnostic_override_fields: List[str] = field(default_factory=list)
+    profile_train_sha256: str = ""
+    profile_val_sha256: str = ""
+    profile_model_config_sha256: str = ""
+
     # ── 模型 ──
-    model_path: str = "models/Qwen/Qwen3-4B"
+    model_path: str = "models/Qwen/Qwen3-4B-Instruct-2507"
 
     # ── 数据 ──
     train_file: str = "data/train.parquet"
     val_file: str = "data/val.parquet"
+    filter_overlong_prompts: bool = True
 
     # ── 训练规模 ──
     total_steps: int = 350
@@ -107,6 +123,8 @@ class TrainerConfig:
     # ── FSDP 专属 ──
     fsdp_param_offload: bool = False
     model_dtype: str = "bfloat16"
+    attn_implementation: str = "sdpa"
+    use_remove_padding: bool = True
 
     # ── vLLM 专属 ──
     gpu_mem_util: float = 0.60
@@ -201,12 +219,15 @@ class TrainerConfig:
             f"data.train_batch_size={self.train_batch_size}",
             f"data.val_batch_size={val_batch}",
             "data.shuffle=True",
-            "data.filter_overlong_prompts=True",
+            f"data.seed={self.seed}",
+            f"data.filter_overlong_prompts={str(self.filter_overlong_prompts).lower()}",
             "data.truncation=left",
             "data.reward_fn_key=data_source",
             "data.return_raw_chat=True",
             # 模型
             f"actor_rollout_ref.model.path={self.model_path}",
+            f"+actor_rollout_ref.model.override_config.attn_implementation={self.attn_implementation}",
+            f"actor_rollout_ref.model.use_remove_padding={str(self.use_remove_padding).lower()}",
             # Actor
             f"actor_rollout_ref.actor.strategy={self.strategy}",
             f"actor_rollout_ref.actor.ppo_mini_batch_size={self.mini_batch_size}",
@@ -230,6 +251,7 @@ class TrainerConfig:
             f"actor_rollout_ref.rollout.n={self.rollout_n}",
             f"actor_rollout_ref.rollout.temperature={self.temperature}",
             f"actor_rollout_ref.rollout.top_p={self.top_p}",
+            f"+actor_rollout_ref.rollout.seed={self.seed}",
             f"actor_rollout_ref.rollout.prompt_length={self.max_prompt_length}",
             f"actor_rollout_ref.rollout.response_length={self.max_response_length}",
             f"actor_rollout_ref.rollout.max_num_batched_tokens={max_num_batched_tokens}",
@@ -284,7 +306,9 @@ class TrainerConfig:
             "model_path": "OVAL_MODEL_PATH",
             "train_file": "OVAL_TRAIN_FILE",
             "val_file": "OVAL_VAL_FILE",
+            "filter_overlong_prompts": "OVAL_FILTER_OVERLONG_PROMPTS",
             "total_steps": "OVAL_TOTAL_STEPS",
+            "save_freq": "OVAL_SAVE_FREQ",
             "train_batch_size": "OVAL_TRAIN_BATCH_SIZE",
             "mini_batch_size": "OVAL_MINI_BATCH_SIZE",
             "micro_batch_size_per_gpu": "OVAL_MICRO_BATCH",
@@ -299,6 +323,8 @@ class TrainerConfig:
             "grad_clip": "OVAL_GRAD_CLIP",
             "gpu_mem_util": "OVAL_GPU_MEM_UTIL",
             "fsdp_param_offload": "OVAL_ACTOR_PARAM_OFFLOAD",
+            "attn_implementation": "OVAL_ATTN_IMPLEMENTATION",
+            "use_remove_padding": "OVAL_USE_REMOVE_PADDING",
             "rollout_tp": "OVAL_ROLLOUT_TP",
             "log_prob_micro_batch": "OVAL_LOG_PROB_MICRO_BATCH",
             "max_assistant_turns": "OVAL_MAX_ASSISTANT_TURNS",
@@ -307,6 +333,7 @@ class TrainerConfig:
             "wandb_project": "OVAL_WANDB_PROJECT",
             "wandb_entity": "OVAL_WANDB_ENTITY",
             "seed": "OVAL_SEED",
+            "run_name": "OVAL_RUN_NAME",
             "agent_loop": "OVAL_AGENT_LOOP",
             "adv_estimator": "OVAL_ADV_ESTIMATOR",
             "strategy": "OVAL_STRATEGY",
@@ -338,12 +365,44 @@ class TrainerConfig:
 
         kwargs.update(overrides)
 
+        experiment_profile = os.environ.get(
+            "OVAL_EXPERIMENT_PROFILE", "custom",
+        )
+        diagnostic_overrides = os.environ.get(
+            "OVAL_DIAGNOSTIC_OVERRIDES", "",
+        ).lower() in {"1", "true", "yes"}
+        profile = get_experiment_profile(experiment_profile)
+        diagnostic_override_fields = sorted(
+            field_name
+            for field_name in DIAGNOSTIC_OVERRIDE_FIELDS
+            if (
+                profile is not None
+                and field_name in kwargs
+                and kwargs[field_name] != profile.frozen[field_name]
+            )
+        )
+        kwargs = merge_profile_values(
+            profile,
+            kwargs,
+            diagnostic_overrides=diagnostic_overrides,
+        )
+        kwargs["experiment_profile"] = experiment_profile
+        kwargs["diagnostic_overrides"] = diagnostic_overrides
+        kwargs["diagnostic_override_fields"] = diagnostic_override_fields
+
         reward_profile = os.environ.get("OVAL_REWARD_PROFILE", "oval_full")
         if reward_profile not in {"prove_baseline", "oval_full"}:
             raise ValueError(
                 "OVAL_REWARD_PROFILE must be 'prove_baseline' or 'oval_full', "
                 f"got {reward_profile!r}"
             )
+        if profile is not None and reward_profile != profile.reward_profile:
+            raise ValueError(
+                f"experiment profile {profile.name!r} requires "
+                f"OVAL_REWARD_PROFILE={profile.reward_profile!r}, got "
+                f"{reward_profile!r}"
+            )
+        kwargs["reward_profile"] = reward_profile
         expected_estimator = (
             "grpo" if reward_profile == "prove_baseline" else "livemcp_grpo"
         )
@@ -355,6 +414,12 @@ class TrainerConfig:
                 f"{configured_estimator!r}"
             )
         kwargs["adv_estimator"] = expected_estimator
+        artifact_hashes = validate_profile_artifacts(profile, kwargs)
+        kwargs["profile_train_sha256"] = artifact_hashes.get("train_file", "")
+        kwargs["profile_val_sha256"] = artifact_hashes.get("val_file", "")
+        kwargs["profile_model_config_sha256"] = artifact_hashes.get(
+            "model_config", "",
+        )
         return cls(**kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -543,6 +608,14 @@ def print_config_summary(config: TrainerConfig, gpu_count: int, gpu_model: str) 
     print(f"  OVAL-MCP GRPO Training")
     print(f"{separator}")
     print(f"  Experiment:   {run_name}")
+    print(f"  Profile:      {config.experiment_profile}")
+    print(f"  Reward:       {config.reward_profile}")
+    print(f"  Diagnostic:   {'yes' if config.diagnostic_overrides else 'no'}")
+    if config.diagnostic_override_fields:
+        print(
+            "  Overrides:    "
+            + ", ".join(config.diagnostic_override_fields)
+        )
     print(f"  Project:      {config.wandb_project}")
     print(f"  Strategy:     {strategy_label}")
     print(f"  GPU:          {gpu_count}x {gpu_model}")

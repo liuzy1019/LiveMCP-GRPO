@@ -392,7 +392,12 @@ class AgentLoopWorkerBase:
                 tokenizer=self.tokenizer,
                 processor=self.processor,
             )
-            output: AgentLoopOutput = await agent_loop.run(sampling_params, **kwargs)
+            loop_kwargs = dict(kwargs)
+            loop_kwargs["_trajectory_info"] = dict(trajectory)
+            output: AgentLoopOutput = await agent_loop.run(
+                dict(sampling_params),
+                **loop_kwargs,
+            )
 
             # Some AgentLoop may have already computed the reward score, e.g SWE-agent.
 
@@ -772,8 +777,10 @@ class AgentLoopManager:
             DataProto: Output batch.
         """
 
-        if self.config.actor_rollout_ref.rollout.free_cache_engine:
-            self.wake_up()
+        # In async hybrid mode wake_up() is also the mandatory FSDP -> serving
+        # weight synchronization boundary.  It must run even when vLLM cache
+        # sleeping is disabled; otherwise the server keeps its dummy weights.
+        self.wake_up()
         if self.reward_model_manager and self.config.reward_model.rollout.free_cache_engine:
             self.reward_model_manager.wake_up()
 
@@ -785,8 +792,9 @@ class AgentLoopManager:
             ]
         )
         output = DataProto.concat(outputs)
-        if self.config.actor_rollout_ref.rollout.free_cache_engine:
-            self.sleep()
+        # Return the colocated actor to trainer mode after every rollout.  The
+        # replica implementation makes cache release conditional internally.
+        self.sleep()
         if self.reward_model_manager and self.config.reward_model.rollout.free_cache_engine:
             self.reward_model_manager.sleep()
 

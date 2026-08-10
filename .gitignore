@@ -55,6 +55,7 @@ wandb/
 # Misc
 tmp_*
 /.runtime_cache/
+/.generation-trace-viewer/
 
 # Internal project docs (not for public repo)
 /AGENTS.md

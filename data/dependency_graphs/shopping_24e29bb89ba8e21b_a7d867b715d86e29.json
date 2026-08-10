@@ -1,0 +1,7650 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "shopping",
+  "schema_hash": "24e29bb89ba8e21b",
+  "tool_names": [
+    "add_review",
+    "add_to_cart",
+    "add_to_wishlist",
+    "apply_coupon",
+    "cancel_order",
+    "checkout",
+    "clear_cart",
+    "compare_products",
+    "get_cart",
+    "get_coupons",
+    "get_order",
+    "get_product",
+    "get_recommendations",
+    "get_return_status",
+    "get_reviews",
+    "get_wishlist",
+    "list_categories",
+    "list_orders",
+    "remove_from_cart",
+    "remove_from_wishlist",
+    "return_order",
+    "search_products",
+    "update_cart_quantity"
+  ],
+  "graph": {
+    "add_review": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_to_cart": {
+      "explicit": [],
+      "implicit": [
+        "checkout",
+        "remove_from_cart",
+        "update_cart_quantity"
+      ]
+    },
+    "add_to_wishlist": {
+      "explicit": [],
+      "implicit": []
+    },
+    "apply_coupon": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cancel_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "checkout": {
+      "explicit": [
+        "cancel_order",
+        "get_order"
+      ],
+      "implicit": []
+    },
+    "clear_cart": {
+      "explicit": [],
+      "implicit": []
+    },
+    "compare_products": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_cart": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "get_coupons": {
+      "explicit": [
+        "apply_coupon"
+      ],
+      "implicit": []
+    },
+    "get_order": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "get_product": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_recommendations": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "get_return_status": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "cancel_order",
+        "compare_products",
+        "get_order",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "get_reviews": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_wishlist": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "list_categories": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_orders": {
+      "explicit": [
+        "cancel_order",
+        "get_order",
+        "return_order"
+      ],
+      "implicit": []
+    },
+    "remove_from_cart": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_from_wishlist": {
+      "explicit": [],
+      "implicit": []
+    },
+    "return_order": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_return_status",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "search_products": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "update_cart_quantity": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "raw_graph": {
+    "add_review": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_to_cart": {
+      "explicit": [],
+      "implicit": [
+        "checkout",
+        "clear_cart",
+        "remove_from_cart",
+        "update_cart_quantity"
+      ]
+    },
+    "add_to_wishlist": {
+      "explicit": [],
+      "implicit": [
+        "remove_from_wishlist"
+      ]
+    },
+    "apply_coupon": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cancel_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "checkout": {
+      "explicit": [
+        "cancel_order",
+        "get_order"
+      ],
+      "implicit": []
+    },
+    "clear_cart": {
+      "explicit": [],
+      "implicit": []
+    },
+    "compare_products": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_cart": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": [
+        "checkout"
+      ]
+    },
+    "get_coupons": {
+      "explicit": [
+        "apply_coupon"
+      ],
+      "implicit": []
+    },
+    "get_order": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_recommendations",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "return_order",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "get_product": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_recommendations": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "get_return_status": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "cancel_order",
+        "compare_products",
+        "get_order",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "get_reviews": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_wishlist": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "list_categories": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_orders": {
+      "explicit": [
+        "cancel_order",
+        "get_order",
+        "return_order"
+      ],
+      "implicit": []
+    },
+    "remove_from_cart": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_from_wishlist": {
+      "explicit": [],
+      "implicit": []
+    },
+    "return_order": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_return_status",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "search_products": {
+      "explicit": [
+        "add_review",
+        "add_to_cart",
+        "add_to_wishlist",
+        "compare_products",
+        "get_product",
+        "get_reviews",
+        "remove_from_cart",
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "implicit": []
+    },
+    "update_cart_quantity": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "add_review",
+        "add_to_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "add_to_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "apply_coupon"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "cancel_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "checkout"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_cart"
+      ],
+      "source": "get_cart",
+      "target": "add_review",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_order"
+      ],
+      "source": "get_order",
+      "target": "add_review",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_recommendations"
+      ],
+      "source": "get_recommendations",
+      "target": "add_review",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_return_status"
+      ],
+      "source": "get_return_status",
+      "target": "add_review",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "add_review",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_review",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_review",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "add_review",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_review",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "add_review",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_review",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "add_to_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "apply_coupon"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "cancel_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "checkout"
+      ],
+      "source": "add_to_cart",
+      "target": "checkout",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "clear_cart"
+      ],
+      "source": "add_to_cart",
+      "target": "clear_cart",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_cart"
+      ],
+      "source": "get_cart",
+      "target": "add_to_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_order"
+      ],
+      "source": "get_order",
+      "target": "add_to_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_recommendations"
+      ],
+      "source": "get_recommendations",
+      "target": "add_to_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_return_status"
+      ],
+      "source": "get_return_status",
+      "target": "add_to_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "add_to_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "remove_from_cart"
+      ],
+      "source": "add_to_cart",
+      "target": "remove_from_cart",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "add_to_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "add_to_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "update_cart_quantity"
+      ],
+      "source": "add_to_cart",
+      "target": "update_cart_quantity",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "apply_coupon"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "cancel_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "checkout"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_cart"
+      ],
+      "source": "get_cart",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_order"
+      ],
+      "source": "get_order",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_recommendations"
+      ],
+      "source": "get_recommendations",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_return_status"
+      ],
+      "source": "get_return_status",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "remove_from_wishlist"
+      ],
+      "source": "add_to_wishlist",
+      "target": "remove_from_wishlist",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "add_to_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "cancel_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "checkout"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_coupons"
+      ],
+      "source": "get_coupons",
+      "target": "apply_coupon",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "checkout"
+      ],
+      "source": "checkout",
+      "target": "cancel_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_return_status"
+      ],
+      "source": "get_return_status",
+      "target": "cancel_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "cancel_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "clear_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_cart"
+      ],
+      "source": "get_cart",
+      "target": "checkout",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_order"
+      ],
+      "source": "checkout",
+      "target": "get_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "checkout",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "compare_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_cart"
+      ],
+      "source": "get_cart",
+      "target": "compare_products",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_order"
+      ],
+      "source": "get_order",
+      "target": "compare_products",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_recommendations"
+      ],
+      "source": "get_recommendations",
+      "target": "compare_products",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_return_status"
+      ],
+      "source": "get_return_status",
+      "target": "compare_products",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "compare_products",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "compare_products",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "compare_products",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "compare_products",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_coupons"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_product"
+      ],
+      "source": "get_cart",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_reviews"
+      ],
+      "source": "get_cart",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "remove_from_cart"
+      ],
+      "source": "get_cart",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "get_cart",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_cart",
+        "update_cart_quantity"
+      ],
+      "source": "get_cart",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_product"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_recommendations"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_product"
+      ],
+      "source": "get_order",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_recommendations"
+      ],
+      "source": "get_order",
+      "target": "get_recommendations",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_return_status"
+      ],
+      "source": "get_return_status",
+      "target": "get_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_reviews"
+      ],
+      "source": "get_order",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "get_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "remove_from_cart"
+      ],
+      "source": "get_order",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "remove_from_wishlist"
+      ],
+      "source": "get_order",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "return_order"
+      ],
+      "source": "get_order",
+      "target": "return_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "update_cart_quantity"
+      ],
+      "source": "get_order",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_recommendations"
+      ],
+      "source": "get_recommendations",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_return_status"
+      ],
+      "source": "get_return_status",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_reviews"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_product",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_product",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_product",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "get_product",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_product",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_return_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_reviews"
+      ],
+      "source": "get_recommendations",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "remove_from_cart"
+      ],
+      "source": "get_recommendations",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "remove_from_wishlist"
+      ],
+      "source": "get_recommendations",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "update_cart_quantity"
+      ],
+      "source": "get_recommendations",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "get_reviews"
+      ],
+      "source": "get_return_status",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "get_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "remove_from_cart"
+      ],
+      "source": "get_return_status",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "remove_from_wishlist"
+      ],
+      "source": "get_return_status",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "get_return_status",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "update_cart_quantity"
+      ],
+      "source": "get_return_status",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "get_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "get_reviews",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "list_categories"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "remove_from_cart"
+      ],
+      "source": "get_wishlist",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "remove_from_wishlist"
+      ],
+      "source": "get_wishlist",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "update_cart_quantity"
+      ],
+      "source": "get_wishlist",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "list_orders"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "return_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_categories",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "remove_from_cart"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "return_order"
+      ],
+      "source": "list_orders",
+      "target": "return_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "remove_from_wishlist"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "remove_from_cart",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "return_order"
+      ],
+      "source": "return_order",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "search_products"
+      ],
+      "source": "search_products",
+      "target": "remove_from_wishlist",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "return_order",
+        "search_products"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "return_order",
+        "update_cart_quantity"
+      ],
+      "source": "return_order",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "search_products",
+        "update_cart_quantity"
+      ],
+      "source": "search_products",
+      "target": "update_cart_quantity",
+      "relation": "explicit"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "add_review",
+        "add_to_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "add_to_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "apply_coupon"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "cancel_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "checkout"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "clear_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "compare_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "add_review",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "add_review"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_order"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "add_review",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "add_review"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "add_review",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "add_review"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "add_review",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "add_review"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "add_review",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "add_review"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "add_review",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "add_review"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "add_review",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "add_review"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_review",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "add_to_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "apply_coupon"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "cancel_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "checkout"
+      ],
+      "raw": {
+        "source": "add_to_cart",
+        "target": "checkout",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "add_to_cart",
+          "checkout"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "clear_cart"
+      ],
+      "raw": {
+        "source": "add_to_cart",
+        "target": "clear_cart",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "compare_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "add_to_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "add_to_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_order"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "add_to_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "add_to_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "add_to_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "add_to_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "add_to_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "add_to_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "add_to_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "add_to_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "add_to_cart",
+        "target": "remove_from_cart",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "add_to_cart",
+          "remove_from_cart"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "add_to_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "add_to_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "add_to_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "add_to_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_cart",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "add_to_cart",
+        "target": "update_cart_quantity",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "add_to_cart",
+          "update_cart_quantity"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "apply_coupon"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "cancel_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "checkout"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "clear_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "compare_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "add_to_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "add_to_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_order"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "add_to_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "add_to_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "add_to_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "add_to_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "add_to_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "add_to_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "add_to_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "add_to_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "add_to_wishlist",
+        "target": "remove_from_wishlist",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "add_to_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "add_to_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "add_to_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "add_to_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_wishlist",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "cancel_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "checkout"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "clear_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "compare_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "get_coupons",
+        "target": "apply_coupon",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_coupons",
+          "apply_coupon"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "apply_coupon",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "checkout"
+      ],
+      "raw": {
+        "source": "checkout",
+        "target": "cancel_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "checkout",
+          "cancel_order"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "checkout",
+          "cancel_order"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "clear_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "compare_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "cancel_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "cancel_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "cancel_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "cancel_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "clear_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "compare_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "checkout",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_order"
+      ],
+      "raw": {
+        "source": "checkout",
+        "target": "get_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "checkout",
+          "get_order"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "checkout",
+          "get_order"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "checkout",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "compare_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "clear_cart",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_cart"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "compare_products",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "compare_products"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_order"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "compare_products",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "compare_products"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "compare_products",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "compare_products"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "compare_products",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "compare_products"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "compare_products",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "compare_products"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "compare_products",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "compare_products"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "compare_products",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "compare_products"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "compare_products",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_coupons"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_product"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "get_product",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "get_product"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "get_reviews",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "get_reviews"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "remove_from_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "remove_from_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "remove_from_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "remove_from_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_cart",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "get_cart",
+        "target": "update_cart_quantity",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_cart",
+          "update_cart_quantity"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_product"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_coupons",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_product"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "get_product",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "get_product"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "get_recommendations",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "get_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "get_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "get_reviews",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "get_reviews"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "get_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "get_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "remove_from_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "remove_from_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "remove_from_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "remove_from_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "return_order"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "return_order",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "update_cart_quantity",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "update_cart_quantity"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_recommendations"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "get_product",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "get_product"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "get_product",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "get_product"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "get_product",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "get_product"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "get_product",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "get_product"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "get_product",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "get_product"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_product",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_return_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "get_reviews",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "get_reviews"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "remove_from_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "remove_from_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "remove_from_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "remove_from_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recommendations",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "get_recommendations",
+        "target": "update_cart_quantity",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_recommendations",
+          "update_cart_quantity"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "get_reviews"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "get_reviews",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "get_reviews"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "remove_from_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "remove_from_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "remove_from_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "remove_from_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "get_return_status",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "return_order"
+        ],
+        [
+          "return_order",
+          "get_return_status"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "return_order",
+          "get_return_status"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_return_status",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "get_return_status",
+        "target": "update_cart_quantity",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_return_status",
+          "update_cart_quantity"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "get_wishlist"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "get_reviews",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "get_reviews"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "get_reviews",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "get_reviews"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "get_reviews",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "get_reviews"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_reviews",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "list_categories"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "remove_from_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "remove_from_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "remove_from_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "remove_from_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_wishlist",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "get_wishlist",
+        "target": "update_cart_quantity",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_wishlist",
+          "update_cart_quantity"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_categories",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_categories",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_categories",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_categories",
+        "return_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_categories",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_categories",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "remove_from_cart"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "return_order"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "return_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "return_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "remove_from_wishlist"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "remove_from_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "remove_from_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "remove_from_cart",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "remove_from_cart"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_cart",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "return_order"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "remove_from_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "remove_from_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "search_products"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "remove_from_wishlist",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "remove_from_wishlist"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_wishlist",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "return_order",
+        "search_products"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "return_order",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "return_order",
+        "target": "update_cart_quantity",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "return_order",
+          "update_cart_quantity"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_products",
+        "update_cart_quantity"
+      ],
+      "raw": {
+        "source": "search_products",
+        "target": "update_cart_quantity",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_products",
+          "update_cart_quantity"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "a7d867b715d86e29",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "4549b9187f1455ba1993d11808cae99e78229554d10c397f5b0d8ddf801d3cd2",
+  "tool_count": 23,
+  "expected_pair_count": 253,
+  "classified_pair_count": 253,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 253,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 248,
+    "contradicted": 5
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:41Z"
+}

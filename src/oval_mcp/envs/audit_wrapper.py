@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.live_mcp.executor import LiveMCPExecutor
-from src.live_mcp.manager import LiveMCPManager
+from src.live_mcp.protocol.manager import LiveMCPManager
 from src.live_mcp.types import ToolCall, ToolExecutionResult
 from src.oval_mcp.envs.domain_adapter import DomainAdapter, get_adapter
 from src.oval_mcp.verifier.events import (
@@ -383,8 +383,8 @@ class AuditWrapper:
 
     # ── recreate detection helpers ──
 
-    @staticmethod
     def _extract_created_entity(
+        self,
         normalized: dict[str, Any],
         result: Any,
         after_state: dict[str, Any] | None,

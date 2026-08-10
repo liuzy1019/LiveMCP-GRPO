@@ -1,5 +1,4 @@
-# Live MCP 10-domain 套件配置（PROVE Table 2 精选子集）
-# 当前配置使用 live backend，通过 MCP subprocess 执行。
+# Live MCP 10-domain suite using subprocess-backed stateful servers.
 
 suite_name: ten_domain_live_mcp
 servers:
@@ -15,7 +14,8 @@ servers:
   - configs/live_mcp/food_delivery.yaml  # Lifestyle: food_delivery (lifecycle)
 
 rollout:
-  max_turns: 10  # 缺省 action-turn budget；生成数据由逐行 budget 覆盖，非 PROVE 2--3 conversation rounds
+  # Default action budget. Generated rows may override it with a per-row budget.
+  max_turns: 10
   observation_max_chars: 4096  # 工具返回截断长度
 
 reward:

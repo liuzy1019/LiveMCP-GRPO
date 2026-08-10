@@ -1,171 +1,134 @@
-# LiveMCP Data
+# LiveMCP 数据
 
-本目录保存依赖图缓存和本地生成数据。Parquet、运行日志和单次生成目录默认不进入 Git。
+> 最后核实：2026-08-10。整体状态见 `docs/PROJECT_STATUS.md`，算法与 PROVE 边界见
+> `docs/OVAL-MCP.md`，逐域准入见 `docs/DOMAIN_SEMANTIC_AUDIT.md`。
 
-## Layout
+## 目录与发布规则
 
 ```text
 data/
-├── dependency_graphs/              # 按 domain 和 schema hash 索引的依赖图
-├── runs/                           # 本地生成 run，不进入 Git
+├── dependency_graphs/       # schema/Teacher/classifier-contract namespaced cache
+├── runs/
 │   └── <run-id>/
-│       ├── candidates/             # 可恢复 shard 候选
 │       ├── train.parquet
 │       ├── val.parquet
-│       └── merge_report.json
-├── train.parquet                   # 指向已发布 train split 的本地符号链接
-└── val.parquet                     # 指向已发布 validation split 的本地符号链接
+│       └── reports/
+├── train.parquet            # 可选：指向已认证不可变 artifact 的活动符号链接
+└── val.parquet              # 可选：同上
 ```
 
-只有 train 和 validation 均完成生成、全局过滤与生产审计后，才允许更新活动符号链接。未完成
-run 的 `survivor_pool.parquet` 和 `candidates/` 不能作为正式训练数据。
+只有完成全局过滤、Parquet readback、production parser、fresh replay 和逐行审查的不可变 artifact
+才能发布为活动入口。临时 shard、Teacher trace、checkpoint、survivor pool 和进程内 accepted 数量都
+不是训练数据。发布活动符号链接必须显式执行，不能由一次 gray run 隐式完成。
 
-## Current Snapshot
+## 当前磁盘事实
 
-当前联合候选集包含 2,121 条轨迹：
+- `data/train.parquet`、`data/val.parquet` 均不存在。
+- `data/runs/` 当前为空。
+- 当前没有通过全局过滤、production parser、fresh replay 和逐行语义审核的正式 artifact。
+- `prove_local_v1`、`oval_local_v1` 与两个 reward-gray profile 所绑定的不可变 train/val 文件缺失，
+  当前会 fail closed；正式训练前必须重新建立并校验 artifact，而不是修改 hash 绕过。
 
-| Split | Rows | UID unique | Contract diagnostics | Prompt overflow |
-|-------|-----:|-----------:|---------------------:|----------------:|
-| Train | 1,621 | 1,621 | 0 | 0 |
-| Validation | 500 | 500 | 0 | 0 |
+从本轮代码开始，新生成行必须在 `extra_info.teacher_model_id` 保存稳定模型身份；serving URL 或 alias
+不能替代该 provenance。旧行缺失该字段时审计失败，不能自动补写猜测值。
 
-联合候选覆盖 10 个 domain。`data/train.parquet` 和 `data/val.parquet` 当前仍指向上一轮已发布
-数据；切换前还需要完成人工语义抽检和 Policy 消费 smoke。
+## 生成参数与论文边界
 
-## Generation Pipeline
+| 参数 | 当前默认/目标 | 边界 |
+|---|---:|---|
+| difficulty | complete 60%、missing-required 20%、minimal 20% | PROVE 公开分布 |
+| distractor | 40%，3--8 个跨域工具 | PROVE 公开机制 |
+| enum stripping | 30% | PROVE 公开机制 |
+| irrelevance | 5% | PROVE 公开机制；当前来源是 internal proxy |
+| missing-function | `1500/(10895+1500)≈12.1%` | 从公开 corpus 数量推导，不是论文 knob |
+| replay error threshold | ≤30% | PROVE hard gate |
+| Jaccard threshold | 0.70 | PROVE plain tool-call sequence hard gate；位置感知/增强签名仅作本地诊断 |
+| checkpoint interval | 25 accepted tasks | 本地工程默认 |
 
-### 1. Dependency Graph
+PROVE 公开 hard gates 是 fresh replay、sensitive provenance 和 tool-call-sequence Jaccard。terminal、
+round、hidden-tool、environment fingerprint、canonical replay、semantic quarantine 和 Parquet schema
+是本地可消费性合同，必须分别报告。第三桶尚未导入 When2Call 806 条与 xLAM-Irrelevance 316 条，
+不能称 strict external-source reproduction。
 
-对每个 domain 的全部无序工具 pair 进行一次关系分类：
+## 受控并行生成与验收
 
-- `explicit`：source 的输出为 target 提供必需输入；
-- `implicit`：source 必须先执行以建立 target 所需状态；
-- `none`：当前 pair 不建立依赖边。
-
-分类结果保存完整 pair ledger、schema hash、Teacher model ID 和 classifier contract hash。缺少
-pair、引用未知工具或与当前 schema 不一致的缓存会直接失效。
-
-### 2. Live-State Sampling
-
-生成 query 前，系统在当前 session 中调用只读 discovery tools，收集可用实体和状态。Query
-Teacher 只看到与当前 chain 相关的 compact view；opaque ID 必须由用户输入或此前 tool
-observation 提供，不能从隐藏状态复制。
-
-### 3. State-Machine Teacher
-
-每个 conversation 依次经过：
-
-```text
-query generation -> teacher decision -> tool execution -> recovery -> continuation
-```
-
-Teacher 只能使用当前可见 schema、用户请求和真实 execution history。所有 tool calls 都在有状态
-MCP session 中执行，并记录 observation、terminal、state delta 和成功条件。
-
-### 4. Robustness Injection
-
-扰动计划在 Teacher 执行前按 task seed 固定：
-
-- distractor tools：混入跨域无关工具；
-- enum stripping：移除部分枚举提示；
-- missing function：隐藏完成目标所需的能力；
-- irrelevance：生成当前工具集合无法处理的请求。
-
-Teacher、Replay 和 Parquet 使用同一份可见 schema。隐藏工具不能出现在 Teacher 输入、执行器
-路由或 ground-truth oracle 中。
-
-### 5. Replay and Deduplication
-
-候选轨迹需要经过：
-
-1. fresh-session replay；
-2. sensitive-parameter provenance；
-3. terminal、round 和 hidden-tool contract；
-4. success-criteria 验证；
-5. tool-call sequence Jaccard 0.70 全局去重；
-6. Parquet round-trip 和训练 parser readback。
-
-## Parquet Contract
-
-每一行包含以下顶层字段：
-
-| Field | Description |
-|-------|-------------|
-| `prompt` | Policy 初始对话和可见 MCP schema |
-| `data_source` | 数据来源标识 |
-| `reward_model` | reward ground truth 容器 |
-| `extra_info` | oracle、环境、replay 和审计信息 |
-| `uid` | 全局唯一轨迹 ID |
-| `group_id` | GRPO grouping key |
-| `perturbation_level` | robustness 配置摘要 |
-| `scenario_type` | success、recovery、clarification 或 abstention 类型 |
-
-`extra_info` 中的关键合同字段包括：
-
-- `oracle_calls`、`required_tools`、`required_call_rounds`；
-- `round_contracts`、`terminal_action`、`allowed_terminal_actions`；
-- `hidden_tools`、`tool_owner_domains`、`candidate_tools`；
-- `success_criteria`、`criterion_call_provenance`；
-- `canonical_replay_*`、`paper_replay_valid`；
-- `server_schema_hashes`、`transition_fingerprints`、`initial_state_hashes`；
-- `reward_fingerprint`、`trajectory_schema_version`、`budget`。
-
-`success_criteria` 和 heterogeneous nested structures 在 Parquet 中按当前 serializer contract
-编码，读取后必须通过训练端 `_build_task_dict`，不能仅以 PyArrow 写入成功作为验收依据。
-
-## Generate
+一组生成固定使用 4 张 GPU；8 卡机器最多同时启动两个 domain 组。每组必须使用独立、domain-scoped
+run-id，不能共享 manifest；同一组 GPU 上不并发启动第二个 vLLM。不存在 `run_10_domains.sh`，不得在
+文档或操作中引用它。可计算 N≥16 reward 的最小 fresh canary：
 
 ```bash
-# 全域生成。
-bash scripts/generate_data.sh --count 500 --val-count 100
-
-# 限制 GPU 数。
-GPU_COUNT=4 bash scripts/generate_data.sh --count 500 --val-count 100
-
-# 单域 smoke。
-bash scripts/generate_data.sh --domain calendar --count 20 --val-count 5
+export ARL_ENV=/mnt/data2/liuzhanyi/envs/arl
+PYTHONNOUSERSITE=1 "$ARL_ENV/bin/python" -m src.live_mcp.corpus.cli run \
+  --mode full --domain DOMAIN --count 16 --val-count 4 \
+  --prompt-profile paper_generation_baseline_v1 \
+  --semantic-gate-profile diagnostic_only
 ```
 
-默认输出目录为 `data/runs/<run-id>/`。模型路径、API endpoint、GPU 数、并发和 vLLM 参数均可
-通过脚本参数或环境变量覆盖。
-
-## Validate
+该组合生成的行会标记为 `artifact_purpose=paper_audit`，只用于论文机制和过滤诊断，训练、
+rollout、reward 入口会 fail closed。训练候选必须显式使用：
 
 ```bash
-# 依赖图和 MCP schema 静态验证。
-python scripts/validate_generation_pipeline.py --stages 1,2
-
-# 正式 Parquet 逐行合同审计。
-python scripts/audit_generated_data.py \
-  data/runs/<run-id>/train.parquet \
-  data/runs/<run-id>/val.parquet
-
-# 完整回归测试。
-python -m pytest tests/
+PYTHONNOUSERSITE=1 "$ARL_ENV/bin/python" -m src.live_mcp.corpus.cli run \
+  --mode full --domain DOMAIN --count 16 --val-count 4 \
+  --prompt-profile local_trainable_v1 \
+  --semantic-gate-profile deterministic_v1
 ```
 
-验收报告至少需要记录：输入候选数、task-ID 去重数、Jaccard 去重数、quarantine 数、各 domain
-保留量、train/validation 数量和环境指纹。
+该组合写入 `artifact_purpose=training_candidate`；其他 profile 组合统一标记为 `experiment`。
 
-## Consume
+公开 Python CLI 必须把自身的 `sys.executable` 作为 `PYTHON_BIN` 传给内部 launcher；调用者显式设置的
+`PYTHON_BIN` 优先。不能依赖未激活 shell 中的 `CONDA_PREFIX`，否则绝对路径启动 ARL CLI 仍会降级到
+系统 `/usr/bin/python3`。
 
-```python
-import pandas as pd
+每域按以下顺序验收：
 
-train = pd.read_parquet("data/train.parquet")
-validation = pd.read_parquet("data/val.parquet")
+1. schema/handler 与 dependency cache provenance；
+2. raw `C(n,2)` ledger、relation warning、live-feasible chain；
+3. Gemma Teacher query/action/observation/state mutation/terminal/continuation 逐行审查；
+4. fresh replay、provenance、Jaccard、Parquet round-trip；
+5. `validate_prove_corpus_evidence`、`validate_teacher_generation_evidence`、环境 metadata 与
+   `build_reward_task` production loader；
+6. Qwen3-4B-Instruct-2507 多 seed rollout/reward；
+7. 记录证据并在获得明确删除授权后清理临时产物，再进入下一域。
+
+`--domain all` 仅用于只读全局结构验证，不用于正式补产或并行启动十域 vLLM。
+
+## Parquet 合同
+
+顶层字段：`prompt`、`data_source`、`reward_model`、`extra_info`、`uid`、`group_id`、
+`perturbation_level`、`scenario_type`。
+
+关键 `extra_info` 至少包括 `prompt_profile`、`semantic_gate_profile`、`artifact_purpose`；consumer
+会重新推导三者关系，缺失或不匹配时拒绝。其余字段包括：
+
+- provenance：`teacher_model_id`、`prompt_profile`、`generation_method`、
+  `dependency_classifier_contract_hash`；
+- oracle：`oracle_calls`、`required_tools`、`dependency_edges`、`required_call_rounds`；
+- 多轮：`conversation_queries`、`round_contracts`、`teacher_round_trace`、
+  `teacher_attempt_trace`、terminal contract；
+- robustness：`hidden_tools`、`candidate_tools`、`tool_owner_domains`；
+- replay/provenance：`canonical_replay_*`、`success_criteria`、sensitive provenance evidence；
+- identity/runtime：`server_schema_hashes`、`transition_fingerprints`、`initial_state_hashes`、
+  `state_profiles`、reward/runtime fingerprint；
+- chain：`source_chain_seed`、`chain_seed`、`query_chain_supported` 三态和对应 status。
+
+heterogeneous nested structures 按 serializer contract 写成 JSON 字符串；消费者必须通过共享
+normalizer 解析，不能按某一次 Pandas/Arrow 表现猜测类型。
+
+## 审计命令
+
+```bash
+PYTHONNOUSERSITE=1 "$LIVEMCP_ENV/bin/python" \
+  scripts/validate_generation_pipeline.py --stages 1,2 --domain all
+
+PYTHONNOUSERSITE=1 "$LIVEMCP_ENV/bin/python" -m src.live_mcp.corpus.audit \
+  data/runs/<run-id>/train.parquet data/runs/<run-id>/val.parquet
+
+PYTHONNOUSERSITE=1 "$ARL_ENV/bin/python" -m pytest -q \
+  tests/test_transport_contract.py
+PYTHONNOUSERSITE=1 "$LIVEMCP_ENV/bin/python" -m pytest -q tests/
 ```
 
-训练入口会再次校验 schema、transition、initial-state、reward fingerprint、round budget 和 prompt
-长度。任何不兼容行都会 fail closed，不会静默修补旧 metadata。
-
-## Publication Checklist
-
-在发布到 Hugging Face 或 ModelScope 前，还需要：
-
-- 固定 train/validation artifact 和校验和；
-- 完成人工语义抽检并记录抽样方法；
-- 提供 Dataset Card、字段说明和生成模型信息；
-- 确认数据许可证和上游模型使用条款；
-- 扫描 secret、机器路径和潜在个人信息；
-- 用公开代码对最终 artifact 重跑生产审计。
+正式报告至少记录 candidate/accepted/final split、UID/query/Jaccard uniqueness、domain/scenario/
+terminal/difficulty/toolchain、replay/provenance/parser、Teacher identity、environment/reward fingerprint，
+以及逐行语义结论。行数和测试数不能替代这些证据。

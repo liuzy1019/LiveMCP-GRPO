@@ -1,4 +1,1 @@
-"""OVAL-MCP environment layer.
-
-DomainAdapter (§5), AuditWrapper (§3).
-"""
+"""OVAL-MCP package."""

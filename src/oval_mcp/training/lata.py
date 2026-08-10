@@ -3,8 +3,8 @@
 问题：
   GRPO 的 standard token allocation 是对 trajectory 内所有 token 分配相同的
   trajectory-level advantage A_i： a_{i,t} = A_i，所有 t。
-  这导致长回复的 per-token 信号被稀释——即使 J_i 相同，长回复的每个 token
-  收到的 gradient 强度弱于短回复。
+  在当前 token-mean policy loss 下，长回复包含更多 active token，因此会占据
+  更大的累计 token 权重；这可能让长度差异主导优化。
 
 方案：
   √L normalization：短回复获得更高的 per-token advantage，长回复反之。
@@ -15,7 +15,7 @@
   "sqrt_l":  a_{i,t} = A_i / sqrt(L_i)          （推荐默认）
   "norm":    a_{i,t} = A_i * sqrt(L_ref / L_i)  （batch 归一化，L_ref = mean(L)）
 
-推荐 "sqrt_l" 作为默认模式。
+LATA 是待灰度验证的实验开关，不是 PROVE baseline 的组成部分。
 """
 
 from __future__ import annotations

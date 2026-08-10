@@ -93,13 +93,19 @@ def run_ppo(config, task_runner_class=None) -> None:
         runner = task_runner_class.options(runtime_env={"nsight": nsight_options}).remote()
     else:
         runner = task_runner_class.remote()
-    ray.get(runner.run.remote(config))
+    try:
+        ray.get(runner.run.remote(config))
 
-    # [Optional] get the path of the timeline trace file from the configuration, default to None
-    # This file is used for performance analysis
-    timeline_json_file = config.ray_kwargs.get("timeline_json_file", None)
-    if timeline_json_file:
-        ray.timeline(filename=timeline_json_file)
+        # [Optional] get the path of the timeline trace file from the configuration, default to None
+        # This file is used for performance analysis
+        timeline_json_file = config.ray_kwargs.get("timeline_json_file", None)
+        if timeline_json_file:
+            ray.timeline(filename=timeline_json_file)
+    finally:
+        # The TaskRunner retains the trainer and WorkerDict handles after
+        # ``trainer.fit()`` returns. Explicitly terminate this owned,
+        # non-detached actor so sequential runs do not race stale GPU workers.
+        ray.kill(runner, no_restart=True)
 
 
 class TaskRunner:

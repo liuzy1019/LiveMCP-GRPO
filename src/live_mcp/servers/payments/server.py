@@ -10,12 +10,12 @@ from src.live_mcp.server_base import StatefulToolServer, _result, serve
 TOOLS = [
     {"name": "create_invoice", "description": "Create a new invoice with a positive amount.", "input_schema": {"type": "object", "properties": {"customer": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive invoice amount; must be greater than zero."}, "currency": {"type": "string"}, "description": {"type": "string"}, "due_date": {"type": "string"}}, "required": ["customer", "amount"]}, "annotations": {"mutating": True}},
     {"name": "get_invoice", "description": "Get invoice details.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}}, "required": ["invoice_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "list_invoices", "description": "List invoices by status, customer, or date range.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "customer": {"type": "string"}, "from_date": {"type": "string"}, "to_date": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "pay_invoice", "description": "Pay an unpaid pending or overdue invoice for exactly its full invoice amount. The invoice must have no linked payment or open dispute and must not be paid, disputed, refunded, or partially refunded. Returns a settled payment with a payment_id. Sensitive param on amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount exactly equal to the invoice amount."}, "method": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
+    {"name": "list_invoices", "description": "List invoices by exact status, customer, or date range. Omit status to return all statuses.", "input_schema": {"type": "object", "properties": {"status": {"type": "string", "enum": ["pending", "overdue", "paid", "partially_refunded", "refunded", "disputed"], "description": "Optional exact invoice status. Omit to list all statuses."}, "customer": {"type": "string"}, "from_date": {"type": "string"}, "to_date": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
+    {"name": "pay_invoice", "description": "Pay an unpaid pending or overdue invoice for exactly its full invoice amount using a user-provided payment method. The invoice must have no linked payment or open dispute and must not be paid, disputed, refunded, or partially refunded. Returns a settled payment with a payment_id. Sensitive param on amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount exactly equal to the invoice amount."}, "method": {"type": "string", "minLength": 1, "description": "User-provided payment method."}}, "required": ["invoice_id", "amount", "method"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
     {"name": "refund_invoice", "description": "Refund a paid or partially_refunded invoice whose linked payment is settled. Amount must be positive and no greater than the invoice's remaining refundable amount.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive amount no greater than the remaining refundable amount."}, "reason": {"type": "string"}}, "required": ["invoice_id", "amount"]}, "annotations": {"mutating": True, "sensitive_params": ["invoice_id", "amount"]}},
     {"name": "cancel_payment", "description": "Cancel an existing pending payment before settlement. Requires a payment_id (pay_...), not an invoice_id. Settled or refunded payments cannot be cancelled.", "input_schema": {"type": "object", "properties": {"payment_id": {"type": "string"}, "reason": {"type": "string"}}, "required": ["payment_id"]}, "annotations": {"mutating": True}},
     {"name": "dispute_invoice", "description": "File a dispute on an invoice only when its current status is paid or pending. Requires a non-empty reason.", "input_schema": {"type": "object", "properties": {"invoice_id": {"type": "string"}, "reason": {"type": "string"}, "evidence": {"type": "string"}}, "required": ["invoice_id", "reason"]}, "annotations": {"mutating": True}},
-    {"name": "create_webhook", "description": "Register a webhook endpoint.", "input_schema": {"type": "object", "properties": {"url": {"type": "string"}, "events": {"type": "array"}}, "required": ["url", "events"]}, "annotations": {"mutating": True}},
+    {"name": "create_webhook", "description": "Register a webhook endpoint for one or more event names.", "input_schema": {"type": "object", "properties": {"url": {"type": "string", "minLength": 1}, "events": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": True}}, "required": ["url", "events"]}, "annotations": {"mutating": True}},
     {"name": "list_webhooks", "description": "List registered webhooks.", "input_schema": {"type": "object", "properties": {}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "delete_webhook", "description": "Delete a webhook registration.", "input_schema": {"type": "object", "properties": {"webhook_id": {"type": "string"}}, "required": ["webhook_id"]}, "annotations": {"mutating": True}},
 ]
@@ -39,6 +39,12 @@ class PaymentsServer(StatefulToolServer):
         inv = state["invoices"].get(arguments["invoice_id"])
         if not inv: raise KeyError(f"invoice not found: {arguments['invoice_id']}")
         visible = dict(inv)
+        visible["payment_linked"] = bool(inv.get("payment_id"))
+        visible["dispute_open"] = any(
+            dispute.get("invoice_id") == inv["invoice_id"]
+            and dispute.get("status") == "open"
+            for dispute in state.get("disputes", {}).values()
+        )
         if inv.get("payment_id") and inv["payment_id"] in state["payments"]:
             visible["payment_status"] = state["payments"][inv["payment_id"]]["status"]
         return _result(True, {"invoice": visible}, None, "", False)
@@ -48,6 +54,12 @@ class PaymentsServer(StatefulToolServer):
         invs = []
         for inv in state["invoices"].values():
             visible = dict(inv)
+            visible["payment_linked"] = bool(inv.get("payment_id"))
+            visible["dispute_open"] = any(
+                dispute.get("invoice_id") == inv["invoice_id"]
+                and dispute.get("status") == "open"
+                for dispute in state.get("disputes", {}).values()
+            )
             if inv.get("payment_id") and inv["payment_id"] in state["payments"]:
                 visible["payment_status"] = state["payments"][inv["payment_id"]]["status"]
             invs.append(visible)
@@ -82,7 +94,7 @@ class PaymentsServer(StatefulToolServer):
         amount = float(arguments["amount"])
         if amount <= 0: raise KeyError("amount must be positive")
         if abs(amount - inv["amount"]) > 0.01: raise KeyError(f"amount mismatch: {amount} vs {inv['amount']}")
-        method = arguments.get("method", "card"); pid = f"pay_{state['next_pay_num']:04d}"; state["next_pay_num"] += 1
+        method = arguments["method"]; pid = f"pay_{state['next_pay_num']:04d}"; state["next_pay_num"] += 1
         inv["status"] = "paid"; inv["payment_id"] = pid
         state["payments"][pid] = {"payment_id": pid, "invoice_id": inv_id, "amount": amount, "method": method, "status": "settled"}
         return _result(True, {"invoice": inv, "payment": state["payments"][pid]}, None, "", True)

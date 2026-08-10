@@ -1,1 +1,1 @@
-"""Reward entry points for LiveMCP training."""
+"""Reward computation pipeline."""

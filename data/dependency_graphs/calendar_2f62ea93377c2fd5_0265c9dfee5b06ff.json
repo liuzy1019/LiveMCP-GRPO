@@ -1,0 +1,4373 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "calendar",
+  "schema_hash": "2f62ea93377c2fd5",
+  "tool_names": [
+    "add_attendee",
+    "change_timezone",
+    "check_conflicts",
+    "create_event",
+    "create_recurring",
+    "delete_event",
+    "export_calendar",
+    "get_event",
+    "get_free_busy",
+    "get_recurring_info",
+    "get_working_hours",
+    "list_events",
+    "remove_attendee",
+    "respond_to_event",
+    "search_events",
+    "set_reminder",
+    "update_event"
+  ],
+  "graph": {
+    "add_attendee": {
+      "explicit": [
+        "respond_to_event"
+      ],
+      "implicit": [
+        "remove_attendee"
+      ]
+    },
+    "change_timezone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "check_conflicts": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "create_event": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "create_recurring": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "delete_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "export_calendar": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "get_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_free_busy": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "get_recurring_info": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_working_hours": {
+      "explicit": [
+        "change_timezone"
+      ],
+      "implicit": []
+    },
+    "list_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "remove_attendee": {
+      "explicit": [],
+      "implicit": []
+    },
+    "respond_to_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "set_reminder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_event": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "raw_graph": {
+    "add_attendee": {
+      "explicit": [
+        "respond_to_event"
+      ],
+      "implicit": [
+        "remove_attendee"
+      ]
+    },
+    "change_timezone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "check_conflicts": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "create_event": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "create_recurring": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "delete_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "export_calendar": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "get_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_free_busy": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "get_recurring_info": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_working_hours": {
+      "explicit": [
+        "change_timezone"
+      ],
+      "implicit": []
+    },
+    "list_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "remove_attendee": {
+      "explicit": [],
+      "implicit": []
+    },
+    "respond_to_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "set_reminder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_event": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "add_attendee",
+        "change_timezone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "check_conflicts"
+      ],
+      "source": "check_conflicts",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "create_event"
+      ],
+      "source": "create_event",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "create_recurring"
+      ],
+      "source": "create_recurring",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "delete_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "export_calendar"
+      ],
+      "source": "export_calendar",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_free_busy"
+      ],
+      "source": "get_free_busy",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "remove_attendee"
+      ],
+      "source": "add_attendee",
+      "target": "remove_attendee",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "respond_to_event"
+      ],
+      "source": "add_attendee",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "check_conflicts"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_recurring"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "delete_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "export_calendar"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_working_hours"
+      ],
+      "source": "get_working_hours",
+      "target": "change_timezone",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_recurring"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "delete_event"
+      ],
+      "source": "check_conflicts",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "export_calendar"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_event"
+      ],
+      "source": "check_conflicts",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_recurring_info"
+      ],
+      "source": "check_conflicts",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "remove_attendee"
+      ],
+      "source": "check_conflicts",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "respond_to_event"
+      ],
+      "source": "check_conflicts",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "set_reminder"
+      ],
+      "source": "check_conflicts",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "update_event"
+      ],
+      "source": "check_conflicts",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_event",
+        "create_recurring"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "delete_event"
+      ],
+      "source": "create_event",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_event",
+        "export_calendar"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_event"
+      ],
+      "source": "create_event",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "remove_attendee"
+      ],
+      "source": "create_event",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_event",
+        "respond_to_event"
+      ],
+      "source": "create_event",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_event",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "set_reminder"
+      ],
+      "source": "create_event",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_event",
+        "update_event"
+      ],
+      "source": "create_event",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "delete_event"
+      ],
+      "source": "create_recurring",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "export_calendar"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_event"
+      ],
+      "source": "create_recurring",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_recurring_info"
+      ],
+      "source": "create_recurring",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "remove_attendee"
+      ],
+      "source": "create_recurring",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "respond_to_event"
+      ],
+      "source": "create_recurring",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "set_reminder"
+      ],
+      "source": "create_recurring",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "update_event"
+      ],
+      "source": "create_recurring",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "export_calendar"
+      ],
+      "source": "export_calendar",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_free_busy"
+      ],
+      "source": "get_free_busy",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_event"
+      ],
+      "source": "export_calendar",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_free_busy"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_recurring_info"
+      ],
+      "source": "export_calendar",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "remove_attendee"
+      ],
+      "source": "export_calendar",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "respond_to_event"
+      ],
+      "source": "export_calendar",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "set_reminder"
+      ],
+      "source": "export_calendar",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "update_event"
+      ],
+      "source": "export_calendar",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_free_busy"
+      ],
+      "source": "get_free_busy",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_event",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_event",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_recurring_info"
+      ],
+      "source": "get_free_busy",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "remove_attendee"
+      ],
+      "source": "get_free_busy",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "respond_to_event"
+      ],
+      "source": "get_free_busy",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "set_reminder"
+      ],
+      "source": "get_free_busy",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "update_event"
+      ],
+      "source": "get_free_busy",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_events",
+        "remove_attendee"
+      ],
+      "source": "list_events",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "respond_to_event"
+      ],
+      "source": "list_events",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_events",
+        "set_reminder"
+      ],
+      "source": "list_events",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "update_event"
+      ],
+      "source": "list_events",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_events",
+        "set_reminder"
+      ],
+      "source": "search_events",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "search_events",
+        "update_event"
+      ],
+      "source": "search_events",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "set_reminder",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "add_attendee",
+        "change_timezone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "check_conflicts"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "create_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "add_attendee"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "create_recurring"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "add_attendee"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "add_attendee",
+        "target": "remove_attendee",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "add_attendee",
+          "remove_attendee"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "add_attendee",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "add_attendee",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "add_attendee",
+          "respond_to_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "check_conflicts"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_recurring"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "get_working_hours",
+        "target": "change_timezone",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_working_hours",
+          "change_timezone"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_recurring"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "update_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "create_recurring"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "delete_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "get_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "remove_attendee"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "respond_to_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "set_reminder"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "update_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "delete_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "get_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "get_recurring_info"
+        ],
+        [
+          "get_recurring_info",
+          "create_recurring"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "get_recurring_info"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "remove_attendee"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "respond_to_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "set_reminder"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "update_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "update_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_event"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "update_event"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "update_event"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_free_busy",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "update_event"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_events",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_events",
+        "update_event"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "set_reminder",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "0265c9dfee5b06ff",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "50ac4ac79f3b5336e807d12b177719025bc1369b50db668e447ae8f6c835ca78",
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 136,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 136
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:40Z"
+}

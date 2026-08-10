@@ -46,6 +46,31 @@ else
     fi
 fi
 
+# ── Validate explicit physical GPU IDs ─────────────────────────────
+declare -A _SEEN_GPU_IDS=()
+_CAN_QUERY_NVIDIA_SMI=0
+if command -v nvidia-smi >/dev/null 2>&1 \
+    && nvidia-smi --query-gpu=index --format=csv,noheader >/dev/null 2>&1; then
+    _CAN_QUERY_NVIDIA_SMI=1
+fi
+for gpu_id in "${GPU_INDEX_ARRAY[@]}"; do
+    if [[ ! "${gpu_id}" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: GPU IDs must be non-negative integers: ${gpu_id}" >&2
+        exit 1
+    fi
+    if [[ -n "${_SEEN_GPU_IDS[${gpu_id}]:-}" ]]; then
+        echo "ERROR: Duplicate GPU ID: ${gpu_id}" >&2
+        exit 1
+    fi
+    _SEEN_GPU_IDS["${gpu_id}"]=1
+    if (( _CAN_QUERY_NVIDIA_SMI == 1 )) \
+        && ! nvidia-smi -i "${gpu_id}" --query-gpu=index \
+            --format=csv,noheader >/dev/null 2>&1; then
+        echo "ERROR: GPU ${gpu_id} is not available to nvidia-smi" >&2
+        exit 1
+    fi
+done
+
 # ── Limit GPU count ─────────────────────────────────────────────────
 if [ -n "${GPU_COUNT:-}" ] && [ "${GPU_COUNT}" -lt "${#GPU_INDEX_ARRAY[@]}" ]; then
     GPU_INDEX_ARRAY=("${GPU_INDEX_ARRAY[@]:0:${GPU_COUNT}}")
@@ -83,7 +108,8 @@ GPU_IDS=$(IFS=','; echo "${GPU_INDEX_ARRAY[*]}")
 export CUDA_VISIBLE_DEVICES="${GPU_IDS}"
 
 # ── Detect GPU model & tier ─────────────────────────────────────────
-if GPU_INFO=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | awk 'NR==1{print}' || true); then
+SELECTED_GPU_ID="${GPU_INDEX_ARRAY[0]}"
+if GPU_INFO=$(nvidia-smi -i "${SELECTED_GPU_ID}" --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | awk 'NR==1{print}' || true); then
     GPU_MODEL=$(printf '%s\n' "${GPU_INFO}" | awk -F',' 'NF {gsub(/^ +| +$/, "", $1); print $1; exit}')
     GPU_MEM_MB=$(printf '%s\n' "${GPU_INFO}" | awk -F',' 'NF > 1 {gsub(/^ +| +$/, "", $2); if ($2 ~ /^[0-9]+$/) print $2; exit}')
 fi
@@ -119,7 +145,7 @@ elif echo "${GPU_MODEL}" | grep -qi "A10"; then
     DEFAULT_GPU_MEM_UTIL=0.50
     DEFAULT_PARAM_OFFLOAD=true
     DEFAULT_ENFORCE_EAGER=true
-    DEFAULT_FREE_CACHE=false
+    DEFAULT_FREE_CACHE=true
 elif echo "${GPU_MODEL}" | grep -qi "H100\|H800"; then
     GPU_TIER="Hopper"
     DEFAULT_GPU_MEM_UTIL=0.80
@@ -131,13 +157,13 @@ elif echo "${GPU_MODEL}" | grep -qi "T4"; then
     DEFAULT_GPU_MEM_UTIL=0.40
     DEFAULT_PARAM_OFFLOAD=true
     DEFAULT_ENFORCE_EAGER=true
-    DEFAULT_FREE_CACHE=false
+    DEFAULT_FREE_CACHE=true
 else
     GPU_TIER="unknown"
     DEFAULT_GPU_MEM_UTIL=0.40
     DEFAULT_PARAM_OFFLOAD=true
     DEFAULT_ENFORCE_EAGER=true
-    DEFAULT_FREE_CACHE=false
+    DEFAULT_FREE_CACHE=true
 fi
 
 # Default per-tier tunables (scripts can override)

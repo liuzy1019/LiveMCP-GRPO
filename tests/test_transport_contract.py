@@ -8,12 +8,24 @@ import sys
 from copy import deepcopy
 from types import SimpleNamespace
 
-from mcp.types import CallToolResult, ImageContent, TextContent
+import pytest
+
+try:
+    from mcp.types import CallToolResult, ImageContent, TextContent
+except ModuleNotFoundError:
+    _MCP_AVAILABLE = False
+else:
+    _MCP_AVAILABLE = True
+
+pytestmark = pytest.mark.skipif(
+    not _MCP_AVAILABLE,
+    reason="native MCP transport is optional in the Policy/GRPO environment",
+)
 
 from src.live_mcp.config import load_suite_config, project_root
-from src.live_mcp.manager import LiveMCPManager
+from src.live_mcp.protocol.manager import LiveMCPManager
 from src.live_mcp.server_base import StatefulToolServer, serve
-from src.live_mcp.transport import (
+from src.live_mcp.protocol.transport import (
     MCPStdioTransport,
     TransportError,
     mcp_error_message,
@@ -132,8 +144,6 @@ def test_native_mcp_generic_mutation_without_envelope_is_rejected() -> None:
         structuredContent={"id": "x", "status": "updated"},
         content=[TextContent(type="text", text="updated")],
     )
-
-    import pytest
 
     with pytest.raises(TransportError, match="no auditable LiveMCP envelope"):
         normalize_mcp_tool_response(result)

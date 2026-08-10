@@ -171,10 +171,10 @@ class CalendarServer(StatefulToolServer):
     def add_attendee(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         evt = self._evt(self._state(session_id), arguments["event_id"]); email = self._email(arguments["email"])
         if email in evt.setdefault("attendees", []):
-            old = evt.setdefault("responses", {}).get(email)
             response = arguments.get("response_status")
+            old = evt.get("responses", {}).get(email)
             if response is not None:
-                evt["responses"][email] = response
+                evt.setdefault("responses", {})[email] = response
             return _result(True, {"event_id": evt["event_id"], "attendees": evt["attendees"], "response": response}, None, "", response is not None and old != response)
         evt["attendees"].append(email)
         response = arguments.get("response_status")
@@ -211,10 +211,21 @@ class CalendarServer(StatefulToolServer):
 
     def set_reminder(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         evt = self._evt(self._state(session_id), arguments["event_id"])
-        rid = f"rem_{len(evt.get('reminders', [])) + 1}"; mins = int(arguments["minutes_before"]); method = arguments.get("method", "popup")
+        mins = int(arguments["minutes_before"]); method = arguments.get("method", "popup")
         if mins <= 0: raise KeyError("minutes_before must be positive")
-        evt.setdefault("reminders", []).append({"id": rid, "minutes_before": mins, "method": method})
-        return _result(True, {"event_id": evt["event_id"], "reminders": evt["reminders"]}, None, "", True)
+        reminders = evt.setdefault("reminders", [])
+        existing = next(
+            (item for item in reminders if item.get("minutes_before") == mins),
+            None,
+        )
+        if existing is not None:
+            changed = existing.get("method") != method
+            if changed:
+                existing["method"] = method
+            return _result(True, {"event_id": evt["event_id"], "reminders": reminders}, None, "", changed)
+        rid = f"rem_{len(reminders) + 1}"
+        reminders.append({"id": rid, "minutes_before": mins, "method": method})
+        return _result(True, {"event_id": evt["event_id"], "reminders": reminders}, None, "", True)
 
     def get_working_hours(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return _result(True, {"working_hours": {"monday": "09:00-18:00", "tuesday": "09:00-18:00", "wednesday": "09:00-18:00", "thursday": "09:00-18:00", "friday": "09:00-17:00", "saturday": None, "sunday": None}, "timezone": self._state(session_id).get("timezone", "America/New_York")}, None, "", False)

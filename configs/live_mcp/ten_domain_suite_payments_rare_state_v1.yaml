@@ -1,0 +1,22 @@
+# Controlled payments state-diversity experiment. All settings match the
+# production suite except the payments state profile.
+
+suite_name: ten_domain_live_mcp_payments_rare_state_v1
+servers:
+  - configs/live_mcp/calendar.yaml
+  - configs/live_mcp/shopping.yaml
+  - configs/live_mcp/banking.yaml
+  - configs/live_mcp/email.yaml
+  - configs/live_mcp/filesystem.yaml
+  - configs/live_mcp/payments_rare_state_v1.yaml
+  - configs/live_mcp/crm.yaml
+  - configs/live_mcp/issue_tracker.yaml
+  - configs/live_mcp/team_chat.yaml
+  - configs/live_mcp/food_delivery.yaml
+
+rollout:
+  max_turns: 10
+  observation_max_chars: 4096
+
+reward:
+  supported_profiles: [prove_baseline, oval_full]

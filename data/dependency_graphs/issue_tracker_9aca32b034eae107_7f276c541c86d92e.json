@@ -1,0 +1,6289 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "issue_tracker",
+  "schema_hash": "9aca32b034eae107",
+  "tool_names": [
+    "add_label",
+    "add_to_sprint",
+    "add_watcher",
+    "assign_issue",
+    "comment_issue",
+    "create_issue",
+    "create_sprint",
+    "create_subtask",
+    "get_issue",
+    "get_time_report",
+    "list_issues",
+    "list_members",
+    "list_sprints",
+    "list_subtasks",
+    "remove_from_sprint",
+    "remove_label",
+    "remove_watcher",
+    "set_milestone",
+    "time_track",
+    "transition_issue",
+    "update_issue"
+  ],
+  "graph": {
+    "add_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_to_sprint": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_watcher": {
+      "explicit": [],
+      "implicit": []
+    },
+    "assign_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "comment_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_issue": {
+      "explicit": [
+        "add_label",
+        "add_to_sprint",
+        "add_watcher",
+        "assign_issue",
+        "comment_issue",
+        "create_subtask",
+        "get_issue",
+        "list_subtasks",
+        "remove_from_sprint",
+        "remove_label",
+        "remove_watcher",
+        "set_milestone",
+        "time_track",
+        "transition_issue",
+        "update_issue"
+      ],
+      "implicit": []
+    },
+    "create_sprint": {
+      "explicit": [
+        "add_to_sprint"
+      ],
+      "implicit": []
+    },
+    "create_subtask": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_issue": {
+      "explicit": [
+        "add_to_sprint",
+        "add_watcher",
+        "assign_issue"
+      ],
+      "implicit": []
+    },
+    "get_time_report": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_issues": {
+      "explicit": [
+        "add_label",
+        "add_to_sprint",
+        "add_watcher",
+        "assign_issue",
+        "comment_issue",
+        "create_subtask",
+        "get_issue",
+        "list_subtasks",
+        "remove_from_sprint",
+        "remove_label",
+        "remove_watcher",
+        "set_milestone",
+        "time_track",
+        "transition_issue",
+        "update_issue"
+      ],
+      "implicit": []
+    },
+    "list_members": {
+      "explicit": [
+        "add_watcher",
+        "assign_issue"
+      ],
+      "implicit": []
+    },
+    "list_sprints": {
+      "explicit": [
+        "add_to_sprint"
+      ],
+      "implicit": []
+    },
+    "list_subtasks": {
+      "explicit": [
+        "add_watcher",
+        "assign_issue"
+      ],
+      "implicit": []
+    },
+    "remove_from_sprint": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_watcher": {
+      "explicit": [],
+      "implicit": []
+    },
+    "set_milestone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "time_track": {
+      "explicit": [],
+      "implicit": []
+    },
+    "transition_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_issue": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "raw_graph": {
+    "add_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "add_to_sprint": {
+      "explicit": [],
+      "implicit": [
+        "remove_from_sprint"
+      ]
+    },
+    "add_watcher": {
+      "explicit": [],
+      "implicit": []
+    },
+    "assign_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "comment_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_issue": {
+      "explicit": [
+        "add_label",
+        "add_to_sprint",
+        "add_watcher",
+        "assign_issue",
+        "comment_issue",
+        "create_subtask",
+        "get_issue",
+        "get_time_report",
+        "list_subtasks",
+        "remove_from_sprint",
+        "remove_label",
+        "remove_watcher",
+        "set_milestone",
+        "time_track",
+        "transition_issue",
+        "update_issue"
+      ],
+      "implicit": []
+    },
+    "create_sprint": {
+      "explicit": [
+        "add_to_sprint",
+        "get_time_report",
+        "list_issues"
+      ],
+      "implicit": []
+    },
+    "create_subtask": {
+      "explicit": [
+        "get_issue",
+        "get_time_report",
+        "remove_label",
+        "remove_watcher",
+        "set_milestone",
+        "time_track",
+        "transition_issue",
+        "update_issue"
+      ],
+      "implicit": []
+    },
+    "get_issue": {
+      "explicit": [
+        "add_to_sprint",
+        "add_watcher",
+        "assign_issue",
+        "get_time_report",
+        "remove_watcher"
+      ],
+      "implicit": []
+    },
+    "get_time_report": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_issues": {
+      "explicit": [
+        "add_label",
+        "add_to_sprint",
+        "add_watcher",
+        "assign_issue",
+        "comment_issue",
+        "create_subtask",
+        "get_issue",
+        "list_subtasks",
+        "remove_from_sprint",
+        "remove_label",
+        "remove_watcher",
+        "set_milestone",
+        "time_track",
+        "transition_issue",
+        "update_issue"
+      ],
+      "implicit": []
+    },
+    "list_members": {
+      "explicit": [
+        "add_watcher",
+        "assign_issue",
+        "create_subtask",
+        "remove_watcher"
+      ],
+      "implicit": []
+    },
+    "list_sprints": {
+      "explicit": [
+        "add_to_sprint"
+      ],
+      "implicit": []
+    },
+    "list_subtasks": {
+      "explicit": [
+        "add_watcher",
+        "assign_issue",
+        "remove_from_sprint",
+        "remove_label",
+        "remove_watcher",
+        "time_track",
+        "transition_issue",
+        "update_issue"
+      ],
+      "implicit": []
+    },
+    "remove_from_sprint": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_label": {
+      "explicit": [],
+      "implicit": []
+    },
+    "remove_watcher": {
+      "explicit": [],
+      "implicit": []
+    },
+    "set_milestone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "time_track": {
+      "explicit": [],
+      "implicit": []
+    },
+    "transition_issue": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_issue": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "add_label",
+        "add_to_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "add_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "assign_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "comment_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_issue"
+      ],
+      "source": "create_issue",
+      "target": "add_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_subtask"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_time_report"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_issues"
+      ],
+      "source": "list_issues",
+      "target": "add_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_label",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "add_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "assign_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "comment_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "create_issue"
+      ],
+      "source": "create_issue",
+      "target": "add_to_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "create_sprint"
+      ],
+      "source": "create_sprint",
+      "target": "add_to_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "create_subtask"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "get_issue"
+      ],
+      "source": "get_issue",
+      "target": "add_to_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "get_time_report"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_issues"
+      ],
+      "source": "list_issues",
+      "target": "add_to_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_sprints"
+      ],
+      "source": "list_sprints",
+      "target": "add_to_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "remove_from_sprint"
+      ],
+      "source": "add_to_sprint",
+      "target": "remove_from_sprint",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "assign_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "comment_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "create_issue"
+      ],
+      "source": "create_issue",
+      "target": "add_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "create_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "create_subtask"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "get_issue"
+      ],
+      "source": "get_issue",
+      "target": "add_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "get_time_report"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_issues"
+      ],
+      "source": "list_issues",
+      "target": "add_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_members"
+      ],
+      "source": "list_members",
+      "target": "add_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_subtasks"
+      ],
+      "source": "list_subtasks",
+      "target": "add_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "comment_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "create_issue"
+      ],
+      "source": "create_issue",
+      "target": "assign_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "create_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "create_subtask"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "get_issue"
+      ],
+      "source": "get_issue",
+      "target": "assign_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "get_time_report"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_issues"
+      ],
+      "source": "list_issues",
+      "target": "assign_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_members"
+      ],
+      "source": "list_members",
+      "target": "assign_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_subtasks"
+      ],
+      "source": "list_subtasks",
+      "target": "assign_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "create_issue"
+      ],
+      "source": "create_issue",
+      "target": "comment_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "create_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "create_subtask"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "get_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "get_time_report"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_issues"
+      ],
+      "source": "list_issues",
+      "target": "comment_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "create_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "create_subtask"
+      ],
+      "source": "create_issue",
+      "target": "create_subtask",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "get_issue"
+      ],
+      "source": "create_issue",
+      "target": "get_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "get_time_report"
+      ],
+      "source": "create_issue",
+      "target": "get_time_report",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_issues"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_subtasks"
+      ],
+      "source": "create_issue",
+      "target": "list_subtasks",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "remove_from_sprint"
+      ],
+      "source": "create_issue",
+      "target": "remove_from_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "remove_label"
+      ],
+      "source": "create_issue",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "remove_watcher"
+      ],
+      "source": "create_issue",
+      "target": "remove_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "set_milestone"
+      ],
+      "source": "create_issue",
+      "target": "set_milestone",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "time_track"
+      ],
+      "source": "create_issue",
+      "target": "time_track",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "transition_issue"
+      ],
+      "source": "create_issue",
+      "target": "transition_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_issue",
+        "update_issue"
+      ],
+      "source": "create_issue",
+      "target": "update_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "create_subtask"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "get_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "get_time_report"
+      ],
+      "source": "create_sprint",
+      "target": "get_time_report",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_issues"
+      ],
+      "source": "create_sprint",
+      "target": "list_issues",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "get_issue"
+      ],
+      "source": "create_subtask",
+      "target": "get_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "get_time_report"
+      ],
+      "source": "create_subtask",
+      "target": "get_time_report",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_issues"
+      ],
+      "source": "list_issues",
+      "target": "create_subtask",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_members"
+      ],
+      "source": "list_members",
+      "target": "create_subtask",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "remove_label"
+      ],
+      "source": "create_subtask",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "remove_watcher"
+      ],
+      "source": "create_subtask",
+      "target": "remove_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "set_milestone"
+      ],
+      "source": "create_subtask",
+      "target": "set_milestone",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "time_track"
+      ],
+      "source": "create_subtask",
+      "target": "time_track",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "transition_issue"
+      ],
+      "source": "create_subtask",
+      "target": "transition_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "update_issue"
+      ],
+      "source": "create_subtask",
+      "target": "update_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "get_time_report"
+      ],
+      "source": "get_issue",
+      "target": "get_time_report",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_issues"
+      ],
+      "source": "list_issues",
+      "target": "get_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "remove_watcher"
+      ],
+      "source": "get_issue",
+      "target": "remove_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_issue",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_issues"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "list_members"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "list_subtasks"
+      ],
+      "source": "list_issues",
+      "target": "list_subtasks",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "remove_from_sprint"
+      ],
+      "source": "list_issues",
+      "target": "remove_from_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "remove_label"
+      ],
+      "source": "list_issues",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "remove_watcher"
+      ],
+      "source": "list_issues",
+      "target": "remove_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "set_milestone"
+      ],
+      "source": "list_issues",
+      "target": "set_milestone",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "time_track"
+      ],
+      "source": "list_issues",
+      "target": "time_track",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "transition_issue"
+      ],
+      "source": "list_issues",
+      "target": "transition_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_issues",
+        "update_issue"
+      ],
+      "source": "list_issues",
+      "target": "update_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_members",
+        "list_sprints"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_members",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_members",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_members",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_members",
+        "remove_watcher"
+      ],
+      "source": "list_members",
+      "target": "remove_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_members",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_members",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_members",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_members",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "list_subtasks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "remove_from_sprint"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "remove_from_sprint"
+      ],
+      "source": "list_subtasks",
+      "target": "remove_from_sprint",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "remove_label"
+      ],
+      "source": "list_subtasks",
+      "target": "remove_label",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "remove_watcher"
+      ],
+      "source": "list_subtasks",
+      "target": "remove_watcher",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "time_track"
+      ],
+      "source": "list_subtasks",
+      "target": "time_track",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "transition_issue"
+      ],
+      "source": "list_subtasks",
+      "target": "transition_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "update_issue"
+      ],
+      "source": "list_subtasks",
+      "target": "update_issue",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "remove_label"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "remove_watcher"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_label",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "set_milestone"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "set_milestone",
+        "time_track"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "set_milestone",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "set_milestone",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "time_track",
+        "transition_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "time_track",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "transition_issue",
+        "update_issue"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "add_label",
+        "add_to_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "add_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "assign_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "comment_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "add_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "add_label"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "add_label"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "create_subtask"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "add_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "add_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_label",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "add_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "assign_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "comment_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "create_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "add_to_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "add_to_sprint"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "add_to_sprint"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "create_sprint"
+      ],
+      "raw": {
+        "source": "create_sprint",
+        "target": "add_to_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_sprint",
+          "add_to_sprint"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_sprint",
+          "add_to_sprint"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "create_subtask"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "get_issue",
+        "target": "add_to_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_issue",
+          "add_to_sprint"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "add_to_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "add_to_sprint"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "list_sprints",
+        "target": "add_to_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_sprints",
+          "add_to_sprint"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "add_to_sprint",
+        "target": "remove_from_sprint",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_to_sprint",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "assign_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "comment_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "create_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "add_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "add_watcher"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "add_watcher"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "create_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "create_subtask"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "get_issue",
+        "target": "add_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_issue",
+          "add_watcher"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "add_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "add_watcher"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_members"
+      ],
+      "raw": {
+        "source": "list_members",
+        "target": "add_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_members",
+          "add_watcher"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "add_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_subtasks",
+          "add_watcher"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_watcher",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "comment_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "create_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "assign_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "assign_issue"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "assign_issue"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "create_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "create_subtask"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "get_issue",
+        "target": "assign_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_issue",
+          "assign_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "assign_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "assign_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_members"
+      ],
+      "raw": {
+        "source": "list_members",
+        "target": "assign_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_members",
+          "assign_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "assign_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_subtasks",
+          "assign_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "assign_issue",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "create_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "comment_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "comment_issue"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "comment_issue"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "create_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "create_subtask"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "comment_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "comment_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "comment_issue",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "create_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "create_subtask"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "create_subtask",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "create_subtask"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "create_subtask"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "get_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "get_issue"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "get_issue"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "get_time_report",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "list_subtasks",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "list_subtasks"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "list_subtasks"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "remove_from_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "remove_from_sprint"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "remove_from_sprint"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "remove_label"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "remove_label"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "remove_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "remove_watcher"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "remove_watcher"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "set_milestone",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "set_milestone"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "set_milestone"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "time_track"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "time_track",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "time_track"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "time_track"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "transition_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "transition_issue"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "transition_issue"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_issue",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "create_issue",
+        "target": "update_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_issue",
+          "update_issue"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_issue",
+          "update_issue"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "create_subtask"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "create_sprint",
+        "target": "get_time_report",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "create_sprint",
+        "target": "list_issues",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_sprint",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "get_issue"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "get_issue",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "get_time_report",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "create_subtask",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "create_subtask"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_members"
+      ],
+      "raw": {
+        "source": "list_members",
+        "target": "create_subtask",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "remove_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "set_milestone",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "time_track"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "time_track",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "transition_issue",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_subtask",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "create_subtask",
+        "target": "update_issue",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "get_time_report"
+      ],
+      "raw": {
+        "source": "get_issue",
+        "target": "get_time_report",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "get_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "get_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "get_issue",
+        "target": "remove_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_issue",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_issues"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_time_report",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "list_members"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "list_subtasks",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "list_subtasks"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "remove_from_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "remove_from_sprint"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "remove_label"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "remove_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "remove_watcher"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "set_milestone",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "set_milestone"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "time_track"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "time_track",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "time_track"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "transition_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "transition_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_issues",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "list_issues",
+        "target": "update_issue",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_issues",
+          "update_issue"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "list_sprints"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "list_members",
+        "target": "remove_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_members",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "list_subtasks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_sprints",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "remove_from_sprint"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "remove_from_sprint",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "remove_label",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "remove_watcher",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "time_track"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "time_track",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "transition_issue",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_subtasks",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "list_subtasks",
+        "target": "update_issue",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "remove_label"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_from_sprint",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "remove_watcher"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_label",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "set_milestone"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_watcher",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "set_milestone",
+        "time_track"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "set_milestone",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "set_milestone",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "time_track",
+        "transition_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "time_track",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "transition_issue",
+        "update_issue"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "7f276c541c86d92e",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "193430de3aedd64702741931ac1758d7a883753d017df96a44a7a0bd5be0d6bc",
+  "tool_count": 21,
+  "expected_pair_count": 210,
+  "classified_pair_count": 210,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 210,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 188,
+    "contradicted": 22
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:48Z"
+}

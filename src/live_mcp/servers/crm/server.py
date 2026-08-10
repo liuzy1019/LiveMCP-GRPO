@@ -20,7 +20,7 @@ TOOLS = [
     {"name": "update_deal", "description": "Update at least one of deal stage or amount. Any supplied amount must be greater than zero.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive deal amount; must be greater than zero."}}, "required": ["deal_id"]}, "annotations": {"mutating": True}},
     {"name": "list_deals", "description": "List deals by stage/contact/lead.", "input_schema": {"type": "object", "properties": {"stage": {"type": "string"}, "contact_id": {"type": "string"}, "lead_id": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "get_deal", "description": "Get full deal details with linked contact/lead.", "input_schema": {"type": "object", "properties": {"deal_id": {"type": "string"}}, "required": ["deal_id"]}, "annotations": {"readonly": True, "mutating": False}},
-    {"name": "create_task", "description": "Create a task related to at least one existing deal or contact.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "deal_id": {"type": "string", "description": "Existing deal_id; at least deal_id or contact_id is required."}, "contact_id": {"type": "string", "description": "Existing contact_id; at least deal_id or contact_id is required."}, "due_date": {"type": "string"}, "priority": {"type": "string"}}, "required": ["title"]}, "annotations": {"mutating": True}},
+    {"name": "create_task", "description": "Create a task. At least one of deal_id or contact_id must reference an existing entity.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "deal_id": {"type": "string", "description": "Existing deal_id. At least one of deal_id or contact_id is required."}, "contact_id": {"type": "string", "description": "Existing contact_id. At least one of deal_id or contact_id is required."}, "due_date": {"type": "string"}, "priority": {"type": "string"}}, "required": ["title"]}, "annotations": {"mutating": True}},
     {"name": "list_tasks", "description": "List tasks by status, deal, or priority.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "deal_id": {"type": "string"}, "priority": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "complete_task", "description": "Mark a task as completed.", "input_schema": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}, "annotations": {"mutating": True}},
     {"name": "add_note", "description": "Add a note to a deal, contact, or lead.", "input_schema": {"type": "object", "properties": {"entity_type": {"type": "string"}, "entity_id": {"type": "string"}, "content": {"type": "string"}}, "required": ["entity_type", "entity_id", "content"]}, "annotations": {"mutating": True}},
@@ -32,6 +32,35 @@ class CRMServer(StatefulToolServer):
     def __init__(self) -> None:
         super().__init__("crm", TOOLS)
         self.handlers = {t["name"]: getattr(self, t["name"]) for t in TOOLS}
+
+    @staticmethod
+    def _lead_deletable(state: dict[str, Any], lead_id: str) -> bool:
+        lead = state["leads"].get(lead_id)
+        return bool(lead) and lead.get("status") != "converted" and not any(
+            deal.get("lead_id") == lead_id
+            for deal in state["deals"].values()
+        ) and not any(
+            note.get("entity_type") == "lead"
+            and note.get("entity_id") == lead_id
+            for note in state.get("notes", {}).values()
+        )
+
+    @staticmethod
+    def _contact_deletable(state: dict[str, Any], contact_id: str) -> bool:
+        references = (
+            (state["deals"].values(), "contact_id"),
+            (state["leads"].values(), "contact_id"),
+            (state.get("tasks", {}).values(), "contact_id"),
+        )
+        return contact_id in state["contacts"] and not any(
+            item.get(field) == contact_id
+            for items, field in references
+            for item in items
+        ) and not any(
+            note.get("entity_type") == "contact"
+            and note.get("entity_id") == contact_id
+            for note in state.get("notes", {}).values()
+        )
 
     def create_lead(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); lid = f"lead_{state['next_lead_num']:04d}"; state["next_lead_num"] += 1
@@ -68,19 +97,16 @@ class CRMServer(StatefulToolServer):
     def delete_lead(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); lid = arguments["lead_id"]; lead = state["leads"].get(lid)
         if not lead: raise KeyError(f"lead not found: {lid}")
-        if lead["status"] == "converted": raise KeyError("cannot delete converted lead")
-        refs = [d for d in state["deals"].values() if d.get("lead_id") == lid]
-        if refs: raise KeyError(f"lead referenced by {len(refs)} deal(s)")
-        note_refs = [
-            note for note in state.get("notes", {}).values()
-            if note.get("entity_type") == "lead" and note.get("entity_id") == lid
-        ]
-        if note_refs: raise KeyError(f"lead referenced by {len(note_refs)} note(s)")
+        if not self._lead_deletable(state, lid):
+            raise KeyError("lead is converted or referenced")
         state["leads"].pop(lid)
         return _result(True, {"deleted_lead": lead}, None, "", True)
 
     def list_leads(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        state = self._state(session_id); leads = list(state["leads"].values())
+        state = self._state(session_id); leads = [
+            {**lead, "deletable": self._lead_deletable(state, lead_id)}
+            for lead_id, lead in state["leads"].items()
+        ]
         if arguments.get("status"): leads = [l for l in leads if l["status"] == arguments["status"]]
         if arguments.get("source"): leads = [l for l in leads if l["source"] == arguments["source"]]
         if arguments.get("company"): leads = [l for l in leads if l["company"] == arguments["company"]]
@@ -109,24 +135,8 @@ class CRMServer(StatefulToolServer):
     def delete_contact(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); cid = arguments["contact_id"]
         if cid not in state["contacts"]: raise KeyError(f"contact not found: {cid}")
-        deal_refs = [d for d in state["deals"].values() if d.get("contact_id") == cid]
-        if deal_refs: raise KeyError(f"contact referenced by {len(deal_refs)} deal(s)")
-        # convert_lead persists the new contact_id on the source lead.  Removing
-        # that contact without checking the reverse reference creates a live
-        # state that Replay can reproduce but no later CRM tool can resolve.
-        lead_refs = [lead for lead in state["leads"].values() if lead.get("contact_id") == cid]
-        if lead_refs:
-            raise KeyError(f"contact referenced by {len(lead_refs)} converted lead(s)")
-        task_refs = [
-            task for task in state.get("tasks", {}).values()
-            if task.get("contact_id") == cid
-        ]
-        if task_refs: raise KeyError(f"contact referenced by {len(task_refs)} task(s)")
-        note_refs = [
-            note for note in state.get("notes", {}).values()
-            if note.get("entity_type") == "contact" and note.get("entity_id") == cid
-        ]
-        if note_refs: raise KeyError(f"contact referenced by {len(note_refs)} note(s)")
+        if not self._contact_deletable(state, cid):
+            raise KeyError("contact is referenced")
         state["contacts"].pop(cid)
         return _result(True, {"deleted_contact_id": cid}, None, "", True)
 
@@ -175,6 +185,13 @@ class CRMServer(StatefulToolServer):
         state = self._state(session_id); deal = state["deals"].get(arguments["deal_id"])
         if not deal: raise KeyError(f"deal not found: {arguments['deal_id']}")
         contact = state["contacts"].get(deal.get("contact_id")) if deal.get("contact_id") else None
+        if contact is not None:
+            contact = {
+                **contact,
+                "deletable": self._contact_deletable(
+                    state, str(contact["contact_id"]),
+                ),
+            }
         lead = state["leads"].get(deal.get("lead_id")) if deal.get("lead_id") else None
         return _result(True, {"deal": deal, "contact": contact, "lead": lead}, None, "", False)
 

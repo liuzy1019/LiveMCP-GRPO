@@ -315,8 +315,15 @@ def compute_grpo_outcome_advantage(
                 id2std[idx] = torch.tensor(1.0)
             elif len(id2score[idx]) > 1:
                 scores_tensor = torch.stack(id2score[idx])
-                id2mean[idx] = torch.mean(scores_tensor)
-                id2std[idx] = torch.std(scores_tensor)
+                if torch.all(scores_tensor == scores_tensor[0]):
+                    # Preserve the exact GRPO invariant for saturated groups.
+                    # A float32 reduction can round the mean away from the
+                    # repeated value and amplify that error through epsilon.
+                    id2mean[idx] = scores_tensor[0]
+                    id2std[idx] = torch.zeros_like(scores_tensor[0])
+                else:
+                    id2mean[idx] = torch.mean(scores_tensor)
+                    id2std[idx] = torch.std(scores_tensor)
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):

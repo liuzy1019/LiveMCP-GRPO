@@ -2,11 +2,22 @@
 共享工具函数：extra_info / metadata 的 JSON-string normalization、数据迭代。
 
 verl/pyarrow 序列化后，extra_info 及其嵌套字段可能变为 JSON 字符串。
-本模块提供统一的 normalize 函数，供 reward、replay loop、register_estimator 复用。
+本模块提供统一的 normalize 函数，供 reward、replay loop、estimator 复用。
 """
 
+import hashlib
 import json
+from pathlib import Path
 from typing import Any, Iterable
+
+
+def sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest of a file without loading it into memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def normalize_extra_info(value: Any) -> dict:

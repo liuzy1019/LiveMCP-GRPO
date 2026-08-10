@@ -1,416 +1,195 @@
 #!/usr/bin/env python3
-"""系统性对抗审查 — 对所有 domain、tool、映射、数据结构的交叉验证。
+"""Audit all public tools against the canonical PROVE semantic contracts."""
 
-覆盖:
-  A. Server TOOLS annotation 与 ToolSemantics 的全量匹配
-  C. _CREATED_ENTITY_BY_TOOL 引用的 tool name 是否真实存在
-  D. _DOMAIN_TOOL_REQUIREMENTS 引用的 tool name 是否真实存在
-  E. _UNSAFE_SHORTCUT_TOOLS 引用的 tool name 是否真实存在
-  F. _ACTION_KEYWORD_MAP 引用的 tool name 是否真实存在
-  H. _detect_missing_dependency 对抗性边界案例
-  I. _classify_scenario 轨迹分类对抗性测试
-  J. _tool_entity 对全部公开工具的覆盖
-"""
-import sys, os, traceback
+from __future__ import annotations
+
 import importlib
+import sys
+from pathlib import Path
+from typing import Any
 
-sys.path.insert(0, ".")
-from src.live_mcp.orchestrator import (
-    _tool_entity as orch_entity,
-    _UNSAFE_SHORTCUT_TOOLS,
-    _CREATED_ENTITY_BY_TOOL, _DOMAIN_TOOL_REQUIREMENTS,
-    _detect_missing_dependency,
-    _classify_scenario,
-    _tool_existing_entity_requirements,
-    _tool_relevant_entity_types,
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.live_mcp.contracts.catalog import domain_contract_registry
+from src.live_mcp.contracts.factory import build_contract_registry
+from src.live_mcp.generation.scenario import (
+    classify_scenario,
+    detect_duplicate_side_effect,
+    detect_missing_dependency,
+)
+from src.live_mcp.registry.tool_semantics import (
+    build_tool_semantics,
+    is_mutating_tool,
 )
 from src.live_mcp.types import OracleCall
-from src.live_mcp.tool_semantics import is_mutating_tool
 
-# ── Parse all server TOOLS ──
 
-def parse_domain_tools() -> tuple[dict[str, set[str]], dict[str, dict[str, dict]]]:
-    """Return (domain→tool_names, domain→tool_name→annotations)."""
-    servers_dir = os.path.join(os.path.dirname(__file__), "..", "src", "live_mcp", "servers")
-    domain_names: dict[str, set[str]] = {}
-    domain_anns: dict[str, dict[str, dict]] = {}
-
-    for domain in sorted(os.listdir(servers_dir)):
-        path = os.path.join(servers_dir, domain, "server.py")
-        if not os.path.isfile(path):
-            continue
-        public_tools = importlib.import_module(
+def load_domain_schemas() -> dict[str, list[dict[str, Any]]]:
+    schemas: dict[str, list[dict[str, Any]]] = {}
+    servers_root = PROJECT_ROOT / "src" / "live_mcp" / "servers"
+    for server_path in sorted(servers_root.glob("*/server.py")):
+        domain = server_path.parent.name
+        module = importlib.import_module(
             f"src.live_mcp.servers.{domain}.server"
-        ).TOOLS
-        tools = {str(tool["name"]) for tool in public_tools}
-        anns = {
-            str(tool["name"]): dict(tool.get("annotations") or {})
-            for tool in public_tools
-        }
-        domain_names[domain] = tools
-        domain_anns[domain] = anns
-    return domain_names, domain_anns
+        )
+        schemas[domain] = list(module.TOOLS)
+    return schemas
 
-FAIL = 0
 
-def section(title: str) -> None:
-    print(f"\n{'='*70}\n{title}\n{'='*70}")
-
-domain_tools, domain_anns = parse_domain_tools()
-all_tool_names: set[str] = set()
-for tools in domain_tools.values():
-    all_tool_names.update(tools)
-total_tool_count = sum(len(tools) for tools in domain_tools.values())
-
-all_mutating: set[str] = set()
-total_mutating_count = 0
-for domain, anns in domain_anns.items():
-    for name, ann in anns.items():
-        if ann.get("mutating") and not ann.get("readonly"):
-            all_mutating.add(name)
-            total_mutating_count += 1
-
-# ═════════════════════════════════════════════════════════════════
-# A. ToolSemantics coverage of all server-annotated mutating tools
-# ═════════════════════════════════════════════════════════════════
-section("A. ToolSemantics vs 所有 server-annotated mutating tools")
-
-missed_mutating = []
-for domain, anns in domain_anns.items():
-    for tool, ann in anns.items():
-        if ann.get("mutating") and not is_mutating_tool(tool, domain):
-            missed_mutating.append(f"{domain}.{tool}")
-
-if missed_mutating:
-    for t in missed_mutating:
-        print(f"  ❌ {t} is annotated mutating but ToolSemantics returns False")
-    FAIL += len(missed_mutating)
-else:
-    print(f"  ✅ All {total_mutating_count} server-annotated mutating tools covered")
-
-# ═════════════════════════════════════════════════════════════════
-# C. _CREATED_ENTITY_BY_TOOL 的 tool name 必须存在于任何 server 中
-# ═════════════════════════════════════════════════════════════════
-section("C. _CREATED_ENTITY_BY_TOOL 引用的 tool name 存在性")
-
-ghost_ce = []
-for tool in sorted(_CREATED_ENTITY_BY_TOOL):
-    if tool not in all_tool_names:
-        ghost_ce.append(tool)
-if ghost_ce:
-    for t in ghost_ce:
-        print(f"  ❌ '{t}' NOT FOUND in any server TOOLS")
-    FAIL += len(ghost_ce)
-else:
-    print(f"  ✅ All {len(_CREATED_ENTITY_BY_TOOL)} tools exist in server TOOLS")
-
-# ═════════════════════════════════════════════════════════════════
-# D. _DOMAIN_TOOL_REQUIREMENTS 引用的 tool name 存在性
-# ═════════════════════════════════════════════════════════════════
-section("D. _DOMAIN_TOOL_REQUIREMENTS 引用的 tool name 存在性")
-
-ghost_dtr = []
-for domain, reqs in sorted(_DOMAIN_TOOL_REQUIREMENTS.items()):
-    dt = domain_tools.get(domain, set())
-    for tool in sorted(reqs):
-        if tool not in dt:
-            ghost_dtr.append(f"{domain}/{tool}")
-if ghost_dtr:
-    for t in ghost_dtr:
-        print(f"  ❌ '{t}' NOT FOUND in domain server TOOLS")
-    FAIL += len(ghost_dtr)
-else:
-    total_reqs = sum(len(v) for v in _DOMAIN_TOOL_REQUIREMENTS.values())
-    print(f"  ✅ All {total_reqs} requirements reference existing tools in correct domains")
-
-# ═════════════════════════════════════════════════════════════════
-# E. _UNSAFE_SHORTCUT_TOOLS 引用的 tool name 存在性
-# ═════════════════════════════════════════════════════════════════
-section("E. _UNSAFE_SHORTCUT_TOOLS 引用的 tool name 存在性")
-
-ghost_us = []
-for domain, tools in sorted(_UNSAFE_SHORTCUT_TOOLS.items()):
-    dt = domain_tools.get(domain, set())
-    for tool in sorted(tools):
-        if tool not in dt:
-            ghost_us.append(f"{domain}/{tool}")
-if ghost_us:
-    for t in ghost_us:
-        print(f"  ❌ '{t}' NOT FOUND in domain server TOOLS")
-    FAIL += len(ghost_us)
-else:
-    total_us = sum(len(v) for v in _UNSAFE_SHORTCUT_TOOLS.values())
-    print(f"  ✅ All {total_us} executor tools exist in correct domains")
-
-# ═════════════════════════════════════════════════════════════════
-# E2. missing_dependency 行为覆盖：有既有实体依赖的 mutating 工具必须被拦截
-# ═════════════════════════════════════════════════════════════════
-section("E2. missing_dependency 行为覆盖 vs server annotations")
-
-e2_fail = False
-for domain, anns in sorted(domain_anns.items()):
-    domain_mutating = {t for t, a in anns.items()
-                       if a.get("mutating") and not a.get("readonly")}
-    for tool in sorted(domain_mutating):
-        requirements = _tool_existing_entity_requirements(tool, domain)
-        calls = [OracleCall(action="tool_call", tool_name=tool, arguments={})]
-        detected = _detect_missing_dependency(calls, domain)
-        if requirements and not detected:
-            print(
-                f"  ❌ {domain}/{tool}: requirements={sorted(requirements)} "
-                "but single-step call is NOT classified missing_dependency"
-            )
-            e2_fail = True
-        if not requirements and detected:
-            print(
-                f"  ❌ {domain}/{tool}: no existing-entity requirements "
-                "but single-step call IS classified missing_dependency"
-            )
-            e2_fail = True
-if not e2_fail:
-    print("  ✅ All dependency-requiring mutating tools are behaviorally covered")
-else:
-    FAIL += 1
-
-# ═════════════════════════════════════════════════════════════════
-# G. No mutation-prefix inference remains
-# ═════════════════════════════════════════════════════════════════
-section("G. ToolSemantics has no prefix-inference layer")
-print("  ✅ Mutation semantics are exact domain/tool mappings")
-
-# ═════════════════════════════════════════════════════════════════
-# H. _detect_missing_dependency 对抗性边界案例
-# ═════════════════════════════════════════════════════════════════
-section("H. _detect_missing_dependency 对抗性边界案例")
-
-h_cases = [
-    # (name, domain, calls, expect_missing_dep, description)
-    # Case 1: read→executor with matching entity → should NOT flag
-    ("read→executor_OK",
-     "email", [("list_inbox", {}), ("reply_email", {})], False,
-     "list_inbox resolves email, reply_email consumes email"),
-    ("read→executor_OK_2",
-     "email", [("get_thread", {}), ("reply_email", {})], False,
-     "get_thread resolves email, reply_email consumes email"),
-    ("read→executor_OK_3",
-     "email", [("get_attachments", {}), ("reply_email", {})], False,
-     "get_attachments resolves email, reply_email consumes email"),
-    # Case 2: executor+creator (like send_email) → exempted
-    ("self_contained_OK",
-     "email", [("send_email", {})], False,
-     "send_email is self-contained, no read needed"),
-    # Case 3: check_orchestrator alone → should flag (executor without read)
-    ("checkout_alone_BAD",
-     "shopping", [("checkout", {})], True,
-     "checkout is executor, no preceding read → missing dep"),
-    # Case 4: add_to_cart creates a cart item but still requires a discovered product.
-    ("add_to_cart_alone_BAD",
-     "shopping", [("add_to_cart", {}), ("checkout", {})], True,
-     "add_to_cart without preceding product read → missing dep"),
-    # Case 5: get_product resolves the input entity, then add_to_cart produces cart item for checkout.
-    ("add_to_cart_checkout_OK",
-     "shopping", [("get_product", {}), ("add_to_cart", {}), ("checkout", {})], False,
-     "get_product→add_to_cart→checkout should pass"),
-    # Case 6: reply_email alone (executor, no preceding read, not self-contained) → should flag
-    ("reply_alone_BAD",
-     "email", [("reply_email", {})], True,
-     "reply_email without preceding read → missing dep"),
-    # Case 7: archive_channel alone → should flag
-    ("archive_alone_BAD",
-     "team_chat", [("archive_channel", {})], True,
-     "archive_channel without preceding read → missing dep"),
-    # Case 8: read only chain (no executor) → should NOT flag
-    ("read_only_OK",
-     "email", [("list_inbox", {}), ("get_email", {})], False,
-     "no executor tools in chain, no dependency check needed"),
-    # Case 9: forward_email with list_inbox → OK
-    ("forward_OK",
-     "email", [("list_inbox", {}), ("forward_email", {})], False,
-     "list_inbox→forward_email should pass"),
-    # Case 10: mark_read with list_inbox → OK
-    ("mark_read_OK",
-     "email", [("list_inbox", {}), ("mark_read", {})], False,
-     "list_inbox→mark_read should pass"),
-    # Case 11: update_event alone (calendar executor) → flag
-    ("update_event_alone_BAD",
-     "calendar", [("update_event", {})], True,
-     "update_event without preceding read → missing dep"),
-    # Case 12: create_event (creator) → exempted
-    ("create_event_OK",
-     "calendar", [("create_event", {})], False,
-     "create_event is creator → exempted"),
-]
-
-h_fail = False
-for name, domain, calls_raw, expect, desc in h_cases:
-    calls = [OracleCall(action='tool_call', tool_name=n, arguments=a)
-             for n, a in calls_raw]
-    try:
-        result = _detect_missing_dependency(calls, domain)
-    except Exception as e:
-        print(f"  ❌ [{name}] EXCEPTION: {e}")
-        h_fail = True
-        continue
-    if result != expect:
-        print(f"  ❌ [{name}] {desc}: expected missing_dep={expect}, got {result}")
-        h_fail = True
-# A tool from another domain is a contract violation, not a read-only fallback.
-try:
-    _detect_missing_dependency(
-        [OracleCall(action="tool_call", tool_name="send_email", arguments={})],
-        "shopping",
-    )
-except ValueError:
-    pass
-else:
-    print("  ❌ [wrong_domain_REJECTED] cross-domain tool was accepted")
-    h_fail = True
-
-if not h_fail:
-    print(
-        f"  ✅ All {len(h_cases)} dependency cases pass; "
-        "cross-domain tools fail closed"
+def call(name: str, **arguments: Any) -> OracleCall:
+    return OracleCall(
+        action="tool_call", tool_name=name, arguments=arguments,
     )
 
-if h_fail:
-    FAIL += 1
 
-# ═════════════════════════════════════════════════════════════════
-# I. _classify_scenario 对抗性测试
-# ═════════════════════════════════════════════════════════════════
-section("I. _classify_scenario 轨迹分类对抗性测试")
+def main() -> int:
+    schemas = load_domain_schemas()
+    registry = build_contract_registry(schemas)
+    failures: list[str] = []
+    total_tools = sum(len(items) for items in schemas.values())
+    mutating_count = 0
 
-i_cases = [
-    # (name, server, oracle_calls, exec_hist, terminal_action, expected)
-    ("clarification_no_calls",
-     "shopping",
-     [],  # empty oracle
-     [],  # empty history
-     "ask_clarification",
-     "clarification_required"),
-    ("normal_read_only",
-     "shopping",
-     [("get_product", {})],
-     [{"tool_name": "get_product", "success": True}],
-     "final_answer",
-     "normal_safe_success"),
-    # missing_dependency: checkout alone → should flag
-    ("checkout_missing_dep",
-     "shopping",
-     [("checkout", {})],
-     [{"tool_name": "checkout", "success": True}],
-     "final_answer",
-     "missing_dependency"),
-    # tool_error_recovery: has execution failure
-    ("error_recovery",
-     "shopping",
-     [("get_product", {}), ("add_to_cart", {})],
-     [{"tool_name": "get_product", "success": True},
-      {"tool_name": "add_to_cart", "success": False}],
-     "final_answer",
-     "tool_error_recovery"),
-    # normal_safe_success: read→executor chain with all success
-    ("normal_chain",
-     "shopping",
-     [("get_cart", {}), ("checkout", {})],
-     [{"tool_name": "get_cart", "success": True},
-      {"tool_name": "checkout", "success": True}],
-     "final_answer",
-     "normal_safe_success"),
-]
+    for domain, tool_schemas in sorted(schemas.items()):
+        names = {str(schema["name"]) for schema in tool_schemas}
+        registered = {contract.name for contract in registry.domain(domain)}
+        if registered != names:
+            failures.append(
+                f"{domain}: registry mismatch missing={sorted(names - registered)} "
+                f"extra={sorted(registered - names)}"
+            )
+        if {
+            contract.name
+            for contract in domain_contract_registry(domain).domain(domain)
+        } != names:
+            failures.append(f"{domain}: catalog registry does not match public schema")
 
-i_fail = False
-for name, server, calls_raw, exec_hist, term_action, expect in i_cases:
-    calls = [OracleCall(action='tool_call', tool_name=n, arguments=a)
-             if isinstance(n, str) else n
-             for n, a in (calls_raw if calls_raw else [])]
-    try:
-        result = _classify_scenario(server, calls, exec_hist, term_action, 42)
-    except Exception as e:
-        traceback.print_exc()
-        print(f"  ❌ [{name}] EXCEPTION: {e}")
-        i_fail = True
-        continue
-    if result != expect:
-        print(f"  ❌ [{name}] expected '{expect}', got '{result}'")
-        i_fail = True
-if not i_fail:
-    print(f"  ✅ All {len(i_cases)} _classify_scenario cases pass")
+        semantics = build_tool_semantics(domain, tool_schemas)
+        if set(semantics) != names:
+            failures.append(f"{domain}: execution semantics coverage mismatch")
 
-if i_fail:
-    FAIL += 1
+        for schema in tool_schemas:
+            name = str(schema["name"])
+            annotations = schema.get("annotations") or {}
+            schema_mutating = bool(annotations.get("mutating")) and not bool(
+                annotations.get("readonly")
+            )
+            mutating_count += int(schema_mutating)
+            if is_mutating_tool(name, domain) != schema_mutating:
+                failures.append(
+                    f"{domain}.{name}: schema/ToolSemantics mutation mismatch"
+                )
 
-# ═════════════════════════════════════════════════════════════════
-# J. _tool_entity 全量覆盖（所有 server tool）
-# ═════════════════════════════════════════════════════════════════
-section("J. _tool_entity 全量覆盖（所有 server tool）")
+            contract = registry.get(domain, name)
+            required = frozenset(
+                schema.get("input_schema", {}).get("required", []) or []
+            )
+            if contract.required_arguments != required:
+                failures.append(
+                    f"{domain}.{name}: required arguments "
+                    f"{contract.required_arguments!r} != schema {required!r}"
+                )
+            properties = set(
+                (schema.get("input_schema", {}).get("properties") or {}).keys()
+            )
+            for binding in contract.input_entities:
+                if binding.name not in properties:
+                    failures.append(
+                        f"{domain}.{name}: entity binding {binding.name!r} "
+                        "is absent from input schema"
+                    )
+            for group in contract.precondition_groups:
+                for predicate in group:
+                    subject = predicate.subject
+                    if (
+                        subject.source == "argument"
+                        and subject.name not in properties
+                    ):
+                        failures.append(
+                            f"{domain}.{name}: predicate argument "
+                            f"{subject.name!r} is absent from input schema"
+                        )
 
-j_fail = False
-for domain, tools in sorted(domain_tools.items()):
-    for tool in sorted(tools):
-        oe = orch_entity(tool, domain)
-        if not oe:
-            print(f"  ❌ {domain}/{tool}: empty entity mapping")
-            j_fail = True
-if not j_fail:
-    print(f"  ✅ All domain/tool entity mappings are non-empty")
-else:
-    FAIL += 1
+    dependency_cases = [
+        (
+            "calendar grounded update",
+            [call("update_event", event_id="evt_001", title="x")],
+            "calendar",
+            False,
+        ),
+        (
+            "calendar ungrounded update",
+            [call("update_event")],
+            "calendar",
+            True,
+        ),
+        (
+            "calendar creator",
+            [call("create_event", title="x")],
+            "calendar",
+            False,
+        ),
+        (
+            "shopping grounded chain",
+            [
+                call("get_product", product_id="prod_001"),
+                call("add_to_cart", product_id="prod_001", quantity=1),
+                call("checkout"),
+            ],
+            "shopping",
+            False,
+        ),
+    ]
+    for label, calls, domain, expected in dependency_cases:
+        actual = detect_missing_dependency(calls, domain)
+        if actual != expected:
+            failures.append(
+                f"{label}: missing_dependency={actual}, expected={expected}"
+            )
 
-# ═════════════════════════════════════════════════════════════════
-# K. 跨 domain entity 混淆检测
-# ═════════════════════════════════════════════════════════════════
-section("K. 跨 domain entity 混淆检测")
+    if not detect_duplicate_side_effect(
+        [call("delete_event", event_id="evt_001"), call("create_event")],
+        "calendar",
+    ):
+        failures.append("calendar delete/create shortcut was not detected")
 
-# 对每个 domain 的每个 executor，如果 _tool_entity 返回的 entity 在
-# 该 domain 的 read 工具中找不到匹配 → entity 映射可能跨 domain 错误
-k_fail = False
-read_prefixes = ("list_", "search_", "get_", "find_", "lookup_", "check_",
-                 "view_", "browse_", "ls", "cat", "pwd", "stat", "head", "tail")
-for domain, tools in sorted(domain_tools.items()):
-    domain_reads = {t for t in tools
-                    if any(t.lower().startswith(p) for p in read_prefixes)}
-    domain_executors = _UNSAFE_SHORTCUT_TOOLS.get(domain, set())
-    for exec_tool in domain_executors:
-        exec_entity = orch_entity(exec_tool, domain)
-        # Check: is there ANY read tool in this domain that resolves this entity.
-        matching_reads = [
-            t for t in domain_reads
-            if exec_entity == orch_entity(t, domain)
-            or exec_entity in _tool_relevant_entity_types(t, domain)
-        ]
-        if not matching_reads:
-            # Check all domains: where IS this entity resolved?
-            all_matching = []
-            for d, ts in domain_tools.items():
-                for t in ts:
-                    if any(t.lower().startswith(p) for p in read_prefixes):
-                        if (
-                            orch_entity(t, d) == exec_entity
-                            or exec_entity in _tool_relevant_entity_types(t, d)
-                        ):
-                            all_matching.append(f"{d}/{t}")
-            print(f"  ⚠️  {domain}/{exec_tool}: entity='{exec_entity}' not resolved by any read in {domain}")
-            print(f"      Should be resolved in: {all_matching if all_matching else 'NOWHERE'}")
-            k_fail = True
+    scenario_cases = [
+        (
+            "clarification",
+            [],
+            [],
+            "ask_clarification",
+            "clarification_required",
+        ),
+        (
+            "recovery",
+            [call("get_product", product_id="prod_001")],
+            [{"tool_name": "get_product", "success": False}],
+            "final_answer",
+            "tool_error_recovery",
+        ),
+        (
+            "normal",
+            [call("get_product", product_id="prod_001")],
+            [{"tool_name": "get_product", "success": True}],
+            "final_answer",
+            "normal_safe_success",
+        ),
+    ]
+    for label, calls, history, terminal, expected in scenario_cases:
+        actual = classify_scenario("shopping", calls, history, terminal)
+        if actual != expected:
+            failures.append(f"{label}: scenario={actual}, expected={expected}")
 
-if not k_fail:
-    print(f"  ✅ All executor tools have matching read tools in their domain")
-else:
-    print(f"  ⚠️  Above warnings may indicate entity mapping errors (not hard failures)")
+    print(f"domains={len(schemas)} tools={total_tools} mutating={mutating_count}")
+    if failures:
+        for failure in failures:
+            print(f"FAIL: {failure}")
+        print(f"failures={len(failures)}")
+        return 1
+    print("failures=0")
+    return 0
 
-# ═════════════════════════════════════════════════════════════════
-# Summary
-# ═════════════════════════════════════════════════════════════════
-section("SUMMARY")
-total_domains = len(domain_tools)
-print(f"  Domains: {total_domains}")
-print(f"  Total tools: {total_tool_count}")
-print(f"  Mutating tools: {total_mutating_count}")
-print(f"  Failures: {FAIL}")
-print()
-if FAIL == 0:
-    print("✅ ALL CHECKS PASSED — no bugs found")
-else:
-    print(f"❌ {FAIL} FAILURES DETECTED — fix before generating data")
-    sys.exit(1)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

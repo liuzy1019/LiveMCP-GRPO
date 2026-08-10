@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from src.live_mcp import errors
 from src.live_mcp.state_seeder import StateSeeder
-from src.live_mcp.tool_semantics import build_tool_semantics
+from src.live_mcp.registry.tool_semantics import build_tool_semantics
 
 
 class StatefulToolServer:
@@ -40,11 +40,14 @@ class StatefulToolServer:
         if method == "session/reset":
             session_id = str(params["session_id"])
             seed = int(params.get("seed", 42))
+            state_profile = str(params.get("state_profile", "baseline"))
             if session_id not in self.sessions and len(self.sessions) >= self.MAX_SESSIONS:
                 raise RuntimeError(
                     f"session capacity exceeded for {self.server_name}: {self.MAX_SESSIONS}"
                 )
-            self.sessions[session_id] = self.seeder.reset_state(self.server_name, session_id, seed)
+            self.sessions[session_id] = self.seeder.reset_state(
+                self.server_name, session_id, seed, state_profile
+            )
             return {"result": {"ok": True}}
         if method == "session/close":
             self.sessions.pop(str(params["session_id"]), None)

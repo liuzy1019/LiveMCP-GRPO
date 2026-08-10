@@ -1,0 +1,1824 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "team_chat",
+  "schema_hash": "22a67750c84bce39",
+  "tool_names": [
+    "archive_channel",
+    "create_channel",
+    "create_thread",
+    "get_channel",
+    "get_thread",
+    "get_user_status",
+    "list_channels",
+    "react_message",
+    "search_messages",
+    "send_dm",
+    "send_message"
+  ],
+  "graph": {
+    "archive_channel": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_channel": {
+      "explicit": [
+        "archive_channel",
+        "create_thread",
+        "get_channel",
+        "react_message",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "create_thread": {
+      "explicit": [
+        "get_thread"
+      ],
+      "implicit": []
+    },
+    "get_channel": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_thread": {
+      "explicit": [
+        "archive_channel",
+        "get_channel",
+        "react_message",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "get_user_status": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_channels": {
+      "explicit": [
+        "archive_channel",
+        "create_thread",
+        "get_channel",
+        "react_message",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "react_message": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_messages": {
+      "explicit": [
+        "create_thread",
+        "get_thread",
+        "react_message"
+      ],
+      "implicit": []
+    },
+    "send_dm": {
+      "explicit": [],
+      "implicit": []
+    },
+    "send_message": {
+      "explicit": [
+        "create_thread",
+        "react_message"
+      ],
+      "implicit": []
+    }
+  },
+  "raw_graph": {
+    "archive_channel": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_channel": {
+      "explicit": [
+        "archive_channel",
+        "create_thread",
+        "get_channel",
+        "react_message",
+        "search_messages",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "create_thread": {
+      "explicit": [
+        "get_thread"
+      ],
+      "implicit": []
+    },
+    "get_channel": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_thread": {
+      "explicit": [
+        "archive_channel",
+        "get_channel",
+        "react_message",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "get_user_status": {
+      "explicit": [
+        "send_dm"
+      ],
+      "implicit": []
+    },
+    "list_channels": {
+      "explicit": [
+        "archive_channel",
+        "create_thread",
+        "get_channel",
+        "react_message",
+        "search_messages",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "react_message": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_messages": {
+      "explicit": [
+        "create_thread",
+        "get_thread",
+        "react_message",
+        "send_message"
+      ],
+      "implicit": []
+    },
+    "send_dm": {
+      "explicit": [],
+      "implicit": []
+    },
+    "send_message": {
+      "explicit": [
+        "create_thread",
+        "react_message"
+      ],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "archive_channel",
+        "create_channel"
+      ],
+      "source": "create_channel",
+      "target": "archive_channel",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "create_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_channel"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_thread"
+      ],
+      "source": "get_thread",
+      "target": "archive_channel",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "list_channels"
+      ],
+      "source": "list_channels",
+      "target": "archive_channel",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "create_thread"
+      ],
+      "source": "create_channel",
+      "target": "create_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_channel"
+      ],
+      "source": "create_channel",
+      "target": "get_channel",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_thread"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "react_message"
+      ],
+      "source": "create_channel",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "search_messages"
+      ],
+      "source": "create_channel",
+      "target": "search_messages",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_channel",
+        "send_message"
+      ],
+      "source": "create_channel",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_channel"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_thread"
+      ],
+      "source": "create_thread",
+      "target": "get_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "list_channels"
+      ],
+      "source": "list_channels",
+      "target": "create_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "search_messages"
+      ],
+      "source": "search_messages",
+      "target": "create_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_thread",
+        "send_message"
+      ],
+      "source": "send_message",
+      "target": "create_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "get_thread"
+      ],
+      "source": "get_thread",
+      "target": "get_channel",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "list_channels"
+      ],
+      "source": "list_channels",
+      "target": "get_channel",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_channel",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "get_user_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "react_message"
+      ],
+      "source": "get_thread",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "search_messages"
+      ],
+      "source": "search_messages",
+      "target": "get_thread",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_message"
+      ],
+      "source": "get_thread",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "list_channels"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "react_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "search_messages"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "send_dm"
+      ],
+      "source": "get_user_status",
+      "target": "send_dm",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "react_message"
+      ],
+      "source": "list_channels",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "search_messages"
+      ],
+      "source": "list_channels",
+      "target": "search_messages",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_channels",
+        "send_message"
+      ],
+      "source": "list_channels",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "react_message",
+        "search_messages"
+      ],
+      "source": "search_messages",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "react_message",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "react_message",
+        "send_message"
+      ],
+      "source": "send_message",
+      "target": "react_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "search_messages",
+        "send_dm"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_messages",
+        "send_message"
+      ],
+      "source": "search_messages",
+      "target": "send_message",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "send_dm",
+        "send_message"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "archive_channel",
+        "create_channel"
+      ],
+      "raw": {
+        "source": "create_channel",
+        "target": "archive_channel",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_channel",
+          "archive_channel"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_channel",
+          "archive_channel"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "create_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_channel"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "archive_channel",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "archive_channel"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "get_user_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "list_channels"
+      ],
+      "raw": {
+        "source": "list_channels",
+        "target": "archive_channel",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_channels",
+          "archive_channel"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "react_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "archive_channel",
+        "send_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "create_thread"
+      ],
+      "raw": {
+        "source": "create_channel",
+        "target": "create_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_channel",
+          "create_thread"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_channel",
+          "create_thread"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_channel"
+      ],
+      "raw": {
+        "source": "create_channel",
+        "target": "get_channel",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_channel",
+          "get_channel"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_channel",
+          "get_channel"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "get_user_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "list_channels"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "react_message"
+      ],
+      "raw": {
+        "source": "create_channel",
+        "target": "react_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_channel",
+          "react_message"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_channel",
+          "react_message"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "create_channel",
+        "target": "search_messages",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_channel",
+        "send_message"
+      ],
+      "raw": {
+        "source": "create_channel",
+        "target": "send_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_channel",
+          "send_message"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_channel",
+          "send_message"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_channel"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "create_thread",
+        "target": "get_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_thread",
+          "get_thread"
+        ],
+        [
+          "get_thread",
+          "create_thread"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_thread",
+          "get_thread"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "get_user_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "list_channels"
+      ],
+      "raw": {
+        "source": "list_channels",
+        "target": "create_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_channels",
+          "create_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "react_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "search_messages",
+        "target": "create_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_messages",
+          "create_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_thread",
+        "send_message"
+      ],
+      "raw": {
+        "source": "send_message",
+        "target": "create_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_message",
+          "create_thread"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "send_message",
+          "create_thread"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_channel",
+        "get_thread"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "get_channel",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "get_channel"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_channel",
+        "get_user_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_channel",
+        "list_channels"
+      ],
+      "raw": {
+        "source": "list_channels",
+        "target": "get_channel",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_channels",
+          "get_channel"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_channel",
+        "react_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_channel",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_channel",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_channel",
+        "send_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "get_user_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "list_channels"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "react_message"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "react_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "react_message"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "search_messages",
+        "target": "get_thread",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_messages",
+          "get_thread"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_thread",
+        "send_message"
+      ],
+      "raw": {
+        "source": "get_thread",
+        "target": "send_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_thread",
+          "send_message"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "list_channels"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "react_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "get_user_status",
+        "target": "send_dm",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_user_status",
+        "send_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_channels",
+        "react_message"
+      ],
+      "raw": {
+        "source": "list_channels",
+        "target": "react_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_channels",
+          "react_message"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_channels",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "list_channels",
+        "target": "search_messages",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_channels",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_channels",
+        "send_message"
+      ],
+      "raw": {
+        "source": "list_channels",
+        "target": "send_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_channels",
+          "send_message"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "react_message",
+        "search_messages"
+      ],
+      "raw": {
+        "source": "search_messages",
+        "target": "react_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_messages",
+          "react_message"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "react_message",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "react_message",
+        "send_message"
+      ],
+      "raw": {
+        "source": "send_message",
+        "target": "react_message",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "send_message",
+          "react_message"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "send_message",
+          "react_message"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_messages",
+        "send_dm"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_messages",
+        "send_message"
+      ],
+      "raw": {
+        "source": "search_messages",
+        "target": "send_message",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "send_dm",
+        "send_message"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "5ef11035153f087f",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "174d4dfa5ac1f93ee5c06bd82b31be32baf101fb510080a9f99ba64216b27037",
+  "tool_count": 11,
+  "expected_pair_count": 55,
+  "classified_pair_count": 55,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 55,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 51,
+    "contradicted": 4
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:49Z"
+}

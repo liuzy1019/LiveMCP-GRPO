@@ -1,0 +1,1518 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "payments",
+  "schema_hash": "2e2833de0b58f248",
+  "tool_names": [
+    "cancel_payment",
+    "create_invoice",
+    "create_webhook",
+    "delete_webhook",
+    "dispute_invoice",
+    "get_invoice",
+    "list_invoices",
+    "list_webhooks",
+    "pay_invoice",
+    "refund_invoice"
+  ],
+  "graph": {
+    "cancel_payment": {
+      "explicit": [
+        "create_invoice",
+        "dispute_invoice",
+        "get_invoice",
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "implicit": []
+    },
+    "create_invoice": {
+      "explicit": [
+        "dispute_invoice",
+        "get_invoice",
+        "pay_invoice"
+      ],
+      "implicit": []
+    },
+    "create_webhook": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "delete_webhook": {
+      "explicit": [],
+      "implicit": []
+    },
+    "dispute_invoice": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_invoice": {
+      "explicit": [
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "implicit": []
+    },
+    "list_invoices": {
+      "explicit": [
+        "cancel_payment",
+        "create_invoice",
+        "dispute_invoice",
+        "get_invoice",
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "implicit": []
+    },
+    "list_webhooks": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "pay_invoice": {
+      "explicit": [],
+      "implicit": [
+        "refund_invoice"
+      ]
+    },
+    "refund_invoice": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "raw_graph": {
+    "cancel_payment": {
+      "explicit": [
+        "create_invoice",
+        "dispute_invoice",
+        "get_invoice",
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "implicit": []
+    },
+    "create_invoice": {
+      "explicit": [
+        "dispute_invoice",
+        "get_invoice",
+        "pay_invoice"
+      ],
+      "implicit": []
+    },
+    "create_webhook": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "delete_webhook": {
+      "explicit": [],
+      "implicit": []
+    },
+    "dispute_invoice": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_invoice": {
+      "explicit": [
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "implicit": []
+    },
+    "list_invoices": {
+      "explicit": [
+        "cancel_payment",
+        "create_invoice",
+        "dispute_invoice",
+        "get_invoice",
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "implicit": []
+    },
+    "list_webhooks": {
+      "explicit": [
+        "delete_webhook"
+      ],
+      "implicit": []
+    },
+    "pay_invoice": {
+      "explicit": [],
+      "implicit": [
+        "refund_invoice"
+      ]
+    },
+    "refund_invoice": {
+      "explicit": [],
+      "implicit": []
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "cancel_payment",
+        "create_invoice"
+      ],
+      "source": "cancel_payment",
+      "target": "create_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "create_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "delete_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "dispute_invoice"
+      ],
+      "source": "cancel_payment",
+      "target": "dispute_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "get_invoice"
+      ],
+      "source": "cancel_payment",
+      "target": "get_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "list_invoices"
+      ],
+      "source": "list_invoices",
+      "target": "cancel_payment",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "pay_invoice"
+      ],
+      "source": "cancel_payment",
+      "target": "pay_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "refund_invoice"
+      ],
+      "source": "cancel_payment",
+      "target": "refund_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "create_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "delete_webhook"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "dispute_invoice"
+      ],
+      "source": "create_invoice",
+      "target": "dispute_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "get_invoice"
+      ],
+      "source": "create_invoice",
+      "target": "get_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "list_invoices"
+      ],
+      "source": "list_invoices",
+      "target": "create_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "pay_invoice"
+      ],
+      "source": "create_invoice",
+      "target": "pay_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "delete_webhook"
+      ],
+      "source": "create_webhook",
+      "target": "delete_webhook",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "dispute_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "get_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "dispute_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "get_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "list_invoices"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "list_webhooks"
+      ],
+      "source": "list_webhooks",
+      "target": "delete_webhook",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "get_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "list_invoices"
+      ],
+      "source": "list_invoices",
+      "target": "dispute_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "list_invoices"
+      ],
+      "source": "list_invoices",
+      "target": "get_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "pay_invoice"
+      ],
+      "source": "get_invoice",
+      "target": "pay_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "refund_invoice"
+      ],
+      "source": "get_invoice",
+      "target": "refund_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "list_webhooks"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "pay_invoice"
+      ],
+      "source": "list_invoices",
+      "target": "pay_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "refund_invoice"
+      ],
+      "source": "list_invoices",
+      "target": "refund_invoice",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_webhooks",
+        "pay_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_webhooks",
+        "refund_invoice"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "source": "pay_invoice",
+      "target": "refund_invoice",
+      "relation": "implicit"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "cancel_payment",
+        "create_invoice"
+      ],
+      "raw": {
+        "source": "cancel_payment",
+        "target": "create_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "cancel_payment",
+          "create_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "create_webhook"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "delete_webhook"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "dispute_invoice"
+      ],
+      "raw": {
+        "source": "cancel_payment",
+        "target": "dispute_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "cancel_payment",
+          "dispute_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "get_invoice"
+      ],
+      "raw": {
+        "source": "cancel_payment",
+        "target": "get_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "cancel_payment",
+          "get_invoice"
+        ],
+        [
+          "get_invoice",
+          "cancel_payment"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "list_invoices"
+      ],
+      "raw": {
+        "source": "list_invoices",
+        "target": "cancel_payment",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_invoices",
+          "cancel_payment"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "list_webhooks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "cancel_payment",
+        "target": "pay_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "cancel_payment",
+          "pay_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_payment",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "cancel_payment",
+        "target": "refund_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "cancel_payment",
+          "refund_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "create_webhook"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "delete_webhook"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "dispute_invoice"
+      ],
+      "raw": {
+        "source": "create_invoice",
+        "target": "dispute_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_invoice",
+          "dispute_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_invoice",
+          "dispute_invoice"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "get_invoice"
+      ],
+      "raw": {
+        "source": "create_invoice",
+        "target": "get_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_invoice",
+          "get_invoice"
+        ],
+        [
+          "get_invoice",
+          "create_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_invoice",
+          "get_invoice"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "list_invoices"
+      ],
+      "raw": {
+        "source": "list_invoices",
+        "target": "create_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_invoices",
+          "create_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "list_webhooks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "create_invoice",
+        "target": "pay_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_invoice",
+          "pay_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_invoice",
+          "pay_invoice"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_invoice",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "delete_webhook"
+      ],
+      "raw": {
+        "source": "create_webhook",
+        "target": "delete_webhook",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_webhook",
+          "delete_webhook"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_webhook",
+          "delete_webhook"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "dispute_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "get_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "list_invoices"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "list_webhooks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_webhook",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "dispute_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "get_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "list_invoices"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "list_webhooks"
+      ],
+      "raw": {
+        "source": "list_webhooks",
+        "target": "delete_webhook",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_webhooks",
+          "delete_webhook"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_webhook",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "get_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "list_invoices"
+      ],
+      "raw": {
+        "source": "list_invoices",
+        "target": "dispute_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_invoices",
+          "dispute_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "list_webhooks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "dispute_invoice",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "list_invoices"
+      ],
+      "raw": {
+        "source": "list_invoices",
+        "target": "get_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_invoices",
+          "get_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "list_webhooks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "get_invoice",
+        "target": "pay_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_invoice",
+          "pay_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_invoice",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "get_invoice",
+        "target": "refund_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_invoice",
+          "refund_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "list_webhooks"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "list_invoices",
+        "target": "pay_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_invoices",
+          "pay_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_invoices",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "list_invoices",
+        "target": "refund_invoice",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_invoices",
+          "refund_invoice"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_webhooks",
+        "pay_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_webhooks",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "pay_invoice",
+        "refund_invoice"
+      ],
+      "raw": {
+        "source": "pay_invoice",
+        "target": "refund_invoice",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "pay_invoice",
+          "refund_invoice"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "e00b1e6603c52123",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "5824815c16d8223cb14a3f28ed49b8e1163bd4d1db603e80e93ad33456fcd593",
+  "tool_count": 10,
+  "expected_pair_count": 45,
+  "classified_pair_count": 45,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 45,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 45
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:48Z"
+}

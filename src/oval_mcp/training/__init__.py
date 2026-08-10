@@ -1,1 +1,1 @@
-"""OVAL-MCP constrained-training helpers."""
+"""OVAL-MCP package."""

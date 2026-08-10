@@ -1,0 +1,4223 @@
+{
+  "cache_version": 8,
+  "dependency_semantics_version": 30,
+  "server_name": "food_delivery",
+  "schema_hash": "78fe13dea611a9e8",
+  "tool_names": [
+    "add_tip",
+    "cancel_order",
+    "contact_support",
+    "create_order",
+    "filter_by_dietary",
+    "get_estimated_time",
+    "get_menu",
+    "get_order",
+    "get_popular_items",
+    "get_restaurant",
+    "list_orders",
+    "list_restaurants",
+    "rate_order",
+    "reorder",
+    "search_restaurants",
+    "track_rider",
+    "update_order_status"
+  ],
+  "graph": {
+    "add_tip": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cancel_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "contact_support": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_order": {
+      "explicit": [
+        "add_tip",
+        "cancel_order",
+        "contact_support",
+        "get_estimated_time",
+        "get_order",
+        "reorder",
+        "update_order_status"
+      ],
+      "implicit": []
+    },
+    "filter_by_dietary": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_estimated_time": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_menu": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_order": {
+      "explicit": [
+        "filter_by_dietary",
+        "get_menu",
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "implicit": []
+    },
+    "get_popular_items": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_restaurant": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_orders": {
+      "explicit": [
+        "add_tip",
+        "cancel_order",
+        "contact_support",
+        "create_order",
+        "filter_by_dietary",
+        "get_estimated_time",
+        "get_menu",
+        "get_order",
+        "get_popular_items",
+        "get_restaurant",
+        "rate_order",
+        "reorder",
+        "track_rider",
+        "update_order_status"
+      ],
+      "implicit": []
+    },
+    "list_restaurants": {
+      "explicit": [
+        "create_order",
+        "filter_by_dietary",
+        "get_menu",
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "implicit": []
+    },
+    "rate_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "reorder": {
+      "explicit": [],
+      "implicit": [
+        "add_tip",
+        "cancel_order",
+        "contact_support",
+        "get_estimated_time",
+        "get_order",
+        "update_order_status"
+      ]
+    },
+    "search_restaurants": {
+      "explicit": [
+        "create_order",
+        "filter_by_dietary",
+        "get_menu",
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "implicit": []
+    },
+    "track_rider": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_order_status": {
+      "explicit": [],
+      "implicit": [
+        "rate_order",
+        "track_rider"
+      ]
+    }
+  },
+  "raw_graph": {
+    "add_tip": {
+      "explicit": [],
+      "implicit": []
+    },
+    "cancel_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "contact_support": {
+      "explicit": [],
+      "implicit": []
+    },
+    "create_order": {
+      "explicit": [
+        "add_tip",
+        "cancel_order",
+        "contact_support",
+        "get_estimated_time",
+        "get_order",
+        "rate_order",
+        "reorder",
+        "update_order_status"
+      ],
+      "implicit": [
+        "track_rider"
+      ]
+    },
+    "filter_by_dietary": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_estimated_time": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_menu": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_order": {
+      "explicit": [
+        "filter_by_dietary",
+        "get_menu",
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "implicit": []
+    },
+    "get_popular_items": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_restaurant": {
+      "explicit": [],
+      "implicit": []
+    },
+    "list_orders": {
+      "explicit": [
+        "add_tip",
+        "cancel_order",
+        "contact_support",
+        "create_order",
+        "filter_by_dietary",
+        "get_estimated_time",
+        "get_menu",
+        "get_order",
+        "get_popular_items",
+        "get_restaurant",
+        "rate_order",
+        "reorder",
+        "track_rider",
+        "update_order_status"
+      ],
+      "implicit": []
+    },
+    "list_restaurants": {
+      "explicit": [
+        "create_order",
+        "filter_by_dietary",
+        "get_menu",
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "implicit": []
+    },
+    "rate_order": {
+      "explicit": [],
+      "implicit": []
+    },
+    "reorder": {
+      "explicit": [],
+      "implicit": [
+        "add_tip",
+        "cancel_order",
+        "contact_support",
+        "get_estimated_time",
+        "get_order",
+        "rate_order",
+        "track_rider",
+        "update_order_status"
+      ]
+    },
+    "search_restaurants": {
+      "explicit": [
+        "create_order",
+        "filter_by_dietary",
+        "get_menu",
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "implicit": []
+    },
+    "track_rider": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_order_status": {
+      "explicit": [],
+      "implicit": [
+        "rate_order",
+        "track_rider"
+      ]
+    }
+  },
+  "pair_classifications": [
+    {
+      "pair": [
+        "add_tip",
+        "cancel_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "contact_support"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "create_order"
+      ],
+      "source": "create_order",
+      "target": "add_tip",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "filter_by_dietary"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_estimated_time"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "add_tip",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "reorder"
+      ],
+      "source": "reorder",
+      "target": "add_tip",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_tip",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "contact_support"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "create_order"
+      ],
+      "source": "create_order",
+      "target": "cancel_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "filter_by_dietary"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_estimated_time"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "cancel_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "reorder"
+      ],
+      "source": "reorder",
+      "target": "cancel_order",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "create_order"
+      ],
+      "source": "create_order",
+      "target": "contact_support",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "filter_by_dietary"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_estimated_time"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "contact_support",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "reorder"
+      ],
+      "source": "reorder",
+      "target": "contact_support",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "contact_support",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "filter_by_dietary"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_estimated_time"
+      ],
+      "source": "create_order",
+      "target": "get_estimated_time",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_order"
+      ],
+      "source": "create_order",
+      "target": "get_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_order",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "create_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "list_restaurants"
+      ],
+      "source": "list_restaurants",
+      "target": "create_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "rate_order"
+      ],
+      "source": "create_order",
+      "target": "rate_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "reorder"
+      ],
+      "source": "create_order",
+      "target": "reorder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "search_restaurants"
+      ],
+      "source": "search_restaurants",
+      "target": "create_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "track_rider"
+      ],
+      "source": "create_order",
+      "target": "track_rider",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "create_order",
+        "update_order_status"
+      ],
+      "source": "create_order",
+      "target": "update_order_status",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_estimated_time"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_order"
+      ],
+      "source": "get_order",
+      "target": "filter_by_dietary",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "filter_by_dietary",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "list_restaurants"
+      ],
+      "source": "list_restaurants",
+      "target": "filter_by_dietary",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "search_restaurants"
+      ],
+      "source": "search_restaurants",
+      "target": "filter_by_dietary",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_menu"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "get_estimated_time",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "reorder"
+      ],
+      "source": "reorder",
+      "target": "get_estimated_time",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_order"
+      ],
+      "source": "get_order",
+      "target": "get_menu",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_popular_items"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "get_menu",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "list_restaurants"
+      ],
+      "source": "list_restaurants",
+      "target": "get_menu",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "search_restaurants"
+      ],
+      "source": "search_restaurants",
+      "target": "get_menu",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_menu",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_popular_items"
+      ],
+      "source": "get_order",
+      "target": "get_popular_items",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_restaurant"
+      ],
+      "source": "get_order",
+      "target": "get_restaurant",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "get_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "reorder"
+      ],
+      "source": "reorder",
+      "target": "get_order",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "get_order",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_order",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "get_popular_items",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "list_restaurants"
+      ],
+      "source": "list_restaurants",
+      "target": "get_popular_items",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "search_restaurants"
+      ],
+      "source": "search_restaurants",
+      "target": "get_popular_items",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "list_orders"
+      ],
+      "source": "list_orders",
+      "target": "get_restaurant",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "list_restaurants"
+      ],
+      "source": "list_restaurants",
+      "target": "get_restaurant",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "search_restaurants"
+      ],
+      "source": "search_restaurants",
+      "target": "get_restaurant",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "list_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "rate_order"
+      ],
+      "source": "list_orders",
+      "target": "rate_order",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "reorder"
+      ],
+      "source": "list_orders",
+      "target": "reorder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "track_rider"
+      ],
+      "source": "list_orders",
+      "target": "track_rider",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_orders",
+        "update_order_status"
+      ],
+      "source": "list_orders",
+      "target": "update_order_status",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "rate_order"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "reorder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "rate_order",
+        "reorder"
+      ],
+      "source": "reorder",
+      "target": "rate_order",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "rate_order",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "rate_order",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "rate_order",
+        "update_order_status"
+      ],
+      "source": "update_order_status",
+      "target": "rate_order",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "reorder",
+        "search_restaurants"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "reorder",
+        "track_rider"
+      ],
+      "source": "reorder",
+      "target": "track_rider",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "reorder",
+        "update_order_status"
+      ],
+      "source": "reorder",
+      "target": "update_order_status",
+      "relation": "implicit"
+    },
+    {
+      "pair": [
+        "search_restaurants",
+        "track_rider"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_restaurants",
+        "update_order_status"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "track_rider",
+        "update_order_status"
+      ],
+      "source": "update_order_status",
+      "target": "track_rider",
+      "relation": "implicit"
+    }
+  ],
+  "pair_audits": [],
+  "relation_audits": [
+    {
+      "pair": [
+        "add_tip",
+        "cancel_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "contact_support"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "create_order"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "add_tip",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_order",
+          "add_tip"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_order",
+          "add_tip"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "filter_by_dietary"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_estimated_time"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_menu"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "add_tip",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "add_tip"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "reorder"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "add_tip",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "reorder",
+          "add_tip"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_tip",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "contact_support"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "create_order"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "cancel_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_order",
+          "cancel_order"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_order",
+          "cancel_order"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "filter_by_dietary"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_estimated_time"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_menu"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "cancel_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "cancel_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "reorder"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "cancel_order",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "reorder",
+          "cancel_order"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "cancel_order",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "create_order"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "contact_support",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_order",
+          "contact_support"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_order",
+          "contact_support"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "filter_by_dietary"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_estimated_time"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_menu"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "contact_support",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "contact_support"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "reorder"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "contact_support",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "reorder",
+          "contact_support"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "contact_support",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "filter_by_dietary"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_estimated_time"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "get_estimated_time",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_order",
+          "get_estimated_time"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_order",
+          "get_estimated_time"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_menu"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_order"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "get_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_order",
+          "get_order"
+        ],
+        [
+          "get_order",
+          "create_order"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_order",
+          "get_order"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "create_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "create_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "list_restaurants",
+        "target": "create_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_restaurants",
+          "create_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "rate_order",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "reorder"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "reorder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_order",
+          "reorder"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_order",
+          "reorder"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "search_restaurants",
+        "target": "create_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_restaurants",
+          "create_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "track_rider",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_order",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "create_order",
+        "target": "update_order_status",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_order",
+          "update_order_status"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_order",
+          "update_order_status"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_estimated_time"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_menu"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_order"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "filter_by_dietary",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "filter_by_dietary"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "filter_by_dietary",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "filter_by_dietary"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "list_restaurants",
+        "target": "filter_by_dietary",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_restaurants",
+          "filter_by_dietary"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "reorder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "search_restaurants",
+        "target": "filter_by_dietary",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_restaurants",
+          "filter_by_dietary"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "filter_by_dietary",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_menu"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "get_estimated_time",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "get_estimated_time"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "reorder"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "get_estimated_time",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "reorder",
+          "get_estimated_time"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_estimated_time",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_order"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "get_menu",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "get_menu"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "get_menu",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "get_menu"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "list_restaurants",
+        "target": "get_menu",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_restaurants",
+          "get_menu"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "reorder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "search_restaurants",
+        "target": "get_menu",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_restaurants",
+          "get_menu"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_menu",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_popular_items"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "get_popular_items",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "get_popular_items"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "get_order",
+        "target": "get_restaurant",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_order",
+          "get_restaurant"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "get_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "get_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "reorder"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "get_order",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "reorder",
+          "get_order"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_order",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "get_restaurant"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "get_popular_items",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "get_popular_items"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "list_restaurants",
+        "target": "get_popular_items",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_restaurants",
+          "get_popular_items"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "reorder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "search_restaurants",
+        "target": "get_popular_items",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_restaurants",
+          "get_popular_items"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_popular_items",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "list_orders"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "get_restaurant",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "get_restaurant"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "list_restaurants",
+        "target": "get_restaurant",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_restaurants",
+          "get_restaurant"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "reorder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "search_restaurants",
+        "target": "get_restaurant",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_restaurants",
+          "get_restaurant"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_restaurant",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "list_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "rate_order",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "rate_order"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "reorder"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "reorder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "reorder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "track_rider",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "track_rider"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_orders",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "list_orders",
+        "target": "update_order_status",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_orders",
+          "update_order_status"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "rate_order"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "reorder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_restaurants",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "rate_order",
+        "reorder"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "rate_order",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "rate_order",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "rate_order",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "rate_order",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "update_order_status",
+        "target": "rate_order",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "update_order_status",
+          "rate_order"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "reorder",
+        "search_restaurants"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "reorder",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "track_rider",
+        "relation": "implicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "source postconditions do not establish any target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "reorder",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "reorder",
+        "target": "update_order_status",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "reorder",
+          "update_order_status"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_restaurants",
+        "track_rider"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_restaurants",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "track_rider",
+        "update_order_status"
+      ],
+      "raw": {
+        "source": "update_order_status",
+        "target": "track_rider",
+        "relation": "implicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "source postcondition establishes a target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [
+        [
+          "update_order_status",
+          "track_rider"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    }
+  ],
+  "classifier_contract_hash": "dbbfcb86cbbe54fb",
+  "teacher_model_id": "models/Google/Gemma-4-31B-it",
+  "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
+  "raw_graph_source": "first_structurally_valid_classification",
+  "graph_source": "local_relation_audit_supported_subset",
+  "review_policy": "not_required_for_paper_baseline",
+  "tie_break_policy": "disabled",
+  "output_field_contract_sha256": "e22172cbb3dec3d8c1e60a549f8c499bc726e5cbe0a204bb70f4ded4de467553",
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
+  "audited_pair_count": 0,
+  "relation_audited_pair_count": 136,
+  "review_disagreement_count": 0,
+  "relation_audit_counts": {
+    "supported": 132,
+    "contradicted": 4
+  },
+  "classification_complete": true,
+  "audit_complete": false,
+  "relation_audit_complete": true,
+  "created_at_utc": "2026-08-09T13:37:49Z"
+}

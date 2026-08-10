@@ -2,13 +2,13 @@
 # GRPO 训练入口 —— PyTorch Lightning 风格配置 + 实验管理。
 #
 # 支持模式：
-#   - 单卡:    bash scripts/train_grpo.sh --model models/Qwen/Qwen3-4B
+#   - 单卡:    bash scripts/train_grpo.sh --model models/Qwen/Qwen3-4B-Instruct-2507
 #   - 多卡 FSDP: bash scripts/train_grpo.sh --gpus 0,1,2,3
 #   - WandB:   bash scripts/train_grpo.sh --wandb
 #   - 环境变量覆盖所有 TrainerConfig 字段（OVAL_* 前缀）
 #
 # Options:
-#   --model PATH              模型路径（default: models/Qwen/Qwen3-4B）
+#   --model PATH              模型路径（default: models/Qwen/Qwen3-4B-Instruct-2507）
 #   --gpus IDS                指定 GPU（如 0,1,2,3）
 #   --devices N               限制 GPU 数量
 #   --total-steps N           训练步数
@@ -21,6 +21,10 @@
 #   --batch-size N            训练 batch size
 #   --rollout-n N             Rollout 每组数量
 #   --reward-profile PROFILE  prove_baseline | oval_full
+#   --experiment-profile NAME custom | prove_local_v1 | oval_local_v1 | prove_reproduction_v1
+#   --diagnostic-overrides     允许 profile 只覆盖 steps / train batch，并记录为诊断运行
+#   --run-name NAME            实验目录名
+#   --save-rollouts            保存逐轨迹输出和 reward 分量
 #   --max-observation-chars N Policy observation budget; default reads suite
 #   --debug                   调试模式（更多日志）
 #
@@ -49,9 +53,19 @@ export RAY_DEDUP_LOGS=1
 export LOGURU_LEVEL=INFO
 unset PYTORCH_CUDA_ALLOC_CONF 2>/dev/null || true
 export TMPDIR="${TMPDIR:-/tmp/oval_tmp}"
-export RAY_TMPDIR="${RAY_TMPDIR:-/tmp/oval_ray}"
-export LIVEMCP_RAY_TMPDIR="${LIVEMCP_RAY_TMPDIR:-${RAY_TMPDIR}}"
-mkdir -p "${TMPDIR}" "${RAY_TMPDIR}"
+export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-/tmp/oval_triton}"
+export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-/tmp/oval_torchinductor}"
+# OVAL_RAY_TMPDIR is the canonical project setting consumed by
+# LiveMCPHyperparams consumes OVAL_RAY_TMPDIR. Export the same short path
+# through every supported Ray directory variable.
+export OVAL_RAY_TMPDIR="${OVAL_RAY_TMPDIR:-${LIVEMCP_RAY_TMPDIR:-${RAY_TMPDIR:-/tmp/oval_ray}}}"
+export RAY_TMPDIR="${OVAL_RAY_TMPDIR}"
+export LIVEMCP_RAY_TMPDIR="${OVAL_RAY_TMPDIR}"
+mkdir -p \
+    "${TMPDIR}" \
+    "${OVAL_RAY_TMPDIR}" \
+    "${TRITON_CACHE_DIR}" \
+    "${TORCHINDUCTOR_CACHE_DIR}"
 
 # ── Parse CLI args ──────────────────────────────────────────────────
 GPU_ARG=""
@@ -84,6 +98,12 @@ while [[ $# -gt 0 ]]; do
         --rollout-n=*) export OVAL_ROLLOUT_N="${1#*=}"; shift ;;
         --reward-profile) export OVAL_REWARD_PROFILE="$2"; shift 2 ;;
         --reward-profile=*) export OVAL_REWARD_PROFILE="${1#*=}"; shift ;;
+        --experiment-profile) export OVAL_EXPERIMENT_PROFILE="$2"; shift 2 ;;
+        --experiment-profile=*) export OVAL_EXPERIMENT_PROFILE="${1#*=}"; shift ;;
+        --diagnostic-overrides) export OVAL_DIAGNOSTIC_OVERRIDES=1; shift ;;
+        --run-name)   export OVAL_RUN_NAME="$2"; shift 2 ;;
+        --run-name=*) export OVAL_RUN_NAME="${1#*=}"; shift ;;
+        --save-rollouts) export OVAL_SAVE_ROLLOUTS=1; shift ;;
         --max-observation-chars) export OVAL_MAX_OBSERVATION_CHARS="$2"; shift 2 ;;
         --max-observation-chars=*) export OVAL_MAX_OBSERVATION_CHARS="${1#*=}"; shift ;;
         --debug)      export OVAL_DEBUG=1; shift ;;
@@ -93,6 +113,9 @@ done
 
 # ── GPU detection ───────────────────────────────────────────────────
 if [ -n "${GPU_ARG}" ]; then
+    # An explicit list is authoritative; do not let a stale GPU_COUNT inherited
+    # from a data-generation shell truncate it.
+    unset GPU_COUNT
     . scripts/gpu_config.sh "${GPU_ARG}"
 else
     . scripts/gpu_config.sh
@@ -119,13 +142,13 @@ elif [ "${GPU_TIER}" = "A100" ] || [ "${GPU_TIER}" = "Hopper" ]; then
     : "${OVAL_MINI_BATCH_SIZE:=16}"
     : "${OVAL_ROLLOUT_N:=16}"
 elif [ "${GPU_TIER}" = "A10" ]; then
-    : "${OVAL_PROMPT_LENGTH:=12384}"   # PROVE: 12,384
-    : "${OVAL_RESPONSE_LENGTH:=16384}" # PROVE: 16,384
+    : "${OVAL_PROMPT_LENGTH:=12384}"
+    : "${OVAL_RESPONSE_LENGTH:=16384}"
     : "${OVAL_MAX_NUM_SEQS:=16}"
     : "${OVAL_MICRO_BATCH:=1}"
     : "${OVAL_TRAIN_BATCH_SIZE:=16}"
     : "${OVAL_MINI_BATCH_SIZE:=8}"
-    : "${OVAL_ROLLOUT_N:=16}"          # PROVE: 16
+    : "${OVAL_ROLLOUT_N:=16}"
 else
     : "${OVAL_PROMPT_LENGTH:=10240}"
     : "${OVAL_RESPONSE_LENGTH:=2048}"
@@ -190,7 +213,6 @@ config = TrainerConfig.from_env(
     enforce_eager=$(_py_bool "${ENFORCE_EAGER:-false}"),
     free_cache_engine=$(_py_bool "${FREE_CACHE_ENGINE:-true}"),
     fsdp_param_offload=$(_py_bool "${PARAM_OFFLOAD:-false}"),
-    rollout_tp=${OVAL_ROLLOUT_TP:-1},
     log_prob_micro_batch=${OVAL_LOG_PROB_MICRO_BATCH:-1},
 )
 
@@ -205,6 +227,16 @@ wandb_dir.mkdir(parents=True, exist_ok=True)
 overrides = config.to_hydra_overrides()
 overrides.append(f'trainer.default_local_dir={run_dir}/checkpoints')
 overrides.append(f'trainer.logger={config.to_logger_list()}')
+if os.environ.get('OVAL_SAVE_ROLLOUTS', '').lower() in {'1', 'true', 'yes'}:
+    rollout_dir = run_dir / 'rollouts'
+    rollout_dir.mkdir(parents=True, exist_ok=True)
+    overrides.append(f'trainer.rollout_data_dir={rollout_dir}')
+# Keep Hydra bookkeeping inside the canonical experiment directory. Console
+# output is already captured by tee below, so a second Hydra log is disabled.
+overrides.append(f'hydra.run.dir={run_dir}')
+overrides.append('hydra.output_subdir=null')
+overrides.append('hydra.job.chdir=false')
+overrides.append('hydra/job_logging=disabled')
 
 print_config_summary(config, num_gpu, gpu_model)
 
@@ -229,20 +261,26 @@ USE_WANDB=$("${CONDA_PYTHON}" -c "import json; print(json.load(open('${CONFIG_JS
 WANDB_DIR=$("${CONDA_PYTHON}" -c "import json; print(json.load(open('${CONFIG_JSON_FILE}'))['wandb_dir'])")
 rm -f "${CONFIG_JSON_FILE}"
 
+# Scope file-backed reward state to this experiment unless the caller provides
+# an explicit path. Export before serializing config and launching Ray workers.
+export OVAL_LAMBDA_STATE_PATH="${OVAL_LAMBDA_STATE_PATH:-${RUN_DIR}/lambda_state.json}"
+
 # Save the effective LiveMCP objective/contract next to trainer config and
 # checkpoints. This is the cross-process source used by reward workers.
 "${CONDA_PYTHON}" -c "
 import json
 from pathlib import Path
-from src.training.livemcp_hyperparams import LiveMCPHyperparams
+from src.training.hyperparams import LiveMCPHyperparams
 hp = LiveMCPHyperparams.from_env()
 from src.live_mcp.config import load_suite_config
 suite = load_suite_config(hp.suite_path)
 runtime_observation_budget = int(
-    suite.rollout.get('observation_max_chars', 4096)
+    hp.resolve_max_observation_chars(suite.rollout)
 )
 path = Path('${RUN_DIR}') / 'livemcp_config.json'
-path.write_text(json.dumps(hp.to_dict(), indent=2, ensure_ascii=False) + '\\n')
+payload = hp.to_dict()
+payload['effective_max_observation_chars'] = runtime_observation_budget
+path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + '\\n')
 print(hp.summary())
 "
 
@@ -252,12 +290,17 @@ echo "=== Validating data ==="
 "${CONDA_PYTHON}" -c "
 import json, sys, pandas as pd
 from pathlib import Path
-from src.live_mcp.observation import (
+from src.live_mcp.protocol.observation import (
     TRAJECTORY_SCHEMA_VERSION, OBSERVATION_SCHEMA_VERSION, OBSERVATION_PROJECTION_VERSION,
 )
-from src.training.livemcp_hyperparams import LiveMCPHyperparams
+from src.training.hyperparams import LiveMCPHyperparams
+from src.live_mcp.config import load_suite_config
 
 hp = LiveMCPHyperparams.from_env()
+suite = load_suite_config(hp.suite_path)
+runtime_observation_budget = int(
+    hp.resolve_max_observation_chars(suite.rollout)
+)
 
 train_file = '${OVAL_TRAIN_FILE:-data/train.parquet}'
 val_file = '${OVAL_VAL_FILE:-data/val.parquet}'
@@ -269,19 +312,22 @@ for path in [train_file, val_file]:
     df = pd.read_parquet(path)
     domains = set()
     from src.utils import normalize_extra_info
-    from src.live_mcp.environment_metadata import (
+    from src.live_mcp.registry.environment_metadata import (
         compute_initial_state_hashes,
+        normalize_state_profiles,
         validate_prove_corpus_evidence,
+        validate_semantic_gate_evidence,
         validate_teacher_generation_evidence,
         validate_environment_metadata,
     )
     import importlib
-    from src.reward.oval_reward_fn import _build_task_dict
+    from src.live_mcp.artifact.reward_task import build_reward_task
     for _, row in df.iterrows():
         ei = normalize_extra_info(row['extra_info'])
         validate_prove_corpus_evidence(ei)
         validate_teacher_generation_evidence(ei)
-        _build_task_dict(ei)
+        validate_semantic_gate_evidence(ei)
+        build_reward_task(ei)
         domains.add(ei.get('domain', 'unknown'))
         expected = {
             'observation_schema_version': OBSERVATION_SCHEMA_VERSION,
@@ -341,6 +387,10 @@ for path in [train_file, val_file]:
             current_initial_state_hashes=compute_initial_state_hashes(
                 {domain for domain in required_schema_domains if domain},
                 int(ei['session_seed']),
+                normalize_state_profiles(
+                    ei.get('state_profiles'),
+                    {domain for domain in required_schema_domains if domain},
+                ),
             ),
         )
         compatible = ei.get('reward_profile_compatibility', [])

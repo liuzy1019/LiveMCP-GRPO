@@ -1,0 +1,20 @@
+# Payments gray-test profile. Invoice count stays fixed while executable
+# lifecycle states are enriched for the controlled A/B experiment.
+
+name: payments
+enabled: true
+
+command:
+  argv: ["python", "-m", "src.live_mcp.servers.payments.server"]
+  cwd: "."
+  env:
+    PYTHONUNBUFFERED: "1"
+
+transport:
+  kind: stdio
+  startup_timeout_s: 20
+  request_timeout_s: 10
+
+session:
+  default_seed: 42
+  state_profile: payments_rare_state_v1
