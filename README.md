@@ -2,21 +2,96 @@
 
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
 [![veRL 0.6.1](https://img.shields.io/badge/veRL-0.6.1-orange.svg)](https://github.com/volcengine/verl)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 
-LiveMCP-GRPO 是面向长程、多工具任务的可执行数据生成与 GRPO 训练系统。它在有状态 MCP
-环境中生成用户任务，让 Teacher 真实执行工具链，用 fresh replay 和 provenance 验证标签，
-再通过可编程 reward 训练 Policy。
+> Executable data synthesis and GRPO training for long-horizon, multi-tool agents in live MCP environments.
 
-## 当前进度
+LiveMCP-GRPO 面向需要多轮规划、真实工具调用和状态变化的 agent。系统以
+[PROVE](https://arxiv.org/abs/2606.03892) 的 verified-environment 思路为基础，将依赖图、
+Live-State sampling、Teacher 执行、fresh replay、可编程奖励和 GRPO 训练连接成一条可审计链路。
 
-十域 Live MCP、Teacher 五步生成、Parquet 合同、reward、Policy agent loop 和 GRPO 入口已实现。
-项目当前处于逐域数据质量准入和训练前验收阶段，尚未开始正式补产或完整训练。
+本仓库同时提供可选的 OVAL 扩展，包括过程奖励、安全约束、进度 shaping 和长度感知 token
+分配。PROVE baseline 与 OVAL 扩展使用独立 profile，不混合报告。
 
-精确数据行数、逐域完成度、活动任务和卡点必须从当前 run manifest、artifact、
-进程与 GPU 状态核实。README 不保存会随运行变化的快照。
+## 问题与动机
 
-## 系统链路
+长程工具调用训练不只是生成一段看似合理的 tool-call 文本。训练数据必须同时满足：
+
+1. 用户任务引用的实体在当前 session 中真实存在；
+2. 多步调用之间存在可证明的参数、实体或状态依赖；
+3. Teacher 的每次调用都能在真实 MCP handler 上执行；
+4. 训练标签能够通过 fresh replay、provenance 和 artifact readback 重建；
+5. reward 区分工具有效性、任务覆盖、调用效率、函数选择和参数正确性。
+
+静态模板、隐藏 backend ID、仅检查最终文本或仅依赖单元测试，都不能满足这些条件。
+LiveMCP-GRPO 将状态事实、执行事实和用户可见文本放在不同信任边界内，并在写入训练数据前
+执行确定性验证。
+
+## 方法
+
+### 1. Verified MCP environments
+
+系统内置十个有状态 domain：
+
+`banking`、`calendar`、`crm`、`email`、`filesystem`、`food_delivery`、
+`issue_tracker`、`payments`、`shopping` 和 `team_chat`。
+
+每个 domain 由以下对象共同定义：
+
+- MCP schema 与真实 handler；
+- entity、state predicate 和 state transition contract；
+- readonly probe、value binding 和 reference visibility；
+- session-scoped state seeder；
+- dependency relation 与 scenario chain contract。
+
+### 2. Five-stage data synthesis
+
+生成管线遵循五个阶段：
+
+1. **Dependency graph**：对 domain 内工具 pair 分类，保存 immutable raw ledger，再由本地
+   relation audit 生成 eligible graph。
+2. **Live-State sampling**：在 fresh session 中查询真实状态，只向 Teacher 暴露 public
+   projection，不暴露 sampler-private handle。
+3. **Query Teacher + Action FSM**：Query Teacher 生成 grounded 用户任务，Action Teacher 在同一
+   MCP 环境中执行多轮工具链。
+4. **Robustness**：在 Teacher 执行前固定 distractor、enum stripping、missing-function 和
+   irrelevance 条件。
+5. **Replay + artifact**：执行 fresh replay、sensitive provenance、plain tool-sequence Jaccard、
+   semantic boundary 和 Parquet round-trip 验证。
+
+### 3. Programmatic reward and GRPO
+
+`prove_baseline` 使用五组件任务奖励：
+
+```text
+R = 0.5 R_validity
+  + 0.5 R_coverage
+  + 0.15 R_efficiency
+  + 0.2 R_name
+  + 0.1 R_arg
+```
+
+`oval_full` 在 baseline 之外启用可选扩展：
+
+- bounded process reward；
+- event-log safety verifier 与 adaptive safety constraint；
+- potential-based progress shaping；
+- LATA length-aware token allocation。
+
+所有 reward 都由环境状态、调用轨迹和 canonical task contract 计算，不依赖外部 judge 模型。
+
+## 技术特点
+
+- **事实与文本分离**：治理事实、内部执行面和用户可见面具有独立边界。
+- **真实执行优先**：Teacher、fresh replay 和 Policy rollout 共用 MCP handler 与 schema。
+- **引用可见性**：自然 selector 可以映射到 canonical ID，但 opaque backend ID 不进入用户文本。
+- **依赖证据**：每条 canonical chain 保存 source、target、occurrence 和连续 evidence path。
+- **失败可审计**：候选失败以结构化 stage、reason 和 trace evidence 保存，不用异常字符串替代归因。
+- **Artifact fail closed**：purpose、schema、runtime、transition 和 reward fingerprint 在消费端重新校验。
+- **双环境隔离**：Teacher 与 Policy 使用互斥的 vLLM/Transformers 依赖，避免运行时污染。
+- **Profile 隔离**：论文机制审计数据不能被 rollout、reward 或训练入口误消费。
+
+## 系统架构
 
 ```mermaid
 flowchart LR
@@ -25,160 +100,204 @@ flowchart LR
     C --> D[Query Teacher]
     D --> E[Action FSM]
     E --> F[Live MCP]
-    F --> G[Profile-Boundary Validation]
+    F --> G[Local Boundary Validation]
     G --> H[Fresh Replay + Provenance]
-    H --> I[Plain Jaccard]
-    I --> J[Parquet Contract]
-    J --> K[Policy Rollout + Reward]
+    H --> I[Jaccard + Canonical Artifact]
+    I --> J[Policy Rollout]
+    J --> K[Programmatic Reward]
+    K --> L[GRPO]
 ```
 
-核心边界：
+详细调用链和依赖方向见 [PROVE_ARCHITECTURE.md](docs/PROVE_ARCHITECTURE.md)。
 
-- domain contract 和真实 MCP trace 决定可执行性；local profile 的引用可见性合同只负责阻止
-  sampler-private handle 出现在用户可见文本，Teacher
-  不能扩张系统事实；
-- opaque backend ID、tool name、raw arguments 和 observation 属于内部执行面，公开 query/continuation/
-  terminal 只能消费 public projection；
-- terminal 保留 Teacher 原始文本；确定性 private-reference / hidden-tool-name 边界在写入前 fail closed；
-- artifact 同时保留审计 provenance 和 canonical public row，训练 consumer 必须重新校验 purpose、hash
-  和 reward compatibility；
-- 依赖图按 domain 内全部无序工具 pair 由 Teacher 分类；
-- query 和参数绑定 session-scoped live state；
-- distractor、enum stripping、missing-function 和 irrelevance 在 Teacher 处理前固定；
-- PROVE 公开 corpus hard gates 与本地训练可消费性合同分开记录；
-- Teacher、Replay 和 Policy rollout 共用同一套 MCP handler 和 schema；
-- `prove_baseline` 只使用 PROVE 五组件任务奖励，`oval_full` 才启用 OVAL 扩展。
+## 项目结构
 
-算法与合同详见 [OVAL-MCP](docs/OVAL-MCP.md)。
-
-## 环境
-
-Teacher 与 Policy 使用不兼容的 vLLM / Transformers 版本，必须分环境。
-
-| 环境 | 用途 | PyTorch | vLLM | Transformers |
-|---|---|---:|---:|---:|
-| `arl` | Gemma-4 Teacher / GT | 2.10.0+cu128 | 0.19.1 | 5.13.0 |
-| `livemcp` | Qwen3-4B-Instruct-2507 rollout / GRPO | 2.8.0+cu128 | 0.11.0 | 4.57.1 |
-
-Teacher：
-
-```bash
-export ARL_ENV=/mnt/data2/liuzhanyi/envs/arl
-conda activate "$ARL_ENV"
-export PYTHON_BIN="$ARL_ENV/bin/python"
+```text
+LiveMCP-GRPO/
+├── configs/                 # MCP suite、rollout 和训练配置
+├── data/
+│   └── dependency_graphs/   # 版本化 dependency cache
+├── docs/                    # 算法、架构、状态和逐域准入合同
+├── scripts/                 # 审计、环境、smoke 和训练入口
+├── src/
+│   ├── agent_loop/          # Policy 多轮 rollout
+│   ├── live_mcp/            # MCP 环境、生成、replay 和 artifact
+│   ├── oval_mcp/            # OVAL verifier、reward 和训练扩展
+│   ├── reward/              # Reward worker 接口
+│   └── training/            # GRPO estimator、配置和入口
+├── tests/                   # 合同、回归和端到端结构测试
+├── verl/                    # Vendored veRL 0.6.1
+├── requirements.txt         # Teacher 环境依赖
+└── requirements-train.txt   # Policy/GRPO 环境依赖
 ```
 
-Policy：
+## Quick Start
+
+### 1. Clone
 
 ```bash
-export LIVEMCP_ENV=/mnt/data2/liuzhanyi/envs/livemcp
-conda activate "$LIVEMCP_ENV"
-export PYTHON_BIN="$LIVEMCP_ENV/bin/python"
-export PYTHONNOUSERSITE=1
+git clone https://github.com/liuzy1019/LiveMCP-GRPO.git
+cd LiveMCP-GRPO
 ```
 
-训练环境可由以下命令创建或核验：
+项目要求 Linux、Python 3.11、CUDA 12.8 和 NVIDIA GPU。Teacher 与 Policy 依赖不兼容，必须使用
+两个独立环境。
+
+### 2. Teacher environment
 
 ```bash
+conda create -n livemcp-teacher python=3.11 pip -y
+conda activate livemcp-teacher
+
+python -m pip install torch==2.10.0 torchvision torchaudio \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install vllm==0.19.1
+python -m pip install -r requirements.txt --no-build-isolation
+python -m pip install -e . --no-deps
+```
+
+Teacher 模型使用本地路径或 vLLM 可识别的模型标识。Gemma-4-31B 在 A10 上推荐 TP=4。
+
+### 3. Policy / GRPO environment
+
+```bash
+export LIVEMCP_ENV="$PWD/../envs/livemcp"
 bash scripts/setup_training_env.sh
 bash scripts/setup_training_env.sh --check
 ```
 
-## 常用命令
+该脚本安装 `requirements-train.txt`、vendored `verl` 和当前项目，不安装 Teacher 依赖。
 
-生成训练候选：
+### 4. Build dependency cache
 
 ```bash
-livemcp-gen run --mode full --count 500 --val-count 100 \
+livemcp-gen build-cache \
+  --model models/Google/Gemma-4-31B-it \
+  --api-base http://localhost:8001/v1
+```
+
+### 5. Generate data
+
+训练候选必须显式使用 local trainability profile：
+
+```bash
+livemcp-gen run \
+  --mode full \
+  --domain all \
+  --suite configs/live_mcp/ten_domain_suite.yaml \
+  --model models/Google/Gemma-4-31B-it \
+  --count 100 \
+  --val-count 20 \
   --prompt-profile local_trainable_v1 \
-  --semantic-gate-profile deterministic_v1
-# 或直接调用
-python -m src.live_mcp.corpus.cli run --mode full --count 500 --val-count 100 \
-  --prompt-profile local_trainable_v1 \
-  --semantic-gate-profile deterministic_v1
+  --semantic-gate-profile deterministic_v1 \
+  --preserve-candidates
 ```
 
-CLI 默认的 paper baseline + diagnostic gate 只产生 `paper_audit`，不能用于 rollout 或训练。
-
-审计：
+论文机制审计使用独立 profile，产物不能训练：
 
 ```bash
-livemcp-audit data/runs/<run-id>/train.parquet data/runs/<run-id>/val.parquet
+livemcp-gen run \
+  --mode full \
+  --domain shopping \
+  --count 16 \
+  --val-count 4 \
+  --prompt-profile paper_generation_baseline_v1 \
+  --semantic-gate-profile diagnostic_only
 ```
 
-构建依赖图缓存：
+### 6. Audit artifacts
 
 ```bash
-livemcp-gen build-cache --model models/Google/Gemma-4-31B-it --api-base http://localhost:8765/v1
+livemcp-audit \
+  data/runs/<run-id>/train.parquet \
+  data/runs/<run-id>/val.parquet
+
+python scripts/validate_generation_pipeline.py --stages 1,2 --domain all
+python scripts/audit_prove_domains.py --domain all
 ```
 
-训练：
+### 7. Train
 
 ```bash
-bash scripts/train_grpo.sh --gpus 0,1,2,3
+OVAL_TRAIN_FILE=data/runs/<run-id>/train.parquet \
+OVAL_VAL_FILE=data/runs/<run-id>/val.parquet \
+bash scripts/train_grpo.sh \
+  --gpus 0,1,2,3 \
+  --reward-profile prove_baseline \
+  --experiment-profile custom
 ```
 
-多 seed smoke：
+多 seed rollout/reward smoke：
 
 ```bash
 bash scripts/smoke_rollout_reward.sh \
   --gpus 0,1,2,3 \
   --seeds 41,42,43 \
   --steps 3 \
-  --reward-profile prove_baseline
+  --reward-profile prove_baseline \
+  --experiment-profile custom \
+  --train-file data/runs/<run-id>/train.parquet \
+  --val-file data/runs/<run-id>/val.parquet
 ```
 
-验证：
+## Profiles
+
+| Prompt profile | Semantic gate | Artifact purpose | 用途 |
+|---|---|---|---|
+| `paper_generation_baseline_v1` | `diagnostic_only` | `paper_audit` | PROVE 机制审计 |
+| `local_trainable_v1` | `deterministic_v1` | `training_candidate` | 本地训练候选 |
+
+训练、rollout 和 reward 入口会拒绝 `paper_audit`，也会拒绝 profile、fingerprint 或 canonical
+contract 不匹配的 artifact。
+
+## 验证
 
 ```bash
-PYTHONNOUSERSITE=1 "$ARL_ENV/bin/python" -m pytest -q \
+# Teacher/native MCP
+conda activate livemcp-teacher
+PYTHONNOUSERSITE=1 python -m pytest -q \
   tests/test_transport_contract.py
+
+# Policy/GRPO
 PYTHONNOUSERSITE=1 "$LIVEMCP_ENV/bin/python" -m pytest -q tests/
-PYTHONNOUSERSITE=1 "$LIVEMCP_ENV/bin/python" -m compileall src scripts tests
-bash -n src/live_mcp/corpus/launcher.sh scripts/train_grpo.sh
+
+# Static checks
+bash -n src/live_mcp/corpus/launcher.sh scripts/*.sh
 git diff --check
 ```
 
-两套测试环境不可混装：native MCP transport 在 ARL 环境单独验证，Policy 全量测试在
-`livemcp` 环境运行；Policy 环境没有可选 `mcp` SDK 时 transport 文件显示为 skip。
-
-完整脚本职责和补产参数见 [scripts/README.md](scripts/README.md)。
-
-## 目录
-
-```text
-configs/              MCP suite 与训练配置说明
-data/                 活动数据、不可变 run 和数据文档
-docs/                 版本化的现役算法与代码边界
-scripts/              生成、合并、审计、训练入口
-src/live_mcp/         环境、Teacher、Replay、数据生成
-src/oval_mcp/         rollout/reward 合同
-src/training/         GRPO 配置、estimator 和入口
-tests/                回归与数据合同测试
-verl/                 vendored verl 0.6.1
-```
+native MCP transport 与 Policy/GRPO 依赖必须分别验证，不能为了单环境全绿混装两套依赖。
 
 ## 文档
 
-| 文档 | 职责 |
+| 文档 | 内容 |
 |---|---|
-| [当前状态](docs/PROJECT_STATUS.md) | 当前数据、验证结果、阻塞项和下一步 |
-| [算法方案](docs/OVAL-MCP.md) | PROVE 对齐边界、五步生成、reward、训练和评测设计 |
-| [代码架构](docs/PROVE_ARCHITECTURE.md) | 生产调用链、依赖方向和语义合同边界 |
-| [域语义准入](docs/DOMAIN_SEMANTIC_AUDIT.md) | 十域事实逻辑的认证标准和当前矩阵 |
-| [数据说明](data/README.md) | 数据 artifact、生成、审计、发布与消费 |
-| [脚本说明](scripts/README.md) | 脚本职责、生成命令和 CI 入口 |
-| [配置说明](configs/README.md) | 配置入口、默认值和环境变量覆盖方式 |
+| [OVAL-MCP.md](docs/OVAL-MCP.md) | PROVE 边界、生成机制、reward 与训练合同 |
+| [PROVE_ARCHITECTURE.md](docs/PROVE_ARCHITECTURE.md) | 生产调用链、模块职责与信任边界 |
+| [DOMAIN_SEMANTIC_AUDIT.md](docs/DOMAIN_SEMANTIC_AUDIT.md) | 十域事实逻辑和逐域准入标准 |
+| [PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | 当前数据门、阻塞项和下一步 |
+| [data/README.md](data/README.md) | Artifact、生成、审计与消费 |
+| [scripts/README.md](scripts/README.md) | 脚本职责和运行参数 |
+| [configs/README.md](configs/README.md) | 配置入口和覆盖方式 |
 
+## 技术栈
 
-### 阅读顺序
+- Training framework: [veRL](https://github.com/volcengine/verl) 0.6.1
+- Teacher serving: vLLM 0.19.1 + Transformers 5
+- Policy rollout: vLLM 0.11.0 + Transformers 4.57
+- Policy model: Qwen3-4B
+- Teacher model: Gemma-4-31B
+- Environment protocol: MCP
+- Configuration: Hydra / OmegaConf
+- Artifact format: Parquet / PyArrow
 
-1. 先读 `docs/PROJECT_STATUS.md`，再按需读算法、架构或域语义准入文档；
-2. 运行数据任务前读 `data/README.md` 和 `scripts/README.md`；
-3. 涉及当前运行时，仍需现场核实 manifest、artifact、进程和 GPU。
+## Acknowledgements
 
-状态事实不得同时在多个文档中展开维护。已完成历史只从 Git 追溯，不在现役文档中重复。
+- [PROVE](https://arxiv.org/abs/2606.03892) for verified live-environment synthesis and programmatic reward design.
+- [veRL](https://github.com/volcengine/verl) for the distributed RL training framework.
+- [vLLM](https://github.com/vllm-project/vllm) for model serving and rollout inference.
+- [Model Context Protocol](https://modelcontextprotocol.io/) for the tool-server protocol.
 
-## 许可
+## License
 
-Apache License 2.0，见 [LICENSE](LICENSE)。
+Apache License 2.0. See [LICENSE](LICENSE).
