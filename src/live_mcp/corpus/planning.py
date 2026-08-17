@@ -25,10 +25,10 @@ from src.live_mcp.corpus.profile import (
     _largest_remainder_ratio_quotas,
     _prove_proxy_bucket,
 )
-from src.live_mcp.corpus.merge import (
+from src.live_mcp.corpus.merge_allocation import _domain_unique_chain_capacity
+from src.live_mcp.corpus.merge_validation import (
     _as_extra,
     _current_tools,
-    _domain_unique_chain_capacity,
     _oracle_calls,
 )
 from src.live_mcp.domain_allocation import jaccard_unique_sequence_count
@@ -404,20 +404,6 @@ def _select_bucket(gaps: dict[str, int]) -> str | None:
         if gaps.get(bucket, 0) > 0:
             return bucket
     return None
-
-
-def _generation_args(bucket: str) -> list[str]:
-    common = ["--irrelevance-ratio", "0"]
-    if bucket == "mcp_conversation":
-        return [
-            "--tool-required-only",
-            "--missing-function-rate",
-            "0",
-            *common,
-        ]
-    if bucket == "missing_function":
-        return ["--missing-function-rate", "1", *common]
-    raise ValueError(f"unsupported generation bucket: {bucket}")
 
 
 def build_plan(

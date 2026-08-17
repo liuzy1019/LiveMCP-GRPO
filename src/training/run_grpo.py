@@ -2,7 +2,7 @@
 """OVAL-MCP GRPO 训练入口。
 
 用法:
-    OVAL_REWARD_PROFILE=oval_full python src/training/run_grpo.py \\
+    OVAL_REWARD_PROFILE=prove_baseline python src/training/run_grpo.py \\
         actor_rollout_ref.model.path=models/Qwen/Qwen3-4B-Instruct-2507 \\
         ...
 """
@@ -72,8 +72,7 @@ def main() -> None:
     estimator_name = _bind_profile_estimator(hp.reward_profile, sys.argv)
     _validate_verl_runtime()
     logger.info("LiveMCP 超参配置:\n" + hp.summary())
-    from src.oval_mcp.training.lambda_state import LambdaState
-    # 将配置保存到 LambdaState 路径相邻位置，供 wandb 等外部工具读取
+    # Save the resolved objective next to optional OVAL state for audit tools.
     lambda_state_dir = os.path.dirname(hp.lambda_state_path) or "."
     config_dump_path = os.path.join(lambda_state_dir, "livemcp_config.json")
     import json as _json
@@ -99,27 +98,28 @@ def main() -> None:
                 "LiveMCP estimator registration failed; aborting before Ray startup"
             )
 
-    # ── 初始化 LambdaState（lambda_safe file-backed 共享状态） ──
-    # 每次训练从干净状态开始（OVAL_KEEP_LAMBDA=1 保留上次状态）
-    if (
-        hp.reward_profile == "prove_baseline" or not hp.keep_lambda
-    ) and os.path.exists(hp.lambda_state_path):
-        LambdaState.reset(hp.lambda_state_path)
-    if hp.reward_profile == "prove_baseline" or not hp.keep_lambda:
-        lambda_state = LambdaState.load_or_default(
-            path=hp.lambda_state_path,
-            lambda_safe=hp.lambda_safe_default,
-            alpha_lambda=hp.alpha_lambda,
-            epsilon=hp.lambda_epsilon,
-            lambda_safe_max=hp.lambda_safe_max,
+    # LambdaState belongs only to the local OVAL objective. The PROVE baseline
+    # must not create or consume hidden reward state.
+    if hp.reward_profile == "oval_full":
+        from src.oval_mcp.training.lambda_state import LambdaState
+
+        if not hp.keep_lambda and os.path.exists(hp.lambda_state_path):
+            LambdaState.reset(hp.lambda_state_path)
+        if not hp.keep_lambda:
+            lambda_state = LambdaState.load_or_default(
+                path=hp.lambda_state_path,
+                lambda_safe=hp.lambda_safe_default,
+                alpha_lambda=hp.alpha_lambda,
+                epsilon=hp.lambda_epsilon,
+                lambda_safe_max=hp.lambda_safe_max,
+            )
+        else:
+            lambda_state = LambdaState.load_or_default(path=hp.lambda_state_path)
+        lambda_state.save()
+        logger.info(
+            f"lambda_safe initialized: {lambda_state.lambda_safe} "
+            f"(path={hp.lambda_state_path})"
         )
-    else:
-        lambda_state = LambdaState.load_or_default(path=hp.lambda_state_path)
-    lambda_state.save()
-    logger.info(
-        f"lambda_safe 初始化: {lambda_state.lambda_safe} "
-        f"(path={hp.lambda_state_path})"
-    )
 
     # ray TaskRunner 跑在独立 actor 进程，主进程注册的 dict / monkey-patch 不会带过去。
     # 通过 task_runner_class hook 在 actor 进程里再注册一次。

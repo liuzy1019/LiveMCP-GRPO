@@ -8,10 +8,422 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.live_mcp.contracts.factory import build_contract_registry
+from src.live_mcp.dependency_value_flow import (
+    _dependency_value_key,
+    _field_values,
+)
+from src.live_mcp.domain_contracts.reference_visibility import (
+    DOMAIN_OPAQUE_ENTITY_TYPES,
+    is_public_entity_reference,
+    is_sampler_private_handle,
+)
+
 
 VALID_TERMINALS: tuple[str, ...] = (
     "final_answer", "report_error", "ask_clarification",
 )
+
+_SAMPLER_PRIVATE_ID_RE = re.compile(
+    r"(?<![A-Za-z0-9_])[A-Za-z][A-Za-z0-9]*_s\d+_\d+"
+    r"(?![A-Za-z0-9_])"
+)
+
+
+@dataclass(frozen=True)
+class UserVisiblePrivateIdExposure:
+    round_idx: int
+    surface: str
+    text: str
+    leaked_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UserVisibleToolNameExposure:
+    round_idx: int
+    text: str
+    exposed_tool_names: tuple[str, ...]
+
+
+def sampler_private_ids(text: str) -> tuple[str, ...]:
+    """Return deterministic seeded backend IDs exposed in public text."""
+    return tuple(sorted(set(_SAMPLER_PRIVATE_ID_RE.findall(str(text or "")))))
+
+
+def user_visible_private_id_exposure(
+    conversation_queries: list[str],
+    oracle_calls_per_round: list[list[Any]],
+    *,
+    private_entity_ids: set[str] | None = None,
+    public_entity_ids: set[str] | None = None,
+) -> UserVisiblePrivateIdExposure | None:
+    """Find the first private entity ID on a user-visible surface.
+
+    Exact IDs proven by typed trace facts cover runtime-created entities; the
+    seeded-ID pattern remains a fail-safe for a leaked sampler reference that
+    did not reach a successful call. Tool arguments and observations are
+    deliberately excluded because the runtime needs opaque IDs internally.
+    """
+    known_private_ids = {
+        str(value) for value in (private_entity_ids or set()) if str(value)
+    }
+    known_public_ids = {
+        str(value) for value in (public_entity_ids or set()) if str(value)
+    }
+
+    def exposed_ids(text: str) -> tuple[str, ...]:
+        exact = {
+            entity_id
+            for entity_id in known_private_ids
+            if re.search(
+                rf"(?<![A-Za-z0-9_]){re.escape(entity_id)}"
+                rf"(?![A-Za-z0-9_])",
+                text,
+            )
+        }
+        # Sampler provenance is an unconditional private-reference fact.
+        # A typed public declaration may expose a separate business identifier,
+        # but can never relabel a seeded backend handle as public.
+        seeded_backend_ids = set(sampler_private_ids(text))
+        derived_private_aliases: set[str] = set()
+        for entity_id in known_private_ids:
+            if not _SAMPLER_PRIVATE_ID_RE.fullmatch(entity_id):
+                continue
+            suffix = entity_id.rsplit("_", 1)[-1]
+            for marker in ("_", "..."):
+                alias = f"{marker}{suffix}"
+                if re.search(
+                    rf"(?<![A-Za-z0-9_]){re.escape(alias)}"
+                    rf"(?![A-Za-z0-9_])",
+                    text,
+                ):
+                    derived_private_aliases.add(alias)
+        return tuple(sorted(
+            exact | seeded_backend_ids | derived_private_aliases,
+        ))
+
+    round_count = max(len(conversation_queries), len(oracle_calls_per_round))
+    for round_idx in range(round_count):
+        if round_idx < len(conversation_queries):
+            query = str(conversation_queries[round_idx] or "")
+            leaked = exposed_ids(query)
+            if leaked:
+                return UserVisiblePrivateIdExposure(
+                    round_idx, "user_query", query, leaked,
+                )
+        if round_idx >= len(oracle_calls_per_round):
+            continue
+        for call in oracle_calls_per_round[round_idx]:
+            action = str(
+                call.get("action", "tool_call")
+                if isinstance(call, dict)
+                else getattr(call, "action", "tool_call")
+            )
+            if action == "tool_call":
+                continue
+            arguments = (
+                call.get("arguments", {})
+                if isinstance(call, dict)
+                else getattr(call, "arguments", {})
+            ) or {}
+            terminal_text = str(
+                arguments.get("text")
+                or arguments.get("question")
+                or arguments.get("reason")
+                or ""
+            )
+            leaked = exposed_ids(terminal_text)
+            if leaked:
+                return UserVisiblePrivateIdExposure(
+                    round_idx, "assistant_terminal", terminal_text, leaked,
+                )
+    return None
+
+
+def user_visible_terminal_tool_name_exposure(
+    oracle_calls_per_round: list[list[Any]],
+    *,
+    tool_names: set[str],
+    hidden_tool_names: set[str] | None = None,
+) -> UserVisibleToolNameExposure | None:
+    """Find an internal capability identifier in assistant terminal text."""
+    hidden_tool_names = hidden_tool_names or set()
+    for round_idx, calls in enumerate(oracle_calls_per_round):
+        for call in calls:
+            action = str(
+                call.get("action", "tool_call")
+                if isinstance(call, dict)
+                else getattr(call, "action", "tool_call")
+            )
+            if action == "tool_call":
+                continue
+            arguments = (
+                call.get("arguments", {})
+                if isinstance(call, dict)
+                else getattr(call, "arguments", {})
+            ) or {}
+            terminal_text = str(
+                arguments.get("text")
+                or arguments.get("question")
+                or arguments.get("reason")
+                or ""
+            )
+            exposed: list[str] = []
+            for tool_name in sorted(tool_names):
+                bounded = (
+                    rf"(?<![A-Za-z0-9_]){re.escape(tool_name)}"
+                    rf"(?![A-Za-z0-9_])"
+                )
+                if "_" in tool_name and re.search(
+                    bounded, terminal_text, re.IGNORECASE,
+                ):
+                    exposed.append(tool_name)
+                    continue
+                if tool_name not in hidden_tool_names:
+                    continue
+                code_like = (
+                    rf"(?:`{re.escape(tool_name)}`|"
+                    rf"\({re.escape(tool_name)}\)|"
+                    rf"\b{re.escape(tool_name)}\s+"
+                    rf"(?:tool|command|function)\b)"
+                )
+                if re.search(code_like, terminal_text, re.IGNORECASE):
+                    exposed.append(tool_name)
+            if exposed:
+                return UserVisibleToolNameExposure(
+                    round_idx=round_idx,
+                    text=terminal_text,
+                    exposed_tool_names=tuple(exposed),
+                )
+    return None
+
+
+def _entity_values(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return [item for child in value for item in _entity_values(child)]
+    if isinstance(value, (dict, tuple, set)):
+        return []
+    return [] if value is None else [value]
+
+
+def round_entity_occurrences(
+    *,
+    domain: str,
+    calls: list[Any],
+    observations: list[Any],
+    server_tools: list[dict[str, Any]],
+) -> tuple[
+    dict[tuple[str, str], dict[str, Any]],
+    dict[tuple[str, str], dict[str, Any]],
+]:
+    """Return typed entity facts and typed input targets for one round."""
+    registry = build_contract_registry({domain: server_tools})
+    facts: dict[tuple[str, str], dict[str, Any]] = {}
+    inputs: dict[tuple[str, str], dict[str, Any]] = {}
+    for call_index, call in enumerate(calls):
+        action = (
+            call.get("action", "tool_call")
+            if isinstance(call, dict)
+            else getattr(call, "action", "tool_call")
+        )
+        if action != "tool_call":
+            continue
+        tool_name = str(
+            call.get("tool_name")
+            if isinstance(call, dict)
+            else getattr(call, "tool_name", "")
+        )
+        arguments = (
+            call.get("arguments", {})
+            if isinstance(call, dict)
+            else getattr(call, "arguments", {})
+        ) or {}
+        try:
+            contract = registry.get(domain, tool_name)
+        except KeyError:
+            continue
+        for binding in contract.input_entities:
+            if binding.name not in arguments:
+                continue
+            for value in _entity_values(arguments[binding.name]):
+                key = (binding.entity_type, _dependency_value_key(value))
+                occurrence = {
+                    "entity_type": binding.entity_type,
+                    "value": value,
+                    "capability": tool_name,
+                    "field": binding.name,
+                    "surface": "argument",
+                    "call_index": call_index,
+                }
+                facts.setdefault(key, occurrence)
+                inputs.setdefault(key, occurrence)
+        # Domain-neutral tools may accept a polymorphic entity pair.
+        dynamic_entity_type = arguments.get("entity_type")
+        dynamic_entity_id = arguments.get("entity_id")
+        if (
+            isinstance(dynamic_entity_type, str)
+            and dynamic_entity_type.strip()
+            and dynamic_entity_id is not None
+        ):
+            for value in _entity_values(dynamic_entity_id):
+                entity_type = dynamic_entity_type.strip()
+                key = (entity_type, _dependency_value_key(value))
+                occurrence = {
+                    "entity_type": entity_type,
+                    "value": value,
+                    "capability": tool_name,
+                    "field": "entity_id",
+                    "surface": "argument",
+                    "call_index": call_index,
+                }
+                facts.setdefault(key, occurrence)
+                inputs.setdefault(key, occurrence)
+        observation = (
+            observations[call_index] if call_index < len(observations) else {}
+        )
+        for binding in contract.output_entities:
+            for raw_value in _field_values(observation, binding.name):
+                for value in _entity_values(raw_value):
+                    key = (binding.entity_type, _dependency_value_key(value))
+                    facts.setdefault(key, {
+                        "entity_type": binding.entity_type,
+                        "value": value,
+                        "capability": tool_name,
+                        "field": binding.name,
+                        "surface": "observation",
+                        "call_index": call_index,
+                    })
+    return facts, inputs
+
+
+def contract_entity_types(
+    domain: str,
+    server_tools: list[dict[str, Any]],
+) -> set[str]:
+    """Return every canonical entity type covered by the tool contracts."""
+    if not server_tools:
+        return set()
+    try:
+        registry = build_contract_registry({domain: server_tools})
+    except (KeyError, TypeError, ValueError):
+        # Persisted diagnostic fixtures and legacy artifacts may carry only a
+        # schema projection. The sampler-pattern fail-safe remains independent
+        # of typed extraction, so degraded metadata must not disable it.
+        return set()
+    return {
+        binding.entity_type
+        for contract in registry.domain(domain)
+        for binding in (*contract.input_entities, *contract.output_entities)
+        if binding.entity_type
+    }
+
+
+def reference_entity_types(
+    domain: str,
+    server_tools: list[dict[str, Any]],
+) -> set[str]:
+    """Return the canonical entity types covered by local visibility policy."""
+    entity_types = contract_entity_types(domain, server_tools)
+    entity_types.update(DOMAIN_OPAQUE_ENTITY_TYPES.get(domain, frozenset()))
+    return entity_types
+
+
+def reference_visibility_from_execution_history(
+    *,
+    domain: str,
+    execution_history: list[dict[str, Any]],
+    server_tools: list[dict[str, Any]],
+) -> tuple[set[str], set[str]]:
+    """Derive exact private/public references from successful typed events.
+
+    A Teacher-visible schema set may include cross-domain distractors.  Typed
+    contracts and reference policy must therefore follow each execution
+    event's recorded owner, rather than the candidate's primary domain.
+    """
+    successful = [
+        event for event in execution_history
+        if isinstance(event, dict)
+        and event.get("success") is True
+        and str(event.get("tool_name") or "")
+    ]
+    schemas_by_owner: dict[str, list[dict[str, Any]]] = {}
+    for schema in server_tools:
+        owner = str(schema.get("_server_name") or domain)
+        schemas_by_owner.setdefault(owner, []).append(schema)
+    events_by_owner: dict[str, list[dict[str, Any]]] = {}
+    for event in successful:
+        owner = str(event.get("server_name") or domain)
+        events_by_owner.setdefault(owner, []).append(event)
+
+    private_ids: set[str] = set()
+    public_ids: set[str] = set()
+    for owner, events in sorted(events_by_owner.items()):
+        owned_schemas = schemas_by_owner.get(owner, [])
+        if not owned_schemas:
+            raise ValueError(
+                f"Missing visible tool schemas for execution owner {owner}"
+            )
+        calls = [{
+            "action": "tool_call",
+            "tool_name": str(event.get("tool_name") or ""),
+            "arguments": dict(event.get("arguments") or {}),
+        } for event in events]
+        observations = [event.get("observation") or {} for event in events]
+        owner_private, owner_public = typed_entity_reference_visibility_from_rounds(
+            domain=owner,
+            calls_per_round=[calls],
+            observations_per_round=[observations],
+            server_tools=owned_schemas,
+            entity_types=reference_entity_types(owner, owned_schemas),
+        )
+        private_ids.update(owner_private)
+        public_ids.update(owner_public)
+    return private_ids - public_ids, public_ids
+
+
+def typed_entity_reference_visibility_from_rounds(
+    *,
+    domain: str,
+    calls_per_round: list[list[Any]],
+    observations_per_round: list[list[Any]],
+    server_tools: list[dict[str, Any]],
+    entity_types: set[str],
+) -> tuple[set[str], set[str]]:
+    """Return private backend handles and public business references.
+
+    Visibility is decided from the canonical typed binding field, rather than
+    treating every identifier belonging to an entity type as equivalent.
+    """
+    private_ids: set[str] = set()
+    public_ids: set[str] = set()
+    if not server_tools or not entity_types:
+        return private_ids, public_ids
+    for round_idx, calls in enumerate(calls_per_round):
+        facts, _ = round_entity_occurrences(
+            domain=domain,
+            calls=calls,
+            observations=(
+                observations_per_round[round_idx]
+                if round_idx < len(observations_per_round)
+                else []
+            ),
+            server_tools=server_tools,
+        )
+        for item in facts.values():
+            value = item.get("value")
+            entity_type = str(item.get("entity_type") or "")
+            field = str(item.get("field") or "")
+            if entity_type not in entity_types or not isinstance(value, str) or not value:
+                continue
+            if is_sampler_private_handle(value):
+                private_ids.add(value)
+            elif is_public_entity_reference(
+                domain, entity_type, field, value,
+            ):
+                public_ids.add(value)
+            elif field == "id" or field.endswith("_id"):
+                private_ids.add(value)
+    return private_ids - public_ids, public_ids
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -118,52 +530,23 @@ class GeneratedQuery:
 
     user_query: str
     target_capability: str
-    chain_supported: bool
     attempts: int
-    mutation_evidence: list[dict[str, Any]] = None
-    dependency_evidence: list[str] = None
-    initial_goal: str = ""
-    initial_goal_grounding_basis: dict[str, Any] = None
-    initial_goal_causal_steps: list[str] = None
-    initial_goal_planning_attempts: int = 0
 
 
-def _chain_goal_phrase(final_tool: str) -> str:
-    """Natural-language outcome hint for chain-seeded query generation.
+def _chain_goal_phrase(
+    tool_schemas: list[dict[str, Any]], final_tool: str,
+) -> str:
+    """Derive a domain-correct outcome hint from the exact visible schema."""
+    schema = next(
+        (tool for tool in tool_schemas if tool.get("name") == final_tool),
+        {},
+    )
+    description = " ".join(str(schema.get("description") or "").split())
+    if description:
+        sentence = description.split(". ", 1)[0].rstrip(".")
+        return sentence[:1].lower() + sentence[1:]
 
-    The hint guides the user goal without exposing tool names or forcing the
-    prompt to list internal workflow steps.
-    """
     name = final_tool.lower()
-    explicit: dict[str, str] = {
-        "checkout": "place or complete an order from the cart",
-        "return_order": "return an order",
-        "track_order": "check an order's shipping or delivery status",
-        "refund_invoice": "refund an invoice",
-        "pay_invoice": "pay an invoice",
-        "dispute_invoice": "dispute an invoice",
-        "cancel_payment": "cancel a pending payment",
-        "complete_task": "mark a CRM task complete",
-        "create_thread": "start a thread from a message",
-        "react_message": "add a reaction to a message",
-        "rate_order": "rate a delivered food order",
-        "add_tip": "add a tip to a food order",
-        "cancel_order": "cancel a food order",
-        "update_order_status": "update a food order's status",
-        "remove_from_wishlist": "remove an item from the wishlist",
-        "remove_from_cart": "remove an item from the cart",
-        "update_cart_quantity": "change the quantity of an item in the cart",
-        "clear_cart": "clear the cart",
-        "get_balance": "check an account balance",
-        "get_history": "check an account transaction history",
-        "get_statement": "get an account statement",
-        "list_orders": "list existing orders",
-        "get_order": "get order details",
-        "search_events": "search calendar events",
-        "list_events": "list calendar events",
-    }
-    if name in explicit:
-        return explicit[name]
     verb_map = {
         "create_": "create",
         "update_": "update",
@@ -214,7 +597,9 @@ def _target_tool_requirement(
     required_text = ", ".join(str(name) for name in required) or "none"
     return (
         f"Internal target capability: {tool_name}\n"
-        f"Capability description: {description or _chain_goal_phrase(tool_name)}{readonly_note}\n"
+        f"Capability description: "
+        f"{description or _chain_goal_phrase(tool_schemas, tool_name)}"
+        f"{readonly_note}\n"
         f"Required information fields: {required_text}"
     )
 
@@ -268,6 +653,20 @@ def reference_datetime_for_seed(seed: int) -> _datetime.datetime:
     return _datetime.datetime.strptime(
         reference_date_for_seed(seed), "%A, %B %d, %Y",
     )
+
+
+def reference_date_for_candidate_state(
+    generation_seed: int,
+    state_seed: int | None,
+) -> str:
+    """Return the temporal anchor owned by the candidate's Live-State.
+
+    ``generation_seed`` still controls persona and sampling diversity.  When a
+    distinct state seed is supplied, however, the state seeder and both Teacher
+    prompts must describe the same current date.
+    """
+    effective_state_seed = generation_seed if state_seed is None else state_seed
+    return reference_date_for_seed(int(effective_state_seed))
 
 # ═══════════════════════════════════════════════════════════════════════
 # Turn-decay schedule:

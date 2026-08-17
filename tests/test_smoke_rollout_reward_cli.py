@@ -40,7 +40,7 @@ def test_unknown_reward_profile_fails_before_launch() -> None:
         "--reward-profile",
         "not-a-profile",
         "--experiment-profile",
-        "prove_local_v1",
+        "custom",
     )
 
     assert completed.returncode == 2
@@ -59,18 +59,18 @@ def test_experiment_profile_is_required() -> None:
     assert "--experiment-profile is required" in completed.stderr
 
 
-def test_reward_and_experiment_profiles_must_match() -> None:
+def test_retired_historical_experiment_profile_is_rejected() -> None:
     completed = _run(
         "--gpus",
         "4,5,6,7",
         "--reward-profile",
-        "oval_full",
+        "prove_baseline",
         "--experiment-profile",
         "prove_local_v1",
     )
 
     assert completed.returncode == 2
-    assert "PROVE experiment profiles require" in completed.stderr
+    assert "accepts only custom" in completed.stderr
 
 
 def test_custom_profile_accepts_explicit_diagnostic_data_contract() -> None:
@@ -88,3 +88,17 @@ def test_custom_profile_accepts_explicit_diagnostic_data_contract() -> None:
     assert completed.returncode == 2
     assert "unsupported --experiment-profile" not in completed.stderr
     assert "--gpus must be a comma-separated list" in completed.stderr
+
+
+def test_custom_profile_requires_explicit_current_artifact_paths() -> None:
+    completed = _run(
+        "--gpus",
+        "4,5,6,7",
+        "--reward-profile",
+        "prove_baseline",
+        "--experiment-profile",
+        "custom",
+    )
+
+    assert completed.returncode == 2
+    assert "--train-file and --val-file are required" in completed.stderr

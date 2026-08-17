@@ -90,6 +90,12 @@ SUITE="configs/live_mcp/ten_domain_suite.yaml"
 SEED=42
 OUTPUT_DIR="${OUTPUT_DIR:-data}"
 GEN_OVERSAMPLE_PCT="${GEN_OVERSAMPLE_PCT:-10}"  # one launcher-level pool margin; shard-level oversample stays 0
+LIVEMCP_FIXED_ATTEMPT_BUDGET="${LIVEMCP_FIXED_ATTEMPT_BUDGET:-0}"
+if [[ "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" != "0" \
+    && "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" != "1" ]]; then
+    echo "ERROR: LIVEMCP_FIXED_ATTEMPT_BUDGET must be 0 or 1, got ${LIVEMCP_FIXED_ATTEMPT_BUDGET}" >&2
+    exit 1
+fi
 RUN_ID="${RUN_ID:-$(date +%m%d_%H%M)}"
 GENERATION_RESUME_CANDIDATE_DIR="${GENERATION_RESUME_CANDIDATE_DIR:-}"
 GENERATION_PRESERVE_CANDIDATES="${GENERATION_PRESERVE_CANDIDATES:-0}"
@@ -209,6 +215,10 @@ if [ -n "${CHAIN_BIN_QUOTAS}" ]; then
         --chain-bin-quotas "${CHAIN_BIN_QUOTAS}"
     )
 fi
+MERGE_DIAGNOSTIC_ARGS=()
+if [ "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" = "1" ]; then
+    MERGE_DIAGNOSTIC_ARGS=(--diagnostic-fixed-attempt)
+fi
 GENERATION_FILTER_ARGS=()
 if [ "${TOOL_REQUIRED_ONLY}" = "1" ]; then
     GENERATION_FILTER_ARGS=(--require-tool-calls)
@@ -225,17 +235,60 @@ mkdir -p logs
 
 # 主日志：tee 到 logs/
 MAIN_LOG="logs/${RUN_ID}_gen_${COUNT}.log"
-export LIVEMCP_TEACHER_TRACE_PATH="${LIVEMCP_TEACHER_TRACE_PATH:-logs/${RUN_ID}_teacher_trace.jsonl}"
+export LIVEMCP_TEACHER_TRACE_PATH="${LIVEMCP_TEACHER_TRACE_PATH:-${RUN_DIR}/teacher_trace.jsonl}"
 exec > >(tee -a "${MAIN_LOG}") 2>&1
 
 # ── GPU detection (via shared gpu_config.sh) ────────────────────────
 # The current formal Teacher-generation baseline is 4×A10 / one TP=4 vLLM
 # instance.  Callers can still opt into another resource count explicitly.
 GPU_COUNT="${GPU_COUNT:-4}"
+# A retained exact-model service owns its GPU lease. Probe it before the
+# free-GPU filter; otherwise its healthy allocation is misclassified as a
+# resource conflict and the launcher never reaches the reuse branch below.
+VLLM_PORT_START="${VLLM_PORT_START:-8001}"
+SERVED_MODEL_PROBE="$(basename "${MODEL}")"
+if [[ "${SERVED_MODEL_PROBE}" == Qwen* && "${SERVED_MODEL_PROBE}" != *Instruct* ]]; then
+    SERVED_MODEL_PROBE="${SERVED_MODEL_PROBE}-Instruct"
+fi
+REUSABLE_VLLM_PID=""
+if MODELS_JSON="$(curl -sf "http://localhost:${VLLM_PORT_START}/v1/models" 2>/dev/null)" \
+    && printf '%s' "${MODELS_JSON}" | "${PYTHON_BIN}" -c '
+import json, sys
+expected = sys.argv[1]
+payload = json.load(sys.stdin)
+raise SystemExit(0 if any(
+    isinstance(item, dict) and item.get("id") == expected
+    for item in payload.get("data", [])
+) else 1)
+' "${SERVED_MODEL_PROBE}"
+then
+    REUSABLE_VLLM_PID="$(
+        ss -ltnp "sport = :${VLLM_PORT_START}" 2>/dev/null \
+            | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | sort -u | head -n 1
+    )"
+    if [ -n "${REUSABLE_VLLM_PID}" ] \
+        && [ -r "/proc/${REUSABLE_VLLM_PID}/environ" ]; then
+        REUSABLE_GPU_IDS="$(
+            tr '\0' '\n' < "/proc/${REUSABLE_VLLM_PID}/environ" \
+                | sed -n 's/^CUDA_VISIBLE_DEVICES=//p' | head -n 1
+        )"
+        if [ -n "${REUSABLE_GPU_IDS}" ]; then
+            export CUDA_VISIBLE_DEVICES="${REUSABLE_GPU_IDS}"
+        fi
+    fi
+    GPU_FREE_ONLY=0
+    echo "[gpu_config] exact-model service detected before allocation: model=${SERVED_MODEL_PROBE} port=${VLLM_PORT_START} pid=${REUSABLE_VLLM_PID:-unknown}" >&2
+fi
 # When no explicit GPU list is passed, auto-select the first GPU_COUNT
 # free GPUs instead of defaulting to 0..N-1.  Set CUDA_VISIBLE_DEVICES
 # or GPU_FREE_ONLY=0 to override.
-: "${GPU_FREE_ONLY:=1}"
+if [ -z "${GPU_FREE_ONLY+x}" ]; then
+    if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then
+        GPU_FREE_ONLY=0
+    else
+        GPU_FREE_ONLY=1
+    fi
+fi
 source scripts/gpu_config.sh
 GPU_MEM_GB=${GPU_MEM_GB:-0}
 
@@ -249,6 +302,11 @@ ratio = float(sys.argv[2])
 print(int(total * ratio + 0.5))
 ' "$1" "${IRRELEVANCE_RATIO}"
 }
+FINAL_IRRELEVANCE_COUNT="$(_rounded_irrelevance_count "$((COUNT + VAL_COUNT))")"
+MERGE_STRATUM_ARGS=(--irrelevance-count "${FINAL_IRRELEVANCE_COUNT}")
+if [ -n "${DIFFICULTY}" ]; then
+    MERGE_STRATUM_ARGS+=(--difficulty "${DIFFICULTY}")
+fi
 echo "LiveMCP-GRPO Data Generation"
 echo "============================================"
 echo "Model:    ${MODEL}"
@@ -260,6 +318,7 @@ if [ -n "${BASE_TRAIN}" ]; then
     echo "Target semantics: ${COUNT} net-new train rows relative to base"
 fi
 echo "Oversample candidates: +${GEN_OVERSAMPLE_PCT}% before quality merge"
+echo "Fixed attempt budget: ${LIVEMCP_FIXED_ATTEMPT_BUDGET}"
 echo "Domain:   ${DOMAIN}"
 echo "Tool-required only: ${TOOL_REQUIRED_ONLY}"
 echo "Irrelevance ratio: ${IRRELEVANCE_RATIO}"
@@ -325,6 +384,13 @@ print('1' if fits else '0')
 VLLM_PIDS=()
 VLLM_PORTS=()
 VLLM_LOGS=()
+VLLM_OWNED=()
+VLLM_SHUTDOWN_ON_EXIT="${VLLM_SHUTDOWN_ON_EXIT:-0}"
+if [ "${VLLM_SHUTDOWN_ON_EXIT}" != "0" ] \
+    && [ "${VLLM_SHUTDOWN_ON_EXIT}" != "1" ]; then
+    echo "ERROR: VLLM_SHUTDOWN_ON_EXIT must be 0 or 1, got ${VLLM_SHUTDOWN_ON_EXIT}" >&2
+    exit 1
+fi
 GEN_SUCCESS=0
 _pids_listening_on_port() {
     local port="$1"
@@ -333,34 +399,69 @@ _pids_listening_on_port() {
         | sort -u
 }
 
+_port_is_listening() {
+    local port="$1"
+    ss -ltnH "sport = :${port}" 2>/dev/null | grep -q .
+}
+
+_port_serves_model() {
+    local port="$1"
+    local expected_model="$2"
+    local models_json
+    models_json="$(curl -sf "http://localhost:${port}/v1/models" 2>/dev/null)" \
+        || return 1
+    printf '%s' "${models_json}" | "${PYTHON_BIN}" -c '
+import json
+import sys
+
+expected = sys.argv[1]
+payload = json.load(sys.stdin)
+models = payload.get("data", []) if isinstance(payload, dict) else []
+raise SystemExit(0 if any(
+    isinstance(item, dict) and item.get("id") == expected
+    for item in models
+) else 1)
+' "${expected_model}"
+}
+
 _cleanup() {
     local exit_code=$?
-    echo "[cleanup] stopping vLLM processes and releasing ports..." >&2
-    # SIGTERM first
-    for pid in "${VLLM_PIDS[@]}"; do
-        if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
-            kill -TERM "$pid" 2>/dev/null || true
-        fi
-    done
-    sleep 2
-    # SIGKILL stragglers
-    for pid in "${VLLM_PIDS[@]}"; do
-        if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
-            kill -KILL "$pid" 2>/dev/null || true
-        fi
-    done
-    # 成功时删除 vLLM 日志；失败时保留用于排查
-    if [ "${GEN_SUCCESS}" = "1" ]; then
-        for log in "${VLLM_LOGS[@]}"; do
-            [ -f "${log}" ] && rm -f "${log}" && echo "[cleanup] removed vLLM log: ${log}" >&2
+    if [ "${VLLM_SHUTDOWN_ON_EXIT}" = "1" ]; then
+        echo "[cleanup] stopping launcher-owned vLLM processes..." >&2
+        for index in "${!VLLM_PIDS[@]}"; do
+            pid="${VLLM_PIDS[$index]}"
+            if [ "${VLLM_OWNED[$index]:-0}" = "1" ] \
+                && [ -n "${pid:-}" ] \
+                && { kill -0 -- "-${pid}" 2>/dev/null \
+                    || kill -0 "${pid}" 2>/dev/null; }; then
+                kill -TERM -- "-${pid}" 2>/dev/null \
+                    || kill -TERM "${pid}" 2>/dev/null \
+                    || true
+            fi
         done
-    else
-        if [ ${#VLLM_LOGS[@]} -gt 0 ]; then
-            echo "[cleanup] generation failed — vLLM logs preserved for debugging:" >&2
-            for log in "${VLLM_LOGS[@]}"; do
-                [ -f "${log}" ] && echo "  ${log}" >&2
-            done
-        fi
+        sleep 2
+        for index in "${!VLLM_PIDS[@]}"; do
+            pid="${VLLM_PIDS[$index]}"
+            if [ "${VLLM_OWNED[$index]:-0}" = "1" ] \
+                && [ -n "${pid:-}" ] \
+                && { kill -0 -- "-${pid}" 2>/dev/null \
+                    || kill -0 "${pid}" 2>/dev/null; }; then
+                kill -KILL -- "-${pid}" 2>/dev/null \
+                    || kill -KILL "${pid}" 2>/dev/null \
+                    || true
+            fi
+        done
+    elif [ ${#VLLM_PIDS[@]} -gt 0 ]; then
+        echo "[cleanup] generation stopped; vLLM service(s) retained:" >&2
+        for index in "${!VLLM_PIDS[@]}"; do
+            echo "  pid=${VLLM_PIDS[$index]:-unknown} port=${VLLM_PORTS[$index]}" >&2
+        done
+    fi
+    if [ ${#VLLM_LOGS[@]} -gt 0 ]; then
+        for log in "${VLLM_LOGS[@]}"; do
+            [ -n "${log:-}" ] && [ -f "${log}" ] \
+                && echo "[cleanup] vLLM log retained: ${log}" >&2
+        done
     fi
     exit $exit_code
 }
@@ -378,6 +479,14 @@ fi
 GENERATION_CLIENT_SEED_STRIDE="${GENERATION_CLIENT_SEED_STRIDE:-1000000}"
 GENERATION_MAX_RECOVERY_ROUNDS="${GENERATION_MAX_RECOVERY_ROUNDS:-3}"
 MERGE_TOPUP_ROUNDS="${MERGE_TOPUP_ROUNDS:-3}"
+if [ "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" = "1" ]; then
+    if [ "${GEN_OVERSAMPLE_PCT}" != "0" ] \
+        || [ "${GENERATION_MAX_RECOVERY_ROUNDS}" != "1" ] \
+        || [ "${MERGE_TOPUP_ROUNDS}" != "0" ]; then
+        echo "ERROR: fixed attempt budget requires GEN_OVERSAMPLE_PCT=0, GENERATION_MAX_RECOVERY_ROUNDS=1, MERGE_TOPUP_ROUNDS=0" >&2
+        exit 1
+    fi
+fi
 if ! [[ "${GENERATION_MAX_RECOVERY_ROUNDS}" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: GENERATION_MAX_RECOVERY_ROUNDS must be >= 1, got ${GENERATION_MAX_RECOVERY_ROUNDS}" >&2
     exit 1
@@ -429,7 +538,9 @@ merge_vllm_with_topups() {
         --val-count "${VAL_COUNT}" \
         --domain "${DOMAIN}" \
         --deficits-output "${deficits_path}" \
+        "${MERGE_DIAGNOSTIC_ARGS[@]}" \
         "${MERGE_SELECTION_ARGS[@]}" \
+        "${MERGE_STRATUM_ARGS[@]}" \
         "${MERGE_BASE_ARGS[@]}"; do
         if [ "${topup_round}" -ge "${MERGE_TOPUP_ROUNDS}" ]; then
             echo "ERROR: global merge still has deficits after ${topup_round} top-up round(s)" >&2
@@ -453,6 +564,23 @@ if errors:
         mapfile -t topup_deficits < <("${PYTHON_BIN}" -c '
 import json, sys
 report = json.load(open(sys.argv[1], encoding="utf-8"))
+requests = report.get("topup_candidate_requests", [])
+if requests:
+    for request in requests:
+        domain = str(request["domain"])
+        stratum = str(request["stratum"])
+        missing = int(request["missing"])
+        candidate_count = int(request["candidate_count"])
+        token = "__irrelevance__" if stratum == "irrelevance" else stratum
+        print(f"{domain}\t{token}\t{missing}\t{candidate_count}")
+    raise SystemExit(0)
+irrelevance = report.get("irrelevance_deficits_by_domain", {})
+has_irrelevance_deficit = any(int(value) > 0 for value in irrelevance.values())
+for domain in sorted(irrelevance):
+    missing = int(irrelevance[domain])
+    if missing > 0:
+        suggested = missing + max(2, missing)
+        print(f"{domain}\t__irrelevance__\t{missing}\t{suggested}")
 strata = report.get("difficulty_deficits_by_domain", {})
 if any(strata.values()):
     for domain in sorted(strata):
@@ -461,7 +589,7 @@ if any(strata.values()):
             if missing > 0:
                 suggested = missing + max(2, missing)
                 print(f"{domain}\t{difficulty}\t{missing}\t{suggested}")
-else:
+elif not has_irrelevance_deficit:
   for domain, missing in sorted(report.get("deficits", {}).items()):
     if domain != "__all__" and int(missing) > 0:
         suggested = int(
@@ -483,17 +611,27 @@ else:
         local slots_per_domain=$(( total_topup_slots / ${#topup_deficits[@]} ))
         if [ "${slots_per_domain}" -lt 1 ]; then slots_per_domain=1; fi
         local entry topup_domain topup_difficulty missing topup_count topup_inst topup_port topup_seed topup_prefix
+        local topup_prefix_difficulty
         local chunk_count chunk_index chunk_base chunk_remainder chunk_size
         for entry in "${topup_deficits[@]}"; do
             IFS=$'\t' read -r topup_domain topup_difficulty missing topup_count <<< "${entry}"
             if [ "${topup_difficulty}" = "__mixed__" ]; then
                 topup_difficulty=""
             fi
+            local topup_is_irrelevance=0
+            if [ "${topup_difficulty}" = "__irrelevance__" ]; then
+                topup_is_irrelevance=1
+                topup_difficulty=""
+            fi
+            topup_prefix_difficulty="${topup_difficulty:-mixed}"
+            if [ "${topup_is_irrelevance}" = "1" ]; then
+                topup_prefix_difficulty="irrelevance"
+            fi
             chunk_count="${slots_per_domain}"
             if [ "${topup_count}" -lt "${chunk_count}" ]; then chunk_count="${topup_count}"; fi
             chunk_base=$(( topup_count / chunk_count ))
             chunk_remainder=$(( topup_count % chunk_count ))
-            echo "  [${topup_domain}/${topup_difficulty:-mixed}] missing=${missing}, generating=${topup_count} across ${chunk_count} shard(s)"
+            echo "  [${topup_domain}/${topup_prefix_difficulty}] missing=${missing}, generating=${topup_count} across ${chunk_count} shard(s)"
             for ((chunk_index=0; chunk_index<chunk_count; chunk_index++)); do
                 chunk_size="${chunk_base}"
                 if [ "${chunk_index}" -lt "${chunk_remainder}" ]; then
@@ -504,14 +642,18 @@ else:
                 topup_seed=$("${PYTHON_BIN}" -m src.live_mcp.corpus.candidate_identity \
                     --base-seed "${SEED}" \
                     --stride "${GENERATION_CLIENT_SEED_STRIDE}" \
+                    --run-id "${RUN_ID}" \
                     --artifact-round "${topup_artifact_round}" \
-                    --domain "${topup_domain}" \
-                    --difficulty "${topup_difficulty:-mixed}" \
+                    --domain-scope "${topup_domain}" \
+                    --stratum "${topup_prefix_difficulty}" \
                     --chunk-index "${chunk_index}")
-                topup_prefix="topup_${topup_artifact_round}_${topup_domain}_${topup_difficulty:-mixed}_${chunk_index}"
+                topup_prefix="topup_${topup_artifact_round}_${topup_domain}_${topup_prefix_difficulty}_${chunk_index}"
                 echo "    shard=${chunk_index}, count=${chunk_size}, port=${topup_port}"
                 local -a topup_difficulty_args=()
-                if [ -n "${topup_difficulty}" ]; then
+                local -a topup_irrelevance_args=(--irrelevance-count 0)
+                if [ "${topup_is_irrelevance}" = "1" ]; then
+                    topup_irrelevance_args=(--irrelevance-count "${chunk_size}")
+                elif [ -n "${topup_difficulty}" ]; then
                     topup_difficulty_args=(--difficulty "${topup_difficulty}")
                 else
                     topup_difficulty_args=("${GENERATION_DIFFICULTY_ARGS[@]}")
@@ -528,10 +670,12 @@ else:
                     --shard-mode \
                     --pool-oversample-ratio 0 \
                     --irrelevance-ratio 0 \
+                    "${topup_irrelevance_args[@]}" \
                     --missing-function-rate "${MISSING_FUNCTION_RATE}" \
                     --distractor-rate "${DISTRACTOR_RATE}" \
                     --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
                     --checkpoint-path "${TMPDIR_SHARD}/shard_${topup_prefix}_checkpoint.json" \
+                    --failure-records-path "${RUN_DIR}/failures/shard_${topup_prefix}.jsonl" \
                     --checkpoint-interval "${CHECKPOINT_INTERVAL}" \
                     --retained-sequences-file "${deficits_path}" \
                     "${topup_difficulty_args[@]}" \
@@ -583,7 +727,11 @@ export OVAL_SUITE_PATH="${SUITE}"
         echo "ERROR: preserved-candidate resume currently requires the vLLM API generation path" >&2
         exit 1
     fi
-    TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
+    if [ "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" = "1" ]; then
+        TMPDIR_SHARD="${RUN_DIR}/candidates"
+    else
+        TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
+    fi
     mkdir -p "${TMPDIR_SHARD}"
 
     if [ "${DEPENDENCY_CACHE_PREWARM}" = "1" ]; then
@@ -602,7 +750,14 @@ export OVAL_SUITE_PATH="${SUITE}"
     IRRELEVANCE_CANDIDATES_ASSIGNED=0
     for ((i=0; i<GPU_COUNT; i++)); do
         GPU_ID="${GPU_INDEX_ARRAY[$i]}"
-        SHARD_SEED=$((SEED + i * GENERATION_CLIENT_SEED_STRIDE))
+        SHARD_SEED=$("${PYTHON_BIN}" -m src.live_mcp.corpus.candidate_identity \
+            --base-seed "${SEED}" \
+            --stride "${GENERATION_CLIENT_SEED_STRIDE}" \
+            --run-id "${RUN_ID}" \
+            --artifact-round 0 \
+            --domain-scope "${DOMAIN}" \
+            --stratum initial \
+            --chunk-index "${i}")
         SHARD_TRAIN=$(( BASE_GPU_TRAIN + (i < REM_GPU_TRAIN ? 1 : 0) ))
         SHARD_VAL=$(( BASE_GPU_VAL + (i < REM_GPU_VAL ? 1 : 0) ))
 
@@ -635,6 +790,7 @@ export OVAL_SUITE_PATH="${SUITE}"
             --distractor-rate "${DISTRACTOR_RATE}" \
             --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
             --checkpoint-path "${TMPDIR_SHARD}/shard_${i}_checkpoint.json" \
+            --failure-records-path "${RUN_DIR}/failures/shard_${i}.jsonl" \
             --checkpoint-interval "${CHECKPOINT_INTERVAL}" \
             "${GENERATION_DIFFICULTY_ARGS[@]}" \
             "${GENERATION_FILTER_ARGS[@]}" \
@@ -666,7 +822,9 @@ export OVAL_SUITE_PATH="${SUITE}"
         --count "${COUNT}" \
         --val-count "${VAL_COUNT}" \
         --domain "${DOMAIN}" \
+        "${MERGE_DIAGNOSTIC_ARGS[@]}" \
         "${MERGE_SELECTION_ARGS[@]}" \
+        "${MERGE_STRATUM_ARGS[@]}" \
         "${MERGE_BASE_ARGS[@]}"
     if [ "${GENERATION_PRESERVE_CANDIDATES}" != "1" ]; then
         rm -f "${TMPDIR_SHARD}"/shard_*_train.parquet "${TMPDIR_SHARD}"/shard_*_val.parquet
@@ -734,7 +892,7 @@ print(tp)
         exit 1
     fi
 
-    PORT_START="${VLLM_PORT_START:-8001}"
+    PORT_START="${VLLM_PORT_START}"
 
     # ── vLLM generation defaults ──
     # All parameters can be overridden via environment variables.
@@ -790,6 +948,8 @@ print(tp)
             exit 1
         fi
         TMPDIR_SHARD="$(cd "${GENERATION_RESUME_CANDIDATE_DIR}" && pwd)"
+    elif [ "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" = "1" ]; then
+        TMPDIR_SHARD="${RUN_DIR}/candidates"
     else
         TMPDIR_SHARD="${TMPDIR:-/tmp}/livemcp_gen_$$"
     fi
@@ -802,21 +962,31 @@ print(tp)
         GPU_SLICE=("${GPU_INDEX_ARRAY[@]:$GPU_START:$TP_SIZE}")
         GPU_LIST=$(IFS=','; echo "${GPU_SLICE[*]}")
         PORT=$(( PORT_START + inst ))
-        EXISTING_PORT_PIDS="$(_pids_listening_on_port "${PORT}")"
-        if [ -n "${EXISTING_PORT_PIDS}" ]; then
-            echo "ERROR: vLLM port ${PORT} is already in use by pid(s): ${EXISTING_PORT_PIDS}" >&2
-            exit 1
-        fi
-        VLLM_PORTS+=("${PORT}")
-        LOG="logs/${RUN_ID}_vllm_instance${inst}.log"
-        VLLM_LOGS+=("${LOG}")
-
         # Derive served model name from directory name (for local vLLM).
         # When using Gemini or other cloud APIs, the model name is passed directly.
         SERVED_MODEL="$(basename "${MODEL}")"
         if [[ "$SERVED_MODEL" == Qwen* && "$SERVED_MODEL" != *Instruct* ]]; then
             SERVED_MODEL="${SERVED_MODEL}-Instruct"
         fi
+
+        EXISTING_PORT_PIDS="$(_pids_listening_on_port "${PORT}")"
+        if _port_is_listening "${PORT}"; then
+            if ! _port_serves_model "${PORT}" "${SERVED_MODEL}"; then
+                echo "ERROR: port ${PORT} is occupied but does not serve exact model ${SERVED_MODEL}; pid(s): ${EXISTING_PORT_PIDS:-unknown}" >&2
+                exit 1
+            fi
+            EXISTING_PORT_PID="$(printf '%s\n' "${EXISTING_PORT_PIDS}" | head -n 1)"
+            VLLM_PORTS+=("${PORT}")
+            VLLM_PIDS+=("${EXISTING_PORT_PID}")
+            VLLM_LOGS+=("")
+            VLLM_OWNED+=("0")
+            echo "  Reusing vLLM model ${SERVED_MODEL} on port ${PORT} (pid ${EXISTING_PORT_PID})"
+            continue
+        fi
+        VLLM_PORTS+=("${PORT}")
+        LOG="logs/${RUN_ID}_vllm_instance${inst}.log"
+        VLLM_LOGS+=("${LOG}")
+        VLLM_OWNED+=("1")
 
         echo "  Starting vLLM instance ${inst} on GPUs ${GPU_LIST}, port ${PORT}"
 
@@ -845,7 +1015,7 @@ print(tp)
         # These variables configure this launcher; vLLM receives the resolved
         # values through CLI flags. Do not leak launcher-only names into
         # vLLM's reserved VLLM_* environment namespace.
-        env \
+        setsid env \
             -u VLLM_CLIENTS_PER_INSTANCE \
             -u VLLM_NUM_INSTANCES \
             -u VLLM_MAX_NUM_SEQS \
@@ -855,8 +1025,9 @@ print(tp)
             -u VLLM_ENFORCE_EAGER \
             -u VLLM_PORT_START \
             CUDA_VISIBLE_DEVICES="${GPU_LIST}" \
-            "${VLLM_PYTHON_BIN}" "${VLLM_ARGS[@]}" > "${LOG}" 2>&1 &
-        VLLM_PIDS+=($!)
+            "${VLLM_PYTHON_BIN}" "${VLLM_ARGS[@]}" \
+            > "${LOG}" 2>&1 < /dev/null &
+        VLLM_PIDS+=("$!")
     done
 
     # Wait for all instances
@@ -867,19 +1038,18 @@ print(tp)
     for ((inst=0; inst<NUM_INSTANCES; inst++)); do
         PORT=$(( PORT_START + inst ))
         PID="${VLLM_PIDS[$inst]}"
+        LOG="${VLLM_LOGS[$inst]}"
         SERVED_MODEL="$(basename "${MODEL}")"
         if [[ "$SERVED_MODEL" == Qwen* && "$SERVED_MODEL" != *Instruct* ]]; then
             SERVED_MODEL="${SERVED_MODEL}-Instruct"
         fi
         WAITED=0
         while [ $WAITED -lt $MAX_WAIT ]; do
-            if ! kill -0 "${PID}" 2>/dev/null; then
+            if [ -n "${PID}" ] && ! kill -0 "${PID}" 2>/dev/null; then
                 echo "ERROR: vLLM instance ${inst} exited during startup; see ${LOG}" >&2
                 exit 1
             fi
-            MODELS_JSON=$(curl -sf "http://localhost:${PORT}/v1/models" 2>/dev/null || true)
-            if [[ "${MODELS_JSON}" == *"\"id\":\"${SERVED_MODEL}\""* ]] || \
-               [[ "${MODELS_JSON}" == *"\"id\": \"${SERVED_MODEL}\""* ]]; then
+            if _port_serves_model "${PORT}" "${SERVED_MODEL}"; then
                 echo "  Instance ${inst} (port ${PORT}) ready after ${WAITED}s"
                 break
             fi
@@ -900,7 +1070,8 @@ print(tp)
             --model "${SERVED_MODEL}" \
             --teacher-model-id "${MODEL}" \
             --api-base "http://localhost:${PORT_START}/v1" \
-            --suite "${SUITE}"
+            --suite "${SUITE}" \
+            --prompt-profile "${LIVEMCP_PROMPT_PROFILE}"
     fi
 
     if [ -n "${GENERATION_RESUME_CANDIDATE_DIR}" ]; then
@@ -917,7 +1088,14 @@ print(tp)
             PORT=$(( PORT_START + inst ))
             for ((client=0; client<VLLM_CLIENTS_PER_INSTANCE; client++)); do
                 CLIENT_ID=$(( inst * VLLM_CLIENTS_PER_INSTANCE + client ))
-                SHARD_SEED=$((SEED + CLIENT_ID * GENERATION_CLIENT_SEED_STRIDE))
+                SHARD_SEED=$("${PYTHON_BIN}" -m src.live_mcp.corpus.candidate_identity \
+                    --base-seed "${SEED}" \
+                    --stride "${GENERATION_CLIENT_SEED_STRIDE}" \
+                    --run-id "${RUN_ID}" \
+                    --artifact-round 0 \
+                    --domain-scope "${DOMAIN}" \
+                    --stratum initial \
+                    --chunk-index "${CLIENT_ID}")
                 SHARD_TRAIN=$(( BASE_CLIENT_TRAIN + (CLIENT_ID < REM_CLIENT_TRAIN ? 1 : 0) ))
                 SHARD_VAL=$(( BASE_CLIENT_VAL + (CLIENT_ID < REM_CLIENT_VAL ? 1 : 0) ))
 
@@ -951,6 +1129,7 @@ print(tp)
                     --distractor-rate "${DISTRACTOR_RATE}" \
                     --max-recovery-rounds "${GENERATION_MAX_RECOVERY_ROUNDS}" \
                     --checkpoint-path "${TMPDIR_SHARD}/shard_${inst}_${client}_checkpoint.json" \
+                    --failure-records-path "${RUN_DIR}/failures/shard_${inst}_${client}.jsonl" \
                     --checkpoint-interval "${CHECKPOINT_INTERVAL}" \
                     "${GENERATION_DIFFICULTY_ARGS[@]}" \
                     "${GENERATION_FILTER_ARGS[@]}" \
@@ -989,8 +1168,12 @@ fi
 echo ""
 echo "=== Generation Complete ==="
 echo "Run dir:       ${RUN_DIR}/"
-echo "Train parquet: ${RUN_DIR}/train.parquet"
-echo "Val parquet:   ${RUN_DIR}/val.parquet"
+if [ "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" = "1" ]; then
+    echo "Accepted audit: ${RUN_DIR}/accepted.parquet"
+else
+    echo "Train parquet: ${RUN_DIR}/train.parquet"
+    echo "Val parquet:   ${RUN_DIR}/val.parquet"
+fi
 if [ "${GENERATION_PRESERVE_CANDIDATES}" = "1" ]; then
     echo "Raw candidates: ${TMPDIR_SHARD}/"
 fi
@@ -998,8 +1181,12 @@ fi
 # ── Parquet integrity validation ────────────────────────────────────
 echo ""
 echo "=== Parquet Integrity Check ==="
+AUDIT_ARTIFACTS=("${RUN_DIR}/train.parquet" "${RUN_DIR}/val.parquet")
+if [ "${LIVEMCP_FIXED_ATTEMPT_BUDGET}" = "1" ]; then
+    AUDIT_ARTIFACTS=("${RUN_DIR}/accepted.parquet")
+fi
 if ! "${PYTHON_BIN}" -m src.live_mcp.corpus.audit \
-    "${RUN_DIR}/train.parquet" "${RUN_DIR}/val.parquet"; then
+    "${AUDIT_ARTIFACTS[@]}"; then
     echo "ERROR: Parquet integrity check failed. See above for details." >&2
     exit 1
 fi

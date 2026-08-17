@@ -1,4 +1,4 @@
-"""Audit event dataclasses matching OVAL-MCP §3 schema.
+"""Audit event dataclasses for the OVAL trajectory event contract.
 
 Each event records a single step in the trajectory: tool_call or terminal action.
 safety verifier reads the event_log, not just final state.
@@ -16,7 +16,7 @@ from typing import Any
 class AuditEvent:
     """Single audited event in a trajectory.
 
-    Matches the JSON schema in OVAL-MCP §3:
+    Matches the OVAL trajectory event schema:
     {
       "event_id": "evtlog_000001",
       "session_id": "sess_...",

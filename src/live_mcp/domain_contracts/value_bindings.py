@@ -14,6 +14,7 @@ OUTPUT_ARGUMENT_ALIASES: dict[str, dict[str, tuple[str, ...]]] = {
         "path": ("source", "target", "file1", "file2", "archive"),
         "target": ("path", "source", "file1", "file2", "archive"),
         "link_path": ("path", "source", "file1", "file2", "archive"),
+        "archive": ("path", "source", "file1", "file2"),
     },
     "issue_tracker": {
         "user_id": ("assignee", "user"),

@@ -6,11 +6,15 @@ import json as _json
 from typing import Any
 
 from loguru import logger
+from src.live_mcp.errors import ActionDecisionError
 
 from src.live_mcp.generation.teacher_contracts import (
     ActionPlan,
     VALID_TERMINALS,
     _final_answer_requests_user_input,
+    reference_visibility_from_execution_history,
+    user_visible_private_id_exposure,
+    user_visible_terminal_tool_name_exposure,
 )
 from src.live_mcp.planner_format import (
     format_conversation_context as _format_conversation_context,
@@ -35,9 +39,7 @@ class ActionTeacherMixin:
         conversation_context: list[dict[str, Any]] | None = None,
         blocked_tools: set[str] | None = None,
         missing_function: bool = False,
-        allowed_missing_mutations: set[str] | None = None,
         allow_direct_answer: bool = False,
-        dependency_plan: dict[str, Any] | None = None,
         round_idx: int = 0,
     ) -> ActionPlan:
         """LLM decides the next action given full context.
@@ -72,6 +74,24 @@ class ActionTeacherMixin:
                 f"be reached via auto-correction."
             )
 
+        # This flag is passed only after the orchestrator has bound a hidden
+        # target to audited unique state-effect evidence.
+        missing_function_contract = (
+            "\n## Missing-Function Contract\n"
+            "The user's complete request requires a capability that is not "
+            "present in Available Tools. You may use read-only tools to establish "
+            "current facts, but do not execute any state-changing tool because "
+            "the complete requested outcome cannot be completed. Never "
+            "invent or call an unavailable tool. End with a concise clarification "
+            "or report that the request cannot be completed.\n"
+            "When you terminate with report_error, the message MUST attribute the "
+            "failure to a missing capability (for example, 'no available capability "
+            "can modify cart quantities'). Do NOT substitute a fabricated state "
+            "reason (for example, 'the item is not in your cart') when the true "
+            "cause is that the required capability is absent from Available Tools.\n"
+            if missing_function else ""
+        )
+
         # First-turn guidance: prevent LLM from answering without tools.
         # Exception: 'missing' difficulty tasks omit a parameter on purpose,
         # so ask_clarification is the correct first action.
@@ -81,18 +101,7 @@ class ActionTeacherMixin:
         # start with a real tool call.
         if attempt == 0:
             if missing_function:
-                first_turn_hint = (
-                    "\nThe user's complete request requires a capability that is not "
-                    "present in Available Tools. You may use visible tools when they make "
-                    "useful progress or establish that the capability is missing. Never "
-                    "invent or call an unavailable tool. End with a concise clarification "
-                    "or report that the request cannot be completed.\n"
-                    "When you terminate with report_error, the message MUST attribute the "
-                    "failure to a missing capability/tool (e.g. 'no tool is available to "
-                    "modify cart quantities'). Do NOT substitute a fabricated state reason "
-                    "(e.g. 'the item is not in your cart') when the true cause is that the "
-                    "required tool is absent from Available Tools.\n"
-                )
+                first_turn_hint = ""
                 default_action = "ask_clarification"
             elif allow_direct_answer:
                 first_turn_hint = (
@@ -140,6 +149,18 @@ class ActionTeacherMixin:
         date_guide = (
             f"## Reference Date\nToday is {reference_date}. Do not invent dates from an earlier year.\n"
             if reference_date else ""
+        )
+
+        natural_selector_profile = bool(
+            getattr(self.prompt_profile, "natural_selector", False)
+            or self.prompt_profile == "local_trainable_v1"
+        )
+        terminal_id_rule = (
+            "- Opaque sampler IDs are internal tool arguments under the local "
+            "natural-selector profile. Do not repeat a discovered opaque ID in "
+            "final_answer, report_error, or ask_clarification; describe the "
+            "resource with its natural selector instead.\n"
+            if natural_selector_profile else ""
         )
 
         # ── Live-state grounding constraint ──
@@ -226,6 +247,7 @@ class ActionTeacherMixin:
             "not provide it and no prior tool output determines it, ask_clarification.\n"
             "- Treat grounded IDs as typed resources. Match invoice_id only to an invoice, "
             "payment_id only to a payment, and likewise for every other schema field.\n"
+            f"{terminal_id_rule}"
             "- Before every mutating call, compare its arguments with the grounded entity "
             "and latest tool observations. Respect shown status, exact amount, remaining "
             "allowance, and linked IDs. Search and list results already provide valid "
@@ -262,20 +284,39 @@ class ActionTeacherMixin:
 
 ## Real MCP Execution Events
 {history_text}
+{missing_function_contract}
 {first_turn_hint}
 ## Your Turn
 Output one JSON object:
 """
+        terminal_correction = ""
+        last_rejection_reason = "invalid_action_decision"
+        rejection_details: list[dict[str, Any]] = []
+        private_ids: set[str] = set()
+        public_ids: set[str] = set()
+        if natural_selector_profile:
+            # Contract construction is a system invariant.  Keep it outside
+            # the model retry loop so schema/ownership bugs fail immediately.
+            private_ids, public_ids = reference_visibility_from_execution_history(
+                domain=self.domain,
+                execution_history=execution_history,
+                server_tools=tool_schemas,
+            )
         for _retry in range(3):
             try:
                 raw = self._generate_chat(
                     "action_decision",
                     [{"role": "system", "content": system},
-                     {"role": "user", "content": user}],
+                     {"role": "user", "content": user + terminal_correction}],
                     temperature=0.3 + 0.05 * _retry,
                 )
                 data = _extract_json(raw)
                 if not isinstance(data, dict):
+                    last_rejection_reason = "action_decision_not_object"
+                    rejection_details.append({
+                        "attempt": _retry + 1,
+                        "reason": last_rejection_reason,
+                    })
                     continue
                 action = data.get("action", default_action)
 
@@ -283,6 +324,7 @@ Output one JSON object:
                 if action == "tool_call":
                     tool_name = data.get("tool_name", "").strip()
                     if not tool_name:
+                        last_rejection_reason = "tool_call_name_missing"
                         logger.debug(
                             f"decide_action got tool_call with empty tool_name for {self.domain}, "
                             f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
@@ -291,12 +333,14 @@ Output one JSON object:
                     # P0: reject calls to blocked (hidden) tools so Teacher
                     # cannot produce an oracle that references a missing function.
                     if blocked_tools and tool_name in blocked_tools:
+                        last_rejection_reason = "blocked_tool_proposed"
                         logger.debug(
                             f"decide_action rejected blocked tool '{tool_name}' for "
                             f"{self.domain}, retrying (attempt {_retry + 1}/3)."
                         )
                         continue
                     if tool_name not in tool_names_set:
+                        last_rejection_reason = "unknown_tool_proposed"
                         logger.debug(
                             f"decide_action rejected unknown candidate tool '{tool_name}' "
                             f"for {self.domain}."
@@ -308,15 +352,73 @@ Output one JSON object:
                         "text", data.get("reason", data.get("question", ""))
                     )
                     if not isinstance(terminal_text, str) or not terminal_text.strip():
+                        last_rejection_reason = "terminal_text_missing"
                         logger.debug(
                             f"decide_action rejected empty terminal '{action}' for "
                             f"{self.domain}, retrying (attempt {_retry + 1}/3)."
+                        )
+                        continue
+                    private_id_exposure = user_visible_private_id_exposure(
+                        [],
+                        [[{
+                            "action": action,
+                            "arguments": {"text": terminal_text},
+                        }]],
+                        private_entity_ids=private_ids,
+                        public_entity_ids=public_ids,
+                    )
+                    if natural_selector_profile and private_id_exposure is not None:
+                        last_rejection_reason = "terminal_private_entity_id_exposure"
+                        rejection_details.append({
+                            "attempt": _retry + 1,
+                            "reason": last_rejection_reason,
+                            "leaked_ids": list(private_id_exposure.leaked_ids),
+                        })
+                        logger.debug(
+                            "decide_action rejected terminal containing sampler-private "
+                            "IDs for {}; retrying generation.", self.domain,
+                        )
+                        terminal_correction = (
+                            "\n## Previous Output Correction\n"
+                            "Your previous terminal response exposed an internal opaque "
+                            "identifier. Generate it again using only natural selectors "
+                            "already present in the user request or observations. Do not "
+                            "repeat values shaped like <prefix>_s<seed>_<suffix>.\n"
+                        )
+                        continue
+                    tool_name_exposure = user_visible_terminal_tool_name_exposure(
+                        [[{
+                            "action": action,
+                            "arguments": {"text": terminal_text},
+                        }]],
+                        tool_names=tool_names_set | set(blocked_tools or set()),
+                        hidden_tool_names=set(blocked_tools or set()),
+                    )
+                    if natural_selector_profile and tool_name_exposure is not None:
+                        last_rejection_reason = "terminal_private_tool_name_exposure"
+                        rejection_details.append({
+                            "attempt": _retry + 1,
+                            "reason": last_rejection_reason,
+                            "exposed_tool_names": list(
+                                tool_name_exposure.exposed_tool_names
+                            ),
+                        })
+                        logger.debug(
+                            "decide_action rejected terminal containing internal tool "
+                            "names for {}; retrying generation.", self.domain,
+                        )
+                        terminal_correction = (
+                            "\n## Previous Output Correction\n"
+                            "Your previous terminal response exposed an internal tool "
+                            "or function name. Generate it again using ordinary user-facing "
+                            "language and describe the capability, not its schema name.\n"
                         )
                         continue
                     if (
                         action == "final_answer"
                         and _final_answer_requests_user_input(terminal_text)
                     ):
+                        last_rejection_reason = "final_answer_requests_user_input"
                         logger.debug(
                             f"decide_action rejected question-shaped final_answer "
                             f"for {self.domain}; retrying as a terminal format error."
@@ -336,6 +438,7 @@ Output one JSON object:
                     action = "tool_call"
                 else:
                     # Unknown action type — retry
+                    last_rejection_reason = "unknown_action_type"
                     logger.debug(
                         f"decide_action unknown action '{action}' for {self.domain}, "
                         f"retrying (attempt {_retry + 1}/3). LLM raw: {raw[:120]}..."
@@ -347,6 +450,7 @@ Output one JSON object:
                 if action == "tool_call":
                     raw_args = data.get("arguments")
                     if not isinstance(raw_args, dict):
+                        last_rejection_reason = "tool_arguments_not_object"
                         logger.debug(
                             f"decide_action rejected non-dict arguments "
                             f"({type(raw_args).__name__}) for {self.domain}, "
@@ -355,11 +459,16 @@ Output one JSON object:
                         )
                         continue
 
+                terminal_text = data.get(
+                    "text", data.get("reason", data.get("question", ""))
+                )
                 plan = ActionPlan(
                     action=action,
                     tool_name=tool_name,
                     arguments=data.get("arguments", {}),
-                    text=data.get("text", data.get("reason", data.get("question", ""))),
+                    text=(
+                        terminal_text if action in VALID_TERMINALS else ""
+                    ),
                 )
                 self.record_environment_event(
                     "parsed_action",
@@ -370,13 +479,24 @@ Output one JSON object:
                 )
                 return plan
             except Exception as e:
+                last_rejection_reason = "action_decision_exception"
+                rejection_details.append({
+                    "attempt": _retry + 1,
+                    "reason": last_rejection_reason,
+                    "exception": f"{type(e).__name__}: {e}",
+                })
                 logger.debug(
                     f"decide_action attempt {_retry + 1}/3 failed for "
                     f"{self.domain}: {type(e).__name__}: {e}"
                 )
-        raise RuntimeError(
+        raise ActionDecisionError(
             f"decide_action failed after 3 attempts for {self.domain} — "
-            f"LLM could not produce a valid decision"
+            f"LLM could not produce a valid decision",
+            reason=last_rejection_reason,
+            details={
+                "attempts": 3,
+                "rejections": rejection_details,
+            },
         )
 
 

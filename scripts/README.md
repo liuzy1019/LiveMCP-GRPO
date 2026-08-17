@@ -22,7 +22,7 @@ python -m src.live_mcp.corpus.cli <command> [options]
 | `resume` | 从保留的 candidate/checkpoint 目录恢复 |
 | `finalize` | base-priority 合并增量数据并完成全局审计 |
 | `profile` | 从完整 corpus 构建训练 composition view |
-| `recertify` | 在当前 runtime/reward 合同下重新认证旧 artifact |
+| `recertify` | 以 owner-preserving fresh replay 在当前 runtime/reward fingerprint 下重新认证旧 artifact；source transition fingerprints 保存在 sidecar report |
 | `build-cache` | 构建/重建依赖图缓存 |
 
 `src/live_mcp/corpus/launcher.sh` 和 corpus Python 模块属于内部实现，不是第二套用户入口。
@@ -49,6 +49,24 @@ python -m src.live_mcp.corpus.cli <command> [options]
 `prove_baseline`；不得依赖默认值把 `oval_full` 混入 baseline。
 
 ## 生成模式
+
+固定 candidate attempt 的失败归因诊断：
+
+```bash
+python -m src.live_mcp.corpus.cli run \
+  --mode full \
+  --domain DOMAIN \
+  --count 32 \
+  --val-count 16 \
+  --prompt-profile local_trainable_v1 \
+  --semantic-gate-profile deterministic_v1 \
+  --preserve-candidates \
+  --fixed-attempt-budget
+```
+
+`--fixed-attempt-budget` 将 `count + val-count` 解释为固定 candidate attempt 数，关闭
+launcher oversample、shard recovery 和 merge top-up。该模式保留过滤前 candidate 与
+failure JSONL，artifact 用途强制为 `experiment`，不得发布或进入训练。
 
 普通全域生成：
 

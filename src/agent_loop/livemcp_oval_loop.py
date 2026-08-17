@@ -500,18 +500,8 @@ class LiveMCPOvalLoop(AgentLoopBase):
         # ── normalize extra_info ──
         from src.utils import normalize_extra_info, normalize_json_field
         extra_info = normalize_extra_info(extra_info)
-        from src.live_mcp.registry.environment_metadata import (
-            validate_prove_corpus_evidence,
-            validate_semantic_gate_evidence,
-            validate_teacher_generation_evidence,
-            validate_training_artifact_evidence,
-        )
-        validate_prove_corpus_evidence(extra_info)
-        validate_teacher_generation_evidence(extra_info)
-        validate_semantic_gate_evidence(extra_info)
-        validate_training_artifact_evidence(extra_info)
-        from src.live_mcp.artifact.reward_task import build_reward_task
-        build_reward_task(extra_info)
+        from src.live_mcp.artifact.validation import validate_artifact_contract
+        validate_artifact_contract(extra_info, require_training=True)
 
         # ── 获取 task 信息 ──
         task_domain = extra_info.get("target_servers", extra_info.get("domain", ""))

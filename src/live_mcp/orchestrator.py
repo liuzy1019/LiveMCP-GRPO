@@ -10,116 +10,27 @@ Per environment:
 
 from __future__ import annotations
 
-import copy
-import fcntl
-import hashlib
-import json
-import os
-import random
-import re
-import tempfile
 import threading
-from contextlib import contextmanager
-from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
-from src.live_mcp.config import SuiteConfig, project_root
-from src.live_mcp.dependency_trace import (
-    align_sampled_chain,
-    auxiliary_tool_call_indices,
-    verify_implicit_edges_counterfactually,
-)
-from src.live_mcp.contracts.catalog import domain_contract_registry
+from src.live_mcp.config import SuiteConfig
 from src.live_mcp.executor import LiveMCPExecutor
-from src.live_mcp.live_state_query_view import (
-    compact_sampling_context as _compact_sampling_context,
-    live_context_to_prompt_state as _live_context_to_prompt_state,
-    teacher_public_action_context as _teacher_public_action_context,
-)
-from src.live_mcp.registry.environment_metadata import build_environment_metadata
-from src.live_mcp.registry.entity_state_contracts import entity_state_is_known
 from src.live_mcp.protocol.manager import LiveMCPManager
-from src.live_mcp.state_seeder import StateSeeder
-from src.live_mcp.protocol.observation import (
-    tool_result_envelope,
-)
 from src.live_mcp.prompt_profiles import resolve_prompt_profile
-from src.live_mcp.task_spec import (
-    DECISION_STRATA,
-    DifficultyVector,
-    TaskSpec,
-    compile_task_spec,
-)
-from src.live_mcp.types import LiveTask, OracleCall, OracleProgram, to_plain
-from src.live_mcp.registry.tool_semantics import (
-    resolve_tool_execution_semantics,
-    tool_call_invalidated_by_state_changes,
-    unresolved_failed_tool_names,
-)
-from src.live_mcp.fsm import (
-    ConversationFSM,
-    FSMStateGroup,
-    RobustnessPlan,
-    teacher_tool_call_budget,
-)
-from src.live_mcp.generation.robustness import (
-    build_teacher_visible_tools as _build_teacher_visible_tools,
-    has_successful_state_transition_noop as _has_successful_state_transition_noop,
-    missing_function_has_nonprefix_mutation as _missing_function_has_nonprefix_mutation,
-    missing_function_original_round_should_abort as _missing_function_original_round_should_abort,
-    normalized_policy_query as _normalized_policy_query,
-    profile_scenario_is_valid as _profile_scenario_is_valid,
-    successful_conversation_realizes_source_chain as _successful_conversation_realizes_source_chain,
-    successful_distractor_names as _successful_distractor_names,
-    zero_tool_terminal_is_valid as _zero_tool_terminal_is_valid,
-)
+from src.live_mcp.types import LiveTask
 from src.live_mcp.generation.turn_loop import run_turn_loop
-from src.live_mcp.generation.conversation_runner import (
-    run_candidate_conversation,
-)
-from src.live_mcp.generation.candidate_finalize import (
-    FinalizationContext,
-    finalize_generated_task,
-)
-from src.live_mcp.generation.candidate_prepare import prepare_candidate
 from src.live_mcp.generation.candidate_pipeline import GenerationCandidateMixin
-from src.live_mcp.generation.scenario import (
-    classify_scenario,
-)
 from src.live_mcp.generation.batch import BatchGenerationMixin
 from src.live_mcp.generation.irrelevance import IrrelevanceGenerationMixin
 from src.live_mcp.generation.context_provider import GenerationContextMixin
 from src.live_mcp.generation.chain_scheduler import ChainSchedulerMixin
 from src.live_mcp.replay.task_outcome import (
-    attribute_success_criteria as _attribute_success_criteria,
-    identity_policy_for_domain as _identity_policy_for_domain,
-    oracle_deleted_target_ids as _oracle_deleted_target_ids,
-    oracle_target_ids as _oracle_target_ids,
-    protected_fields_by_resource as _protected_fields_by_resource,
     stable_state_hash as _stable_state_hash,
 )
 from src.live_mcp.artifact.task_builder import build_live_task
 
-from src.utils import extract_json as _extract_json
 
-
-from src.live_mcp.dependency_value_flow import (
-    _value_is_explicit_in_query,
-    _required_arguments_by_tool,
-    _novel_dependency_output_fields,
-    _dependency_argument_bindings,
-    _sampled_chain_edges,
-    _operational_dependency_contracts,
-    _difficulty_vector_for_chain,
-    _decision_stratum,
-    _verify_dependency_evidence,
-    _verify_realized_chain_dependencies,
-)
 from src.live_mcp.dependency_cache_contract import DependencyCacheContractMixin
 from src.live_mcp.dependency_cache_store import DependencyCacheStoreMixin
 from src.live_mcp.dependency_chain_catalog import DependencyChainCatalogMixin

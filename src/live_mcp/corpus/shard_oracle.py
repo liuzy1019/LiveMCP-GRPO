@@ -2,31 +2,26 @@
 
 from __future__ import annotations
 
-import argparse
-import json
-import math
-import os
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
 from loguru import logger
 
-from src.live_mcp.task_planner import DOMAIN_DESCRIPTIONS
-from src.live_mcp.planner_format import format_tools
-from src.live_mcp.prompt_profiles import PROMPT_PROFILES, resolve_prompt_profile
 from src.live_mcp.registry.tool_semantics import (
-    SELF_CONTAINED_WRITE_TOOLS,
     is_mutating_tool,
     resolve_tool_execution_semantics,
 )
-from src.live_mcp.dedup import dedup_tasks
 from src.live_mcp.dependency_trace import (
     align_sampled_chain, auxiliary_tool_call_indices,
     dependency_edges_from_alignment,
+    unauthorized_mutating_tool_names,
+)
+from src.live_mcp.contracts.outcome import (
+    mutation_outcome_issue,
+    successful_state_transition_noop_indices,
 )
 
 def _task_scenario(task) -> str:
@@ -66,10 +61,19 @@ def _required_round_oracle_projection(
     """
     histories = getattr(task, "execution_history_per_round", None) or []
     history = histories[round_idx] if round_idx < len(histories) else []
+    state_transition_noops = successful_state_transition_noop_indices(
+        oracle_calls=round_calls,
+        execution_history=history,
+        domain=(
+            task.target_servers[0]
+            if getattr(task, "target_servers", None)
+            else ""
+        ),
+    )
     history_cursor = 0
     required = []
     decisions: list[dict[str, Any]] = []
-    for call in round_calls:
+    for call_index, call in enumerate(round_calls):
         if getattr(call, "action", "tool_call") != "tool_call":
             required.append(call)
             continue
@@ -103,13 +107,7 @@ def _required_round_oracle_projection(
                     else ""
                 )
             )
-            if (
-                domain
-                and matched.get("state_changed") is False
-                and resolve_tool_execution_semantics(
-                    call.tool_name, domain,
-                ) == "state_transition"
-            ):
+            if call_index in state_transition_noops:
                 # The factual attempt remains in teacher_attempt_trace.  A
                 # successful state-transition no-op did not produce a required
                 # outcome and must not be rewarded as ground truth.  Successful
@@ -338,31 +336,6 @@ def _validate_task_training_contract(task) -> None:
                 f"Unseeded fallback is NOT allowed in baseline training data."
             )
 
-    # ── P3c: Detect final_answer tasks whose oracle did not produce state
-    # criteria despite the user query requesting a write/mutate action.
-    # These tasks teach models to call a few tools then final_answer without
-    # actually completing the user's request.  We only WARN (not reject)
-    # because some legitimate operations (e.g. send_email) are not tracked
-    # in the state machine and naturally have empty criteria.
-    if terminal_action == "final_answer" and real_required_tools:
-        criteria = _task_success_criteria(task)
-        if not criteria:
-            state_changing = [t for t in real_required_tools
-                             if is_mutating_tool(t, task.target_servers[0])
-                             and t not in SELF_CONTAINED_WRITE_TOOLS]
-            if state_changing:
-                # Empty criteria remain valid; R_coverage
-                # operates on tool-call sequences, not state diffs (§3.3).
-                # Rejecting here conflicts with the oracle length [1,8] gate
-                # above (which already accepted the task) and causes ~50% yield
-                # loss.  The task still has a valid oracle trace; empty criteria
-                # just means R_state will not reward this specific dimension.
-                logger.warning(
-                    f"Task {task.task_id}: final_answer with {state_changing} "
-                    f"but empty success_criteria.  Accepting — R_coverage "
-                    f"will use pure tool-call matching."
-                )
-
     # ── P3d: tool_error_recovery with empty criteria is semantically broken ──
     # tool_error_recovery indicates the oracle encountered execution failures
     # and performed recovery steps.  If the oracle trace uses only readonly
@@ -518,9 +491,46 @@ def _validate_task_training_contract(task) -> None:
     has_missing_func = bool(
         (task.metadata or {}).get("has_missing_function")
     )
+    prompt_profile = str((task.metadata or {}).get("prompt_profile") or "")
+    source_chain = list((task.metadata or {}).get("source_chain_seed") or [])
+    initial_round_calls = list(
+        (getattr(task, "oracle_calls_per_round", None) or [[]])[0]
+    )
+    if prompt_profile != "paper_generation_baseline_v1" and source_chain:
+        unauthorized_mutations = unauthorized_mutating_tool_names(
+            initial_round_calls,
+            source_chain,
+            is_mutating=lambda name: is_mutating_tool(
+                name, task.target_servers[0]
+            ),
+        )
+        if unauthorized_mutations:
+            raise ValueError(
+                f"Task {task.task_id}: initial round contains state-changing "
+                "capabilities absent from source_chain_seed: "
+                f"{unauthorized_mutations}."
+            )
+
+    if prompt_profile != "paper_generation_baseline_v1":
+        outcome_issue = mutation_outcome_issue(
+            tool_names=real_required_tools,
+            success_criteria=_task_success_criteria(task),
+            criterion_provenance=list(
+                (task.metadata or {}).get("success_criteria_provenance") or []
+            ),
+            is_mutating=lambda name: is_mutating_tool(
+                name, task.target_servers[0]
+            ),
+        )
+        if outcome_issue:
+            raise ValueError(f"Task {task.task_id}: {outcome_issue}")
+
     if has_missing_func:
         hidden_tools_list = list(task.hidden_tools) if task.hidden_tools else []
         hidden_tool = (task.metadata or {}).get("hidden_tool", "")
+        missing_function_evidence = list(
+            (task.metadata or {}).get("missing_function_evidence") or []
+        )
         visible_names = {t.get("name", "") for t in (task.visible_tools or [])}
 
         # 1. hidden_tools must be non-empty and consistent with metadata
@@ -529,10 +539,31 @@ def _validate_task_training_contract(task) -> None:
                 f"Task {task.task_id}: has_missing_function=True but "
                 f"hidden_tools is empty — missing-function contract broken."
             )
-        if hidden_tool and hidden_tool not in hidden_tools_list:
+        if (
+            prompt_profile != "paper_generation_baseline_v1"
+            and not missing_function_evidence
+        ):
+            raise ValueError(
+                f"Task {task.task_id}: missing-function capability evidence "
+                "is empty."
+            )
+        if len(hidden_tools_list) == 1 and hidden_tool != hidden_tools_list[0]:
             raise ValueError(
                 f"Task {task.task_id}: metadata.hidden_tool='{hidden_tool}' "
-                f"not in hidden_tools={hidden_tools_list}."
+                f"does not equal hidden_tools={hidden_tools_list}."
+            )
+        source_chain = list(
+            (task.metadata or {}).get("source_chain_seed") or []
+        )
+        if (
+            len(hidden_tools_list) != 1
+            or not source_chain
+            or hidden_tools_list[0] != source_chain[-1]
+        ):
+            raise ValueError(
+                f"Task {task.task_id}: missing-function must hide exactly "
+                f"source_chain_seed[-1]; hidden_tools={hidden_tools_list}, "
+                f"source_chain_seed={source_chain}."
             )
 
         # 2. hidden tool must NOT appear in visible_tool_names (schema leak)
@@ -553,6 +584,16 @@ def _validate_task_training_contract(task) -> None:
             raise ValueError(
                 f"Task {task.task_id}: hidden tool(s) {oracle_blocked} "
                 f"appear in oracle tool calls — execution block failed."
+            )
+
+        mutating_oracle_tools = [
+            name for name in oracle_tool_names
+            if is_mutating_tool(name, task.target_servers[0])
+        ]
+        if mutating_oracle_tools:
+            raise ValueError(
+                f"Task {task.task_id}: missing-function oracle contains "
+                f"state-changing tools {sorted(mutating_oracle_tools)}."
             )
 
         # 4. terminal must be ask_clarification or report_error

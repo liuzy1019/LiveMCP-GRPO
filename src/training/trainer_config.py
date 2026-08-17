@@ -59,7 +59,7 @@ class TrainerConfig:
 
     # ── 实验合同 ──
     experiment_profile: str = "custom"
-    reward_profile: str = "oval_full"
+    reward_profile: str = "prove_baseline"
     diagnostic_overrides: bool = False
     diagnostic_override_fields: List[str] = field(default_factory=list)
     profile_train_sha256: str = ""
@@ -143,9 +143,9 @@ class TrainerConfig:
     agent_loop: str = "livemcp_oval"
     reward_fn_path: str = "src/reward/oval_reward_fn.py"
     reward_fn_name: str = "compute_score"
-    # from_env() binds the estimator to the selected reward profile.
-    # oval_full uses the audited LiveMCP extension.
-    adv_estimator: str = "livemcp_grpo"
+    # The object defaults must describe one coherent PROVE objective. from_env()
+    # switches this to livemcp_grpo only when reward_profile=oval_full.
+    adv_estimator: str = "grpo"
 
     # ── 恢复 ──
     resume: bool = False
@@ -390,7 +390,7 @@ class TrainerConfig:
         kwargs["diagnostic_overrides"] = diagnostic_overrides
         kwargs["diagnostic_override_fields"] = diagnostic_override_fields
 
-        reward_profile = os.environ.get("OVAL_REWARD_PROFILE", "oval_full")
+        reward_profile = os.environ.get("OVAL_REWARD_PROFILE", "prove_baseline")
         if reward_profile not in {"prove_baseline", "oval_full"}:
             raise ValueError(
                 "OVAL_REWARD_PROFILE must be 'prove_baseline' or 'oval_full', "

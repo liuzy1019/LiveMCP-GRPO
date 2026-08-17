@@ -61,7 +61,8 @@ class OracleProgram:
     task_id: str
     calls: list[OracleCall]
     success_criteria: list[dict[str, Any]]
-    progress_predicates: list[dict[str, Any]] = field(default_factory=list)  # OVAL-MCP §5.4: per-step progress tracking
+    # OVAL-only per-step progress tracking; absent from the PROVE baseline.
+    progress_predicates: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass

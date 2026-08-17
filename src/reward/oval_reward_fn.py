@@ -27,11 +27,8 @@ from src.oval_mcp.training.lambda_state import LambdaState
 from src.training.hyperparams import get_config
 from src.live_mcp.artifact.reward_task import (
     ArtifactIntegrityError,
-    build_reward_task,
 )
-from src.live_mcp.registry.environment_metadata import (
-    validate_training_artifact_evidence,
-)
+from src.live_mcp.artifact.validation import validate_artifact_contract
 
 _safety_verifier = SafetyVerifier()
 _progress_tracker = ProgressTracker()
@@ -209,21 +206,21 @@ def compute_score(
             f"rollout={runtime_reward_profile!r}, reward={reward_profile!r}"
         )
 
-    try:
-        validate_training_artifact_evidence(extra_info)
-    except RuntimeError as exc:
-        raise RewardIntegrityError(str(exc)) from exc
-
     if extra_info.get("trajectory_integrity_ok") is False:
         raise RewardIntegrityError(
             f"trajectory integrity failed: {extra_info.get('trajectory_errors', [])}"
         )
 
-    # Merge ground_truth data (e.g., oracle_calls, success_criteria) into extra_info
-    if isinstance(ground_truth, dict):
-        for key in ("oracle_calls", "success_criteria"):
-            if key not in extra_info and key in ground_truth:
-                extra_info[key] = ground_truth[key]
+    # The verl ground_truth payload is a transport mirror, not a fallback
+    # oracle. Reward must score the exact task contract validated by rollout.
+    try:
+        task_dict = validate_artifact_contract(
+            extra_info,
+            require_training=True,
+            ground_truth=ground_truth,
+        )
+    except RuntimeError as exc:
+        raise RewardIntegrityError(str(exc)) from exc
 
     # ── 解析 audit_events ──
     audit_raw = extra_info.get("audit_events", [])
@@ -238,7 +235,6 @@ def compute_score(
     event_log = EventLog(events=audit_events, session_id=session_id, task_id=task_id)
 
     # ── 构建 task_dict ──
-    task_dict = build_reward_task(extra_info)
     task_dict["apply_terminal_validity_penalty"] = (
         reward_profile == "oval_full"
     )
@@ -247,13 +243,17 @@ def compute_score(
     )
 
     # ── Domain adapter ──
-    domain = extra_info.get("domain", "calendar")
-    try:
-        domain_adapter = get_adapter(domain)
-    except Exception as exc:
-        raise RewardIntegrityError(
-            f"domain adapter unavailable for {domain!r}: {exc}"
-        ) from exc
+    domain = str(extra_info.get("domain") or "")
+    if not domain:
+        raise RewardIntegrityError("rollout evidence is missing domain")
+    domain_adapter = None
+    if reward_profile == "oval_full":
+        try:
+            domain_adapter = get_adapter(domain)
+        except Exception as exc:
+            raise RewardIntegrityError(
+                f"domain adapter unavailable for {domain!r}: {exc}"
+            ) from exc
 
     # ── R_task ──
     try:

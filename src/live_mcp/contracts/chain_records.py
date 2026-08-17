@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.live_mcp.contracts.models import StatePredicate, ToolContract
+from src.live_mcp.contracts.models import StatePredicate
 from src.live_mcp.contracts.record_evaluator import evaluate_record_predicate
 from src.live_mcp.contracts.registry import ContractRegistry
 from src.live_mcp.contracts.state_relations import transition_matches

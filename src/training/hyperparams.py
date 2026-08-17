@@ -33,7 +33,7 @@ class LiveMCPHyperparams:
     """LiveMCP 训练的所有超参，单点定义默认值。"""
 
     # Select prove_baseline for the five-component task reward.
-    reward_profile: str = "oval_full"
+    reward_profile: str = "prove_baseline"
 
     # ── 奖励消融开关 ──────────────────────────────────────────────
     # I_shape: 启用 F_gamma 进度塑形项（0=关, 1=开）
@@ -73,7 +73,7 @@ class LiveMCPHyperparams:
     lata_mode: str = "none"
 
     # ── Task Reward 权重 ──────────────────────────────────────────
-    # 见 OVAL-MCP §7.1
+    # PROVE task-reward contract; see docs/OVAL-MCP.md.
     w_val: float = 0.5
     w_cov: float = 0.5
     w_eff: float = 0.15

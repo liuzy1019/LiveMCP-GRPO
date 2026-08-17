@@ -1,11 +1,11 @@
 """lambda_safe 跨进程共享状态管理器（含 stall protection 和进程安全锁）。
 
-OVAL-MCP §9 要求：
+OVAL adaptive-safety contract：
   - lambda_safe 在 batch 边界更新（projected dual ascent）
   - lambda_safe 由 reward function 消费（计算 J 时使用）
   - lambda_safe 更新需要所有 valid rollout 的 C_safety 值
 
-Stall protection (§9.3)：
+Stall protection：
   - 连续 K_stall 步 hat_C > tau_unsafe_stall 时冻结 lambda_safe
   - 冻结期间 λ 不再增大，但允许减小（hat_C 回到正常范围时自动解冻）
   - streak 和 frozen 状态持久化到文件中，跨进程重启不丢失

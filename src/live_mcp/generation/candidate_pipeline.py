@@ -18,17 +18,27 @@ from typing import Any
 from loguru import logger
 
 from src.live_mcp.contracts.catalog import domain_contract_registry
+from src.live_mcp.contracts.outcome import (
+    mutation_outcome_issue,
+    successful_state_transition_noop_indices,
+)
 from src.live_mcp.domain_contracts.entities import _tool_entity
+from src.live_mcp.domain_contracts.reference_visibility import (
+    public_entity_reference_ids_from_records,
+)
 from src.live_mcp.dependency_trace import (
     align_sampled_chain,
     auxiliary_tool_call_indices,
     verify_implicit_edges_counterfactually,
+    select_realized_dependency_chain,
 )
 from src.live_mcp.dependency_value_flow import (
+    _operational_dependency_contracts,
+    _sampled_chain_edges,
     _verify_dependency_evidence,
     _verify_realized_chain_dependencies,
 )
-from src.live_mcp.fsm import ConversationFSM, FSMStateGroup, RobustnessPlan
+from src.live_mcp.fsm import ConversationFSM, RobustnessPlan
 from src.live_mcp.generation.candidate_finalize import (
     FinalizationContext,
     finalize_generated_task,
@@ -46,9 +56,27 @@ from src.live_mcp.generation.robustness import (
 from src.live_mcp.replay.task_outcome import (
     attribute_success_criteria as _attribute_success_criteria,
 )
-from src.live_mcp.task_spec import DifficultyVector, TaskSpec
 from src.live_mcp.generation.query_teacher import QueryGenerationError
+from src.live_mcp.generation.teacher_contracts import (
+    reference_date_for_candidate_state,
+)
 from src.live_mcp.types import LiveTask, OracleCall, to_plain
+from src.live_mcp.errors import CandidateGenerationError
+
+
+def _candidate_conversation_reason(exc: Exception) -> str:
+    """Map expected fail-closed conversation outcomes to stable taxonomy."""
+    structured_reason = str(getattr(exc, "reason", "") or "")
+    if structured_reason:
+        return structured_reason
+    message = str(exc)
+    if message.startswith("Failed to generate followup"):
+        return "continuation_generation_failed"
+    if "per-round action budget without a terminal response" in message:
+        return "teacher_action_budget_exhausted"
+    if "successful no-progress tool call" in message:
+        return "teacher_no_progress_exhausted"
+    return "candidate_conversation_exception"
 
 
 class GenerationCandidateMixin:
@@ -74,15 +102,16 @@ class GenerationCandidateMixin:
             robustness_plan: if None, defaults to clean (no perturbations).
             When provided, distractor/enum-stripping are applied to the
             Teacher/Policy-visible candidate schemas while the live handler keeps
-            its authoritative execution contract. Missing-function is selected
-            after full query synthesis, then removed from the Action Teacher schema
-            and blocked explicitly in generation replay and Policy rollout.
+            its authoritative execution contract. Missing-function is sampled
+            and bound to an audited hidden capability before query synthesis,
+            then blocked in generation replay and Policy rollout.
 
             Retries with different seed if oracle_calls is empty or replay fails.
             """
-            from src.live_mcp.task_planner import (
-                derive_success_criteria, derive_progress_predicates,
-                _PERSONA_TEMPLATES, reference_date_for_seed,
+            from src.live_mcp.generation.teacher_contracts import _PERSONA_TEMPLATES
+            from src.live_mcp.replay.criteria import (
+                derive_progress_predicates,
+                derive_success_criteria,
             )
             from src.live_mcp.replay.gates import provenance_check, replay_validate
             from src.live_mcp.types import ToolCall
@@ -91,7 +120,7 @@ class GenerationCandidateMixin:
 
             # ── Sample diversity injectors ──
             persona = _PERSONA_TEMPLATES[seed % len(_PERSONA_TEMPLATES)]
-            reference_date = reference_date_for_seed(seed)
+            reference_date = reference_date_for_candidate_state(seed, state_seed)
 
             # ── Sample dependency-chain seed ──
             # Defer chain selection until live state is available so chains with
@@ -123,6 +152,7 @@ class GenerationCandidateMixin:
             all_required_tools: set = set()
             conversation_queries: list = []
             oracle_calls_per_round: list = []
+            oracle_observations_per_round: list = []
             execution_history_per_round: list = []
             task_id = ""
             user_query = ""
@@ -146,10 +176,6 @@ class GenerationCandidateMixin:
             source_chain_fingerprint = ""
             chain_sampling_attempt_number = 0
             chain_sampling_jaccard_novel = False
-            task_spec: TaskSpec | None = None
-            difficulty_vector: DifficultyVector | None = None
-            requested_decision_stratum = ""
-            selected_decision_stratum = ""
             all_attempt_calls: list[OracleCall] = []
             all_attempt_observations: list[Any] = []
             all_attempt_round_indices: list[int] = []
@@ -175,6 +201,38 @@ class GenerationCandidateMixin:
             generation_succeeded = False
             conversation_fsm = ConversationFSM()
             sampling_state_seed = int(seed if state_seed is None else state_seed)
+            rejection_history: list[dict[str, Any]] = []
+
+            def _reject(
+                stage: str, reason: str, **details: Any,
+            ) -> None:
+                rejection_history.append({
+                    "stage": stage,
+                    "reason_code": reason,
+                    "attempt": len(rejection_history) + 1,
+                    **details,
+                })
+
+            def _conversation_failure_evidence(
+                **details: Any,
+            ) -> dict[str, Any]:
+                """Build self-contained evidence after a conversation exists."""
+                return {
+                    "source_chain_seed": list(source_chain_seed or []),
+                    "source_chain_edges": list(source_chain_edges),
+                    "user_query": user_query,
+                    "conversation_queries": list(conversation_queries),
+                    "oracle_calls_per_round": [
+                        [to_plain(call) for call in calls]
+                        for calls in oracle_calls_per_round
+                    ],
+                    "oracle_observations_per_round": [
+                        list(observations)
+                        for observations in oracle_observations_per_round
+                    ],
+                    "realized_tool_sequence": list(realized_tool_sequence),
+                    **details,
+                }
 
             # ── Retry with different seed if LLM refuses to call tools ──
             for retry_attempt in range(max_task_attempts):
@@ -208,11 +266,16 @@ class GenerationCandidateMixin:
                         sampling_state_seed=sampling_state_seed,
                         local_seed=local_seed, local_rng=local_rng,
                         retry_attempt=retry_attempt,
-                        max_task_attempts=max_task_attempts, plan=plan,
-                        difficulty=difficulty, teacher=teacher,
+                        max_task_attempts=max_task_attempts, teacher=teacher,
+                        difficulty=difficulty, robustness_plan=plan,
                         trace_generation=_trace_generation,
                     )
                     if prepared.retry_candidate:
+                        _reject(
+                            "dependency_chain_selection",
+                            prepared.rejection_reason
+                            or "dependency_chain_retry",
+                        )
                         continue
                     initial_state_snapshot = prepared.initial_state_snapshot
                     initial_state_hashes = prepared.initial_state_hashes
@@ -226,10 +289,6 @@ class GenerationCandidateMixin:
                     chain_sampling_jaccard_novel = prepared.chain_sampling_jaccard_novel
                     query_chain_context = prepared.query_chain_context
                     query_grounding_state = prepared.query_grounding_state
-                    difficulty_vector = prepared.difficulty_vector
-                    requested_decision_stratum = prepared.requested_decision_stratum
-                    selected_decision_stratum = prepared.selected_decision_stratum
-                    task_spec = prepared.task_spec
                     try:
                         query_contract = generate_query_contract(
                             teacher=teacher,
@@ -244,10 +303,8 @@ class GenerationCandidateMixin:
                             reference_date=reference_date,
                             source_chain_seed=source_chain_seed,
                             query_chain_context=query_chain_context,
-                            task_spec=task_spec,
                             plan=plan,
                             server_tools=server_tools,
-                            server_name=server_name,
                             trace_generation=_trace_generation,
                         )
                     except QueryGenerationError as exc:
@@ -257,39 +314,62 @@ class GenerationCandidateMixin:
                             exc.reason,
                         )
                         raise
-                    if query_contract.retry_candidate:
-                        continue
                     generated_query = query_contract.generated_query
                     user_query = query_contract.user_query
                     blocked_tools_set = query_contract.blocked_tools
                     chain_seed = query_contract.chain_seed
                     chain_context = query_contract.chain_context
                     teacher_visible_tools = query_contract.teacher_visible_tools
+                    plan = query_contract.plan
 
-                    conversation = run_candidate_conversation(
-                        orchestrator=self,
-                        teacher=teacher,
-                        session_id=session_id,
-                        server_name=server_name,
-                        server_tools=server_tools,
-                        teacher_visible_tools=teacher_visible_tools,
-                        difficulty=difficulty,
-                        local_seed=local_seed,
-                        local_rng=local_rng,
-                        retry_attempt=retry_attempt,
-                        max_task_attempts=max_task_attempts,
-                        user_query=user_query,
-                        query_chain_context=query_chain_context,
-                        conversation_fsm=conversation_fsm,
-                        generated_query=generated_query,
-                        source_chain_seed=source_chain_seed,
-                        blocked_tools_set=blocked_tools_set,
-                        plan=plan,
-                        max_turns=max_turns,
-                        reference_date=reference_date,
-                        persona=persona,
-                        trace_generation=_trace_generation,
-                    )
+                    try:
+                        conversation = run_candidate_conversation(
+                            orchestrator=self,
+                            teacher=teacher,
+                            session_id=session_id,
+                            server_name=server_name,
+                            server_tools=server_tools,
+                            teacher_visible_tools=teacher_visible_tools,
+                            difficulty=difficulty,
+                            local_seed=local_seed,
+                            local_rng=local_rng,
+                            retry_attempt=retry_attempt,
+                            max_task_attempts=max_task_attempts,
+                            user_query=user_query,
+                            query_chain_context=query_chain_context,
+                            conversation_fsm=conversation_fsm,
+                            generated_query=generated_query,
+                            source_chain_seed=source_chain_seed,
+                            blocked_tools_set=blocked_tools_set,
+                            plan=plan,
+                            max_turns=max_turns,
+                            reference_date=reference_date,
+                            persona=persona,
+                            trace_generation=_trace_generation,
+                        )
+                    except CandidateGenerationError:
+                        raise
+                    except Exception as exc:
+                        conversation_reason = _candidate_conversation_reason(exc)
+                        raise CandidateGenerationError(
+                            f"Candidate conversation failed for {server_name}: "
+                            f"{type(exc).__name__}: {exc}",
+                            stage="candidate_conversation",
+                            reason=conversation_reason,
+                            details={
+                                "source_chain_seed": list(
+                                    source_chain_seed or []
+                                ),
+                                "source_chain_edges": list(source_chain_edges),
+                                "user_query": user_query,
+                                "exception_type": type(exc).__name__,
+                                "exception_message": str(exc),
+                                "partial_trajectory": dict(
+                                    getattr(exc, "details", {}) or {}
+                                ),
+                            },
+                            rejection_history=rejection_history,
+                        ) from exc
                     all_oracle_calls = conversation.oracle_calls
                     all_execution_history = conversation.execution_history
                     all_aligned_observations = conversation.aligned_observations
@@ -299,10 +379,12 @@ class GenerationCandidateMixin:
                     all_required_tools = conversation.required_tools
                     conversation_queries = conversation.conversation_queries
                     oracle_calls_per_round = conversation.oracle_calls_per_round
+                    oracle_observations_per_round = (
+                        conversation.oracle_observations_per_round
+                    )
                     execution_history_per_round = (
                         conversation.execution_history_per_round
                     )
-                    continuation_goal_specs = conversation.continuation_goal_specs
                     task_id = conversation.task_id
                     initial_action_entity_summaries = (
                         conversation.initial_action_entity_summaries
@@ -316,10 +398,29 @@ class GenerationCandidateMixin:
                         execution_history=all_execution_history,
                         conversation_queries=conversation_queries,
                         oracle_calls_per_round=oracle_calls_per_round,
+                        oracle_observations_per_round=(
+                            oracle_observations_per_round
+                        ),
                         source_chain_seed=source_chain_seed,
                         server_tools=server_tools,
-                        mutation_evidence=generated_query.mutation_evidence,
+                        teacher_visible_tools=teacher_visible_tools,
                         paper_baseline=self._uses_paper_baseline(),
+                        oracle_observations=all_aligned_observations,
+                        dependency_contracts=[
+                            dict(item)
+                            for item in query_chain_context.get(
+                                "dependency_contracts", []
+                            )
+                            if isinstance(item, dict)
+                        ],
+                        live_state_public_entity_ids=(
+                            public_entity_reference_ids_from_records(
+                                server_name,
+                                live_sampling_context.get(
+                                    "entity_records", [],
+                                ),
+                            )
+                        ),
                     )
                     if not early_validation.accepted:
                         logger.debug(
@@ -328,18 +429,38 @@ class GenerationCandidateMixin:
                             task_id,
                             early_validation.reason,
                         )
+                        _reject(
+                            "early_trace_validation",
+                            early_validation.reason,
+                            task_id=task_id,
+                        )
                         continue
+                    continuation_goal_specs = list(
+                        early_validation.continuation_link_evidence
+                    )
                     _real_now = early_validation.real_calls
                     _terminal_now = early_validation.terminal_action
                     scenario_type = early_validation.scenario_type
                     initial_round_oracle_calls = (
                         early_validation.initial_round_calls
                     )
+                    initial_round_history = (
+                        execution_history_per_round[0]
+                        if execution_history_per_round else []
+                    )
+                    initial_round_state_transition_noops = (
+                        successful_state_transition_noop_indices(
+                            oracle_calls=initial_round_oracle_calls,
+                            execution_history=initial_round_history,
+                            domain=server_name,
+                        )
+                    )
 
                     realized_tool_sequence: list[str] = []
                     dependency_call_indices: list[int] = []
                     auxiliary_call_indices: list[int] = []
                     reward_dependency_chain: list[str] = []
+                    realized_chain_edges: list[dict[str, str]] = []
                     success_scenario = scenario_type in {
                         "normal_safe_success", "tool_error_recovery",
                     }
@@ -349,17 +470,50 @@ class GenerationCandidateMixin:
                             for call in initial_round_oracle_calls
                             if getattr(call, "action", "tool_call") == "tool_call"
                         ]
-                        aligned = align_sampled_chain(
+                        source_alignment = align_sampled_chain(
                             initial_round_oracle_calls, chain_seed,
                         )
-                        if aligned is None:
-                            raise RuntimeError(
-                                "accepted task lost its sampled-chain alignment"
+                        if source_alignment is not None:
+                            reward_dependency_chain = list(chain_seed)
+                            dependency_call_indices = source_alignment
+                        else:
+                            graph = self._domain_graphs.get(
+                                self._dependency_cache_key(server_name), {}
                             )
-                        dependency_call_indices = aligned
-                        reward_dependency_chain = list(chain_seed)
+                            (
+                                reward_dependency_chain,
+                                dependency_call_indices,
+                            ) = select_realized_dependency_chain(
+                                initial_round_oracle_calls, graph,
+                            )
+                        if len(reward_dependency_chain) < 2:
+                            _reject(
+                                "dependency_evidence",
+                                "realized_dependency_path_missing",
+                                task_id=task_id,
+                            )
+                            continue
+                        noop_dependency_indices = sorted(
+                            set(dependency_call_indices)
+                            & initial_round_state_transition_noops
+                        )
+                        if noop_dependency_indices:
+                            _reject(
+                                "outcome_evidence",
+                                "dependency_state_transition_noop",
+                                task_id=task_id,
+                                call_indices=noop_dependency_indices,
+                                chain_seed=list(reward_dependency_chain),
+                            )
+                            continue
+                        graph = self._domain_graphs.get(
+                            self._dependency_cache_key(server_name), {}
+                        )
+                        realized_chain_edges = _sampled_chain_edges(
+                            reward_dependency_chain, graph,
+                        )
                         auxiliary_call_indices = auxiliary_tool_call_indices(
-                            initial_round_oracle_calls, aligned,
+                            initial_round_oracle_calls, dependency_call_indices,
                         )
                     initial_round_calls = (
                         oracle_calls_per_round[0]
@@ -369,32 +523,29 @@ class GenerationCandidateMixin:
                         all_aligned_observations[:len(initial_round_calls)]
                         if initial_round_calls else []
                     )
-                    deterministic_contracts = [
-                        dict(item)
-                        for item in query_chain_context.get(
-                            "dependency_contracts", []
-                        )
-                        if isinstance(item, dict)
-                    ]
-                    evidence_to_verify = list(
-                        generated_query.dependency_evidence
+                    deterministic_contracts = _operational_dependency_contracts(
+                        reward_dependency_chain,
+                        server_name,
+                        server_tools,
                     )
-                    if self.prompt_profile.paper_baseline:
-                        evidence_to_verify = deterministic_contracts
                     verified_dependency_evidence = _verify_dependency_evidence(
-                        evidence_to_verify,
+                        deterministic_contracts,
                         initial_round_calls,
                         initial_round_observations,
                         user_query,
                         server_tools,
                     )
-                    if success_scenario and chain_seed and len(chain_seed) > 1:
+                    if (
+                        success_scenario
+                        and reward_dependency_chain
+                        and len(reward_dependency_chain) > 1
+                    ):
                         classifier_explicit_edges = {
                             (
                                 str(item.get("source_capability") or ""),
                                 str(item.get("target_capability") or ""),
                             )
-                            for item in source_chain_edges
+                            for item in realized_chain_edges
                             if item.get("relation") == "explicit"
                         }
                         (
@@ -406,21 +557,21 @@ class GenerationCandidateMixin:
                             server_name=server_name,
                             seed=sampling_state_seed,
                             oracle_calls=initial_round_calls,
-                            sampled_chain=chain_seed,
+                            sampled_chain=reward_dependency_chain,
                             explicitly_verified_edges=classifier_explicit_edges,
                         )
                         (
                             verified_dependency_evidence,
                             dependency_issues,
                         ) = _verify_realized_chain_dependencies(
-                            chain_seed,
+                            reward_dependency_chain,
                             deterministic_contracts,
                             initial_round_calls,
                             initial_round_observations,
                             user_query,
                             server_tools,
                             server_name,
-                            source_chain_edges,
+                            realized_chain_edges,
                             counterfactual_evidence,
                         )
                         dependency_issues.extend(counterfactual_issues)
@@ -431,11 +582,16 @@ class GenerationCandidateMixin:
                                 task_id,
                                 dependency_issues,
                             )
-                            self.manager.close_session(session_id)
+                            _reject(
+                                "dependency_evidence",
+                                "realized_dependency_invalid",
+                                issues=list(dependency_issues),
+                                task_id=task_id,
+                            )
                             continue
                         evidence_alignment = align_sampled_chain(
                             initial_round_calls,
-                            chain_seed,
+                            reward_dependency_chain,
                             verified_dependency_evidence=(
                                 verified_dependency_evidence
                             ),
@@ -447,7 +603,11 @@ class GenerationCandidateMixin:
                                 server_name,
                                 task_id,
                             )
-                            self.manager.close_session(session_id)
+                            _reject(
+                                "dependency_evidence",
+                                "dependency_evidence_not_canonical_path",
+                                task_id=task_id,
+                            )
                             continue
                         dependency_call_indices = evidence_alignment
                         auxiliary_call_indices = auxiliary_tool_call_indices(
@@ -455,8 +615,8 @@ class GenerationCandidateMixin:
                         )
                     if (
                         success_scenario
-                        and source_chain_seed
-                        and len(source_chain_seed) > 1
+                        and reward_dependency_chain
+                        and len(reward_dependency_chain) > 1
                         and not verified_dependency_evidence
                     ):
                         logger.debug(
@@ -464,6 +624,11 @@ class GenerationCandidateMixin:
                             "Teacher evidence was not realized by the executed trace",
                             server_name,
                             task_id,
+                        )
+                        _reject(
+                            "dependency_evidence",
+                            "dependency_evidence_not_realized",
+                            task_id=task_id,
                         )
                         continue
 
@@ -486,7 +651,14 @@ class GenerationCandidateMixin:
                         _trace_key(call) for call in _real_now
                     )
                     if successful_attempts - oracle_successes:
-                        self.manager.close_session(session_id)
+                        _reject(
+                            "oracle_projection",
+                            "successful_attempt_omitted_from_oracle",
+                            omitted_count=sum(
+                                (successful_attempts - oracle_successes).values()
+                            ),
+                            task_id=task_id,
+                        )
                         continue
 
                     # ── Derive success criteria from state delta ──
@@ -501,6 +673,26 @@ class GenerationCandidateMixin:
                     success_criteria_provenance = _attribute_success_criteria(
                         success_criteria, all_execution_history, server_name,
                     )
+                    if not self._uses_paper_baseline():
+                        schema_by_name = {
+                            str(tool.get("name") or ""): tool
+                            for tool in server_tools
+                        }
+                        outcome_issue = mutation_outcome_issue(
+                            tool_names=[call.tool_name for call in _real_now],
+                            success_criteria=success_criteria,
+                            criterion_provenance=success_criteria_provenance,
+                            is_mutating=lambda name: bool(
+                                (schema_by_name.get(name, {}).get("annotations") or {})
+                                .get("mutating")
+                            ),
+                        )
+                        if outcome_issue:
+                            _reject(
+                                "outcome_evidence", outcome_issue,
+                                task_id=task_id,
+                            )
+                            continue
                     progress_predicates = derive_progress_predicates(
                         oracle_calls=all_oracle_calls,
                         domain=server_name,
@@ -531,34 +723,57 @@ class GenerationCandidateMixin:
                         ),
                     )
                     if not valid:
+                        replay_details = _conversation_failure_evidence(
+                            num_errors=num_errors,
+                            num_calls=num_calls,
+                            error_rate=error_rate,
+                            task_id=task_id,
+                        )
                         if retry_attempt + 1 < max_task_attempts:
                             logger.debug(
                                 f"Replay validation failed for {server_name}: "
                                 f"{num_errors}/{num_calls} errors ({error_rate:.0%}), "
                                 f"retrying (attempt {retry_attempt + 1}/3)"
                             )
-                            self.manager.close_session(session_id)
+                            _reject(
+                                "fresh_replay", "replay_invalid",
+                                **replay_details,
+                            )
                             continue
-                        raise RuntimeError(
+                        raise CandidateGenerationError(
                             f"Replay validation failed for {server_name} task {task_id}: "
-                            f"{num_errors}/{num_calls} errors ({error_rate:.0%})"
+                            f"{num_errors}/{num_calls} errors ({error_rate:.0%})",
+                            stage="fresh_replay",
+                            reason="replay_invalid",
+                            details=replay_details,
+                            rejection_history=rejection_history,
                         )
-                    # Canonical export and every consumer require the fresh
-                    # replay to reproduce the task outcome. Reject here too so
-                    # a shard cannot count a row that serialization will later
-                    # reject.
-                    if not criteria_ok:
+                    # Outcome replay is a local trainability gate. PROVE's
+                    # published replay filter counts schema/execution errors,
+                    # so paper-audit rows retain this result as a diagnostic.
+                    if not criteria_ok and not self._uses_paper_baseline():
+                        criteria_details = _conversation_failure_evidence(
+                            criteria_failed=criteria_failed,
+                            task_id=task_id,
+                        )
                         if retry_attempt + 1 < max_task_attempts:
                             logger.debug(
                                 f"Replay outcome criteria failed for "
                                 f"{server_name} task {task_id}; retrying"
                             )
-                            self.manager.close_session(session_id)
+                            _reject(
+                                "fresh_replay", "outcome_criteria_not_reproduced",
+                                **criteria_details,
+                            )
                             continue
-                        raise RuntimeError(
+                        raise CandidateGenerationError(
                             f"Replay outcome criteria failed for {server_name} "
                             f"task {task_id}: {criteria_failed} criterion/criteria "
-                            f"not reproduced"
+                            f"not reproduced",
+                            stage="fresh_replay",
+                            reason="outcome_criteria_not_reproduced",
+                            details=criteria_details,
+                            rejection_history=rejection_history,
                         )
 
                     # ── Sensitive-parameter provenance check ──
@@ -578,6 +793,11 @@ class GenerationCandidateMixin:
                         violations=prov_violations,
                     )
                     if not prov_ok:
+                        provenance_details = _conversation_failure_evidence(
+                            violation_count=len(prov_violations),
+                            violations=prov_violations,
+                            task_id=task_id,
+                        )
                         if retry_attempt + 1 < max_task_attempts:
                             logger.debug(
                                 f"Provenance check failed for {server_name}: "
@@ -585,11 +805,18 @@ class GenerationCandidateMixin:
                                 f"(e.g., {prov_violations[0]['param']} in {prov_violations[0]['tool']}), "
                                 f"retrying (attempt {retry_attempt + 1}/3)"
                             )
-                            self.manager.close_session(session_id)
+                            _reject(
+                                "sensitive_provenance", "provenance_invalid",
+                                **provenance_details,
+                            )
                             continue
-                        raise RuntimeError(
+                        raise CandidateGenerationError(
                             f"Provenance check failed for {server_name} task {task_id}: "
-                            f"{len(prov_violations)} untraceable sensitive params"
+                            f"{len(prov_violations)} untraceable sensitive params",
+                            stage="sensitive_provenance",
+                            reason="provenance_invalid",
+                            details=provenance_details,
+                            rejection_history=rejection_history,
                         )
 
                     # The scenario was classified before the source-target gate;
@@ -612,24 +839,25 @@ class GenerationCandidateMixin:
                             difficulty,
                             scenario_type,
                         )
+                        _reject(
+                            "prompt_profile",
+                            "scenario_profile_mismatch",
+                            difficulty=difficulty,
+                            scenario_type=scenario_type,
+                            task_id=task_id,
+                        )
                         continue
-                    # ── Guard: teacher-generated traces with empty success_criteria ──
-                    # Teacher models occasionally produce oracle traces that yield
-                    # empty success_criteria — either because the oracle used only
-                    # readonly tools, or because a mutating call didn't change
-                    # tracked state (e.g. cancel already-cancelled order).
-                    #
-                    # Empty criteria remain valid; coverage is based on matching
-                    # oracle tool-call sequences, not on state-diff criteria (§3.3).
-                    # Empty success_criteria means the coverage reward operates in
-                    # pure tool-call-match mode, which is correct.
-                    # We log a warning to help diagnose pipeline health but allow
-                    # the task through.
-                    if scenario_type in frozenset({"normal_safe_success", "tool_error_recovery"}) and not success_criteria:
+                    # Readonly success may have no state delta. State-transition
+                    # mutations were already required to carry attributed criteria.
+                    if (
+                        scenario_type in frozenset({
+                            "normal_safe_success", "tool_error_recovery",
+                        })
+                        and not success_criteria
+                    ):
                         logger.warning(
                             f"Empty success_criteria for {scenario_type} task {task_id} "
-                            f"(oracle has {len(_real)} tool call(s)). "
-                            f"Accepting — R_coverage will use pure tool-call matching."
+                            f"(oracle has {len(_real)} readonly/action tool call(s))."
                         )
 
                     # ── Success ──
@@ -661,10 +889,40 @@ class GenerationCandidateMixin:
                 finally:
                     self.manager.close_session(session_id)
 
+            if not generation_succeeded:
+                last = rejection_history[-1] if rejection_history else {
+                    "stage": "candidate_generation",
+                    "reason_code": "candidate_exhausted_without_disposition",
+                }
+                raise CandidateGenerationError(
+                    f"Teacher generation exhausted {max_task_attempts} attempt(s) "
+                    f"for {server_name}: {last['reason_code']}",
+                    stage=str(last["stage"]),
+                    reason=str(last["reason_code"]),
+                    details=_conversation_failure_evidence(
+                        initial_round_oracle_calls=[
+                            to_plain(call)
+                            for call in (
+                                oracle_calls_per_round[0]
+                                if oracle_calls_per_round else []
+                            )
+                        ],
+                        initial_round_oracle_observations=list(
+                            oracle_observations_per_round[0]
+                            if oracle_observations_per_round else []
+                        ),
+                        realized_tool_sequence=list(realized_tool_sequence),
+                        last_rejection={
+                            key: value for key, value in last.items()
+                            if key not in {"stage", "reason_code"}
+                        },
+                    ),
+                    rejection_history=rejection_history,
+                )
+
             return finalize_generated_task(
                 self,
                 FinalizationContext(
-                    generation_succeeded=generation_succeeded,
                     max_task_attempts=max_task_attempts,
                     server_name=server_name,
                     all_oracle_calls=all_oracle_calls,
@@ -689,6 +947,7 @@ class GenerationCandidateMixin:
                     initial_state_snapshot=initial_state_snapshot,
                     source_chain_seed=source_chain_seed,
                     source_chain_edges=source_chain_edges,
+                    realized_chain_edges=realized_chain_edges,
                     initial_state_hashes=initial_state_hashes,
                     local_seed=local_seed,
                     reference_date=reference_date,
@@ -702,10 +961,6 @@ class GenerationCandidateMixin:
                     generated_query=generated_query,
                     continuation_goal_specs=continuation_goal_specs,
                     verified_dependency_evidence=verified_dependency_evidence,
-                    requested_decision_stratum=requested_decision_stratum,
-                    selected_decision_stratum=selected_decision_stratum,
-                    difficulty_vector=difficulty_vector,
-                    task_spec=task_spec,
                     valid=valid,
                     criteria_ok=criteria_ok,
                     error_rate=error_rate,

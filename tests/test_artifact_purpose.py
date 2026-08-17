@@ -46,6 +46,19 @@ def test_training_boundary_accepts_matching_training_candidate() -> None:
     validate_training_artifact_evidence(row)
 
 
+def test_fixed_attempt_diagnostic_is_never_training_candidate() -> None:
+    row = {
+        "prompt_profile": "local_trainable_v1",
+        "semantic_gate_profile": "deterministic_v1",
+        "fixed_attempt_budget": True,
+        "artifact_purpose": "experiment",
+    }
+
+    assert expected_artifact_purpose(row) == "experiment"
+    with pytest.raises(ValueError, match="not training-consumable"):
+        validate_artifact_purpose(row, require_training=True)
+
+
 def test_persisted_purpose_cannot_override_profile_pair() -> None:
     row = {
         "prompt_profile": "paper_generation_baseline_v1",

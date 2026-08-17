@@ -145,7 +145,7 @@ class ChainSchedulerMixin:
 
     @staticmethod
     def _position_aware_chain_jaccard(a: list[str], b: list[str]) -> float:
-        """Match the position-aware chain-capacity metric used by global merge."""
+        """Local scheduling heuristic; global PROVE merge uses plain Jaccard."""
         return position_aware_jaccard(a, b)
 
     def _record_chain_accepted(self, server_name: str, fingerprint: str) -> None:
@@ -173,7 +173,9 @@ class ChainSchedulerMixin:
                 fingerprint,
                 {"attempted": 0, "accepted": 0, "rejected_goal": 0},
             )
-            if reason == "goal_unsat":
+            if reason in {
+                "goal_unsat", "goal_incoherent_mutation_set",
+            }:
                 counters["rejected_goal"] = counters.get("rejected_goal", 0) + 1
 
     def _chain_sampling_summary(self, server_name: str) -> dict[str, int]:
@@ -195,16 +197,3 @@ class ChainSchedulerMixin:
                     v.get("rejected_goal", 0) for v in domain_stats.values()
                 ),
             }
-
-    @staticmethod
-    def _chain_progress_for_calls(oracle_calls: list, chain_seed: list[str] | None) -> int:
-        """Compute how many chain_seed prefix steps are satisfied by oracle_calls."""
-        if not chain_seed:
-            return 0
-        progress = 0
-        for call in oracle_calls:
-            if getattr(call, "action", "tool_call") != "tool_call":
-                continue
-            if progress < len(chain_seed) and call.tool_name == chain_seed[progress]:
-                progress += 1
-        return progress

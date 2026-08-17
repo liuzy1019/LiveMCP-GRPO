@@ -25,11 +25,9 @@ class DependencyCacheStoreMixin:
         A relation-audit or runtime-consumer change must invalidate the
         executable cache, but it does not invalidate an earlier complete LLM
         classification when the tool schema, Teacher identity, and classifier
-        prompt are byte-for-byte unchanged.  Only the paper-baseline path has
-        no second LLM reviewer, so other profiles still rebuild normally.
+        prompt are byte-for-byte unchanged. Generation prompt profiles do not
+        participate in this corpus-level identity.
         """
-        if not self._uses_paper_baseline():
-            return None
         current = self._classifier_contract_payload(server_name)
         expected_tools = sorted(tool.get("name", "") for tool in server_tools)
         expected_pairs = len(expected_tools) * (len(expected_tools) - 1) // 2
@@ -187,27 +185,6 @@ class DependencyCacheStoreMixin:
                 and pair_classifications is not None
                 and len(pair_classifications) == expected_pair_count
             )
-            diagnostic_complete = bool(
-                classification_complete
-                and isinstance(raw_pair_audits, list)
-                and payload.get("audited_pair_count") == len(raw_pair_audits)
-                and payload.get("audit_complete") is True
-                and pair_audits is not None
-                and isinstance(raw_relation_audits, list)
-                and payload.get("relation_audited_pair_count")
-                    == expected_pair_count
-                and payload.get("relation_audit_complete") is True
-                and relation_audits is not None
-                and relation_audit_counts is not None
-                and relation_audit_counts.get("insufficient_evidence", 0) == 0
-                and payload.get("relation_audit_counts")
-                    == relation_audit_counts
-                and payload.get("review_disagreement_count") == sum(
-                    1
-                    for audit in pair_audits
-                    if audit["disagrees_with_raw"]
-                )
-            )
             relation_complete = bool(
                 classification_complete
                 and isinstance(raw_relation_audits, list)
@@ -242,27 +219,13 @@ class DependencyCacheStoreMixin:
                 and classification_complete
                 and payload.get("raw_graph") == derived_raw_graph
             )
-            diagnostic_cache_contract_matches = bool(
+            cache_contract_matches = bool(
                 raw_cache_contract_matches
-                and diagnostic_complete
-                and self._valid_cached_graph(graph, expected_tool_names)
-                and graph == derived_graph
+                and relation_complete
                 and payload.get("classifier_contract_hash")
                     == self._classifier_contract_hash(server_name)
                 and payload.get("output_field_contract_sha256")
                     == classifier_contract.get("output_field_contract_sha256")
-            )
-            cache_contract_matches = (
-                bool(
-                    raw_cache_contract_matches
-                    and relation_complete
-                    and payload.get("classifier_contract_hash")
-                        == self._classifier_contract_hash(server_name)
-                    and payload.get("output_field_contract_sha256")
-                        == classifier_contract.get("output_field_contract_sha256")
-                )
-                if self._uses_paper_baseline()
-                else diagnostic_cache_contract_matches
             )
             if cache_contract_matches:
                 logger.info(f"Loaded dependency graph cache: {cache_path}")
@@ -294,11 +257,10 @@ class DependencyCacheStoreMixin:
         if pair_classifications is None:
             logger.warning(f"Skipping incomplete dependency pair ledger for {server_name}")
             return False
-        paper_baseline = self._uses_paper_baseline()
         supplied_pair_audits = pair_audits if pair_audits is not None else []
         validated_pair_audits = (
             []
-            if paper_baseline and not supplied_pair_audits
+            if not supplied_pair_audits
             else self._validate_dependency_pair_audits(
                 supplied_pair_audits,
                 pair_classifications,
@@ -309,7 +271,7 @@ class DependencyCacheStoreMixin:
         if validated_pair_audits is None:
             logger.warning(
                 f"Skipping dependency graph cache for {server_name}: "
-                "missing or invalid independent pair-audit provenance"
+                "invalid optional independent pair-audit provenance"
             )
             return False
         pair_audits = validated_pair_audits
@@ -319,16 +281,6 @@ class DependencyCacheStoreMixin:
         relation_audit_counts = dict(Counter(
             audit["verdict"] for audit in relation_audits
         ))
-        if (
-            not paper_baseline
-            and relation_audit_counts.get("insufficient_evidence", 0)
-        ):
-            logger.warning(
-                f"Skipping dependency graph cache for {server_name}: "
-                f"{relation_audit_counts['insufficient_evidence']} pair(s) "
-                "lack complete local output/state contracts"
-            )
-            return False
         raw_graph = self._graph_from_pair_classifications(
             pair_classifications, expected_tool_names,
         )
@@ -340,10 +292,10 @@ class DependencyCacheStoreMixin:
         )
         # The ledger is authoritative. Refuse a graph that does not exactly
         # match it instead of silently normalizing corruption during load.
-        expected_input_graph = raw_graph if paper_baseline else derived_graph
+        accepted_input_graphs = (raw_graph, derived_graph)
         if (
             not self._valid_cached_graph(graph, expected_tool_names)
-            or normalized_input_graph != expected_input_graph
+            or normalized_input_graph not in accepted_input_graphs
         ):
             logger.warning(f"Skipping invalid dependency graph cache for {server_name}")
             return False

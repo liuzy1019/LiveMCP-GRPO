@@ -27,6 +27,24 @@ def _list(value: Any, field: str) -> list[Any]:
     return value
 
 
+def _validate_relation_edges(
+    *, chain: list[str], edges: list[Any], field: str,
+) -> None:
+    if len(edges) != max(0, len(chain) - 1):
+        raise RuntimeError(f"{field} count mismatch")
+    for edge_index, (source, target) in enumerate(zip(chain, chain[1:])):
+        relation_entry = edges[edge_index]
+        if (
+            not isinstance(relation_entry, dict)
+            or relation_entry.get("source_capability") != source
+            or relation_entry.get("target_capability") != target
+            or relation_entry.get("relation") not in {"explicit", "implicit"}
+        ):
+            raise RuntimeError(
+                f"invalid {field}[{edge_index}] relation metadata"
+            )
+
+
 def validate_dependency_artifact(extra_info: dict[str, Any]) -> None:
     """Validate the sampled/realized/auxiliary partition and reward edges."""
     oracle_calls = _list(extra_info.get("oracle_calls"), "oracle_calls")
@@ -43,10 +61,26 @@ def validate_dependency_artifact(extra_info: dict[str, Any]) -> None:
     source_chain = [str(item) for item in _list(
         extra_info.get("source_chain_seed"), "source_chain_seed",
     )]
-    if success_scenario and (chain != source_chain or not chain):
-        raise RuntimeError(
-            "successful artifact must preserve its sampled source chain"
-        )
+    if success_scenario and not chain:
+        raise RuntimeError("successful artifact has no realized dependency chain")
+    source_edges = _list(
+        extra_info.get("source_chain_edges"), "source_chain_edges",
+    )
+    _validate_relation_edges(
+        chain=source_chain, edges=source_edges, field="source_chain_edges",
+    )
+    raw_realized_edges = extra_info.get("realized_chain_edges")
+    if raw_realized_edges is None and not chain:
+        raw_realized_edges = []
+    elif raw_realized_edges is None and chain == source_chain:
+        # Backward-compatible read of rows written before realized relations
+        # became a first-class Parquet field.  Alternative paths never use
+        # this fallback because their source and realized chains differ.
+        raw_realized_edges = source_edges
+    realized_edges = _list(raw_realized_edges, "realized_chain_edges")
+    _validate_relation_edges(
+        chain=chain, edges=realized_edges, field="realized_chain_edges",
+    )
     evidence = _list(
         extra_info.get("verified_dependency_evidence", []),
         "verified_dependency_evidence",
@@ -97,23 +131,9 @@ def validate_dependency_artifact(extra_info: dict[str, Any]) -> None:
                 f"non-success scenario {scenario!r} must not carry reward dependencies"
             )
         return
-    source_edges = _list(
-        extra_info.get("source_chain_edges"), "source_chain_edges",
-    )
-    if len(source_edges) != len(edges):
-        raise RuntimeError("source_chain_edges count mismatch")
     for edge_index, (source, target) in enumerate(zip(chain, chain[1:])):
         expected_indices = (aligned[edge_index], aligned[edge_index + 1])
-        relation_entry = source_edges[edge_index]
-        if (
-            not isinstance(relation_entry, dict)
-            or relation_entry.get("source_capability") != source
-            or relation_entry.get("target_capability") != target
-            or relation_entry.get("relation") not in {"explicit", "implicit"}
-        ):
-            raise RuntimeError(
-                f"invalid source_chain_edges[{edge_index}] relation metadata"
-            )
+        relation_entry = realized_edges[edge_index]
         expected_evidence_type = (
             "explicit_value_binding"
             if relation_entry["relation"] == "explicit"

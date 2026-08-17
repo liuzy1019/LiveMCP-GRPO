@@ -9,7 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
-import src.live_mcp.orchestrator as orchestrator_module
+import src.live_mcp.dependency_cache_store as dependency_cache_store_module
 from src.live_mcp.domain_contracts import dependency as dependency_contracts
 from src.live_mcp.domain_contracts import outputs as output_contracts
 from src.live_mcp.domain_contracts import states as state_contracts
@@ -20,8 +20,12 @@ from src.live_mcp.config import project_root
 from src.live_mcp.live_state_feasibility import chain_is_feasible
 from src.live_mcp.orchestrator import TaskOrchestrator
 from src.live_mcp.prompt_profiles import resolve_prompt_profile
+from src.live_mcp.servers.banking.server import TOOLS as BANKING_TOOLS
 from src.live_mcp.servers.payments.server import TOOLS as PAYMENT_TOOLS
-from src.live_mcp.servers.calendar.server import TOOLS as CALENDAR_TOOLS
+from src.live_mcp.servers.calendar.server import (
+    CalendarServer,
+    TOOLS as CALENDAR_TOOLS,
+)
 from src.live_mcp.servers.shopping.server import TOOLS as SHOPPING_TOOLS
 from src.live_mcp.types import OracleProgram
 
@@ -71,13 +75,12 @@ class _NoneRelationClient:
                 self.counter.value += 1
         if self.delay:
             time.sleep(self.delay)
-        is_pair_audit = "independent adversarial reviewer" in messages[0]["content"]
         return json.dumps({
             "classifications": [
                 {
                     "pair": "tool_a → tool_b",
-                    "source": "" if is_pair_audit else "tool_a",
-                    "target": "" if is_pair_audit else "tool_b",
+                    "source": "",
+                    "target": "",
                     "relation": "none",
                 },
             ],
@@ -234,7 +237,7 @@ def test_none_relation_uses_pair_when_model_returns_none_endpoints() -> None:
 
     classification = orchestrator._classify_edges_llm(TOOLS, "probe")
 
-    assert orchestrator.client.calls == 2
+    assert orchestrator.client.calls == 1
     assert classification is not None
     graph, pairs, audits = classification
     assert graph == {
@@ -247,8 +250,7 @@ def test_none_relation_uses_pair_when_model_returns_none_endpoints() -> None:
         "target": "",
         "relation": "none",
     }]
-    assert len(audits) == 1
-    assert audits[0]["final"]["relation"] == "none"
+    assert audits == []
 
 
 def test_unordered_pair_records_teacher_selected_direction() -> None:
@@ -259,14 +261,13 @@ def test_unordered_pair_records_teacher_selected_direction() -> None:
 
     assert classification is not None
     graph, pairs, audits = classification
-    # The raw direction is preserved, but an uncovered probe domain cannot
-    # promote it into the eligible graph.
-    assert graph["tool_a"]["explicit"] == []
+    # Classification returns immutable raw provenance. The save/load boundary
+    # derives the locally executable graph from deterministic relation audits.
+    assert graph["tool_a"]["explicit"] == ["tool_b"]
     assert graph["tool_b"]["implicit"] == []
     assert pairs[0]["source"] == "tool_a"
     assert pairs[0]["target"] == "tool_b"
-    assert audits[0]["initial"] == audits[0]["review"]
-    assert audits[0]["binding_candidates"] == []
+    assert audits == []
     relation_audit = TaskOrchestrator._build_local_relation_audits(
         pairs, DEPENDENT_TOOLS, "probe",
     )[0]
@@ -282,13 +283,13 @@ def test_unordered_pair_accepts_reverse_teacher_direction() -> None:
     assert classification is not None
     graph, pairs, audits = classification
     assert graph["tool_a"]["explicit"] == []
-    assert graph["tool_b"]["implicit"] == []
+    assert graph["tool_b"]["implicit"] == ["tool_a"]
     assert pairs[0]["source"] == "tool_b"
     assert pairs[0]["target"] == "tool_a"
-    assert audits[0]["final"]["relation"] == "implicit"
+    assert audits == []
 
 
-def test_relation_contract_does_not_rewrite_first_structurally_valid_raw_pair() -> None:
+def test_classifier_keeps_first_structurally_valid_raw_pair() -> None:
     class _InvalidThenNoneClient:
         model_path = "test-teacher"
 
@@ -311,141 +312,9 @@ def test_relation_contract_does_not_rewrite_first_structurally_valid_raw_pair() 
     classification = orchestrator._classify_edges_llm(TOOLS, "probe")
 
     assert classification is not None
-    assert orchestrator.client.calls == 2
+    assert orchestrator.client.calls == 1
     assert classification[1][0]["relation"] == "explicit"
-    assert classification[0]["tool_a"]["explicit"] == []
-
-
-def test_readonly_pair_is_not_rewritten_by_contract_feedback() -> None:
-    class _FeedbackAwareClient:
-        model_path = "test-teacher"
-
-        def __init__(self) -> None:
-            self.messages = []
-
-        def generate_chat(self, messages, **_kwargs) -> str:
-            self.messages.append(messages)
-            feedback = messages[1]["content"]
-            relation = (
-                "none"
-                if (
-                    'only valid answer is relation="none"' in feedback
-                    or "independent adversarial reviewer"
-                    in messages[0]["content"]
-                )
-                else "explicit"
-            )
-            return json.dumps({"classifications": [{
-                "pair": "tool_a → tool_b",
-                "source": "" if relation == "none" else "tool_a",
-                "target": "" if relation == "none" else "tool_b",
-                "relation": relation,
-            }]})
-
-    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
-    orchestrator.client = _FeedbackAwareClient()
-
-    classification = orchestrator._classify_edges_llm(TOOLS, "probe")
-
-    assert classification is not None
-    assert len(orchestrator.client.messages) == 2
-    assert classification[1][0]["relation"] == "explicit"
-    assert "Contract Feedback" not in orchestrator.client.messages[0][1]["content"]
-
-
-def test_relation_contract_rejects_readonly_implicit_source() -> None:
-    issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["tool_a", "tool_b"],
-            "source": "tool_a",
-            "target": "tool_b",
-            "relation": "implicit",
-        },
-        {tool["name"]: tool for tool in TOOLS},
-    )
-
-    assert issue == "implicit source is explicitly readonly/non-mutating"
-
-
-def test_relation_contract_rejects_explicit_entity_type_mismatch() -> None:
-    tools = [
-        {
-            "name": "create_draft",
-            "input_schema": {"type": "object", "required": ["to", "subject"]},
-            "annotations": {"mutating": True},
-        },
-        {
-            "name": "move_to_thread",
-            "input_schema": {
-                "type": "object",
-                "required": ["email_id", "thread_id"],
-            },
-            "annotations": {"mutating": True},
-        },
-    ]
-    issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["create_draft", "move_to_thread"],
-            "source": "create_draft",
-            "target": "move_to_thread",
-            "relation": "explicit",
-        },
-        {tool["name"]: tool for tool in tools},
-        "email",
-    )
-
-    assert issue is not None
-    assert "draft" in issue
-    assert "email" in issue
-
-    # A foreign-key ID copied from the source call's required arguments is an
-    # echo, not a newly discovered value.  Incomplete output ledgers used to
-    # let this pair bypass the explicit binding check.
-    issue_tools = [
-        {"name": "create_subtask", "input_schema": {
-            "type": "object", "required": ["issue_id", "title"],
-        }},
-        {"name": "get_issue", "input_schema": {
-            "type": "object", "required": ["issue_id"],
-        }},
-    ]
-    assert TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["create_subtask", "get_issue"],
-            "source": "create_subtask", "target": "get_issue",
-            "relation": "explicit",
-        },
-        {tool["name"]: tool for tool in issue_tools},
-        "issue_tracker",
-    ) is not None
-
-    # checkout now returns only the created order ID/status summary.  Product
-    # IDs live in get_order detail, so checkout -> get_product must fail closed.
-    shopping_tools = {tool["name"]: tool for tool in SHOPPING_TOOLS}
-    assert TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["checkout", "get_product"],
-            "source": "checkout",
-            "target": "get_product",
-            "relation": "explicit",
-        },
-        shopping_tools,
-        "shopping",
-    ) is not None
-
-    # product and cart_item share product_id identity.  Whether the observed
-    # product is currently in the cart is a live Step-2 membership check, not a
-    # Step-1 entity-type contradiction.
-    assert TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["get_order", "remove_from_cart"],
-            "source": "get_order",
-            "target": "remove_from_cart",
-            "relation": "explicit",
-        },
-        shopping_tools,
-        "shopping",
-    ) is None
+    assert classification[0]["tool_a"]["explicit"] == ["tool_b"]
 
 
 def test_strict_cache_validator_keeps_raw_relation_separate_from_eligibility() -> None:
@@ -497,6 +366,7 @@ def test_strict_cache_validator_keeps_raw_relation_separate_from_eligibility() -
         "teacher_model_id": "teacher",
         "classifier_prompt_sha256": "prompt",
         "output_field_contract_sha256": "output-fields",
+        "graph_source": "local_relation_audit_supported_subset",
     }
 
     assert _strict_cache_issue("shopping", data, names, tools) == ""
@@ -515,18 +385,17 @@ def test_strict_cache_validator_keeps_raw_relation_separate_from_eligibility() -
         paper_data,
         names,
         tools,
-        paper_baseline=True,
     ) == ""
 
 
-def test_fresh_classification_always_runs_raw_pass_and_independent_review() -> None:
+def test_fresh_classification_runs_one_raw_pass_without_profile_review() -> None:
     orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
     orchestrator.client = _NoneRelationClient()
 
     classification = orchestrator._classify_edges_llm(TOOLS, "probe")
 
     assert classification is not None
-    assert orchestrator.client.calls == 2
+    assert orchestrator.client.calls == 1
 
 
 def test_paper_baseline_classifies_each_pair_once_without_local_review_gate() -> None:
@@ -543,6 +412,36 @@ def test_paper_baseline_classifies_each_pair_once_without_local_review_gate() ->
     assert graph == TaskOrchestrator._graph_from_pair_classifications(
         pairs, ["tool_a", "tool_b"],
     )
+
+
+def test_dependency_cache_identity_is_generation_profile_independent(
+    tmp_path, monkeypatch,
+) -> None:
+    _install_complete_probe_contract(monkeypatch, TOOLS)
+    monkeypatch.setattr(
+        TaskOrchestrator,
+        "DEPENDENCY_CACHE_ROOT",
+        tmp_path / "data" / "dependency_graphs",
+    )
+    orchestrator = TaskOrchestrator.__new__(TaskOrchestrator)
+    orchestrator.client = _NoneRelationClient()
+    orchestrator.prompt_profile = resolve_prompt_profile(
+        "paper_generation_baseline_v1"
+    )
+    paper_hash = orchestrator._classifier_contract_hash("probe")
+    schema_hash = orchestrator._tool_schema_hash(TOOLS, "probe")
+    graph, pairs, audits = orchestrator._classify_edges_llm(TOOLS, "probe")
+    assert orchestrator._save_dependency_cache(
+        "probe", schema_hash, TOOLS, graph, pairs, audits,
+    )
+    assert orchestrator.client.calls == 1
+
+    orchestrator.prompt_profile = resolve_prompt_profile("local_trainable_v1")
+    assert orchestrator._classifier_contract_hash("probe") == paper_hash
+    assert orchestrator._load_dependency_cache(
+        "probe", schema_hash, TOOLS,
+    ) is not None
+    assert orchestrator.client.calls == 1
 
 
 def test_paper_baseline_cache_loads_complete_raw_ledger_without_audits(
@@ -777,7 +676,9 @@ def test_atomic_cache_save_publishes_only_complete_json(tmp_path, monkeypatch) -
         })
         real_replace(source, destination)
 
-    monkeypatch.setattr(orchestrator_module.os, "replace", _observed_replace)
+    monkeypatch.setattr(
+        dependency_cache_store_module.os, "replace", _observed_replace,
+    )
     pairs = orchestrator._pair_classifications_from_graph(graph, ["tool_a", "tool_b"])
     orchestrator._save_dependency_cache(
         "probe", schema_hash, TOOLS, graph, pairs,
@@ -843,7 +744,7 @@ def test_cold_cache_is_classified_once_across_processes(tmp_path, monkeypatch) -
     assert all(process.exitcode == 0 for process in processes)
     results = [result_queue.get(timeout=2) for _ in processes]
     assert all(status == "ok" for status, _ in results), results
-    assert counter.value == 2
+    assert counter.value == 1
 
     cache_files = list((tmp_path / "data" / "dependency_graphs").glob("probe_*.json"))
     assert len(cache_files) == 1
@@ -961,22 +862,17 @@ def test_classifier_preserves_raw_none_and_relation_audit_records_missed_binding
         "list_accounts.account_id -> get_balance.account_id"
         in user_prompt
     )
-    assert len(orchestrator.client.messages) == 2
+    assert len(orchestrator.client.messages) == 1
     assert classification[1][0]["relation"] == "none"
-    assert classification[2][0]["initial"]["relation"] == "none"
-    assert classification[2][0]["review"]["relation"] == "explicit"
-    assert classification[2][0]["tie_break"] is None
+    assert classification[2] == []
     relation_audit = TaskOrchestrator._build_local_relation_audits(
         classification[1], tools, "banking",
     )[0]
     assert relation_audit["verdict"] == "contradicted"
     assert relation_audit["eligible"] is False
-    audit_prompt = orchestrator.client.messages[1][1]["content"]
-    assert "list_accounts.account_id -> get_balance.account_id" in audit_prompt
-    assert "Conflicting Independent Decisions" not in audit_prompt
 
 
-def test_pair_review_is_diagnostic_and_not_rewritten_by_contract_feedback() -> None:
+def test_generation_profile_does_not_trigger_pair_review() -> None:
     class _StableFalseExplicitUntilFeedbackClient:
         model_path = "test-teacher"
 
@@ -1008,20 +904,17 @@ def test_pair_review_is_diagnostic_and_not_rewritten_by_contract_feedback() -> N
 
     assert classification is not None
     _, pairs, audits = classification
-    assert len(orchestrator.client.messages) == 2
+    assert len(orchestrator.client.messages) == 1
     assert pairs[0] == {
         "pair": ["get_cart", "get_recommendations"],
         "source": "",
         "target": "",
         "relation": "none",
     }
-    assert audits[0]["initial"]["relation"] == "none"
-    assert audits[0]["review"]["relation"] == "explicit"
-    assert audits[0]["disagrees_with_raw"] is True
-    assert audits[0]["tie_break"] is None
+    assert audits == []
 
 
-def test_adversarial_review_cannot_overwrite_raw_batch_classification() -> None:
+def test_single_pass_preserves_raw_batch_classification() -> None:
     class _ExplicitThenNoneClient:
         model_path = "test-teacher"
 
@@ -1047,17 +940,13 @@ def test_adversarial_review_cannot_overwrite_raw_batch_classification() -> None:
 
     assert classification is not None
     graph, pairs, audits = classification
-    assert orchestrator.client.calls == 2
+    assert orchestrator.client.calls == 1
     assert pairs[0]["relation"] == "explicit"
-    assert graph["tool_a"]["explicit"] == []
-    assert audits[0]["initial"]["relation"] == "explicit"
-    assert audits[0]["review"]["relation"] == "none"
-    assert audits[0]["tie_break"] is None
-    assert audits[0]["final"]["relation"] == "explicit"
-    assert audits[0]["disagrees_with_raw"] is True
+    assert graph["tool_a"]["explicit"] == ["tool_b"]
+    assert audits == []
 
 
-def test_pair_audit_disagreement_does_not_request_a_third_decision() -> None:
+def test_single_pass_never_requests_second_or_third_decision() -> None:
     class _ThreeWayDisagreementClient:
         model_path = "test-teacher"
 
@@ -1088,125 +977,10 @@ def test_pair_audit_disagreement_does_not_request_a_third_decision() -> None:
     )
     assert classification is not None
     graph, pairs, audits = classification
-    assert orchestrator.client.calls == 2
+    assert orchestrator.client.calls == 1
     assert pairs[0]["relation"] == "explicit"
-    assert graph["tool_a"]["explicit"] == []
-    assert audits[0]["review"]["relation"] == "none"
-    assert audits[0]["final"] == audits[0]["initial"]
-    assert audits[0]["disagrees_with_raw"] is True
-
-
-def test_none_relation_is_rejected_by_certified_output_binding() -> None:
-    tools = {
-        "list_accounts": {
-            "name": "list_accounts",
-            "input_schema": {"type": "object", "required": []},
-            "annotations": {"readonly": True, "mutating": False},
-        },
-        "get_balance": {
-            "name": "get_balance",
-            "input_schema": {
-                "type": "object", "required": ["account_id"],
-            },
-            "annotations": {"readonly": True, "mutating": False},
-        },
-    }
-    issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["get_balance", "list_accounts"],
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-        tools,
-        "banking",
-    )
-
-    assert issue is not None
-    assert "list_accounts -> get_balance" in issue
-
-
-def test_fixed_state_contradiction_blocks_syntactic_explicit_binding() -> None:
-    tools = {tool["name"]: tool for tool in SHOPPING_TOOLS}
-
-    explicit_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["checkout", "return_order"],
-            "source": "checkout",
-            "target": "return_order",
-            "relation": "explicit",
-        },
-        tools,
-        "shopping",
-    )
-    assert explicit_issue is not None
-    assert "placed" in explicit_issue
-    assert "shipped" in explicit_issue
-
-    none_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["checkout", "return_order"],
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-        tools,
-        "shopping",
-    )
-    assert none_issue is None
-    assert (
-        TaskOrchestrator._dependency_pair_certified_explicit_directions(
-            ("checkout", "return_order"), tools, "shopping",
-        )
-        == []
-    )
-
-    # add_to_wishlist is idempotent for an existing member.  This is not a
-    # hard execution contradiction; live state-change/task suitability decides
-    # whether the resulting no-op is useful.
-    wishlist_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["add_to_wishlist", "get_wishlist"],
-            "source": "get_wishlist",
-            "target": "add_to_wishlist",
-            "relation": "explicit",
-        },
-        tools,
-        "shopping",
-    )
-    assert wishlist_issue is None
-    assert (
-        "get_wishlist", "add_to_wishlist",
-    ) in TaskOrchestrator._dependency_pair_certified_explicit_directions(
-        ("add_to_wishlist", "get_wishlist"), tools, "shopping",
-    )
-    implicit_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["add_to_wishlist", "get_wishlist"],
-            "source": "add_to_wishlist",
-            "target": "get_wishlist",
-            "relation": "implicit",
-        },
-        tools,
-        "shopping",
-    )
-    # This helper belongs to local eligibility auditing, not the raw parser.
-    # The raw label remains preserved elsewhere, while the factual reverse
-    # explicit binding prevents this implicit direction entering the graph.
-    assert implicit_issue is not None
-    assert "explicit-precedence" in implicit_issue
-    none_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["add_to_wishlist", "get_wishlist"],
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-        tools,
-        "shopping",
-    )
-    assert none_issue is not None
-    assert "get_wishlist -> add_to_wishlist" in none_issue
+    assert graph["tool_a"]["explicit"] == ["tool_b"]
+    assert audits == []
 
 
 def test_shopping_list_orders_does_not_bypass_get_order_for_products() -> None:
@@ -1230,154 +1004,6 @@ def test_shopping_list_orders_does_not_bypass_get_order_for_products() -> None:
         )
         == [("list_orders", "get_order")]
     )
-
-
-def test_certified_binding_takes_precedence_over_reverse_implicit() -> None:
-    tools = {tool["name"]: tool for tool in SHOPPING_TOOLS}
-    issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["add_to_cart", "get_cart"],
-            "source": "add_to_cart",
-            "target": "get_cart",
-            "relation": "implicit",
-        },
-        tools,
-        "shopping",
-    )
-
-    assert issue is not None
-    assert "get_cart -> add_to_cart" in issue
-
-
-def test_shopping_v19_manual_counterexamples_are_fail_closed() -> None:
-    tools = {tool["name"]: tool for tool in SHOPPING_TOOLS}
-    rejected = [
-        {
-            "pair": ["add_to_cart", "get_cart"],
-            "source": "add_to_cart",
-            "target": "get_cart",
-            "relation": "implicit",
-        },
-        {
-            # return_order exposes product_id values that can ground the
-            # required product_id of add_to_cart in the reverse direction.
-            "pair": ["add_to_cart", "return_order"],
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-        {
-            "pair": ["add_to_wishlist", "checkout"],
-            "source": "checkout",
-            "target": "add_to_wishlist",
-            "relation": "explicit",
-        },
-        {
-            "pair": ["checkout", "return_order"],
-            "source": "checkout",
-            "target": "return_order",
-            "relation": "explicit",
-        },
-    ]
-    for entry in rejected:
-        assert TaskOrchestrator._pair_classification_contract_issue(
-            entry, tools, "shopping",
-        ) is not None
-
-    accepted = [
-        {
-            "pair": ["add_to_cart", "get_cart"],
-            "source": "get_cart",
-            "target": "add_to_cart",
-            "relation": "explicit",
-        },
-        {
-            "pair": ["add_to_cart", "return_order"],
-            "source": "return_order",
-            "target": "add_to_cart",
-            "relation": "explicit",
-        },
-        {
-            "pair": ["add_to_wishlist", "checkout"],
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-        {
-            "pair": ["checkout", "return_order"],
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-    ]
-    for entry in accepted:
-        assert TaskOrchestrator._pair_classification_contract_issue(
-            entry, tools, "shopping",
-        ) is None
-
-
-def test_explicit_contract_supports_factual_argument_aliases() -> None:
-    from src.live_mcp.servers.banking.server import TOOLS as banking_tools
-
-    tools = {tool["name"]: tool for tool in banking_tools}
-    issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["list_accounts", "transfer"],
-            "source": "list_accounts",
-            "target": "transfer",
-            "relation": "explicit",
-        },
-        tools,
-        "banking",
-    )
-
-    assert issue is None
-
-    shopping_tools = {tool["name"]: tool for tool in SHOPPING_TOOLS}
-    shopping_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["compare_products", "search_products"],
-            "source": "search_products",
-            "target": "compare_products",
-            "relation": "explicit",
-        },
-        shopping_tools,
-        "shopping",
-    )
-    assert shopping_issue is None
-
-
-def test_shopping_echoed_required_identifiers_do_not_create_explicit_edges() -> None:
-    tools = {tool["name"]: tool for tool in SHOPPING_TOOLS}
-
-    for source_name, target_name in (
-        ("get_product", "update_cart_quantity"),
-        ("get_reviews", "add_to_cart"),
-        ("cancel_order", "get_order"),
-        ("add_review", "add_to_cart"),
-        ("compare_products", "get_product"),
-    ):
-        explicit = {
-            "pair": sorted([source_name, target_name]),
-            "source": source_name,
-            "target": target_name,
-            "relation": "explicit",
-        }
-        issue = TaskOrchestrator._pair_classification_contract_issue(
-            explicit, tools, "shopping",
-        )
-        assert issue is not None
-        assert "no novel output field" in issue
-
-        none = {
-            "pair": sorted([source_name, target_name]),
-            "source": "",
-            "target": "",
-            "relation": "none",
-        }
-        assert TaskOrchestrator._pair_classification_contract_issue(
-            none, tools, "shopping",
-        ) is None
 
 
 def test_shopping_local_relation_audit_separates_raw_and_eligible_edges() -> None:
@@ -1419,6 +1045,36 @@ def test_shopping_local_relation_audit_separates_raw_and_eligible_edges() -> Non
             "target": "",
             "relation": "none",
         }, "supported", False),
+        ({
+            "pair": ["checkout", "return_order"],
+            "source": "checkout",
+            "target": "return_order",
+            "relation": "explicit",
+        }, "contradicted", False),
+        ({
+            "pair": ["checkout", "return_order"],
+            "source": "",
+            "target": "",
+            "relation": "none",
+        }, "supported", False),
+        ({
+            "pair": ["add_to_wishlist", "get_wishlist"],
+            "source": "get_wishlist",
+            "target": "add_to_wishlist",
+            "relation": "explicit",
+        }, "supported", True),
+        ({
+            "pair": ["add_to_wishlist", "get_wishlist"],
+            "source": "add_to_wishlist",
+            "target": "get_wishlist",
+            "relation": "implicit",
+        }, "contradicted", False),
+        ({
+            "pair": ["get_order", "remove_from_cart"],
+            "source": "get_order",
+            "target": "remove_from_cart",
+            "relation": "explicit",
+        }, "supported", True),
     ]
 
     for raw, expected_verdict, expected_eligible in cases:
@@ -1434,6 +1090,49 @@ def test_shopping_local_relation_audit_separates_raw_and_eligible_edges() -> Non
         assert audit["eligible"] is expected_eligible
 
 
+def test_local_relation_audit_uses_only_novel_cross_tool_bindings() -> None:
+    banking_tools = {tool["name"]: tool for tool in BANKING_TOOLS}
+    payments_tools = {tool["name"]: tool for tool in PAYMENT_TOOLS}
+
+    banking = TaskOrchestrator._local_dependency_relation_audit(
+        {
+            "pair": ["list_accounts", "transfer"],
+            "source": "list_accounts",
+            "target": "transfer",
+            "relation": "explicit",
+        },
+        banking_tools,
+        "banking",
+    )
+    missed_payment_binding = TaskOrchestrator._local_dependency_relation_audit(
+        {
+            "pair": sorted(["get_invoice", "pay_invoice"]),
+            "source": "",
+            "target": "",
+            "relation": "none",
+        },
+        payments_tools,
+        "payments",
+    )
+    echoed_invoice_id = TaskOrchestrator._local_dependency_relation_audit(
+        {
+            "pair": sorted(["get_invoice", "dispute_invoice"]),
+            "source": "get_invoice",
+            "target": "dispute_invoice",
+            "relation": "explicit",
+        },
+        payments_tools,
+        "payments",
+    )
+
+    assert banking["verdict"] == "supported"
+    assert banking["eligible"] is True
+    assert missed_payment_binding["verdict"] == "contradicted"
+    assert missed_payment_binding["eligible"] is False
+    assert echoed_invoice_id["verdict"] == "contradicted"
+    assert echoed_invoice_id["eligible"] is False
+
+
 def test_shopping_relation_contract_coverage_matches_all_public_tools() -> None:
     names = {tool["name"] for tool in SHOPPING_TOOLS}
     assert set(output_contracts.DOMAIN_VALUE_OUTPUT_FIELDS["shopping"]) == names
@@ -1444,6 +1143,55 @@ def test_calendar_relation_contract_coverage_matches_all_public_tools() -> None:
     names = {tool["name"] for tool in CALENDAR_TOOLS}
     assert set(output_contracts.DOMAIN_VALUE_OUTPUT_FIELDS["calendar"]) == names
     assert set(state_contracts.DOMAIN_STATE_FACTS["calendar"]) == names
+
+
+def test_calendar_free_busy_output_contract_matches_handler_observation() -> None:
+    server = CalendarServer()
+    session_id = "calendar-output-contract"
+    server.handle_request(
+        "session/reset", {"session_id": session_id, "seed": 42},
+    )
+
+    result = server._call_tool({
+        "session_id": session_id,
+        "name": "get_free_busy",
+        "arguments": {
+            "emails": ["sarah@example.com"],
+            "start_time": "2026-01-16T12:00",
+            "end_time": "2026-01-16T18:00",
+        },
+    })
+
+    assert result["success"] is True
+    assert set(result["observation"]) == {"busy", "query_range"}
+    assert set(
+        output_contracts.DOMAIN_VALUE_OUTPUT_FIELDS["calendar"][
+            "get_free_busy"
+        ]
+    ) == set(result["observation"])
+
+
+def test_calendar_information_constraint_is_not_eligible_dependency() -> None:
+    tools_by_name = {tool["name"]: tool for tool in CALENDAR_TOOLS}
+    raw = {
+        "pair": ["get_free_busy", "update_event"],
+        "source": "get_free_busy",
+        "target": "update_event",
+        "relation": "explicit",
+    }
+
+    audit = TaskOrchestrator._local_dependency_relation_audit(
+        raw, tools_by_name, "calendar",
+    )
+    graph = TaskOrchestrator._eligible_graph_from_relation_audits(
+        [raw], [audit], sorted(raw["pair"]),
+    )
+
+    assert audit["verdict"] == "contradicted"
+    assert audit["certified_explicit_directions"] == []
+    assert audit["certified_implicit_directions"] == []
+    assert graph["get_free_busy"]["explicit"] == []
+    assert graph["get_free_busy"]["implicit"] == []
 
 
 def test_calendar_single_event_cannot_feed_recurring_info() -> None:
@@ -1579,69 +1327,6 @@ def test_shopping_cache_round_trip_keeps_bad_raw_edges_out_of_eligible_graph(
     assert _strict_cache_issue(
         "shopping", payload, names, SHOPPING_TOOLS,
     ) == ""
-
-
-def test_payments_get_invoice_uses_only_novel_output_bindings() -> None:
-    tools = {
-        tool["name"]: tool
-        for tool in PAYMENT_TOOLS
-    }
-    for target_name in ("pay_invoice", "refund_invoice", "cancel_payment"):
-        issue = TaskOrchestrator._pair_classification_contract_issue(
-            {
-                "pair": sorted(["get_invoice", target_name]),
-                "source": "",
-                "target": "",
-                "relation": "none",
-            },
-            tools,
-            "payments",
-        )
-        assert issue is not None
-        assert "certified novel-output" in issue
-
-    # invoice_id is merely echoed and dispute_invoice does not consume any
-    # other novel get_invoice output, so none remains valid for this pair.
-    dispute_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": sorted(["get_invoice", "dispute_invoice"]),
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-        tools,
-        "payments",
-    )
-    assert dispute_issue is None
-
-    create_issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": ["create_invoice", "get_invoice"],
-            "source": "",
-            "target": "",
-            "relation": "none",
-        },
-        tools,
-        "payments",
-    )
-    assert create_issue is not None
-    assert "create_invoice -> get_invoice" in create_issue
-
-
-def test_explicit_relation_rejects_echoed_source_required_field() -> None:
-    tools = {tool["name"]: tool for tool in PAYMENT_TOOLS}
-    issue = TaskOrchestrator._pair_classification_contract_issue(
-        {
-            "pair": sorted(["get_invoice", "dispute_invoice"]),
-            "source": "get_invoice",
-            "target": "dispute_invoice",
-            "relation": "explicit",
-        },
-        tools,
-        "payments",
-    )
-    assert issue is not None
-    assert "echoed source-required fields" in issue
 
 
 def test_output_field_contract_invalidates_only_classifier_cache(monkeypatch) -> None:

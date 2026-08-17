@@ -7,13 +7,15 @@ from typing import Any
 
 from loguru import logger
 
+from src.live_mcp.errors import ActionDecisionError, TurnLoopError
 from src.live_mcp.fsm import ConversationFSM, FSMStateGroup
 from src.live_mcp.protocol.observation import tool_result_envelope
 from src.live_mcp.registry.tool_semantics import (
+    is_mutating_tool,
     tool_call_invalidated_by_state_changes,
     unresolved_failed_tool_names,
 )
-from src.live_mcp.types import OracleCall
+from src.live_mcp.types import OracleCall, to_plain
 from src.live_mcp.generation.tool_resolution import fuzzy_match_tool as _fuzzy_match_tool
 
 def run_turn_loop(
@@ -31,11 +33,10 @@ def run_turn_loop(
     chain_context: dict[str, Any] | None = None,
     blocked_tools: set[str] | None = None,
     missing_function_contract: bool = False,
-    allowed_missing_mutations: set[str] | None = None,
     prior_execution_history: list[dict[str, Any]] | None = None,
     conversation_context: list[dict[str, Any]] | None = None,
     allow_direct_answer: bool = False,
-    dependency_plan: list[dict[str, str]] | None = None,
+    authorized_mutating_tools: set[str] | None = None,
     fsm: ConversationFSM | None = None,
 ) -> tuple[list, list[dict], list[Any], set[str], list[OracleCall], list[Any]]:
     """Run one conversation round of teacher-driven tool execution.
@@ -60,6 +61,7 @@ def run_turn_loop(
     required_tools: set[str] = set()
     attempt_calls: list[OracleCall] = []
     attempt_observations: list[Any] = []
+    pre_dispatch_rejections: list[dict[str, Any]] = []
 
     def _record_attempt(
         name: str,
@@ -121,6 +123,32 @@ def run_turn_loop(
     _turn: int = 0       # real turn count (tool exec + terminal)
     tool_calls_dispatched = 0
     no_progress_rejections = 0
+    missing_function_mutation_rejections = 0
+    unauthorized_mutation_rejections = 0
+
+    def _fail(
+        reason: str,
+        message: str,
+        *,
+        cause_details: dict[str, Any] | None = None,
+    ) -> None:
+        raise TurnLoopError(
+            message,
+            reason=reason,
+            details={
+                "round_idx": round_idx,
+                "user_query": current_query,
+                "oracle_calls": [to_plain(call) for call in oracle_calls],
+                "oracle_observations": list(oracle_observations),
+                "execution_history": list(execution_history),
+                "attempt_calls": [to_plain(call) for call in attempt_calls],
+                "attempt_observations": list(attempt_observations),
+                "pre_dispatch_rejections": list(pre_dispatch_rejections),
+                "tool_calls_dispatched": tool_calls_dispatched,
+                "teacher_attempts": attempt,
+                "cause_details": dict(cause_details or {}),
+            },
+        )
 
     # The extra iteration is reserved for a terminal decision after the
     # last permitted tool dispatch.  A tool call in that slot fails the
@@ -145,17 +173,15 @@ def run_turn_loop(
                 conversation_context=conversation_context,
                 blocked_tools=blocked_tools,
                 missing_function=missing_function_contract,
-                allowed_missing_mutations=allowed_missing_mutations,
                 allow_direct_answer=allow_direct_answer,
-                dependency_plan=dependency_plan,
                 round_idx=round_idx,
             )
-        except RuntimeError:
-            logger.debug(
-                "_run_turn_loop: decide_action exhausted retries; "
-                "breaking turn loop."
+        except ActionDecisionError as exc:
+            _fail(
+                exc.reason,
+                str(exc),
+                cause_details=exc.details,
             )
-            break
 
         if action.action == "ask_clarification":
             _trace(
@@ -180,7 +206,8 @@ def run_turn_loop(
             if action.action == "final_answer":
                 unresolved = unresolved_failed_tool_names(execution_history)
                 if unresolved:
-                    raise RuntimeError(
+                    _fail(
+                        "final_answer_with_unresolved_failure",
                         "Teacher emitted final_answer with unresolved failed "
                         f"actions in round {round_idx}: {sorted(unresolved)}"
                     )
@@ -209,7 +236,8 @@ def run_turn_loop(
         tool_name = _fuzzy_match_tool(tool_name, {t["name"] for t in server_tools}) or tool_name
 
         if tool_calls_dispatched >= max_tool_calls:
-            raise RuntimeError(
+            _fail(
+                "teacher_tool_call_safety_budget_exhausted",
                 "Teacher reached the tool-call safety budget and did not "
                 "emit a terminal response"
             )
@@ -265,13 +293,57 @@ def run_turn_loop(
             )
             attempt += 1
             if no_progress_rejections >= 3:
-                raise RuntimeError(
+                _fail(
+                    "teacher_no_progress_exhausted",
                     "Teacher repeated a successful no-progress "
                     "tool call after three pre-dispatch rejections"
                 )
             continue
 
         execution_domain = _owner_domain(tool_name)
+        if (
+            authorized_mutating_tools is not None
+            and is_mutating_tool(tool_name, execution_domain)
+            and tool_name not in authorized_mutating_tools
+        ):
+            unauthorized_mutation_rejections += 1
+            rejection = {
+                "round_idx": round_idx,
+                "reason": "initial_round_unauthorized_mutation",
+                "tool_name": tool_name,
+                "server_name": execution_domain,
+                "arguments": dict(action.arguments),
+                "rejection_count": unauthorized_mutation_rejections,
+            }
+            pre_dispatch_rejections.append(rejection)
+            _trace("unauthorized_mutation_rejected", **rejection)
+            attempt += 1
+            if unauthorized_mutation_rejections >= 3:
+                _fail(
+                    "initial_round_unauthorized_mutation_repeated",
+                    "Teacher repeatedly proposed a state mutation absent "
+                    f"from source_chain_seed: {tool_name}",
+                )
+            continue
+        if missing_function_contract and is_mutating_tool(
+            tool_name, execution_domain,
+        ):
+            missing_function_mutation_rejections += 1
+            _trace(
+                "missing_function_mutation_rejected",
+                round_idx=round_idx,
+                tool_name=tool_name,
+                arguments=dict(action.arguments),
+                rejection_count=missing_function_mutation_rejections,
+            )
+            attempt += 1
+            if missing_function_mutation_rejections >= 3:
+                _fail(
+                    "missing_function_mutation_repeated",
+                    "Teacher repeatedly proposed a state mutation for a "
+                    "bound missing-function candidate"
+                )
+            continue
         if fsm is not None:
             fsm.transition(
                 FSMStateGroup.TOOL_EXECUTION,
@@ -353,30 +425,6 @@ def run_turn_loop(
                 )
 
                 if rec_action == "give_up":
-                    completed_mutations = {
-                        str(event.get("tool_name") or "")
-                        for event in execution_history
-                        if (
-                            isinstance(event, dict)
-                            and event.get("success") is True
-                        )
-                    }
-                    pending_independent_mutations = (
-                        set(allowed_missing_mutations or set())
-                        - completed_mutations
-                        - {failed_tool}
-                    )
-                    if pending_independent_mutations:
-                        _trace(
-                            "recovery_give_up_deferred",
-                            round_idx=round_idx,
-                            failed_tool=failed_tool,
-                            pending_independent_mutations=sorted(
-                                pending_independent_mutations
-                            ),
-                        )
-                        recovery_deferred = True
-                        break
                     reason = str(
                         recovery.get("reason")
                         or "The request cannot be completed with the available tools and state."
@@ -641,12 +689,14 @@ def run_turn_loop(
     if (any(oc.action == "tool_call" for oc in oracle_calls)
             and not any(oc.action in ("final_answer", "report_error", "ask_clarification")
                         for oc in oracle_calls)):
-        raise RuntimeError(
+        _fail(
+            "teacher_action_budget_exhausted",
             "Teacher exhausted the per-round action budget without a "
             "terminal response"
         )
     if not oracle_calls:
-        raise RuntimeError(
+        _fail(
+            "teacher_produced_no_action",
             "Teacher produced no action for the current conversation round"
         )
 
@@ -658,5 +708,3 @@ def run_turn_loop(
         attempt_calls,
         attempt_observations,
     )
-
-

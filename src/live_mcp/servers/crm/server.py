@@ -1,4 +1,4 @@
-"""Stateful CRM server with 16 tools.
+"""Stateful CRM server with 17 tools.
 Relational state: leads, contacts, deals, tasks, notes.
 Safety: identity_policy=preserve, reference integrity.
 """
@@ -14,6 +14,7 @@ TOOLS = [
     {"name": "delete_lead", "description": "Delete a lead (only if not converted).", "input_schema": {"type": "object", "properties": {"lead_id": {"type": "string"}}, "required": ["lead_id"]}, "annotations": {"mutating": True}},
     {"name": "list_leads", "description": "List leads by status, source, or company.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "source": {"type": "string"}, "company": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "create_contact", "description": "Create a contact directly.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "company": {"type": "string"}}, "required": ["name", "email"]}, "annotations": {"mutating": True}},
+    {"name": "list_contacts", "description": "List contacts, including whether each contact is currently safe to delete.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "company": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "update_contact", "description": "Update an existing contact's name, email, phone, or company.", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string"}, "fields": {"type": "object", "properties": {"name": {"type": "string"}, "email": {"type": "string"}, "phone": {"type": "string"}, "company": {"type": "string"}}, "additionalProperties": False, "minProperties": 1}}, "required": ["contact_id", "fields"], "additionalProperties": False}, "annotations": {"mutating": True}},
     {"name": "delete_contact", "description": "Delete a contact only when it is not referenced by any deal or converted lead.", "input_schema": {"type": "object", "properties": {"contact_id": {"type": "string", "description": "Existing contact_id with no deal or converted-lead references."}}, "required": ["contact_id"]}, "annotations": {"mutating": True}},
     {"name": "create_deal", "description": "Create a deal linked to at least one existing contact or lead. The amount must be greater than zero.", "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Positive deal amount; must be greater than zero."}, "contact_id": {"type": "string", "description": "Existing contact_id; at least contact_id or lead_id is required."}, "lead_id": {"type": "string", "description": "Existing lead_id; at least contact_id or lead_id is required."}, "stage": {"type": "string", "enum": ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]}}, "required": ["name", "amount"]}, "annotations": {"mutating": True}},
@@ -23,7 +24,7 @@ TOOLS = [
     {"name": "create_task", "description": "Create a task. At least one of deal_id or contact_id must reference an existing entity.", "input_schema": {"type": "object", "properties": {"title": {"type": "string"}, "deal_id": {"type": "string", "description": "Existing deal_id. At least one of deal_id or contact_id is required."}, "contact_id": {"type": "string", "description": "Existing contact_id. At least one of deal_id or contact_id is required."}, "due_date": {"type": "string"}, "priority": {"type": "string"}}, "required": ["title"]}, "annotations": {"mutating": True}},
     {"name": "list_tasks", "description": "List tasks by status, deal, or priority.", "input_schema": {"type": "object", "properties": {"status": {"type": "string"}, "deal_id": {"type": "string"}, "priority": {"type": "string"}}, "required": []}, "annotations": {"readonly": True, "mutating": False}},
     {"name": "complete_task", "description": "Mark a task as completed.", "input_schema": {"type": "object", "properties": {"task_id": {"type": "string"}}, "required": ["task_id"]}, "annotations": {"mutating": True}},
-    {"name": "add_note", "description": "Add a note to a deal, contact, or lead.", "input_schema": {"type": "object", "properties": {"entity_type": {"type": "string"}, "entity_id": {"type": "string"}, "content": {"type": "string"}}, "required": ["entity_type", "entity_id", "content"]}, "annotations": {"mutating": True}},
+    {"name": "add_note", "description": "Add a note to a deal, contact, or lead.", "input_schema": {"type": "object", "properties": {"entity_type": {"type": "string", "enum": ["lead", "contact", "deal"]}, "entity_id": {"type": "string"}, "content": {"type": "string"}}, "required": ["entity_type", "entity_id", "content"], "additionalProperties": False}, "annotations": {"mutating": True}},
 ]
 
 VALID_STAGES = ["prospecting", "qualification", "proposal", "negotiation", "closed_won", "closed_lost"]
@@ -117,6 +118,30 @@ class CRMServer(StatefulToolServer):
         contact = {"contact_id": cid, "name": arguments["name"], "email": arguments["email"], "phone": arguments.get("phone", ""), "company": arguments.get("company", ""), "lead_id": None}
         state["contacts"][cid] = contact
         return _result(True, {"contact": contact}, None, "", True)
+
+    def list_contacts(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        state = self._state(session_id)
+        contacts = [
+            {
+                **contact,
+                "deletable": self._contact_deletable(state, contact_id),
+            }
+            for contact_id, contact in state["contacts"].items()
+        ]
+        if arguments.get("name"):
+            contacts = [
+                contact for contact in contacts
+                if contact.get("name") == arguments["name"]
+            ]
+        if arguments.get("company"):
+            contacts = [
+                contact for contact in contacts
+                if contact.get("company") == arguments["company"]
+            ]
+        return _result(
+            True, {"contacts": contacts, "count": len(contacts)},
+            None, "", False,
+        )
 
     def update_contact(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); contact = state["contacts"].get(arguments["contact_id"])

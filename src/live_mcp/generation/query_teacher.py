@@ -8,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.live_mcp.errors import CandidateGenerationError
 from src.live_mcp.planner_format import format_state_compact as _format_state_compact
 from src.live_mcp.generation.teacher_contracts import (
     DIFFICULTY_DESCRIPTIONS,
@@ -18,12 +19,22 @@ from src.live_mcp.generation.teacher_contracts import (
 from src.utils import extract_json as _extract_json
 
 
-class QueryGenerationError(RuntimeError):
+class QueryGenerationError(CandidateGenerationError):
     """Structured failure of one fixed chain/state query contract."""
 
-    def __init__(self, message: str, *, reason: str) -> None:
-        super().__init__(message)
-        self.reason = reason
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            stage="query_generation",
+            reason=reason,
+            details=details,
+        )
 
 
 class QueryTeacherMixin:
@@ -40,7 +51,6 @@ class QueryTeacherMixin:
         reference_date: str = "",
         chain_seed: list[str] | None = None,
         chain_context: dict[str, Any] | None = None,
-        **_kwargs: Any,
     ) -> GeneratedQuery:
         """LLM generates a natural-language user query grounded in live state.
 
@@ -48,12 +58,16 @@ class QueryTeacherMixin:
         the query toward a realistic dependency chain without making that
         chain the only valid tool trajectory.
 
-        chain_context is a compact subset of live-state entity IDs extracted by
-        _extract_chain_context(). The grounding constraint prevents ID invention.
+        chain_context is a compact chain-aligned view extracted from live
+        state. PROVE baseline includes real entity IDs; the local trainable
+        profile can replace opaque IDs with natural selectors.
         """
-        difficulty_desc = DIFFICULTY_DESCRIPTIONS.get(
-            difficulty, DIFFICULTY_DESCRIPTIONS["complete"]
-        )
+        if difficulty not in DIFFICULTY_DESCRIPTIONS:
+            raise ValueError(
+                f"unknown query difficulty {difficulty!r}; expected one of "
+                f"{sorted(DIFFICULTY_DESCRIPTIONS)}"
+            )
+        difficulty_desc = DIFFICULTY_DESCRIPTIONS[difficulty]
         state_text = _format_state_compact(grounded_state, max_entities=20)
 
         # Date context
@@ -83,8 +97,9 @@ class QueryTeacherMixin:
         elif difficulty == "complete":
             grounding_line = (
                 "Include all user-known information needed to complete the goal. "
-                "If you naturally reference an entity that already exists, copy its exact ID "
-                "from Current State. Do not substitute an existing ID for an entity that an "
+                "If you reference an existing entity, copy an exact identifier or natural "
+                "selector shown in Grounded Live State. Never invent a value that is not "
+                "shown. Do not substitute an existing ID for an entity that an "
                 "earlier capability in the dependency chain will create. If an earlier discovery "
                 "capability intentionally hides IDs, use enough exact shown selector facts to "
                 "identify one candidate uniquely. A label such as 'savings', 'the invoice', or "
@@ -93,7 +108,7 @@ class QueryTeacherMixin:
             )
         else:
             grounding_line = (
-                "You forgot one key detail. Use IDs from Current State where you remember them, "
+                "You forgot one key detail. Use only values shown in Grounded Live State, "
                 "but leave out the missing piece naturally — don't signal that you're omitting it."
             )
 
@@ -107,40 +122,52 @@ class QueryTeacherMixin:
 
         # ── The complete dependency chain seeds one task. ──
         chain_goal_block = ""
+        causal_relation_block = ""
         if chain_seed:
             final_tool = chain_seed[-1]
-            goal_phrase = _chain_goal_phrase(final_tool)
+            goal_phrase = _chain_goal_phrase(tool_schemas, final_tool)
             if goal_phrase:
                 chain_requirements = "\n".join(
                     f"- {_target_tool_requirement(tool_schemas, tool_name)}"
                     for tool_name in chain_seed
                 )
-                chain_fact_note = ""
-                if (
-                    self.domain == "team_chat"
-                    and "create_thread" in chain_seed
-                    and "react_message" in chain_seed
-                    and chain_seed.index("create_thread") < chain_seed.index("react_message")
-                ):
-                    chain_fact_note = (
-                        " Handler fact: a newly created thread starts with no replies. "
-                        "A requested reaction must therefore target the existing root "
-                        "message; do not request a reaction to a new thread reply."
+                if difficulty == "complete":
+                    state_change_parameter_contract = (
+                        "Every required field that controls a state change MUST "
+                        "have a concrete user-authorized value in the message or "
+                        "an unambiguous value in Grounded Live State; never leave "
+                        "such a field for the assistant to invent (for example an "
+                        "amount, recipient, status, path, date, quantity, or "
+                        "message body)."
+                    )
+                elif difficulty == "missing":
+                    state_change_parameter_contract = (
+                        "Exactly ONE critical user-supplied field may be absent. "
+                        "Every other user-known field that controls a state change "
+                        "must have a concrete value in the message or an unambiguous "
+                        "value in Grounded Live State. The missing field must be "
+                        "resolved by clarification, never invented by the assistant."
+                    )
+                else:
+                    state_change_parameter_contract = (
+                        "Do NOT require concrete entity selectors or parameters in "
+                        "this minimal message. It must still authorize every requested "
+                        "user-visible state change, while missing values are left for "
+                        "clarification and are never invented by the assistant."
                     )
                 chain_goal_block = (
                     "\n## Complete Task Goal (internal synthesis guide)\n"
                     f"The grounded dependency chain is: {chain_seed}.\n"
                     f"Capabilities in execution order:\n{chain_requirements}\n"
                     f"The message MUST clearly request the final outcome: {goal_phrase}. "
-                    f"Return target_capability exactly as {final_tool!r}. If you cannot "
+                    "If you cannot "
                     "write a natural request for this target, return user_query as "
                     "'UNSAT' instead of switching to another task. "
                     "The request must preserve the dependency: do not give the user "
                     "an ID or value that an earlier capability is supposed to discover "
                     "or produce. Each earlier capability must remain a plausible internal "
                     "prerequisite for the final outcome. If that cannot be expressed as "
-                    "one natural user goal, return UNSAT. Set chain_supported=true only "
-                    "when these conditions hold. "
+                    "one natural user goal, return UNSAT. "
                     "Treat each entity label as a typed resource: an invoice ID is not "
                     "a payment ID, order ID, or any other ID type. Choose only entities "
                     "whose shown status and numeric facts satisfy the target capability. "
@@ -156,12 +183,46 @@ class QueryTeacherMixin:
                     "Session-internal navigation such as changing the current working "
                     "directory may remain implicit only when it is an earlier execution "
                     "detail rather than the final requested outcome. "
-                    "Every required field that controls a state change MUST have a "
-                    "concrete user-authorized value in the message or an unambiguous "
-                    "value in Current State; never leave such a field for the assistant "
-                    "to invent (for example an amount, recipient, status, path, date, "
-                    "quantity, or message body).\n"
-                    f"{chain_fact_note}\n"
+                    f"{state_change_parameter_contract}\n"
+                )
+            relation_lines: list[str] = []
+            for relation in (chain_context or {}).get(
+                "dependency_relations", []
+            ):
+                if not isinstance(relation, dict):
+                    continue
+                source = str(relation.get("source_capability") or "")
+                target = str(relation.get("target_capability") or "")
+                kind = str(relation.get("relation") or "")
+                for binding in relation.get("value_bindings", []):
+                    if not isinstance(binding, dict):
+                        continue
+                    relation_lines.append(
+                        f"- {source} output field "
+                        f"{binding.get('source_output_field')} supplies "
+                        f"{target} argument {binding.get('target_argument')}."
+                    )
+                for binding in relation.get("state_bindings", []):
+                    if not isinstance(binding, dict):
+                        continue
+                    relation_lines.append(
+                        f"- {source} field {binding.get('source_field')} must "
+                        f"establish {binding.get('state_slot')} for the same "
+                        f"entity used as {target} argument "
+                        f"{binding.get('target_argument')}."
+                    )
+                if kind == "implicit" and not relation.get("state_bindings"):
+                    relation_lines.append(
+                        f"- {source} must establish the live state required "
+                        f"by {target} on the same resource."
+                    )
+            if relation_lines:
+                causal_relation_block = (
+                    "\n## Verified Causal Relations (internal synthesis guide)\n"
+                    "Use these relations to keep one concrete entity lineage. "
+                    "Do not repeat them as workflow steps in the user message.\n"
+                    + "\n".join(relation_lines)
+                    + "\n"
                 )
 
         # ── Grounded-entity constraint ──
@@ -171,14 +232,12 @@ class QueryTeacherMixin:
         # IDs that don't exist in any seed, causing 100% replay failure.
         anti_halluc_block = ""
         if chain_context and chain_context.get("query_grounding_summaries"):
-            summaries_text = "\n".join(
-                chain_context["query_grounding_summaries"][:30]
-            )
             hidden_types = chain_context.get("opaque_id_hidden_types", [])
             if hidden_types:
                 anti_halluc_block = (
-                    f"\n## Chain-Aligned Grounded Candidates\n"
-                    f"{summaries_text}\n\n"
+                    f"\n## Chain-Aligned Grounding Rule\n"
+                    "Use only candidates already shown once in Grounded Live "
+                    "State above. "
                     f"Opaque IDs are intentionally hidden for these entity types: "
                     f"{hidden_types}. Refer to them only through the shown natural "
                     f"selectors (name, customer, status, category, amount, etc.). "
@@ -190,10 +249,11 @@ class QueryTeacherMixin:
                 )
             else:
                 anti_halluc_block = (
-                    f"\n## Chain-Aligned Entities (ONLY these IDs exist)\n"
-                    f"{summaries_text}\n\n"
+                    f"\n## Chain-Aligned Grounding Rule\n"
+                    "Only the entities already shown once in Grounded Live State "
+                    "above exist for this task. "
                     f"⚠️ CRITICAL: You MUST ONLY reference entity IDs from this list "
-                    f"or from Current State above. Do NOT invent, modify, or guess IDs. "
+                    f"or from Grounded Live State above. Do NOT invent, modify, or guess IDs. "
                     f"If an ID is 'evt_001', write 'evt_001' — not 'evt_005' or 'evt_0001'.\n"
                 )
         elif difficulty == "complete":
@@ -201,11 +261,9 @@ class QueryTeacherMixin:
             # the full state for complete-difficulty tasks.
             anti_halluc_block = (
                 "\n## Anti-Hallucination Rule\n"
-                "⚠️ CRITICAL: Reference ONLY entity IDs that appear in Current State "
-                "above. Do NOT invent or modify existing IDs; copy them exactly as "
-                "shown. A new ID or path is allowed only when an earlier capability "
-                "in the sampled chain creates it, and its parent/namespace must come "
-                "from Current State.\n"
+                "Reference only identifiers or selectors that appear in Grounded Live "
+                "State above. Do not invent or infer IDs. A new value is allowed only when "
+                "an earlier capability in the sampled chain creates it.\n"
             )
 
         user = f"""## Persona
@@ -214,9 +272,10 @@ class QueryTeacherMixin:
 ## What this assistant can help with
 {self.domain_desc}
 {dep_hints}
-## Current State (real IDs and values)
+## Grounded Live State
 {state_text}
 {chain_goal_block}
+{causal_relation_block}
 {anti_halluc_block}
 ## Your task
 Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
@@ -225,26 +284,10 @@ Type ONE message to your assistant. Difficulty: {difficulty}. {difficulty_desc}
 Remember: state your GOAL, not the steps. One message, 1-2 sentences max.
 
 Return only:
-{{"user_query": "<the message or UNSAT>", "target_capability": "<sampled chain final capability>", "chain_supported": <true or false>, "mutation_evidence": [{{"capability": "<state-changing chain capability>", "query_span": "<exact words from user_query that authorize it>"}}]}}
-
-mutation_evidence must contain one item for every state-changing capability in
-the sampled chain. A dependency edge never authorizes an unstated side effect.
-If cd is the final requested capability, it still needs evidence. query_span must
-be copied verbatim from user_query and directly authorize the stated goal. Do not
-invent an evidence span for an operation the user did not request. Read-only
-capabilities must not appear in mutation_evidence.
+{{"user_query": "<the message or UNSAT>"}}
 """
-        tools_by_name = {
-            str(tool.get("name") or ""): tool for tool in tool_schemas
-        }
-        expected_mutations = {
-            tool_name
-            for tool_name in (chain_seed or [])
-            if (tools_by_name.get(tool_name, {}).get("annotations") or {}).get(
-                "mutating"
-            ) is True
-        }
         failure_reason = "invalid_query_contract"
+        attempt_diagnostics: list[dict[str, Any]] = []
         for attempt in range(3):
             try:
                 raw = self._generate_chat(
@@ -255,12 +298,18 @@ capabilities must not appear in mutation_evidence.
                 )
                 data = _extract_json(raw)
                 if not isinstance(data, dict):
+                    attempt_diagnostics.append({
+                        "attempt": attempt + 1,
+                        "parsed_type": type(data).__name__,
+                    })
                     continue
                 query = data.get("user_query", "")
-                target_capability = str(data.get("target_capability", "")).strip()
-                chain_supported = data.get("chain_supported") is True
-                mutation_evidence = data.get("mutation_evidence", [])
-                expected_target = chain_seed[-1] if chain_seed else ""
+                target_capability = chain_seed[-1] if chain_seed else ""
+                attempt_diagnostics.append({
+                    "attempt": attempt + 1,
+                    "user_query": str(query),
+                    "target_capability": target_capability,
+                })
                 if str(query).strip().upper() == "UNSAT":
                     failure_reason = "goal_unsat"
                     logger.debug(
@@ -273,26 +322,24 @@ capabilities must not appear in mutation_evidence.
                     # satisfiable; let pool-level oversampling choose a fresh
                     # seed and dependency chain instead.
                     break
-                if expected_target and target_capability != expected_target:
-                    logger.debug(
-                        f"generate_query attempt {attempt + 1}/3 target mismatch "
-                        f"for {self.domain}: expected={expected_target!r}, "
-                        f"got={target_capability!r}"
-                    )
-                    continue
-                if expected_target and not chain_supported:
-                    logger.debug(
-                        f"generate_query attempt {attempt + 1}/3 did not support "
-                        f"the sampled chain for {self.domain}: chain={chain_seed}"
-                    )
-                    continue
-                hidden_types = {
+                natural_selector_profile = bool(
+                    getattr(self.prompt_profile, "natural_selector", False)
+                    or self.prompt_profile == "local_trainable_v1"
+                )
+                hidden_types = ({
                     str(value)
                     for value in chain_context.get(
                         "opaque_id_hidden_types", []
                     )
-                } if chain_context else set()
-                hidden_ids = {
+                } if chain_context and natural_selector_profile else set())
+                explicit_hidden_ids = {
+                    str(value)
+                    for value in (chain_context or {}).get(
+                        "opaque_id_hidden_ids", []
+                    )
+                    if str(value)
+                }
+                hidden_ids = explicit_hidden_ids or {
                     str(item.get("id") or "")
                     for item in (chain_context or {}).get("entity_ids", [])
                     if isinstance(item, dict)
@@ -314,53 +361,17 @@ capabilities must not appear in mutation_evidence.
                         f"sampler-private IDs for {self.domain}: {leaked_ids}"
                     )
                     continue
-                if expected_mutations:
-                    if not isinstance(mutation_evidence, list):
-                        continue
-                    evidence_by_capability: dict[str, str] = {}
-                    for item in mutation_evidence:
-                        if not isinstance(item, dict):
-                            continue
-                        capability = str(item.get("capability") or "").strip()
-                        query_span = str(item.get("query_span") or "").strip()
-                        if capability and query_span:
-                            evidence_by_capability[capability] = query_span
-                    if not expected_mutations.issubset(evidence_by_capability):
-                        logger.debug(
-                            f"generate_query attempt {attempt + 1}/3 mutation "
-                            f"target coverage mismatch for {self.domain}: expected="
-                            f"{sorted(expected_mutations)}, got="
-                            f"{sorted(evidence_by_capability)}"
-                        )
-                        continue
-                    normalized_query = " ".join(str(query).lower().split())
-                    if any(
-                        " ".join(span.lower().split()) not in normalized_query
-                        for span in evidence_by_capability.values()
-                    ):
-                        logger.debug(
-                            f"generate_query attempt {attempt + 1}/3 used mutation "
-                            f"evidence absent from query for {self.domain}"
-                        )
-                        continue
                 if query:
                     return GeneratedQuery(
                         user_query=str(query),
                         target_capability=target_capability,
-                        chain_supported=chain_supported,
                         attempts=attempt + 1,
-                        mutation_evidence=[
-                            dict(item)
-                            for item in mutation_evidence
-                            if isinstance(item, dict)
-                        ],
-                        dependency_evidence=[],
-                        initial_goal="",
-                        initial_goal_grounding_basis={},
-                        initial_goal_causal_steps=[],
-                        initial_goal_planning_attempts=0,
                     )
             except Exception as e:
+                attempt_diagnostics.append({
+                    "attempt": attempt + 1,
+                    "exception": f"{type(e).__name__}: {e}",
+                })
                 logger.debug(
                     f"generate_query attempt {attempt + 1}/3 failed for "
                     f"{self.domain}: {type(e).__name__}: {e}"
@@ -368,6 +379,13 @@ capabilities must not appear in mutation_evidence.
         raise QueryGenerationError(
             f"Failed to generate query for {self.domain}",
             reason=failure_reason,
+            details={
+                "source_chain_seed": list(chain_seed or []),
+                "expected_target_capability": (
+                    chain_seed[-1] if chain_seed else ""
+                ),
+                "attempt_diagnostics": attempt_diagnostics,
+            },
         )
 
 

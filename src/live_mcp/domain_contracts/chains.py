@@ -19,6 +19,13 @@ class ChainConstraint:
 
 
 _DOMAIN_CHAIN_CONSTRAINTS: dict[str, tuple[ChainConstraint, ...]] = {
+    "banking": (
+        ChainConstraint(
+            "forbidden_order", frozenset({"cancel_transfer"}),
+            frozenset({"schedule_transfer"}),
+            code="synthetic_scheduled_transfer_reversal",
+        ),
+    ),
     "calendar": (
         ChainConstraint(
             "forbidden_order", frozenset({"get_recurring_info"}),
@@ -106,6 +113,11 @@ _DOMAIN_CHAIN_CONSTRAINTS: dict[str, tuple[ChainConstraint, ...]] = {
         ),
     ),
     "food_delivery": (
+        ChainConstraint(
+            "forbidden_order", frozenset({"reorder"}),
+            frozenset({"create_order"}),
+            code="new_order_cannot_be_reordered_as_history",
+        ),
         ChainConstraint(
             "require_between", frozenset({"track_rider"}),
             frozenset({"create_order", "reorder"}),

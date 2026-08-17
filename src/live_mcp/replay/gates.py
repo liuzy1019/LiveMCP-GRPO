@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json as _json
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from loguru import logger
@@ -223,6 +224,39 @@ _SECURITY_RELEVANT_PARAMS: tuple[str, ...] = (
     "account_number", "account_id", "routing_number",
 )
 
+_NUMERIC_SOURCE_TOKEN_RE = re.compile(
+    r"(?<![\w.])[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?![\w.])"
+)
+
+
+def _canonical_number(value: Any) -> Decimal | None:
+    """Return a canonical number only when the complete value is numeric."""
+    if isinstance(value, bool):
+        return None
+    if not isinstance(value, (int, float, Decimal, str)):
+        return None
+    text = str(value).strip()
+    if not re.fullmatch(r"[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?", text):
+        return None
+    try:
+        return Decimal(text.replace(",", ""))
+    except InvalidOperation:
+        return None
+
+
+def _numeric_value_appears_in_sources(value: Any, sources: list[str]) -> bool:
+    expected = _canonical_number(value)
+    if expected is None:
+        return False
+    for source in sources:
+        for token in _NUMERIC_SOURCE_TOKEN_RE.findall(source):
+            try:
+                if Decimal(token.replace(",", "")) == expected:
+                    return True
+            except InvalidOperation:
+                continue
+    return False
+
 
 def provenance_check(
     oracle_calls: list[OracleCall],
@@ -266,8 +300,6 @@ def provenance_check(
             contracts[tool_name] = contract
 
     def _traceable(value: Any, sources: list[str]) -> bool:
-        import re
-
         currency_symbols = {
             "USD": "$",
             "EUR": "€",
@@ -282,6 +314,8 @@ def provenance_check(
             if not item_text:
                 continue
             if any(item_text.casefold() in source.casefold() for source in sources):
+                continue
+            if _numeric_value_appears_in_sources(item, sources):
                 continue
             if (
                 item_text.upper() in currency_symbols

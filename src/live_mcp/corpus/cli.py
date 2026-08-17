@@ -139,6 +139,141 @@ def _generated_parquet_summary(path: Path) -> dict:
             key: sorted(values) for key, values in provenance.items()
         },
     }
+
+
+def _generation_failure_summary(directory: Path) -> dict:
+    stages: Counter[str] = Counter()
+    reasons: Counter[str] = Counter()
+    records = 0
+    files = sorted(directory.glob("*.jsonl")) if directory.is_dir() else []
+    for path in files:
+        for line_number, raw_line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1,
+        ):
+            if not raw_line.strip():
+                continue
+            try:
+                record = json.loads(raw_line)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f"invalid failure record {path}:{line_number}"
+                ) from exc
+            records += 1
+            stages[str(record.get("stage") or "unknown")] += 1
+            reasons[str(record.get("reason_code") or "unknown")] += 1
+    return {
+        "directory": _relative_display(directory),
+        "files": len(files),
+        "records": records,
+        "stages": dict(sorted(stages.items())),
+        "reasons": dict(sorted(reasons.items())),
+    }
+
+
+def _command_owns_run(arguments: list[str], run_id: str) -> bool:
+    """Return whether one argv vector is a generation owner for ``run_id``."""
+    return any(
+        argument == "--run-id"
+        and index + 1 < len(arguments)
+        and arguments[index + 1] == run_id
+        for index, argument in enumerate(arguments)
+    ) and (
+        any(argument.endswith("src/live_mcp/corpus/launcher.sh") for argument in arguments)
+        or (
+            "src.live_mcp.corpus.cli" in arguments
+            and any(command in arguments for command in ("run", "resume"))
+        )
+    )
+
+
+def _run_process_is_active(run_id: str) -> bool:
+    """Return whether another live process command line owns this run id."""
+    current_pid = os.getpid()
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return False
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == current_pid:
+            continue
+        try:
+            arguments = [
+                item.decode(errors="replace")
+                for item in (entry / "cmdline").read_bytes().split(b"\0")
+                if item
+            ]
+        except (FileNotFoundError, PermissionError, ProcessLookupError):
+            continue
+        if _command_owns_run(arguments, run_id):
+            return True
+    return False
+
+
+def reconcile_run_manifest(output_dir: Path) -> dict:
+    """Idempotently converge a recoverable manifest from durable evidence."""
+    manifest_path = output_dir / "generation_manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(f"run manifest not found: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    status = str(manifest.get("status") or "")
+    fixed_attempt = bool(
+        (manifest.get("request") or {}).get("fixed_attempt_budget")
+    )
+    if status != "running" and not (status == "failed" and fixed_attempt):
+        return manifest
+
+    run_id = output_dir.name
+    accepted = output_dir / "accepted.parquet"
+    if accepted.is_file():
+        try:
+            from src.live_mcp.artifact.readback import validate_parquet_readback
+
+            validate_parquet_readback(accepted)
+            outputs = dict(manifest.get("outputs") or {})
+            for split in ("train", "val", "accepted"):
+                artifact = output_dir / f"{split}.parquet"
+                if artifact.is_file():
+                    outputs[split] = _generated_parquet_summary(artifact)
+            manifest.update({
+                "status": "completed",
+                "returncode": 0,
+                "finished_at": datetime.now().astimezone().isoformat(),
+                "outputs": outputs,
+                "failure_evidence": _generation_failure_summary(
+                    output_dir / "failures"
+                ),
+                "reconciled_from_durable_evidence": True,
+            })
+            if fixed_attempt:
+                manifest["completion_kind"] = "fixed_attempt_diagnostic"
+        except Exception as exc:
+            manifest.update({
+                "status": "failed",
+                "finished_at": datetime.now().astimezone().isoformat(),
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "reconciled_from_durable_evidence": True,
+            })
+    elif not _run_process_is_active(run_id):
+        manifest.update({
+            "status": "interrupted",
+            "finished_at": datetime.now().astimezone().isoformat(),
+            "error_type": "OrphanedRun",
+            "error_message": (
+                "no active owner process and no accepted artifact"
+            ),
+            "reconciled_from_durable_evidence": True,
+        })
+    _write_json_atomic(manifest_path, manifest)
+    return manifest
+
+
+def _status_command(args: argparse.Namespace) -> int:
+    output_dir = PROJECT_ROOT / "data" / "runs" / args.run_id
+    manifest = reconcile_run_manifest(output_dir)
+    print(json.dumps(manifest, indent=2, sort_keys=True))
+    return 0
+
+
 def _project_path(value: str | Path) -> Path:
     path = Path(value)
     return path if path.is_absolute() else PROJECT_ROOT / path
@@ -200,6 +335,23 @@ def _bucket_generation_args(bucket: str) -> list[str]:
 
 def build_launcher_command(args: argparse.Namespace) -> tuple[list[str], dict[str, str]]:
     """Translate the public run contract to the internal launcher contract."""
+    fixed_attempt_budget = bool(
+        getattr(args, "fixed_attempt_budget", False)
+    )
+    if fixed_attempt_budget:
+        if args.command != "run" or args.mode != "full":
+            raise ValueError(
+                "--fixed-attempt-budget is only valid for full run mode"
+            )
+        if args.publish:
+            raise ValueError(
+                "--fixed-attempt-budget is diagnostic and cannot publish"
+            )
+        if args.candidate_budget is not None:
+            raise ValueError(
+                "--fixed-attempt-budget cannot be combined with "
+                "--candidate-budget"
+            )
     command = [
         "bash",
         "src/live_mcp/corpus/launcher.sh",
@@ -231,6 +383,14 @@ def build_launcher_command(args: argparse.Namespace) -> tuple[list[str], dict[st
     # LIVEMCP_PROMPT_PROFILE can silently change the requested formal profile.
     env["LIVEMCP_PROMPT_PROFILE"] = prompt_profile
     env["LIVEMCP_SEMANTIC_GATE_PROFILE"] = args.semantic_gate_profile
+    if fixed_attempt_budget:
+        env.update({
+            "GEN_OVERSAMPLE_PCT": "0",
+            "GENERATION_MAX_RECOVERY_ROUNDS": "1",
+            "GENERATION_PRESERVE_CANDIDATES": "1",
+            "LIVEMCP_FIXED_ATTEMPT_BUDGET": "1",
+            "MERGE_TOPUP_ROUNDS": "0",
+        })
     if args.difficulty is not None:
         command.extend(["--difficulty", args.difficulty])
     command.extend(["--distractor-rate", str(args.distractor_rate)])
@@ -261,8 +421,21 @@ def build_launcher_command(args: argparse.Namespace) -> tuple[list[str], dict[st
                 str(args.candidate_budget),
             ])
         if args.tool_required_only:
-            command.append("--tool-required-only")
-        if args.irrelevance_ratio is not None:
+            if args.irrelevance_ratio not in (None, 0, 0.0):
+                raise ValueError(
+                    "--tool-required-only is incompatible with non-zero "
+                    "--irrelevance-ratio"
+                )
+            command.extend([
+                "--tool-required-only",
+                "--irrelevance-ratio",
+                str(
+                    0
+                    if args.irrelevance_ratio is None
+                    else args.irrelevance_ratio
+                ),
+            ])
+        elif args.irrelevance_ratio is not None:
             command.extend([
                 "--irrelevance-ratio",
                 str(args.irrelevance_ratio),
@@ -376,6 +549,7 @@ def _run_command(args: argparse.Namespace) -> int:
                 "prompt_profile", "semantic_gate_profile", "difficulty",
                 "distractor_rate", "tool_required_only", "irrelevance_ratio",
                 "missing_function_rate", "checkpoint_interval",
+                "fixed_attempt_budget",
             )
         },
         "launcher": {
@@ -423,10 +597,24 @@ def _run_command(args: argparse.Namespace) -> int:
     manifest["returncode"] = int(completed.returncode)
     manifest["finished_at"] = datetime.now().astimezone().isoformat()
     try:
-        for split in ("train", "val"):
+        for split in ("train", "val", "accepted"):
             artifact = output_dir / f"{split}.parquet"
             if artifact.is_file():
                 manifest["outputs"][split] = _generated_parquet_summary(artifact)
+        if args.fixed_attempt_budget and completed.returncode == 0:
+            manifest["completion_kind"] = "fixed_attempt_diagnostic"
+            filter_report = output_dir / "candidates" / "merge_deficits.json"
+            if filter_report.is_file():
+                manifest["outputs"]["filter_report"] = {
+                    "path": _relative_display(filter_report),
+                    "sha256": _sha256_file(filter_report),
+                    "summary": json.loads(
+                        filter_report.read_text(encoding="utf-8")
+                    ),
+                }
+        manifest["failure_evidence"] = _generation_failure_summary(
+            output_dir / "failures"
+        )
     except Exception as exc:
         manifest.update({
             "status": "failed",
@@ -467,6 +655,21 @@ def _try_resume_merge_without_teacher(args: argparse.Namespace) -> int:
         "--deficits-output",
         str(deficits),
     ]
+    if args.mode == "supplement":
+        irrelevance_ratio = 0.0
+    elif args.tool_required_only:
+        irrelevance_ratio = 0.0
+    else:
+        irrelevance_ratio = (
+            0.05 if args.irrelevance_ratio is None
+            else float(args.irrelevance_ratio)
+        )
+    command.extend([
+        "--irrelevance-count",
+        str(int((count + val_count) * irrelevance_ratio + 0.5)),
+    ])
+    if args.difficulty is not None:
+        command.extend(["--difficulty", args.difficulty])
     if args.chain_bin_quotas is not None:
         command.extend(["--chain-bin-quotas", args.chain_bin_quotas])
     if args.mode == "supplement":
@@ -672,6 +875,14 @@ def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="retain raw shard parquets for controlled gray-test audit",
     )
+    parser.add_argument(
+        "--fixed-attempt-budget",
+        action="store_true",
+        help=(
+            "diagnostic only: treat count+val-count as candidate attempts; "
+            "disable oversample, shard recovery, and merge top-up"
+        ),
+    )
     parser.add_argument("--publish", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
 
@@ -702,6 +913,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_run_arguments(resume)
     resume.set_defaults(handler=_run_command)
+
+    status = subparsers.add_parser(
+        "status", help="inspect and reconcile one durable generation run"
+    )
+    status.add_argument("--run-id", required=True)
+    status.set_defaults(handler=_status_command)
 
     finalize = subparsers.add_parser(
         "finalize", help="merge incremental runs into a new certified corpus"
@@ -758,6 +975,11 @@ def build_parser() -> argparse.ArgumentParser:
     build_cache.add_argument("--suite", default="configs/live_mcp/ten_domain_suite.yaml")
     build_cache.add_argument("--device", type=int, default=None)
     build_cache.add_argument("--workers", type=int, default=4)
+    build_cache.add_argument(
+        "--prompt-profile",
+        choices=tuple(PROMPT_PROFILES),
+        default="paper_generation_baseline_v1",
+    )
     build_cache.set_defaults(handler=_build_cache_command)
 
     return parser
@@ -799,6 +1021,7 @@ def _build_cache_command(args: argparse.Namespace) -> int:
         assert runtime.executor is not None
         orchestrator = TaskOrchestrator(
             runtime.suite_config, runtime.manager, runtime.executor, client,
+            prompt_profile=args.prompt_profile,
         )
         domains = _select_domains(runtime, args.domain)
 
@@ -828,6 +1051,11 @@ def build_cache_main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--suite", default="configs/live_mcp/ten_domain_suite.yaml")
     parser.add_argument("--device", type=int, default=None)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument(
+        "--prompt-profile",
+        choices=tuple(PROMPT_PROFILES),
+        default="paper_generation_baseline_v1",
+    )
     args = parser.parse_args(argv)
     return _build_cache_command(args)
 

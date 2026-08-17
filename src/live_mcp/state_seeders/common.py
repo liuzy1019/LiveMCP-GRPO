@@ -7,7 +7,7 @@ import random
 
 
 def _reference_datetime(seed: int) -> _datetime.datetime:
-    from src.live_mcp.task_planner import reference_datetime_for_seed
+    from src.live_mcp.generation.teacher_contracts import reference_datetime_for_seed
 
     return reference_datetime_for_seed(seed)
 

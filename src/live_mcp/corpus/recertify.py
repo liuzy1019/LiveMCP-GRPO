@@ -18,20 +18,18 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 
-from src.live_mcp.corpus.shard import _validate_parquet_readback
+from src.live_mcp.artifact.readback import validate_parquet_readback
 from src.live_mcp.registry.environment_metadata import (
     compute_initial_state_hashes,
     compute_reward_fingerprint,
+    compute_transition_fingerprint,
     normalize_state_profiles,
     validate_environment_metadata,
-    validate_prove_corpus_evidence,
-    validate_semantic_gate_evidence,
-    validate_teacher_generation_evidence,
 )
 from src.live_mcp.generation_runtime import TeacherGenerationRuntime
 from src.live_mcp.replay.gates import replay_validate
 from src.live_mcp.types import OracleCall
-from src.live_mcp.artifact.reward_task import build_reward_task
+from src.live_mcp.artifact.validation import validate_artifact_contract
 from src.utils import normalize_extra_info, normalize_json_field, sha256_file
 
 
@@ -42,7 +40,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Fresh-replay a canonical run and write a new copy bound to the "
-            "current reward fingerprint"
+            "current runtime and reward fingerprints"
         ),
     )
     parser.add_argument("--input-dir", required=True, type=Path)
@@ -95,7 +93,10 @@ def _oracle_payload(row: dict[str, Any]) -> tuple[list[OracleCall], list[Any]]:
         OracleCall(
             tool_name=str(call.get("tool_name") or ""),
             arguments=dict(call.get("arguments") or {}),
+            save_as=str(call.get("save_as") or ""),
             action=str(call.get("action") or "tool_call"),
+            server_name=str(call.get("server_name") or ""),
+            expected_success=call.get("expected_success"),
         )
         for call in raw_calls
         if isinstance(call, dict)
@@ -116,6 +117,15 @@ def _list_field(value: Any, field: str) -> list[Any]:
     return value
 
 
+def _transition_fingerprints(extra_info: dict[str, Any]) -> dict[str, str]:
+    value = normalize_json_field(
+        extra_info.get("transition_fingerprints"), default={},
+    )
+    if not isinstance(value, dict) or not value:
+        raise RuntimeError("missing transition_fingerprints")
+    return {str(owner): str(fingerprint) for owner, fingerprint in value.items()}
+
+
 def _recertify_row(
     row: dict[str, Any],
     *,
@@ -134,29 +144,57 @@ def _recertify_row(
             "unexpected source reward_fingerprint: "
             f"data={source_fingerprint!r}, expected={expected_source_fingerprint!r}"
         )
-    if source_fingerprint == current_fingerprint:
-        raise RuntimeError("source run already uses the current reward_fingerprint")
-
-    validate_prove_corpus_evidence(extra_info)
-    validate_teacher_generation_evidence(extra_info)
-    validate_semantic_gate_evidence(extra_info)
+    reward_model = migrated.get("reward_model") or {}
+    validate_artifact_contract(
+        extra_info,
+        require_training=False,
+        ground_truth=(
+            reward_model.get("ground_truth")
+            if isinstance(reward_model, dict) else None
+        ),
+    )
     owners = _owners(extra_info)
+    current_tools = _current_tools(owners)
+    source_transition_fingerprints = _transition_fingerprints(extra_info)
+    if set(source_transition_fingerprints) != owners:
+        raise RuntimeError(
+            "source transition_fingerprints must exactly cover owners: "
+            f"fingerprints={sorted(source_transition_fingerprints)}, "
+            f"owners={sorted(owners)}"
+        )
+    current_transition_fingerprints = {
+        owner: compute_transition_fingerprint(owner, current_tools[owner])
+        for owner in sorted(owners)
+    }
+    if (
+        source_fingerprint == current_fingerprint
+        and source_transition_fingerprints == current_transition_fingerprints
+    ):
+        raise RuntimeError(
+            "source run already uses the current runtime/reward fingerprints"
+        )
+    state_profiles = normalize_state_profiles(
+        extra_info.get("state_profiles"), owners,
+    )
 
     # Validate every environment contract while substituting only the field
     # whose semantics this fresh replay is explicitly re-certifying.
     validation_metadata = dict(extra_info)
     validation_metadata["reward_fingerprint"] = current_fingerprint
+    validation_metadata["transition_fingerprints"] = (
+        current_transition_fingerprints
+    )
     seed = int(extra_info["session_seed"])
     validate_environment_metadata(
         validation_metadata,
-        current_tools_by_domain=_current_tools(owners),
+        current_tools_by_domain=current_tools,
         required_owner_domains=owners,
         reward_profile="prove_baseline",
         runtime_max_observation_chars=runtime_observation_budget,
         current_initial_state_hashes=compute_initial_state_hashes(
             owners,
             seed,
-            normalize_state_profiles(extra_info.get("state_profiles"), owners),
+            state_profiles,
         ),
     )
 
@@ -170,9 +208,15 @@ def _recertify_row(
         domain=str(extra_info["domain"]),
         success_criteria=criteria,
         blocked_tools={str(name) for name in hidden},
+        state_profiles=state_profiles,
     )
     valid, error_rate, num_errors, num_calls, criteria_ok, criteria_failed = replay
-    if not valid or not criteria_ok:
+    from src.live_mcp.prompt_profiles import requires_outcome_replay
+
+    outcome_required = requires_outcome_replay(
+        str(extra_info.get("prompt_profile") or "")
+    )
+    if not valid or (outcome_required and not criteria_ok):
         raise RuntimeError(
             "fresh canonical replay rejected row: "
             f"valid={valid}, errors={num_errors}/{num_calls}, "
@@ -180,6 +224,7 @@ def _recertify_row(
         )
 
     extra_info["reward_fingerprint"] = current_fingerprint
+    extra_info["transition_fingerprints"] = current_transition_fingerprints
     extra_info["reward_profile_fingerprints"] = {
         profile: compute_reward_fingerprint(profile)
         for profile in ("prove_baseline", "oval_full")
@@ -188,23 +233,21 @@ def _recertify_row(
     extra_info["canonical_replay_error_rate"] = float(error_rate)
     extra_info["canonical_replay_num_errors"] = int(num_errors)
     extra_info["canonical_replay_num_calls"] = int(num_calls)
-    extra_info["canonical_replay_criteria_ok"] = True
+    extra_info["canonical_replay_criteria_ok"] = bool(criteria_ok)
     extra_info["canonical_replay_criteria_failed"] = int(criteria_failed)
-    validate_teacher_generation_evidence(extra_info)
-    validate_semantic_gate_evidence(extra_info)
+    task = validate_artifact_contract(extra_info, require_training=False)
     validate_environment_metadata(
         extra_info,
-        current_tools_by_domain=_current_tools(owners),
+        current_tools_by_domain=current_tools,
         required_owner_domains=owners,
         reward_profile="prove_baseline",
         runtime_max_observation_chars=runtime_observation_budget,
         current_initial_state_hashes=compute_initial_state_hashes(
             owners,
             seed,
-            normalize_state_profiles(extra_info.get("state_profiles"), owners),
+            state_profiles,
         ),
     )
-    task = build_reward_task(extra_info)
     if not isinstance(task, dict) or "required_tool_calls" not in task:
         raise RuntimeError("production reward parser returned an invalid task")
     migrated["extra_info"] = extra_info
@@ -240,6 +283,7 @@ def recertify_run(
         "source_run": str(input_dir),
         "source_reward_fingerprint": expected_source_fingerprint,
         "current_reward_fingerprint": current_fingerprint,
+        "source_transition_fingerprints": {},
         "splits": {},
         "rejections": [],
     }
@@ -253,6 +297,15 @@ def recertify_run(
                 frame = pd.read_parquet(input_path)
                 accepted: list[dict[str, Any]] = []
                 for row_index, row in enumerate(frame.to_dict(orient="records")):
+                    extra = normalize_extra_info(row.get("extra_info"))
+                    for owner, fingerprint in _transition_fingerprints(extra).items():
+                        previous = report["source_transition_fingerprints"].get(owner)
+                        if previous is not None and previous != fingerprint:
+                            raise RuntimeError(
+                                "source run mixes transition fingerprints for "
+                                f"{owner!r}: {previous!r} != {fingerprint!r}"
+                            )
+                        report["source_transition_fingerprints"][owner] = fingerprint
                     try:
                         accepted.append(_recertify_row(
                             row,
@@ -263,7 +316,6 @@ def recertify_run(
                             executor=runtime.executor,
                         ))
                     except Exception as exc:
-                        extra = normalize_extra_info(row.get("extra_info"))
                         report["rejections"].append({
                             "split": split,
                             "row_index": row_index,
@@ -274,7 +326,7 @@ def recertify_run(
                 pd.DataFrame(accepted, columns=frame.columns).to_parquet(
                     output_path, index=False,
                 )
-                _validate_parquet_readback(output_path)
+                validate_parquet_readback(output_path)
                 report["splits"][split] = {
                     "input_rows": int(len(frame)),
                     "accepted_rows": len(accepted),

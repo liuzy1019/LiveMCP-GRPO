@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from src.live_mcp.config import project_root
-from src.live_mcp.dependency_value_flow import _dependency_argument_bindings
 from src.live_mcp.domain_contracts import value_bindings
 from src.live_mcp.domain_contracts.states import domain_state_fact_payload
 from src.live_mcp.domain_contracts import outputs as output_contracts
@@ -120,23 +119,6 @@ class DependencyCacheContractMixin:
         )
 
     @staticmethod
-    def _dependency_pair_audit_system_prompt() -> str:
-        """Return the independent per-pair review contract."""
-        return (
-            DependencyCacheContractMixin._dependency_classifier_system_prompt()
-            + "\n\n"
-            "You are now the independent adversarial reviewer for exactly one "
-            "unordered pair. Re-evaluate the pair from the tool contracts rather "
-            "than copying a previous batch decision. A displayed verified binding "
-            "has passed the factual output ledger, required-input, alias, and typed "
-            "entity checks. Treat it as explicit unless it is visibly marked as "
-            "blocked by a fixed target-state contradiction. Reject workflow "
-            "convention as implicit unless "
-            "the target truly cannot succeed before the source mutation. Return "
-            "exactly one classification in the requested JSON format."
-        )
-
-    @staticmethod
     def _dependency_output_field_contract_hash(server_name: str = "") -> str:
         """Hash factual handler-output fields exposed only to Step-1 classification."""
         output_fields = output_contracts.DOMAIN_VALUE_OUTPUT_FIELDS.get(
@@ -175,15 +157,12 @@ class DependencyCacheContractMixin:
                 getattr(self.client, "model_path", "unknown"),
             )
         )
-        paper_baseline = self._uses_paper_baseline()
-        prompt = (
-            self._dependency_classifier_system_prompt()
-            if paper_baseline
-            else "\n\n--- independent pair audit ---\n\n".join((
-                self._dependency_classifier_system_prompt(),
-                self._dependency_pair_audit_system_prompt(),
-            ))
-        )
+        # Dependency classification is a corpus-level PROVE contract, not a
+        # generation-prompt contract.  All prompt profiles consume the same
+        # immutable C(n,2) Teacher ledger; local executability is derived by the
+        # deterministic relation audit below.  Keep the persisted policy value
+        # stable so the already-certified v30 caches remain directly loadable.
+        prompt = self._dependency_classifier_system_prompt()
         payload = {
             "teacher_model_id": model_id,
             "classifier_prompt_sha256": hashlib.sha256(
@@ -196,11 +175,7 @@ class DependencyCacheContractMixin:
             # ``raw_graph``; describing the filtered ``graph`` as raw would make
             # cache provenance contradict the persisted payload.
             "graph_source": "local_relation_audit_supported_subset",
-            "review_policy": (
-                "not_required_for_paper_baseline"
-                if paper_baseline
-                else "diagnostic_only"
-            ),
+            "review_policy": "not_required_for_paper_baseline",
             "tie_break_policy": "disabled",
         }
         output_contract_hash = self._dependency_output_field_contract_hash(

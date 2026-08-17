@@ -9,7 +9,11 @@ training profile.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Any
+
+from src.live_mcp.dependency_trace import unauthorized_mutating_tool_names
+from src.live_mcp.contracts.outcome import mutation_outcome_issue
 
 
 class ArtifactIntegrityError(RuntimeError):
@@ -50,6 +54,46 @@ def _list_value(value: Any) -> list[Any]:
     if isinstance(value, tuple):
         return list(value)
     return [value]
+
+
+def validate_ground_truth_consistency(
+    extra_info: dict[str, Any], ground_truth: Any,
+) -> None:
+    """Validate the verl ground-truth mirror against the canonical task.
+
+    ``extra_info`` is the task contract consumed by rollout and reward.
+    ``reward_model.ground_truth`` exists for verl transport compatibility and
+    must remain an exact mirror; it is never an independent fallback source.
+    """
+    if hasattr(ground_truth, "as_py"):
+        ground_truth = ground_truth.as_py()
+    if not isinstance(ground_truth, Mapping):
+        raise ArtifactIntegrityError("ground_truth must be a mapping")
+
+    for field in (
+        "oracle_calls",
+        "success_criteria",
+        "required_tools",
+        "dependency_edges",
+    ):
+        if field not in extra_info or field not in ground_truth:
+            raise ArtifactIntegrityError(
+                f"canonical task/ground_truth is missing {field}"
+            )
+        canonical = (
+            _list_value(extra_info[field])
+            if field == "required_tools"
+            else _json_value(extra_info[field], field)
+        )
+        mirrored = (
+            _list_value(ground_truth[field])
+            if field == "required_tools"
+            else _json_value(ground_truth[field], field)
+        )
+        if canonical != mirrored:
+            raise ArtifactIntegrityError(
+                f"ground_truth mismatch for {field}"
+            )
 
 
 def parse_round_contracts(extra_info: dict[str, Any]) -> list[dict[str, Any]]:
@@ -200,7 +244,70 @@ def build_reward_task(extra_info: dict[str, Any]) -> dict[str, Any]:
             "oracle calls"
         )
 
+    prompt_profile = str(extra_info.get("prompt_profile") or "")
+    source_chain = [
+        str(name)
+        for name in _list_value(extra_info.get("source_chain_seed", []))
+        if str(name)
+    ]
+    clean_tools = _json_value(
+        extra_info.get("clean_visible_tools", "[]"), "clean_visible_tools",
+    )
+    mutating_names = {
+        str(tool.get("name") or "")
+        for tool in (clean_tools if isinstance(clean_tools, list) else [])
+        if isinstance(tool, dict)
+        and (tool.get("annotations") or {}).get("mutating") is True
+    }
+    if prompt_profile != "paper_generation_baseline_v1" and source_chain:
+        first_round_count = len(round_contracts[0].get("required_tools", []))
+        unauthorized_mutations = unauthorized_mutating_tool_names(
+            real_calls[:first_round_count],
+            source_chain,
+            is_mutating=lambda name: name in mutating_names,
+        )
+        if unauthorized_mutations:
+            raise ArtifactIntegrityError(
+                f"task {task_id} initial round contains mutation absent from "
+                f"source_chain_seed: {unauthorized_mutations}"
+            )
+    if prompt_profile != "paper_generation_baseline_v1":
+        provenance = _json_value(
+            extra_info.get("success_criteria_provenance", []),
+            "success_criteria_provenance",
+        )
+        outcome_issue = mutation_outcome_issue(
+            tool_names=[str(call.get("tool_name") or "") for call in real_calls],
+            success_criteria=success_criteria,
+            criterion_provenance=(provenance if isinstance(provenance, list) else []),
+            is_mutating=lambda name: name in mutating_names,
+        )
+        if outcome_issue:
+            raise ArtifactIntegrityError(f"task {task_id}: {outcome_issue}")
+
     scenario = str(extra_info.get("scenario_type", ""))
+    if bool(extra_info.get("has_missing_function", False)):
+        prompt_profile = str(extra_info.get("prompt_profile") or "")
+        evidence = _json_value(
+            extra_info.get("missing_function_evidence", []),
+            "missing_function_evidence",
+        )
+        if (
+            prompt_profile != "paper_generation_baseline_v1"
+            and (not isinstance(evidence, list) or not evidence)
+        ):
+            raise ArtifactIntegrityError(
+                f"task {task_id} has no bound missing-function capability evidence"
+            )
+        mutating_calls = [
+            str(call.get("tool_name") or "") for call in real_calls
+            if str(call.get("tool_name") or "") in mutating_names
+        ]
+        if mutating_calls:
+            raise ArtifactIntegrityError(
+                f"task {task_id} missing-function oracle contains mutation: "
+                f"{mutating_calls}"
+            )
     is_abstention = scenario in {"irrelevant", "no_tool_or_abstention"}
     missing_terminal_without_calls = (
         scenario in {"missing_function", "clarification_required"}
@@ -260,4 +367,5 @@ __all__ = [
     "build_reward_task",
     "parse_dependency_edges",
     "parse_round_contracts",
+    "validate_ground_truth_consistency",
 ]

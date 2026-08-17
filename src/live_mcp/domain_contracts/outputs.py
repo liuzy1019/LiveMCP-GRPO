@@ -20,6 +20,15 @@ for domain, tool_fields in _DEPENDENCY_TOOL_OUTPUT_FIELDS.items():
         DOMAIN_VALUE_OUTPUT_FIELDS[domain][tool_name] = tuple(fields)
 
 _ADDITIONAL_HANDLER_OUTPUTS: dict[str, dict[str, tuple[str, ...]]] = {
+    "banking": {
+        "transfer": ("txn_id",),
+        "wire_transfer": ("txn_id",),
+        "deposit": ("txn_id",),
+        "withdraw": ("txn_id",),
+        "bill_pay": ("txn_id",),
+        "get_history": ("txn_id",),
+        "get_statement": ("txn_id",),
+    },
     "crm": {
         "get_deal": ("deal_id", "contact_id", "lead_id"),
         "list_tasks": ("task_id", "deal_id", "contact_id"),

@@ -19,7 +19,20 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.live_mcp.config import load_suite_config
 from src.live_mcp.contracts.factory import build_contract_registry
 from src.live_mcp.executor import LiveMCPExecutor
+from src.live_mcp.dependency_value_flow import (
+    _filter_relation_verifiable_chains,
+)
+from src.live_mcp.live_state_query_view import (
+    SELECTOR_FIELDS,
+    generation_query_prompt_state,
+)
+from src.live_mcp.domain_contracts.reference_visibility import (
+    DOMAIN_OPAQUE_ENTITY_TYPES,
+    record_exposes_entity_reference,
+)
 from src.live_mcp.orchestrator import TaskOrchestrator
+from src.live_mcp.planner_format import format_state_compact
+from src.live_mcp.prompt_profiles import PROMPT_PROFILES
 from src.live_mcp.protocol.manager import LiveMCPManager
 
 
@@ -91,6 +104,118 @@ def _entity_state_distributions(
     }
 
 
+def _query_state_view_audit(
+    context: dict[str, Any],
+    domain: str,
+    *,
+    natural_selector: bool,
+) -> dict[str, Any]:
+    """Audit the exact profile-selected state text sent to Query states."""
+    state = generation_query_prompt_state(
+        context, domain, natural_selector=natural_selector,
+    )
+    rendered = format_state_compact(state, max_entities=50)
+    opaque_types = set(
+        DOMAIN_OPAQUE_ENTITY_TYPES.get(domain, frozenset())
+    )
+    records_by_key = {
+        (str(item.get("type") or ""), str(item.get("id") or "")): (
+            item.get("data") if isinstance(item.get("data"), dict) else {}
+        )
+        for item in context.get("entity_records", [])
+        if isinstance(item, dict)
+    }
+    candidate_references = {
+        (str(item.get("type") or ""), str(item.get("id") or ""))
+        for item in context.get("entity_ids", [])
+        if isinstance(item, dict)
+        and str(item.get("type") or "") in opaque_types
+        and str(item.get("id") or "")
+    }
+    public_reference_ids = sorted({
+        entity_id
+        for entity_type, entity_id in candidate_references
+        if record_exposes_entity_reference(
+            domain,
+            entity_type,
+            entity_id,
+            records_by_key.get((entity_type, entity_id), {}),
+        )
+    })
+    opaque_ids = sorted({
+        entity_id
+        for entity_type, entity_id in candidate_references
+        if not record_exposes_entity_reference(
+            domain,
+            entity_type,
+            entity_id,
+            records_by_key.get((entity_type, entity_id), {}),
+        )
+    })
+    exposed_opaque_ids = [
+        entity_id for entity_id in opaque_ids if entity_id in rendered
+    ]
+    public_summaries = state.get("public_entity_summaries", [])
+    empty_selector_types = Counter(
+        str(item).strip().split()[1]
+        for item in public_summaries
+        if str(item).rstrip().endswith("{}")
+        and len(str(item).strip().split()) >= 2
+    ) if isinstance(public_summaries, list) else Counter()
+    empty_record_field_sets: dict[str, Counter[tuple[str, ...]]] = {}
+    for item in context.get("entity_records", []):
+        if not isinstance(item, dict):
+            continue
+        entity_type = str(item.get("type") or "")
+        data = item.get("data") or {}
+        if entity_type not in opaque_types or not isinstance(data, dict):
+            continue
+        if any(field in data for field in SELECTOR_FIELDS):
+            continue
+        empty_record_field_sets.setdefault(entity_type, Counter())[
+            tuple(sorted(str(key) for key in data))
+        ] += 1
+    return {
+        "view": "natural_selector" if natural_selector else "prove_real_id",
+        "opaque_source_id_count": len(opaque_ids),
+        "public_business_reference_count": len(public_reference_ids),
+        "exposed_opaque_id_count": len(exposed_opaque_ids),
+        "exposed_opaque_ids": exposed_opaque_ids[:5],
+        "empty_selector_count": sum(empty_selector_types.values()),
+        "empty_selector_types": dict(sorted(empty_selector_types.items())),
+        "empty_selector_record_fields": {
+            entity_type: [
+                {"fields": list(fields), "count": count}
+                for fields, count in field_sets.most_common(3)
+            ]
+            for entity_type, field_sets in sorted(
+                empty_record_field_sets.items()
+            )
+        },
+        "omitted_opaque_candidate_count": (
+            sum(
+                sum(field_sets.values())
+                for field_sets in empty_record_field_sets.values()
+            )
+            if natural_selector else 0
+        ),
+        "omitted_opaque_candidate_types": (
+            {
+                entity_type: sum(field_sets.values())
+                for entity_type, field_sets in sorted(
+                    empty_record_field_sets.items()
+                )
+            }
+            if natural_selector else {}
+        ),
+        "profile_contract_satisfied": (
+            not exposed_opaque_ids and not empty_selector_types
+            if natural_selector
+            else len(exposed_opaque_ids) == len(opaque_ids)
+        ),
+    }
+
+
 def _classify_target_availability(
     availability: dict[str, dict[str, Any]],
     feasible_chains: list[list[str]],
@@ -114,7 +239,9 @@ def _classify_target_availability(
     return baseline_unusable, state_machine_reachable, genuinely_unreachable
 
 
-def audit_domains(domains: list[str], seed: int) -> dict[str, Any]:
+def audit_domains(
+    domains: list[str], seed: int, prompt_profile: str = "local_trainable_v1",
+) -> dict[str, Any]:
     suite = load_suite_config("configs/live_mcp/ten_domain_suite.yaml")
     manager = LiveMCPManager(suite)
     manager.start_suite()
@@ -126,7 +253,7 @@ def audit_domains(domains: list[str], seed: int) -> dict[str, Any]:
         )
         orchestrator = TaskOrchestrator(
             suite, manager, executor, client,
-            prompt_profile="paper_generation_baseline_v1",
+            prompt_profile=prompt_profile,
         )
         report: dict[str, Any] = {}
         for domain in domains:
@@ -147,6 +274,7 @@ def audit_domains(domains: list[str], seed: int) -> dict[str, Any]:
             dependency: dict[str, Any] = {
                 "cache_current": cache is not None,
                 "schema_hash": schema_hash,
+                "prompt_profile": orchestrator.prompt_profile.name,
             }
             if cache is not None:
                 cache_path = orchestrator._graph_cache_path(
@@ -189,18 +317,38 @@ def audit_domains(domains: list[str], seed: int) -> dict[str, Any]:
                     feasible = orchestrator._filter_feasible_chains(
                         chains, domain, context,
                     )
+                    relation_verifiable, precheck_issues = (
+                        _filter_relation_verifiable_chains(
+                            feasible, graph, domain, tools,
+                        )
+                    )
+                    production_eligible = (
+                        relation_verifiable
+                        if orchestrator.prompt_profile.dependency_necessary
+                        else feasible
+                    )
                     dependency.update({
                         "edge_count": _edge_count(graph),
                         "sampled_chain_count": len(chains),
                         "live_feasible_chain_count": len(feasible),
+                        "relation_verifiable_chain_count": len(
+                            relation_verifiable
+                        ),
+                        "production_eligible_chain_count": len(
+                            production_eligible
+                        ),
+                        "relation_precheck_issue_counts": precheck_issues,
                     })
                 else:
                     feasible = []
+                    production_eligible = []
                 (
                     baseline_unusable,
                     state_machine_reachable,
                     genuinely_unreachable,
-                ) = _classify_target_availability(availability, feasible)
+                ) = _classify_target_availability(
+                    availability, production_eligible,
+                )
                 report[domain] = {
                     "tools": {
                         "schema_count": len(tools),
@@ -219,6 +367,13 @@ def audit_domains(domains: list[str], seed: int) -> dict[str, Any]:
                             context["entity_records"],
                         ),
                     },
+                    "query_state_view": _query_state_view_audit(
+                        context,
+                        domain,
+                        natural_selector=(
+                            orchestrator.prompt_profile.natural_selector
+                        ),
+                    ),
                     # A target can be unavailable in baseline state yet valid
                     # under PROVE when an accepted predecessor establishes its
                     # required entity/state.  Keep that distinct from a tool
@@ -241,6 +396,16 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--domain", default="all")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--prompt-profile",
+        default="local_trainable_v1",
+        choices=tuple(sorted(PROMPT_PROFILES)),
+        help=(
+            "chain eligibility profile; use local_trainable_v1 for training "
+            "candidate audits and paper_generation_baseline_v1 only for "
+            "paper-mechanism audits"
+        ),
+    )
     args = parser.parse_args()
 
     suite = load_suite_config("configs/live_mcp/ten_domain_suite.yaml")
@@ -251,7 +416,11 @@ def main() -> int:
     unknown = sorted(set(domains) - set(enabled))
     if unknown:
         parser.error(f"unknown or disabled domains: {unknown}")
-    print(json.dumps(audit_domains(domains, args.seed), indent=2, sort_keys=True))
+    print(json.dumps(
+        audit_domains(domains, args.seed, args.prompt_profile),
+        indent=2,
+        sort_keys=True,
+    ))
     return 0
 
 

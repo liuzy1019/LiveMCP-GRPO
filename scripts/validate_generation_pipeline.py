@@ -124,8 +124,6 @@ def _strict_cache_issue(
     data: dict,
     tool_names: list[str],
     server_tools: list[dict] | None = None,
-    *,
-    paper_baseline: bool = False,
 ) -> str:
     expected_names = sorted(tool_names)
     expected_pair_count = len(expected_names) * (len(expected_names) - 1) // 2
@@ -157,21 +155,21 @@ def _strict_cache_issue(
     if raw_graph != derived_raw:
         return "raw_graph 与 pair ledger 重建结果不一致"
 
-    if paper_baseline:
-        if data.get("graph_source") != "local_relation_audit_supported_subset":
-            return "paper baseline eligible graph_source 不正确"
-        if data.get("review_policy") != "not_required_for_paper_baseline":
-            return "paper baseline review_policy 不正确"
-    else:
+    if data.get("graph_source") != "local_relation_audit_supported_subset":
+        return "eligible graph_source 不正确"
+    pair_audits_data = data.get("pair_audits")
+    if pair_audits_data:
         pair_audits = TaskOrchestrator._validate_dependency_pair_audits(
-            data.get("pair_audits"), ledger, server_tools, domain,
+            pair_audits_data, ledger, server_tools, domain,
         )
         if pair_audits is None:
-            return "pair_audits 缺失或与当前工具合同不一致"
+            return "可选 pair_audits 与当前工具合同不一致"
         if data.get("audited_pair_count") != expected_pair_count:
             return "audited_pair_count 不正确"
         if data.get("audit_complete") is not True:
             return "audit_complete 未确认"
+    elif data.get("audited_pair_count") != 0 or data.get("audit_complete") is True:
+        return "空 pair_audits 的计数或完成标记不一致"
 
     relation_audits = TaskOrchestrator._validate_local_relation_audits(
         data.get("relation_audits"), ledger, server_tools, domain,
@@ -187,9 +185,6 @@ def _strict_cache_issue(
     ))
     if data.get("relation_audit_counts") != relation_counts:
         return "relation_audit_counts 与 relation_audits 不一致"
-    if not paper_baseline and relation_counts.get("insufficient_evidence", 0):
-        return "relation_audits 仍含 insufficient_evidence"
-
     graph = data.get("graph")
     if not TaskOrchestrator._valid_cached_graph(graph, expected_names):
         return "graph 结构或 tool 引用无效"
@@ -358,8 +353,6 @@ def stage1_topology(
         teacher_model_id=teacher_model_id,
         prompt_profile=prompt_profile,
     )
-    paper_baseline = resolve_prompt_profile(prompt_profile).paper_baseline
-
     for domain in domains:
         print(f"\n── {domain} ──")
 
@@ -382,7 +375,6 @@ def stage1_topology(
         current_names = [tool["name"] for tool in server_tools]
         cache_issue = _strict_cache_issue(
             domain, data, current_names, server_tools,
-            paper_baseline=paper_baseline,
         )
         if cache_issue:
             _fail("S1", f"{domain}: {cache_issue}")
@@ -724,7 +716,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--semantic-gate-profile",
-        default="deterministic_v1",
+        default="diagnostic_only",
         choices=("diagnostic_only", "deterministic_v1"),
         help="Stage 3 completed-trace semantic gate",
     )

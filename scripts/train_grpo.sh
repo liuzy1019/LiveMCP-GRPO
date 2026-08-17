@@ -21,7 +21,7 @@
 #   --batch-size N            训练 batch size
 #   --rollout-n N             Rollout 每组数量
 #   --reward-profile PROFILE  prove_baseline | oval_full
-#   --experiment-profile NAME custom | prove_local_v1 | oval_local_v1 | prove_reproduction_v1
+#   --experiment-profile NAME custom | prove_reproduction_v1
 #   --diagnostic-overrides     允许 profile 只覆盖 steps / train batch，并记录为诊断运行
 #   --run-name NAME            实验目录名
 #   --save-rollouts            保存逐轨迹输出和 reward 分量
@@ -315,19 +315,20 @@ for path in [train_file, val_file]:
     from src.live_mcp.registry.environment_metadata import (
         compute_initial_state_hashes,
         normalize_state_profiles,
-        validate_prove_corpus_evidence,
-        validate_semantic_gate_evidence,
-        validate_teacher_generation_evidence,
         validate_environment_metadata,
     )
     import importlib
-    from src.live_mcp.artifact.reward_task import build_reward_task
+    from src.live_mcp.artifact.validation import validate_artifact_contract
     for _, row in df.iterrows():
         ei = normalize_extra_info(row['extra_info'])
-        validate_prove_corpus_evidence(ei)
-        validate_teacher_generation_evidence(ei)
-        validate_semantic_gate_evidence(ei)
-        build_reward_task(ei)
+        reward_model = row['reward_model']
+        if not isinstance(reward_model, dict):
+            raise RuntimeError(f'{path}: reward_model must be a mapping')
+        validate_artifact_contract(
+            ei,
+            require_training=True,
+            ground_truth=reward_model.get('ground_truth'),
+        )
         domains.add(ei.get('domain', 'unknown'))
         expected = {
             'observation_schema_version': OBSERVATION_SCHEMA_VERSION,

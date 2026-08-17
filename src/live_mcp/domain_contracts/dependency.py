@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from src.live_mcp.domain_contracts.value_bindings import (
-    OUTPUT_ARGUMENT_ALIASES as _DEPENDENCY_OUTPUT_ARGUMENT_ALIASES,
-)
-
 _DEPENDENCY_TOOL_OUTPUT_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
     "banking": {
         "list_accounts": ("account_id",),
@@ -25,7 +21,7 @@ _DEPENDENCY_TOOL_OUTPUT_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
         "delete_event": ("event_id",),
         "export_calendar": ("event_id",),
         "get_event": ("event_id",),
-        "get_free_busy": ("event_id",),
+        "get_free_busy": ("busy", "query_range"),
         "get_recurring_info": (
             "event_id", "recurrence", "until", "count",
         ),
@@ -38,6 +34,7 @@ _DEPENDENCY_TOOL_OUTPUT_FIELDS: dict[str, dict[str, tuple[str, ...]]] = {
         "update_event": ("event_id",),
     },
     "crm": {
+        "list_contacts": ("contact_id",),
         "list_deals": ("contact_id", "deal_id", "lead_id"),
         "list_leads": ("contact_id", "lead_id"),
     },
@@ -269,6 +266,7 @@ _DEPENDENCY_TOOL_STATE_PRECONDITIONS: dict[
     },
     "crm": {
         "create_contact": frozenset(),
+        "list_contacts": frozenset(),
         "update_contact": frozenset({"contact_exists:contact_id"}),
         "delete_contact": frozenset({"contact_exists:contact_id"}),
         "list_leads": frozenset(),
@@ -505,6 +503,7 @@ _DEPENDENCY_TOOL_STATE_POSTCONDITIONS: dict[
     },
     "crm": {
         "create_contact": frozenset({"contact_exists:contact_id"}),
+        "list_contacts": frozenset(),
         "update_contact": frozenset(),
         "delete_contact": frozenset({"contact_absent:contact_id"}),
         "list_leads": frozenset(),

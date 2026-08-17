@@ -14,13 +14,13 @@ If required_tool_calls = []: binary R_task (no-tool tasks).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from src.oval_mcp.verifier.events import EventLog
 
 
-# Recommended weights from OVAL-MCP §7.1
+# PROVE task-reward weights; docs/OVAL-MCP.md is the authoritative contract.
 DEFAULT_WEIGHTS = {
     "w_val": 0.5,
     "w_cov": 0.5,

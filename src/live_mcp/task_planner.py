@@ -26,7 +26,6 @@ import hashlib
 import json as _json
 import os
 import random
-import re
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
@@ -43,25 +42,42 @@ from src.live_mcp.planner_format import (
 from src.live_mcp.generation.action_teacher import ActionTeacherMixin
 from src.live_mcp.generation.query_teacher import QueryTeacherMixin
 from src.live_mcp.generation.teacher_contracts import (
-    ContinuationPolicy,
     DOMAIN_DESCRIPTIONS,
-    GeneratedQuery,
-    _PERSONA_TEMPLATES,
     _chain_goal_phrase,
     _target_tool_requirement,
-    reference_date_for_seed,
-    reference_datetime_for_seed,
-)
-
-
-from src.live_mcp.replay.criteria import (
-    derive_progress_predicates,
-    derive_success_criteria,
 )
 from src.utils import extract_json as _extract_json
 
 if TYPE_CHECKING:
     from src.live_mcp.llm_client import LLMClient
+
+
+def _resolve_teacher_trace_path(
+    trace_setting: str,
+    *,
+    project_root: Path,
+) -> Path | None:
+    """Resolve a trace path inside one of the two governed evidence roots."""
+    if not trace_setting.strip():
+        return None
+    candidate = Path(trace_setting.strip())
+    candidate = candidate if candidate.is_absolute() else project_root / candidate
+    candidate = candidate.resolve()
+    allowed_roots = (
+        (project_root / "data" / "runs").resolve(),
+        (project_root / "logs").resolve(),
+    )
+    if not any(
+        candidate == root or candidate.is_relative_to(root)
+        for root in allowed_roots
+    ):
+        logger.warning(
+            "Ignoring LIVEMCP_TEACHER_TRACE_PATH outside project evidence "
+            "roots data/runs/ and logs/: {}",
+            candidate,
+        )
+        return None
+    return candidate
 
 
 class TaskPlanner(QueryTeacherMixin, ActionTeacherMixin):
@@ -80,6 +96,7 @@ class TaskPlanner(QueryTeacherMixin, ActionTeacherMixin):
         "query_generation": 256,
         "action_decision": 384,
         "continuation_generation": 256,
+        "continuation_goal_selection": 192,
         "clarification_generation": 192,
         "recovery_decision": 384,
     }
@@ -102,18 +119,10 @@ class TaskPlanner(QueryTeacherMixin, ActionTeacherMixin):
         self._trace_path: Path | None = None
         if trace_setting:
             project_root = Path(__file__).resolve().parents[2]
-            candidate = Path(trace_setting)
-            candidate = candidate if candidate.is_absolute() else project_root / candidate
-            candidate = candidate.resolve()
-            logs_root = (project_root / "logs").resolve()
-            try:
-                candidate.relative_to(logs_root)
-            except ValueError:
-                logger.warning(
-                    "Ignoring LIVEMCP_TEACHER_TRACE_PATH outside project logs/: {}",
-                    candidate,
-                )
-            else:
+            candidate = _resolve_teacher_trace_path(
+                trace_setting, project_root=project_root,
+            )
+            if candidate is not None:
                 candidate.parent.mkdir(parents=True, exist_ok=True)
                 self._trace_path = candidate
         self.trace_includes_state = (
@@ -257,7 +266,7 @@ class TaskPlanner(QueryTeacherMixin, ActionTeacherMixin):
             "switching to finding shell scripts is unrelated and forbidden. If the "
             "previous goal is complete, ask for a detail, adjustment, reversal, or "
             "next action on its exact entity/result instead of starting a new task.\n"
-            "Do not ask for an outcome that Current State already shows as satisfied. "
+            "Do not ask for an outcome that Grounded Live State already shows as satisfied. "
             "For example, do not request the same reminder, attendee, label, or field "
             "value twice.\n"
             "Choose a request that is feasible for the entity's current status. "
@@ -267,7 +276,7 @@ class TaskPlanner(QueryTeacherMixin, ActionTeacherMixin):
             "Never use one resource type's ID where another is required.\n"
             "Across every difficulty level, if you refer to an existing resource "
             "by ID, name, email, username, path, or another selector, copy an exact "
-            "value shown in Current State. Never invent a person or resource. "
+            "value shown in Grounded Live State. Never invent a person or resource. "
             "Missing or minimal difficulty may omit a required task detail, but "
             "that omission never permits a fabricated entity.\n"
             "If you request a state-changing action, include user-decided required "
@@ -283,7 +292,9 @@ class TaskPlanner(QueryTeacherMixin, ActionTeacherMixin):
 
         next_goal_block = ""
         if chain_seed and chain_progress < len(chain_seed):
-            next_goal = _chain_goal_phrase(chain_seed[chain_progress])
+            next_goal = _chain_goal_phrase(
+                tool_schemas, chain_seed[chain_progress],
+            )
             if next_goal:
                 next_goal_block = (
                     "\n## Next Conversation Goal\n"
@@ -311,7 +322,7 @@ class TaskPlanner(QueryTeacherMixin, ActionTeacherMixin):
 ## All Completed Conversation Rounds
 {conversation_text}
 
-## Current State (real IDs and values you can reference)
+## Grounded Live State
 {state_text}
 {next_goal_block}
 
@@ -321,20 +332,23 @@ Ask for the next thing you need. Do NOT acknowledge or confirm what the assistan
 The follow-up MUST stay within the assistant capabilities listed above and
 continue this same domain conversation. Do not request an unavailable
 cross-domain capability.
-For every difficulty, any existing entity selector you mention (including an
-ID, name, email, username, or path) MUST be copied exactly from Current State.
+For every difficulty, any existing entity selector you mention (including a
+ID, name, email, username, or path) MUST be copied exactly from Grounded Live State.
 For missing or minimal difficulty, omit a task detail instead of inventing an
-entity or selector that is absent from Current State.
+entity or selector that is absent from Grounded Live State.
 For complete difficulty, if the target capability requires an existing entity,
-copy its exact ID from Current State into the message and include every concrete
-detail needed for the requested change. Select only an entity whose shown type,
-status, amount, and linked IDs satisfy the tool description. If no such entity
-exists, ask for a read-only status/detail check rather than requesting an
-impossible mutation.
+copy an exact shown identifier or natural selector from Grounded Live State and
+include every concrete user-decided detail needed for the requested change.
+Never invent an identifier. If the shown facts do not identify one resource uniquely, refer to
+an entity already anchored in the immediately preceding public conversation or
+ask a clarification question. Select only an entity whose shown type, status,
+and amount satisfy the tool description. If no such entity exists, ask for a
+read-only status/detail check rather than requesting an impossible mutation.
 
 Return only:
 {{"user_query": "<the follow-up message>"}}
 """
+        continuation_diagnostics: list[dict[str, Any]] = []
         for attempt in range(3):
             try:
                 raw = self._generate_chat(
@@ -345,16 +359,31 @@ Return only:
                 )
                 data = _extract_json(raw)
                 if not isinstance(data, dict):
+                    continuation_diagnostics.append({
+                        "attempt": attempt + 1,
+                        "parsed_type": type(data).__name__,
+                    })
                     continue
                 query = data.get("user_query", "")
+                continuation_diagnostics.append({
+                    "attempt": attempt + 1,
+                    "user_query": str(query),
+                })
                 if query:
-                    return query
+                    return str(query)
             except Exception as e:
+                continuation_diagnostics.append({
+                    "attempt": attempt + 1,
+                    "exception": f"{type(e).__name__}: {e}",
+                })
                 logger.debug(
                     f"generate_followup attempt {attempt + 1}/3 failed for "
                     f"{self.domain}: {type(e).__name__}: {e}"
                 )
-        raise RuntimeError(f"Failed to generate followup for {self.domain}")
+        raise RuntimeError(
+            f"Failed to generate followup for {self.domain}: "
+            f"{continuation_diagnostics}"
+        )
 
     def generate_clarification(
         self,
@@ -416,7 +445,7 @@ Return only:
 ## Available Tools and Preconditions
 {tools_text}
 
-## Current State
+## Grounded Live State
 {state_text}
 
 ## Task
@@ -424,6 +453,8 @@ Write ONE short user clarification question. The user realized they need to prov
 more information or ask a follow-up detail question. The question must remain
 within the current domain and visible tools. Do not request an unavailable
 cross-domain capability or start a separate task.
+Use only identifiers or selectors shown in Grounded Live State or already
+stated in the public conversation. Never invent an identifier.
 
 Return only:
 {{"user_query": "<the clarification question>"}}

@@ -1,6 +1,6 @@
 """AuditWrapper: wraps LiveMCPExecutor to produce structured event logs.
 
-OVAL-MCP §3: audit_wrapper records model action, MCP observation/error,
+The OVAL trajectory event contract records model action, MCP observation/error,
 state diff, and normalizes through DomainAdapter before appending to trajectory event log.
 
 Why audit_wrapper is necessary:

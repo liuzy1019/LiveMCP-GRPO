@@ -18,12 +18,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.live_mcp.corpus.audit import audit_file
-from src.live_mcp.corpus.merge import (
-    _as_extra,
+from src.live_mcp.corpus.merge_allocation import _initial_query_key
+from src.live_mcp.corpus.merge_dedup import (
     _dedup_jaccard,
     _dedup_jaccard_with_fixed_rows,
     _dedup_task_ids,
-    _initial_query_key,
+)
+from src.live_mcp.corpus.merge_validation import (
     _quality_issue,
     _row_fingerprint,
 )

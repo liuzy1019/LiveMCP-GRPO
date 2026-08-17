@@ -4,15 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
-import os
 import re
 import sys
-from collections import defaultdict
-from collections.abc import Hashable
-from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
@@ -22,62 +17,27 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.live_mcp.protocol.observation import (
-    TRAJECTORY_SCHEMA_VERSION,
-    OBSERVATION_SCHEMA_VERSION,
-    OBSERVATION_PROJECTION_VERSION,
-    compute_server_schema_hash,
-)
-from src.live_mcp.domain_allocation import (
-    capacity_weighted_domain_quotas,
-    position_aware_jaccard,
-)
-from src.live_mcp.registry.tool_semantics import (
-    is_mutating_tool,
-    unresolved_failed_tool_names,
-)
 from src.live_mcp.corpus.semantic_quarantine import (
     evaluate_semantic_quarantine,
 )
 from src.live_mcp.corpus.semantic_core import resolve_semantic_gate_profile
-from src.live_mcp.domain_contracts.semantic_policies import (
-    evaluate_domain_label_issue,
-)
 from src.live_mcp.corpus.merge_validation import (
     FatalShardIntegrityError,
     _as_extra,
-    _as_json_list,
-    _oracle_calls,
-    _unresolved_failure_issue,
-    _nested_strings,
-    _action_dates,
-    _round_terminal,
-    _deterministic_label_issue,
-    _current_tools,
-    _current_schema_hashes,
-    _runtime_observation_budget,
     _row_fingerprint,
     _quality_issue,
-    _row_tool_sequence,
 )
 from src.live_mcp.corpus.merge_allocation import (
     _proportional_stratum_order,
     _stratified_head,
-    _domain_quotas,
     _capacity_weighted_domain_quotas,
-    _minimum_domain_coverage,
-    _add_weighted_with_caps,
     _availability_constrained_split_quotas,
-    _sequence_jaccard,
     _domain_unique_chain_capacity,
     _domain_deficit_report,
     _suggest_topup_count,
     _write_deficit_report,
     _frozen_allocation_capacity,
-    _initial_query_key,
-    _is_local_irrelevance_row,
     _dedup_local_irrelevance_queries,
-    _isolate_initial_queries,
     _balanced_domain_split,
 )
 from src.live_mcp.corpus.merge_dedup import (
@@ -85,11 +45,8 @@ from src.live_mcp.corpus.merge_dedup import (
     _dedup_task_ids,
     _load_quarantined_task_ids,
     _drop_quarantined_tasks,
-    _row_required_call_count,
-    _row_chain_bin,
     _normalize_chain_bin_quotas,
     _select_chain_bin_quotas,
-    _row_jaccard,
     _dedup_jaccard,
     _dedup_jaccard_with_fixed_rows,
 )
@@ -205,6 +162,7 @@ def merge_split(
     *,
     write_output: bool = True,
     semantic_quarantine_records: list[dict[str, Any]] | None = None,
+    statistics: dict[str, int] | None = None,
 ) -> tuple[bool, pd.DataFrame]:
     dfs = [pd.read_parquet(path) for path in sorted(tmpdir.glob(pattern))]
     if not dfs:
@@ -212,6 +170,10 @@ def merge_split(
         return False, pd.DataFrame()
 
     merged = pd.concat(dfs, ignore_index=True)
+    if statistics is not None:
+        statistics["candidate_rows_input"] = (
+            statistics.get("candidate_rows_input", 0) + len(merged)
+        )
     if len(merged) == 0 or len(merged.columns) == 0:
         print(f"  {outpath}: 0 rows (empty parquet files)")
         return True, pd.DataFrame()
@@ -260,6 +222,10 @@ def merge_split(
             only_issue = str(next(iter(quality_counts)))
             if only_issue.startswith("environment_metadata_invalid:"):
                 raise FatalShardIntegrityError(pattern, len(merged), only_issue)
+    if statistics is not None:
+        statistics["quality_removed"] = (
+            statistics.get("quality_removed", 0) + dropped_quality
+        )
     merged = merged.loc[~bad_mask].drop(columns=["_quality_issue"]).reset_index(drop=True)
 
     before_dedup = len(merged)
@@ -275,6 +241,10 @@ def merge_split(
     dropped_dedup = before_dedup - len(merged)
     if dropped_dedup:
         print(f"  dedup: dropped {dropped_dedup} cross-shard duplicates, {len(merged)} remaining")
+    if statistics is not None:
+        statistics["cross_shard_exact_removed"] = (
+            statistics.get("cross_shard_exact_removed", 0) + dropped_dedup
+        )
 
     if target > 0 and len(merged) > target:
         merged = _stratified_head(merged, target)
@@ -325,6 +295,9 @@ def merge_shards(
     base_train_path: Path | None = None,
     base_val_path: Path | None = None,
     chain_bin_quotas: dict[str, int] | None = None,
+    irrelevance_count: int = 0,
+    fixed_difficulty: str | None = None,
+    diagnostic_fixed_attempt: bool = False,
 ) -> int:
     """Globally deduplicate candidates before final train/val truncation.
 
@@ -335,10 +308,20 @@ def merge_shards(
     """
     if (base_train_path is None) != (base_val_path is None):
         raise ValueError("base_train_path and base_val_path must be provided together")
+    if diagnostic_fixed_attempt and (
+        base_train_path is not None or chain_bin_quotas is not None
+    ):
+        raise ValueError(
+            "fixed-attempt diagnostics cannot use a base corpus or chain-bin quotas"
+        )
     chain_bin_quotas = _normalize_chain_bin_quotas(
         chain_bin_quotas,
         required=count + val_count,
     )
+    if not 0 <= irrelevance_count <= count + val_count:
+        raise ValueError(
+            "irrelevance_count must be between 0 and count+val_count"
+        )
     if chain_bin_quotas is not None and (
         val_count != 0 or domains is None or len(domains) != 1
     ):
@@ -347,7 +330,9 @@ def merge_shards(
         )
     train_path = output_dir / "train.parquet"
     val_path = output_dir / "val.parquet"
+    required = count + val_count
     semantic_quarantine_records: list[dict[str, Any]] = []
+    merge_statistics: dict[str, int] = {}
     try:
         ok_train, train_candidates = merge_split(
             tmpdir,
@@ -356,6 +341,7 @@ def merge_shards(
             0,
             write_output=False,
             semantic_quarantine_records=semantic_quarantine_records,
+            statistics=merge_statistics,
         )
         ok_val, val_candidates = merge_split(
             tmpdir,
@@ -364,6 +350,7 @@ def merge_shards(
             0,
             write_output=False,
             semantic_quarantine_records=semantic_quarantine_records,
+            statistics=merge_statistics,
         )
     except FatalShardIntegrityError as exc:
         _write_semantic_quarantine_report(
@@ -446,6 +433,7 @@ def merge_shards(
                 ),
             }
         deficit_report.update({
+            **merge_statistics,
             "semantic_gate_removed": semantic_gate_removed,
             "quarantine_removed": quarantine_removed,
             "task_id_removed": tid_removed,
@@ -454,6 +442,22 @@ def merge_shards(
             "jaccard_removed": 0,
         })
         _write_deficit_report(deficits_output, deficit_report)
+        if diagnostic_fixed_attempt:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            accepted_path = output_dir / "accepted.parquet"
+            pool.reset_index(drop=True).to_parquet(accepted_path, index=False)
+            deficit_report.update({
+                "completion_kind": "fixed_attempt_diagnostic",
+                "accepted_rows_after_all_filters": 0,
+                "requested_candidate_attempts": required,
+                "training_publishable": False,
+            })
+            _write_deficit_report(deficits_output, deficit_report)
+            print(
+                f"  diagnostic accepted artifact: {accepted_path} (0 rows); "
+                f"requested attempts={required}; training_publishable=false"
+            )
+            return 0
         print(f"  FATAL: global unique candidates=0, need {count + val_count}")
         return 1
     if base_rows:
@@ -538,6 +542,10 @@ def merge_shards(
             pool_before_jaccard, threshold=0.70, mode="local",
         )
     jaccard_removed = jaccard_removed_prove
+    # Preserve the entire occupied PROVE sequence space for the next top-up.
+    # In supplement mode this includes immutable base rows; only the candidate
+    # subset below participates in net-new quota accounting and output.
+    retained_sequence_pool = pool.copy()
     if base_rows:
         retained_base = int((~pool[marker].astype(bool)).sum())
         if retained_base != base_rows:
@@ -636,7 +644,13 @@ def merge_shards(
             domain: train_quotas[domain] + val_quotas[domain]
             for domain in domains
         }
-        corpus_ledger = CorpusLedger.from_pool(pool, required_by_domain)
+        corpus_ledger = CorpusLedger.from_pool(
+            pool,
+            required_by_domain,
+            irrelevance_count=irrelevance_count,
+            fixed_difficulty=fixed_difficulty,
+            retained_pool=retained_sequence_pool,
+        )
         if corpus_ledger.complete:
             pool = corpus_ledger.select(pool)
         deficit_report = _domain_deficit_report(
@@ -651,13 +665,19 @@ def merge_shards(
         deficit_report["frozen_val_quota_by_domain"] = frozen_val_quotas
         deficit_report["quota_rebalanced"] = quota_rebalanced
         deficit_report.update(corpus_ledger.report())
-        for domain, difficulty_deficits in corpus_ledger.deficits.items():
-            difficulty_missing = sum(difficulty_deficits.values())
-            if not difficulty_missing:
-                continue
+        for domain, stratum_missing in (
+            corpus_ledger.total_deficits_by_domain.items()
+        ):
             deficit_report["deficits"][domain] = max(
                 int(deficit_report["deficits"].get(domain, 0)),
-                difficulty_missing,
+                int(stratum_missing),
+            )
+            measured_candidate_budget = _suggest_topup_count(
+                missing=int(stratum_missing),
+                available=int(
+                    deficit_report["available_by_domain"].get(domain, 0)
+                ),
+                candidates=int(candidate_by_domain.get(domain, 0)),
             )
             deficit_report["suggested_topup_by_domain"][domain] = max(
                 int(
@@ -665,10 +685,14 @@ def merge_shards(
                         domain, 0,
                     )
                 ),
-                difficulty_missing + max(2, difficulty_missing),
+                measured_candidate_budget,
             )
+        deficit_report["topup_candidate_requests"] = (
+            corpus_ledger.candidate_topup_requests(
+                deficit_report["suggested_topup_by_domain"],
+            )
+        )
     else:
-        required = count + val_count
         deficit_report = {
             "pool_size": len(pool),
             "required_total": required,
@@ -677,8 +701,9 @@ def merge_shards(
             "deficits": {"__all__": required - len(pool)} if len(pool) < required else {},
         }
     deficit_report.update({
+        **merge_statistics,
         "semantic_gate_removed": semantic_gate_removed,
-        "semantic_gate_removed_is_PROVE": False,  # LOCAL contract (OVAL-MCP.md §5)
+        "semantic_gate_removed_is_PROVE": False,  # Local trainability contract.
         "jaccard_removed": jaccard_removed_prove,
         "jaccard_removed_is_PROVE": True,          # PROVE hard gate (Jaccard 0.70)
         "jaccard_removed_prove": jaccard_removed_prove,
@@ -694,9 +719,38 @@ def merge_shards(
         "chain_bin_selection": chain_bin_report,
     })
     deficit_report.setdefault("retained_tool_sequences_by_domain", {})
+    deficit_report.setdefault("topup_candidate_requests", [])
     _write_deficit_report(deficits_output, deficit_report)
 
-    required = count + val_count
+    if diagnostic_fixed_attempt:
+        invalid_contract_rows = [
+            str(_as_extra(row["extra_info"]).get("task_id") or row.get("uid") or "")
+            for _, row in pool.iterrows()
+            if _as_extra(row["extra_info"]).get("fixed_attempt_budget") is not True
+            or str(_as_extra(row["extra_info"]).get("artifact_purpose") or "")
+            != "experiment"
+        ]
+        if invalid_contract_rows:
+            raise RuntimeError(
+                "diagnostic merge received non-diagnostic artifacts: "
+                f"{invalid_contract_rows[:10]}"
+            )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        accepted_path = output_dir / "accepted.parquet"
+        pool.reset_index(drop=True).to_parquet(accepted_path, index=False)
+        deficit_report.update({
+            "completion_kind": "fixed_attempt_diagnostic",
+            "accepted_rows_after_all_filters": len(pool),
+            "requested_candidate_attempts": required,
+            "training_publishable": False,
+        })
+        _write_deficit_report(deficits_output, deficit_report)
+        print(
+            f"  diagnostic accepted artifact: {accepted_path} ({len(pool)} rows); "
+            f"requested attempts={required}; training_publishable=false"
+        )
+        return 0
+
     if len(pool) < required or deficit_report.get("deficits"):
         print(
             f"  FATAL: global unique candidates={len(pool)}, need {required} "
@@ -745,11 +799,17 @@ def main() -> int:
     parser.add_argument("--domain", default="all")
     parser.add_argument("--deficits-output")
     parser.add_argument("--chain-bin-quotas")
+    parser.add_argument("--irrelevance-count", type=int, default=0)
+    parser.add_argument(
+        "--difficulty",
+        choices=("complete", "missing", "minimal"),
+    )
     parser.add_argument("--min-domain-train", type=int)
     parser.add_argument("--min-domain-val", type=int)
     parser.add_argument("--quarantine-task-ids", type=Path)
     parser.add_argument("--base-train", type=Path)
     parser.add_argument("--base-val", type=Path)
+    parser.add_argument("--diagnostic-fixed-attempt", action="store_true")
     args = parser.parse_args()
 
     domains = (
@@ -781,6 +841,9 @@ def main() -> int:
         base_train_path=args.base_train,
         base_val_path=args.base_val,
         chain_bin_quotas=chain_bin_quotas,
+        irrelevance_count=args.irrelevance_count,
+        fixed_difficulty=args.difficulty,
+        diagnostic_fixed_attempt=args.diagnostic_fixed_attempt,
     )
 
 

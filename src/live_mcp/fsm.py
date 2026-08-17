@@ -70,16 +70,20 @@ class ConversationFSM:
 
 @dataclass
 class RobustnessPlan:
-    """Immutable robustness perturbation plan, sampled before Teacher.
+    """Robustness knobs plus any factually bound perturbation contract.
 
-    Sampled once per task seed. Distractors, enum stripping, and
-    missing-function affect the generation-time Teacher contract.
+    Sampling decides only whether a perturbation is requested.  A requested
+    missing-function knob is not executable until generation binds
+    ``hidden_tool`` and ``missing_function_evidence`` from audited contracts.
     """
     inject_distractors: bool = False
     distractor_tools: list[dict] = field(default_factory=list)
     strip_enums: bool = False
     missing_function: bool = False
+    missing_function_requested: bool = False
     hidden_tool: str | None = None
+    missing_function_evidence: tuple[str, ...] = ()
+    missing_function_binding_failure: str = ""
     irrelevance: bool = False
 
     @classmethod
@@ -122,6 +126,7 @@ class RobustnessPlan:
             distractor_tools=distractors,
             strip_enums=strip_enums,
             missing_function=missing_function,
+            missing_function_requested=missing_function,
             irrelevance=irrelevance,
         )
 

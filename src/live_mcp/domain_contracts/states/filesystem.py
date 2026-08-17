@@ -15,9 +15,13 @@ def _target(name: str, slot: str):
     return arg("file", name, slot, observed=False)
 
 
-_FILE_READERS = {
+_TEXT_FILE_TOOLS = {
     "cat", "head", "tail", "wc", "sort", "uniq", "cut", "sed", "awk",
-    "md5sum", "sha256sum", "file_info", "xxd", "truncate", "split",
+    "truncate", "split",
+}
+
+_BYTE_SAFE_FILE_TOOLS = {
+    "md5sum", "sha256sum", "file_info", "xxd",
 }
 
 
@@ -41,6 +45,7 @@ FILESYSTEM_STATE_FACTS = {
         post=(
             out("file", "path", "filesystem.exists"),
             out("file", "path", "filesystem.type", "file"),
+            out("file", "path", "filesystem.archive", False),
         ),
     ),
     "mv": facts(
@@ -92,11 +97,13 @@ FILESYSTEM_STATE_FACTS = {
             out("file", "archive", "filesystem.exists"),
             out("file", "archive", "filesystem.type", "file"),
             out("file", "archive", "filesystem.archive", True),
+            out("file", "archive", "filesystem.archive_format", "tar"),
         ),
     ),
     "tar_extract": facts(pre=(
         arg("file", "archive", "filesystem.exists"),
         arg("file", "archive", "filesystem.archive", True),
+        arg("file", "archive", "filesystem.archive_format", "tar"),
     )),
     "zip": facts(
         pre=(_target("archive", "filesystem.target_creatable"),),
@@ -104,23 +111,38 @@ FILESYSTEM_STATE_FACTS = {
             out("file", "archive", "filesystem.exists"),
             out("file", "archive", "filesystem.type", "file"),
             out("file", "archive", "filesystem.archive", True),
+            out("file", "archive", "filesystem.archive_format", "zip"),
         ),
     ),
     "unzip": facts(pre=(
         arg("file", "archive", "filesystem.exists"),
         arg("file", "archive", "filesystem.archive", True),
+        arg("file", "archive", "filesystem.archive_format", "zip"),
     )),
     "diff": facts(pre=(
         _exists("file1"), _type("file1", "file"),
+        arg("file", "file1", "filesystem.archive", False),
         _exists("file2"), _type("file2", "file"),
+        arg("file", "file2", "filesystem.archive", False),
     )),
     "join": facts(pre=(
         _exists("file1"), _type("file1", "file"),
+        arg("file", "file1", "filesystem.archive", False),
         _exists("file2"), _type("file2", "file"),
+        arg("file", "file2", "filesystem.archive", False),
     )),
 }
 
 FILESYSTEM_STATE_FACTS.update({
+    name: facts(pre=(
+        _exists(),
+        _type("path", "file"),
+        arg("file", "path", "filesystem.archive", False),
+    ))
+    for name in _TEXT_FILE_TOOLS
+})
+
+FILESYSTEM_STATE_FACTS.update({
     name: facts(pre=(_exists(), _type("path", "file")))
-    for name in _FILE_READERS
+    for name in _BYTE_SAFE_FILE_TOOLS
 })

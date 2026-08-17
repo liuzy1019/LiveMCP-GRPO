@@ -8,6 +8,7 @@ semantics identical on both sides of the Parquet boundary.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from src.live_mcp.types import ToolCall
@@ -30,6 +31,7 @@ def align_sampled_chain(
     sampled_chain: list[str] | tuple[str, ...],
     *,
     verified_dependency_evidence: Any | None = None,
+    prefer_latest: bool = False,
 ) -> list[int] | None:
     """Align every sampled chain step to an ordered oracle tool-call index.
 
@@ -100,6 +102,25 @@ def align_sampled_chain(
                 return None
         return min(paths)
 
+    if prefer_latest:
+        aligned_reversed: list[int] = []
+        cursor = len(oracle_calls)
+        for expected_name in reversed(chain):
+            match = next(
+                (
+                    index
+                    for index in range(cursor - 1, -1, -1)
+                    if _call_action(oracle_calls[index]) == "tool_call"
+                    and _call_tool_name(oracle_calls[index]) == expected_name
+                ),
+                None,
+            )
+            if match is None:
+                return None
+            aligned_reversed.append(match)
+            cursor = match
+        return list(reversed(aligned_reversed))
+
     aligned: list[int] = []
     cursor = -1
     for expected_name in chain:
@@ -140,6 +161,80 @@ def auxiliary_tool_call_indices(
     ]
 
 
+def unauthorized_mutating_tool_names(
+    oracle_calls: list[Any],
+    authorized_capabilities: Iterable[str],
+    *,
+    is_mutating: Callable[[str], bool],
+) -> list[str]:
+    """Return state-changing calls absent from immutable query provenance."""
+    authorized = {str(name) for name in authorized_capabilities if str(name)}
+    return sorted({
+        name
+        for call in oracle_calls
+        if _call_action(call) == "tool_call"
+        and (name := _call_tool_name(call))
+        and is_mutating(name)
+        and name not in authorized
+    })
+
+
+def select_realized_dependency_chain(
+    oracle_calls: list[Any],
+    graph: dict[str, dict[str, list[str]]],
+    *,
+    max_length: int = 5,
+) -> tuple[list[str], list[int]]:
+    """Select the longest graph-valid path actually executed by Teacher.
+
+    ``source_chain_seed`` is query provenance, not an execution template.  A
+    successful alternative route receives reward dependency edges only when
+    its own ordered calls form a path in the audited dependency graph.
+    """
+    tool_indices = [
+        index
+        for index, call in enumerate(oracle_calls)
+        if _call_action(call) == "tool_call" and _call_tool_name(call)
+    ]
+    paths: list[list[int]] = []
+
+    def extend(path: list[int], start: int) -> None:
+        if len(path) >= 2:
+            paths.append(list(path))
+        if len(path) >= max_length:
+            return
+        for position in range(start, len(tool_indices)):
+            call_index = tool_indices[position]
+            if path:
+                source_name = _call_tool_name(oracle_calls[path[-1]])
+                target_name = _call_tool_name(oracle_calls[call_index])
+                relations = [
+                    relation
+                    for relation in ("explicit", "implicit")
+                    if target_name in graph.get(source_name, {}).get(
+                        relation, []
+                    )
+                ]
+                if len(relations) != 1:
+                    continue
+            extend(path + [call_index], position + 1)
+
+    extend([], 0)
+    if not paths:
+        return [], []
+    selected = min(
+        paths,
+        key=lambda path: (
+            -len(path),
+            tuple(path),
+            tuple(_call_tool_name(oracle_calls[index]) for index in path),
+        ),
+    )
+    return [
+        _call_tool_name(oracle_calls[index]) for index in selected
+    ], selected
+
+
 def verify_implicit_edges_counterfactually(
     *,
     manager: Any,
@@ -156,10 +251,11 @@ def verify_implicit_edges_counterfactually(
     the already-required dependency prefix.  The exact target call must fail
     without the source and succeed after the source changes state.
     """
-    aligned = align_sampled_chain(oracle_calls, sampled_chain)
+    aligned = align_sampled_chain(
+        oracle_calls, sampled_chain, prefer_latest=True,
+    )
     if aligned is None:
         return [], ["sampled chain is not aligned for counterfactual replay"]
-    chain_calls = [oracle_calls[index] for index in aligned]
     evidence: list[dict[str, Any]] = []
     issues: list[str] = []
 
@@ -184,15 +280,28 @@ def verify_implicit_edges_counterfactually(
     ):
         if (source_name, target_name) in explicitly_verified_edges:
             continue
-        prefix = chain_calls[:edge_index]
-        source_call = chain_calls[edge_index]
-        target_call = chain_calls[edge_index + 1]
+        source_index = aligned[edge_index]
+        target_index = aligned[edge_index + 1]
+        source_call = oracle_calls[source_index]
+        target_call = oracle_calls[target_index]
+        # Hold every other successful action before the target fixed.  Using
+        # only sampled-chain nodes silently removes auxiliary setup calls
+        # (for example mkdir between cp and mv), so the present replay can
+        # fail for a reason unrelated to the edge under test.
+        prior_tool_calls = [
+            (index, call)
+            for index, call in enumerate(oracle_calls[:target_index])
+            if _call_action(call) == "tool_call"
+        ]
 
         absent = manager.create_session(seed=seed, server_names=[server_name])
         try:
             prefix_ok = all(
-                _execute(absent.session_id, call, f"absent_prefix_{index}").success
-                for index, call in enumerate(prefix)
+                _execute(
+                    absent.session_id, call, f"absent_prefix_{call_index}",
+                ).success
+                for call_index, call in prior_tool_calls
+                if call_index != source_index
             )
             absent_result = (
                 _execute(absent.session_id, target_call, "absent_target")
@@ -213,17 +322,22 @@ def verify_implicit_edges_counterfactually(
 
         present = manager.create_session(seed=seed, server_names=[server_name])
         try:
-            present_prefix_ok = all(
-                _execute(present.session_id, call, f"present_prefix_{index}").success
-                for index, call in enumerate(prefix)
-            )
-            source_result = (
-                _execute(present.session_id, source_call, "present_source")
-                if present_prefix_ok else None
-            )
+            present_prefix_ok = True
+            source_result = None
+            for call_index, call in prior_tool_calls:
+                result = _execute(
+                    present.session_id, call, f"present_prefix_{call_index}",
+                )
+                if call_index == source_index:
+                    source_result = result
+                if not result.success:
+                    present_prefix_ok = False
+                    break
             target_result = (
                 _execute(present.session_id, target_call, "present_target")
-                if source_result is not None and source_result.success
+                if present_prefix_ok
+                and source_result is not None
+                and source_result.success
                 else None
             )
         finally:

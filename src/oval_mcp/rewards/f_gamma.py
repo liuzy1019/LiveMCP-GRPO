@@ -1,6 +1,6 @@
 """F_gamma: Potential-based progress shaping.
 
-OVAL-MCP §8.
+This is an OVAL-only reward extension, not part of the PROVE baseline.
 
 progress potential:
   Phi(m_t) = completed_required_states(m_t) / total_required_states

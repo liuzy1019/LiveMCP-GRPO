@@ -1,4 +1,4 @@
-"""P_process: Bounded process score per OVAL-MCP §7.3.
+"""P_process: bounded process score for the OVAL reward extension.
 
 Per-step score:
   B_t = sum(triggered bonus values)    # > 0

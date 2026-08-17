@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import sys
 from collections import Counter
@@ -15,19 +16,32 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.live_mcp.corpus.shard import _validate_parquet_readback
-from src.live_mcp.corpus.merge import _as_extra, _quality_issue
+from src.live_mcp.artifact.readback import validate_parquet_readback
+from src.live_mcp.corpus.merge_validation import _as_extra, _quality_issue
 from src.live_mcp.generation.teacher_contracts import (
     _final_answer_requests_user_input,
 )
-from src.live_mcp.artifact.reward_task import build_reward_task
+from src.live_mcp.artifact.validation import validate_artifact_contract
 from src.utils import normalize_extra_info
 
 
 def audit_file(path: Path) -> dict[str, object]:
     """Validate every row and return a compact corpus summary."""
-    _validate_parquet_readback(path)
+    validate_parquet_readback(path)
     frame = pd.read_parquet(path)
+    if frame.empty:
+        summary = {
+            "path": str(path),
+            "rows": 0,
+            "domains": {},
+            "scenarios": {},
+            "terminals": {},
+            "required_workflow_projection": {},
+            "diagnostics": {},
+        }
+        del frame
+        gc.collect()
+        return summary
     failures: list[str] = []
     domains: Counter[str] = Counter()
     scenarios: Counter[str] = Counter()
@@ -41,7 +55,7 @@ def audit_file(path: Path) -> dict[str, object]:
             failures.append(f"row {index}: {issue}")
             continue
         extra = normalize_extra_info(_as_extra(row.get("extra_info")))
-        build_reward_task(extra)
+        validate_artifact_contract(extra, require_training=False)
         domains[str(extra.get("domain") or "unknown")] += 1
         scenarios[str(extra.get("scenario_type") or "unknown")] += 1
         oracle_calls = json.loads(extra["oracle_calls"])

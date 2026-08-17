@@ -76,6 +76,7 @@ _DOMAIN_TOOL_REQUIREMENTS: dict[str, dict[str, set[str]]] = {
         "unzip": {"file"},
     },
     "crm": {
+        "list_contacts": {"contact"},
         "list_leads": {"lead"},
         "update_lead": {"lead"},
         "convert_lead": {"lead"},
@@ -165,6 +166,7 @@ _DOMAIN_TOOL_RELEVANT: dict[str, dict[str, set[str]]] = {
         "tar_create", "tar_extract", "zip", "unzip", "symlink",
     )},
     "crm": {
+        "list_contacts": {"contact"},
         "list_leads": {"lead"},
         "list_deals": {"deal"}, "list_tasks": {"task"},
         "create_deal": {"lead", "contact", "deal"},
@@ -211,6 +213,7 @@ _DOMAIN_PROBE_PRIMARY_ENTITY_TYPES: dict[str, dict[str, set[str]]] = {
         )
     },
     "crm": {
+        "list_contacts": {"contact"},
         "list_leads": {"lead"},
         "list_deals": {"deal"}, "list_tasks": {"task"},
         "get_deal": {"deal", "contact", "lead"},

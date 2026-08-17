@@ -232,6 +232,7 @@ _READ_STATE_ROOTS: dict[str, dict[str, tuple[str, ...]]] = {
         "get_recurring_info": ("events",),
     },
     "crm": {
+        "list_contacts": ("contacts",),
         "list_leads": ("leads",),
         "list_deals": ("deals",),
         "list_tasks": ("tasks",),
@@ -578,6 +579,52 @@ def mutation_target_identity(
     return None
 
 
+def _observation_links_target_identities(
+    events: list[dict[str, Any]],
+    failed_identity: tuple[tuple[str, str], ...] | None,
+    successful_identity: tuple[tuple[str, str], ...] | None,
+) -> bool:
+    """Prove a natural selector and canonical target identify one record."""
+    if (
+        failed_identity is None
+        or successful_identity is None
+        or len(failed_identity) != 1
+        or len(successful_identity) != 1
+        or failed_identity[0][0] != successful_identity[0][0]
+    ):
+        return False
+    field_name = failed_identity[0][0]
+    try:
+        failed_value = json.loads(failed_identity[0][1])
+        successful_value = json.loads(successful_identity[0][1])
+    except (TypeError, json.JSONDecodeError):
+        return False
+    if (
+        not isinstance(failed_value, str)
+        or not isinstance(successful_value, str)
+        or failed_value == successful_value
+    ):
+        return False
+
+    def linked(value: Any) -> bool:
+        if isinstance(value, dict):
+            if value.get(field_name) == successful_value and any(
+                key != field_name and item == failed_value
+                for key, item in value.items()
+            ):
+                return True
+            return any(linked(item) for item in value.values())
+        if isinstance(value, list):
+            return any(linked(item) for item in value)
+        return False
+
+    return any(
+        event.get("success") is True and linked(event.get("observation"))
+        for event in events
+        if isinstance(event, dict)
+    )
+
+
 def unresolved_failed_tool_names(
     execution_history: list[dict[str, Any]],
 ) -> set[str]:
@@ -585,7 +632,7 @@ def unresolved_failed_tool_names(
     unresolved: set[
         tuple[str, tuple[tuple[str, str], ...] | None]
     ] = set()
-    for event in execution_history:
+    for event_index, event in enumerate(execution_history):
         if not isinstance(event, dict):
             continue
         tool_name = str(event.get("tool_name") or "")
@@ -599,6 +646,17 @@ def unresolved_failed_tool_names(
             unresolved.discard(failure_key)
             # Readonly and identity-free calls recover at capability level.
             unresolved.discard((tool_name, None))
+            for unresolved_key in tuple(unresolved):
+                failed_tool, failed_identity = unresolved_key
+                if (
+                    failed_tool == tool_name
+                    and _observation_links_target_identities(
+                        execution_history[:event_index + 1],
+                        failed_identity,
+                        target_identity,
+                    )
+                ):
+                    unresolved.discard(unresolved_key)
         elif event.get("success") is False:
             unresolved.add(failure_key)
     return {tool_name for tool_name, _ in unresolved}

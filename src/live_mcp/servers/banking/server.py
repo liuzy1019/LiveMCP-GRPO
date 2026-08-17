@@ -47,28 +47,32 @@ class BankingServer(StatefulToolServer):
         if aid not in state["accounts"]: raise KeyError(f"account not found: {aid}")
         return state["accounts"][aid]
 
+    @staticmethod
+    def _account_reference(acct: dict[str, Any]) -> dict[str, str]:
+        return {"account_last4": str(acct["account_last4"])}
+
     def list_accounts(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
         atype = arguments.get("type")
-        accts = [{"account_id": a["account_id"], "type": a["type"], "balance": a["balance"], "currency": a["currency"], "frozen": a.get("frozen", False)} for a in state["accounts"].values() if not atype or a["type"] == atype]
+        accts = [{"account_id": a["account_id"], "account_last4": a["account_last4"], "type": a["type"], "balance": a["balance"], "currency": a["currency"], "frozen": a.get("frozen", False)} for a in state["accounts"].values() if not atype or a["type"] == atype]
         return _result(True, {"accounts": accts}, None, "", False)
 
     def get_account_info(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         acct = self._acct(self._state(session_id), arguments["account_id"])
-        return _result(True, {"account_id": acct["account_id"], "owner": acct["owner"], "balance": acct["balance"], "currency": acct["currency"], "type": acct["type"], "frozen": acct.get("frozen", False), "opened_date": acct.get("opened_date", "2020-01-01")}, None, "", False)
+        return _result(True, {"account_id": acct["account_id"], **self._account_reference(acct), "owner": acct["owner"], "balance": acct["balance"], "currency": acct["currency"], "type": acct["type"], "frozen": acct.get("frozen", False), "opened_date": acct.get("opened_date", "2020-01-01")}, None, "", False)
 
     def get_balance(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         acct = self._acct(self._state(session_id), arguments["account_id"])
-        return _result(True, {"account_id": acct["account_id"], "balance": acct["balance"], "currency": acct["currency"]}, None, "", False)
+        return _result(True, {"account_id": acct["account_id"], **self._account_reference(acct), "balance": acct["balance"], "currency": acct["currency"]}, None, "", False)
 
     def get_history(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id)
-        aid = arguments["account_id"]; self._acct(state, aid)
+        aid = arguments["account_id"]; acct = self._acct(state, aid)
         limit = int(arguments.get("limit", 10)); start_date = arguments.get("start_date"); txn_type = arguments.get("txn_type")
         txns = [t for t in state["transactions"] if t.get("from_account") == aid or t.get("to_account") == aid]
         if start_date: txns = [t for t in txns if t.get("timestamp", "") >= start_date]
         if txn_type: txns = [t for t in txns if t.get("type") == txn_type]
-        return _result(True, {"account_id": aid, "transactions": txns[-limit:], "count": len(txns)}, None, "", False)
+        return _result(True, {"account_id": aid, **self._account_reference(acct), "transactions": txns[-limit:], "count": len(txns)}, None, "", False)
 
     def get_statement(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
@@ -77,7 +81,7 @@ class BankingServer(StatefulToolServer):
         txns = [t for t in state["transactions"] if (t.get("from_account") == aid or t.get("to_account") == aid) and t.get("timestamp", "").startswith(period)]
         debits = sum(t["amount"] for t in txns if t.get("from_account") == aid)
         credits = sum(t["amount"] for t in txns if t.get("to_account") == aid)
-        return _result(True, {"account_id": aid, "period": period, "opening_balance": acct["balance"] - credits + debits, "closing_balance": acct["balance"], "total_debits": debits, "total_credits": credits, "transactions": txns}, None, "", False)
+        return _result(True, {"account_id": aid, **self._account_reference(acct), "period": period, "opening_balance": acct["balance"] - credits + debits, "closing_balance": acct["balance"], "total_debits": debits, "total_credits": credits, "transactions": txns}, None, "", False)
 
     def transfer(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); from_aid, to_aid = arguments["from_account"], arguments["to_account"]; amount = float(arguments["amount"])
@@ -93,7 +97,7 @@ class BankingServer(StatefulToolServer):
         from_acct["balance"] -= amount; to_acct["balance"] += amount
         tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": from_aid, "to_account": to_aid, "amount": amount, "currency": currency, "type": "transfer", "memo": arguments.get("memo", ""), "timestamp": state["current_date"]}
         state["transactions"].append(txn)
-        return _result(True, {"transaction": txn, "from_balance": from_acct["balance"], "to_balance": to_acct["balance"]}, None, "", True)
+        return _result(True, {"transaction": txn, "from_account_last4": from_acct["account_last4"], "to_account_last4": to_acct["account_last4"], "from_balance": from_acct["balance"], "to_balance": to_acct["balance"]}, None, "", True)
 
     def wire_transfer(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); from_aid, amount = arguments["from_account"], float(arguments["amount"])
@@ -108,7 +112,7 @@ class BankingServer(StatefulToolServer):
         acct["balance"] -= total
         tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": from_aid, "type": "wire_transfer", "routing_number": arguments["routing_number"], "recipient_name": arguments["recipient_name"], "amount": amount, "fee": fee, "currency": currency, "timestamp": state["current_date"]}
         state["transactions"].append(txn)
-        return _result(True, {"transaction": txn, "remaining_balance": acct["balance"], "fee": fee}, None, "", True)
+        return _result(True, {"transaction": txn, **self._account_reference(acct), "remaining_balance": acct["balance"], "fee": fee}, None, "", True)
 
     def deposit(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid, amount = arguments["account_id"], float(arguments["amount"])
@@ -118,7 +122,7 @@ class BankingServer(StatefulToolServer):
         acct["balance"] += amount
         tid = self._txn_id(state); txn = {"txn_id": tid, "to_account": aid, "amount": amount, "currency": acct["currency"], "type": "deposit", "source": arguments.get("source", "branch"), "timestamp": state["current_date"]}
         state["transactions"].append(txn)
-        return _result(True, {"transaction": txn, "new_balance": acct["balance"]}, None, "", True)
+        return _result(True, {"transaction": txn, **self._account_reference(acct), "new_balance": acct["balance"]}, None, "", True)
 
     def withdraw(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid, amount = arguments["account_id"], float(arguments["amount"])
@@ -129,7 +133,7 @@ class BankingServer(StatefulToolServer):
         acct["balance"] -= amount
         tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": aid, "amount": amount, "currency": acct["currency"], "type": "withdrawal", "timestamp": state["current_date"]}
         state["transactions"].append(txn)
-        return _result(True, {"transaction": txn, "new_balance": acct["balance"]}, None, "", True)
+        return _result(True, {"transaction": txn, **self._account_reference(acct), "new_balance": acct["balance"]}, None, "", True)
 
     def bill_pay(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid, amount = arguments["account_id"], float(arguments["amount"]); payee = arguments["payee"]
@@ -140,7 +144,7 @@ class BankingServer(StatefulToolServer):
         acct["balance"] -= amount
         tid = self._txn_id(state); txn = {"txn_id": tid, "from_account": aid, "amount": amount, "currency": acct["currency"], "type": "bill_pay", "payee": payee, "due_date": arguments.get("due_date", ""), "timestamp": state["current_date"]}
         state["transactions"].append(txn)
-        return _result(True, {"transaction": txn, "new_balance": acct["balance"]}, None, "", True)
+        return _result(True, {"transaction": txn, **self._account_reference(acct), "new_balance": acct["balance"]}, None, "", True)
 
     def schedule_transfer(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); from_aid, to_aid = arguments["from_account"], arguments["to_account"]; amount = float(arguments["amount"])
@@ -162,7 +166,7 @@ class BankingServer(StatefulToolServer):
         sid = f"sched_{state['next_txn_num']:04d}"; state["next_txn_num"] += 1
         scheduled = {"scheduled_txn_id": sid, "from_account": from_aid, "to_account": to_aid, "amount": amount, "execute_date": arguments["execute_date"], "status": "scheduled"}
         state.setdefault("scheduled_transfers", {})[sid] = scheduled
-        return _result(True, {"scheduled_transfer": scheduled}, None, "", True)
+        return _result(True, {"scheduled_transfer": scheduled, "from_account_last4": from_acct["account_last4"], "to_account_last4": to_acct["account_last4"]}, None, "", True)
 
     def cancel_transfer(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); sid = arguments["scheduled_txn_id"]
@@ -179,7 +183,15 @@ class BankingServer(StatefulToolServer):
         account_id = arguments.get("account_id")
         status = arguments.get("status")
         transfers = [
-            dict(item)
+            {
+                **dict(item),
+                "from_account_last4": self._acct(
+                    state, item["from_account"],
+                )["account_last4"],
+                "to_account_last4": self._acct(
+                    state, item["to_account"],
+                )["account_last4"],
+            }
             for item in state.get("scheduled_transfers", {}).values()
             if (not account_id or item.get("from_account") == account_id)
             and (not status or item.get("status") == status)
@@ -195,25 +207,25 @@ class BankingServer(StatefulToolServer):
     def freeze_account(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
         if acct.get("frozen"):
-            return _result(True, {"account_id": aid, "frozen": True, "reason": arguments.get("reason", "unspecified")}, None, "", False)
+            return _result(True, {"account_id": aid, **self._account_reference(acct), "frozen": True, "reason": arguments.get("reason", "unspecified")}, None, "", False)
         reason = arguments.get("reason", "unspecified"); acct["frozen"] = True
         state["freeze_log"].append({"account_id": aid, "reason": reason, "frozen": True, "timestamp": state["current_date"]})
-        return _result(True, {"account_id": aid, "frozen": True, "reason": reason}, None, "", True)
+        return _result(True, {"account_id": aid, **self._account_reference(acct), "frozen": True, "reason": reason}, None, "", True)
 
     def unfreeze_account(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
         if not str(arguments.get("authorization_code", "")).strip():
             raise KeyError("authorization code must be non-empty")
         if not acct.get("frozen"):
-            return _result(True, {"account_id": aid, "frozen": False}, None, "", False)
+            return _result(True, {"account_id": aid, **self._account_reference(acct), "frozen": False}, None, "", False)
         acct["frozen"] = False
         state["freeze_log"].append({"account_id": aid, "reason": "unfrozen", "frozen": False, "timestamp": state["current_date"]})
-        return _result(True, {"account_id": aid, "frozen": False}, None, "", True)
+        return _result(True, {"account_id": aid, **self._account_reference(acct), "frozen": False}, None, "", True)
 
     def verify_account(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         state = self._state(session_id); aid = arguments["account_id"]; acct = self._acct(state, aid)
         owner = arguments.get("owner_name", ""); verified = owner.lower() == acct["owner"].lower() if owner else False
-        return _result(True, {"account_id": aid, "verified": verified, "frozen": acct.get("frozen", False)}, None, "", False)
+        return _result(True, {"account_id": aid, **self._account_reference(acct), "verified": verified, "frozen": acct.get("frozen", False)}, None, "", False)
 
     def get_exchange_rate(self, session_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         key = f"{arguments['from_currency']}_{arguments['to_currency']}"
@@ -231,7 +243,7 @@ class BankingServer(StatefulToolServer):
         rate = 0.045 if term <= 12 else 0.055
         loan = {"loan_id": lid, "account_id": aid, "amount": amount, "term_months": term, "interest_rate": rate, "purpose": arguments.get("purpose", ""), "status": "pending"}
         state.setdefault("loans", {})[lid] = loan
-        return _result(True, {"loan": loan, "monthly_payment": round(amount * rate / 12 + amount / term, 2)}, None, "", True)
+        return _result(True, {"loan": loan, **self._account_reference(acct), "monthly_payment": round(amount * rate / 12 + amount / term, 2)}, None, "", True)
 
 
 if __name__ == "__main__":

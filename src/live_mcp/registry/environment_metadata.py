@@ -599,7 +599,7 @@ def validate_tool_owner_contract(extra_info: dict[str, Any]) -> dict[str, str]:
 def validate_semantic_gate_evidence(extra_info: dict[str, Any]) -> None:
     """Re-evaluate the persisted local semantic disposition at every consumer.
 
-    Per OVAL-MCP.md §5, semantic quarantine is a LOCAL contract: only a
+    Semantic quarantine is a LOCAL contract: only a
     provable contradiction (hard gate) under the deterministic profile aborts
     consumption.  Subjective-naturalness diagnostics (hard_gate=False) are
     recorded but never block the train/rollout pipeline.
@@ -652,7 +652,12 @@ def validate_teacher_generation_evidence(extra_info: dict[str, Any]) -> None:
 
     if extra_info.get("canonical_replay_valid") is not True:
         raise RuntimeError("missing positive canonical replay evidence")
-    if extra_info.get("canonical_replay_criteria_ok") is not True:
+    from src.live_mcp.prompt_profiles import requires_outcome_replay
+
+    criteria_ok = extra_info.get("canonical_replay_criteria_ok") is True
+    if requires_outcome_replay(
+        str(extra_info.get("prompt_profile") or "")
+    ) and not criteria_ok:
         raise RuntimeError("canonical replay outcome criteria did not pass")
     try:
         canonical_rate = float(extra_info["canonical_replay_error_rate"])
@@ -669,7 +674,8 @@ def validate_teacher_generation_evidence(extra_info: dict[str, Any]) -> None:
         canonical_calls < 0
         or canonical_errors < 0
         or canonical_errors > canonical_calls
-        or canonical_criteria_failed != 0
+        or (criteria_ok and canonical_criteria_failed != 0)
+        or (not criteria_ok and canonical_criteria_failed <= 0)
     ):
         raise RuntimeError("invalid canonical replay counters")
     expected_canonical_rate = (

@@ -5,11 +5,17 @@ from pathlib import Path
 
 import pytest
 
-from src.live_mcp.corpus.merge import _write_semantic_quarantine_report
+from src.live_mcp.corpus.merge_dedup import _write_semantic_quarantine_report
 from src.live_mcp.corpus.semantic_quarantine import (
     evaluate_semantic_quarantine,
 )
 from src.live_mcp.registry.environment_metadata import validate_semantic_gate_evidence
+from src.live_mcp.servers.payments.server import TOOLS as PAYMENT_TOOLS
+from src.live_mcp.protocol.observation import TRAJECTORY_SCHEMA_VERSION
+from src.live_mcp.generation.irrelevance import (
+    IRRELEVANCE_PROOF_VERSION,
+    _tool_inventory_sha256,
+)
 
 
 def _terminal(text: str, action: str = "final_answer") -> dict:
@@ -56,6 +62,74 @@ def _extra(query: str, history: list[dict], terminal_text: str) -> dict:
     }
 
 
+def _executed_amount_extra(*, amount: int) -> dict:
+    query = "Create an invoice for Acme for 1500 dollars."
+    history = [_event(
+        "create_invoice",
+        arguments={"customer": "Acme", "amount": amount},
+        observation={"invoice": {"customer": "Acme", "amount": amount}},
+        state_changed=True,
+    )]
+    return {
+        "domain": "payments",
+        "trajectory_schema_version": TRAJECTORY_SCHEMA_VERSION,
+        "continuation_goal_specs": [],
+        "success_criteria": [],
+        "success_criteria_provenance": [],
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": query,
+            "execution_history": history,
+            "oracle_calls": [{
+                "action": "tool_call",
+                "tool_name": "create_invoice",
+                "arguments": {"customer": "Acme", "amount": amount},
+            }, _terminal("The invoice was created.")],
+        }],
+    }
+
+
+def test_generic_semantic_gate_accepts_executed_user_amount() -> None:
+    assert evaluate_semantic_quarantine(_executed_amount_extra(amount=1500)) is None
+
+
+def test_generic_semantic_gate_does_not_claim_argument_provenance() -> None:
+    issue = evaluate_semantic_quarantine(_executed_amount_extra(amount=1600))
+
+    assert issue is None
+
+
+def test_irrelevance_requires_capability_inventory_proof() -> None:
+    query = "Can you give me the live sports score for tonight's game?"
+    extra = {
+        "domain": "payments",
+        "prompt_profile": "local_trainable_v1",
+        "trajectory_schema_version": TRAJECTORY_SCHEMA_VERSION,
+        "user_query": query,
+        "clean_visible_tools": PAYMENT_TOOLS,
+        "irrelevance_capability_proof": {
+            "proof_version": IRRELEVANCE_PROOF_VERSION,
+            "unavailable_capability_class": "live_sports_score",
+            "query_evidence_span": "live sports score",
+            "available_tool_inventory_sha256": _tool_inventory_sha256(
+                PAYMENT_TOOLS
+            ),
+        },
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": query,
+            "execution_history": [],
+            "oracle_calls": [_terminal("I cannot provide live sports scores.", "report_error")],
+        }],
+    }
+
+    assert evaluate_semantic_quarantine(extra) is None
+    extra["irrelevance_capability_proof"]["query_evidence_span"] = "tonight"
+    issue = evaluate_semantic_quarantine(extra)
+    assert issue is not None
+    assert issue.reason_code == "irrelevance_query_evidence_class_mismatch"
+
+
 def test_rejects_social_only_continuation_and_visible_id_reask() -> None:
     social = _extra("Find the K3 Keyboard.", [], "Found it.")
     social["teacher_round_trace"].append({
@@ -84,16 +158,31 @@ def test_rejects_social_only_continuation_and_visible_id_reask() -> None:
     })
     issue = evaluate_semantic_quarantine(reask)
     assert issue is not None
-    assert issue.reason_code == "shopping_reasks_already_visible_order_id"
+    assert issue.reason_code == "terminal_exposes_private_entity_id"
+    assert issue.hard_gate is True
 
 
-def test_rejects_sampler_private_id_in_initial_query_for_all_domains() -> None:
+@pytest.mark.parametrize(("domain", "private_id"), [
+    ("banking", "acc_s43_004"),
+    ("calendar", "evt_s43_004"),
+    ("crm", "deal_s43_004"),
+    ("email", "email_s43_004"),
+    ("filesystem", "file_s43_004"),
+    ("food_delivery", "ord_s43_004"),
+    ("issue_tracker", "iss_s43_004"),
+    ("payments", "inv_s43_004"),
+    ("shopping", "ord_s43_004"),
+    ("team_chat", "ch_s43_004"),
+])
+def test_rejects_sampler_private_id_in_initial_query_for_all_domains(
+    domain: str, private_id: str,
+) -> None:
     extra = {
-        "domain": "banking",
-        "task_id": "banking-private-id",
+        "domain": domain,
+        "task_id": f"{domain}-private-id",
         "teacher_round_trace": [{
             "round_idx": 0,
-            "user_query": "Unfreeze account acc_s43_004 now.",
+            "user_query": f"Act on {private_id} now.",
             "execution_history": [],
             "oracle_calls": [_terminal(
                 "Please provide the authorization code.",
@@ -105,8 +194,185 @@ def test_rejects_sampler_private_id_in_initial_query_for_all_domains() -> None:
     issue = evaluate_semantic_quarantine(extra)
 
     assert issue is not None
-    assert issue.reason_code == "initial_query_exposes_sampler_private_id"
-    assert issue.trace_evidence["leaked_ids"] == ["acc_s43_004"]
+    assert issue.reason_code == "initial_query_exposes_private_entity_id"
+    assert issue.trace_evidence["leaked_ids"] == [private_id]
+
+
+def test_calendar_rejects_invitation_delivery_claim_without_observation() -> None:
+    extra = {
+        "domain": "calendar",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Move the post-mortem to Monday.",
+            "execution_history": [_event(
+                "update_event",
+                observation={"event": {"event_id": "evt_1"}},
+                state_changed=True,
+            )],
+            "oracle_calls": [_terminal(
+                "The event was moved and updated invites have been sent."
+            )],
+        }],
+    }
+
+    issue = evaluate_semantic_quarantine(extra)
+
+    assert issue is not None
+    assert issue.reason_code == (
+        "calendar_invitation_delivery_claim_without_evidence"
+    )
+
+
+def test_calendar_allows_invitation_delivery_claim_with_observation() -> None:
+    extra = {
+        "domain": "calendar",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Move the post-mortem to Monday.",
+            "execution_history": [_event(
+                "update_event",
+                observation={
+                    "event": {"event_id": "evt_1"},
+                    "attendee_notifications_sent": True,
+                },
+                state_changed=True,
+            )],
+            "oracle_calls": [_terminal(
+                "The event was moved and updated invites have been sent."
+            )],
+        }],
+    }
+
+    assert evaluate_semantic_quarantine(extra) is None
+
+
+def test_paper_profile_accepts_real_id_grounded_by_prove_sampling_context() -> None:
+    extra = {
+        "domain": "banking",
+        "prompt_profile": "paper_generation_baseline_v1",
+        "semantic_gate_profile": "diagnostic_only",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Unfreeze account acc_s43_004 now.",
+            "execution_history": [],
+            "oracle_calls": [_terminal(
+                "Please provide the authorization code.",
+                action="ask_clarification",
+            )],
+        }],
+    }
+
+    assert evaluate_semantic_quarantine(extra) is None
+
+
+def test_rejects_sampler_private_id_in_terminal_and_continuation_query() -> None:
+    terminal_leak = {
+        "domain": "banking",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Show my business account details.",
+            "execution_history": [],
+            "oracle_calls": [_terminal(
+                "Your business account ID is acc_s42_003."
+            )],
+        }],
+    }
+    issue = evaluate_semantic_quarantine(terminal_leak)
+    assert issue is not None
+    assert issue.reason_code == "terminal_exposes_private_entity_id"
+    assert issue.round_idx == 0
+    assert issue.trace_evidence["leaked_ids"] == ["acc_s42_003"]
+
+    continuation_leak = {
+        "domain": "banking",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Show my business account details.",
+            "execution_history": [],
+            "oracle_calls": [_terminal("Your business account is active.")],
+        }, {
+            "round_idx": 1,
+            "user_query": "Show the history for acc_s42_003.",
+            "execution_history": [],
+            "oracle_calls": [_terminal("Here are the recent transactions.")],
+        }],
+    }
+    issue = evaluate_semantic_quarantine(continuation_leak)
+    assert issue is not None
+    assert issue.reason_code == "continuation_query_exposes_private_entity_id"
+    assert issue.round_idx == 1
+
+
+def test_allows_runtime_created_business_reference_after_reload() -> None:
+    extra = {
+        "domain": "payments",
+        "prompt_profile": "local_trainable_v1",
+        "semantic_gate_profile": "deterministic_v1",
+        "clean_visible_tools": PAYMENT_TOOLS,
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Bill Acme $1,500.",
+            "execution_history": [_event(
+                "create_invoice",
+                arguments={"customer": "Acme", "amount": 1500},
+                observation={
+                    "invoice": {
+                        "invoice_id": "inv_0021", "customer": "Acme",
+                    },
+                },
+                state_changed=True,
+            )],
+            "oracle_calls": [
+                {
+                    "action": "tool_call",
+                    "tool_name": "create_invoice",
+                    "arguments": {"customer": "Acme", "amount": 1500},
+                },
+                _terminal("Invoice inv_0021 was created for Acme."),
+            ],
+        }],
+    }
+
+    issue = evaluate_semantic_quarantine(extra)
+
+    assert issue is None
+
+
+def test_allows_runtime_private_entity_id_only_inside_tool_trace() -> None:
+    extra = {
+        "domain": "payments",
+        "prompt_profile": "local_trainable_v1",
+        "semantic_gate_profile": "deterministic_v1",
+        "clean_visible_tools": PAYMENT_TOOLS,
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Pay the Acme invoice.",
+            "execution_history": [_event(
+                "pay_invoice",
+                arguments={
+                    "invoice_id": "inv_0021", "amount": 1500,
+                    "method": "card",
+                },
+                observation={
+                    "invoice": {"invoice_id": "inv_0021", "status": "paid"},
+                },
+                state_changed=True,
+            )],
+            "oracle_calls": [
+                {
+                    "action": "tool_call",
+                    "tool_name": "pay_invoice",
+                    "arguments": {
+                        "invoice_id": "inv_0021", "amount": 1500,
+                        "method": "card",
+                    },
+                },
+                _terminal("The Acme invoice was paid."),
+            ],
+        }],
+    }
+
+    assert evaluate_semantic_quarantine(extra) is None
 
 
 def test_rejects_clarification_after_prior_round_fixed_order_focus() -> None:
@@ -443,7 +709,7 @@ def test_retains_deterministic_first_recommendation_purchase() -> None:
     })
     issue = evaluate_semantic_quarantine(reask)
     assert issue is not None
-    assert issue.reason_code == "shopping_reasks_already_visible_return_id"
+    assert issue.reason_code == "terminal_exposes_private_entity_id"
 
     order_reask = _extra(
         "Show the items in my order.",
@@ -458,7 +724,7 @@ def test_retains_deterministic_first_recommendation_purchase() -> None:
     })
     issue = evaluate_semantic_quarantine(order_reask)
     assert issue is not None
-    assert issue.reason_code == "shopping_reasks_already_visible_order_id"
+    assert issue.reason_code == "terminal_exposes_private_entity_id"
 
 
 def test_rejects_placed_verb_as_status_filter_but_keeps_explicit_status() -> None:
@@ -486,6 +752,21 @@ def test_rejects_placed_verb_as_status_filter_but_keeps_explicit_status() -> Non
     )
     assert evaluate_semantic_quarantine(explicit) is None
 
+    returning_item = _extra(
+        "Can you get me the specs for the item I'm currently returning?",
+        [_event(
+            "list_orders",
+            arguments={"status": "returning"},
+            observation={"orders": [{"status": "returning"}]},
+        )],
+        "Which item in that order do you mean?",
+    )
+    returning_item["teacher_round_trace"][0]["oracle_calls"][-1] = _terminal(
+        "Which item in that order do you mean?",
+        action="ask_clarification",
+    )
+    assert evaluate_semantic_quarantine(returning_item) is None
+
 
 def test_source_target_disconnect_precedes_surface_status_diagnostic() -> None:
     disconnected = _extra(
@@ -503,8 +784,8 @@ def test_source_target_disconnect_precedes_surface_status_diagnostic() -> None:
     issue = evaluate_semantic_quarantine(disconnected)
 
     assert issue is not None
-    assert issue.reason_code == "successful_trace_missing_source_target"
-    assert issue.trace_evidence["missing_target"] == "get_order"
+    assert issue.reason_code == "shopping_unauthorized_order_status_filter"
+    assert issue.hard_gate is False
 
 
 def test_rejects_relational_recommendation_without_grounded_seed() -> None:
@@ -540,6 +821,27 @@ def test_rejects_relational_recommendation_without_grounded_seed() -> None:
         "There are no similar recommendations.",
     )
     assert evaluate_semantic_quarantine(grounded) is None
+
+    grounded_then_fallback = _extra(
+        "Suggest products similar to the K3 Keyboard.",
+        [
+            _event("search_products", observation={"products": [{
+                "product_id": "prd_k3", "name": "K3 Keyboard",
+            }]}),
+            _event(
+                "get_recommendations",
+                arguments={"based_on_product": "prd_k3"},
+                observation={"recommendations": []},
+            ),
+            _event(
+                "get_recommendations",
+                arguments={"category": "keyboard"},
+                observation={"recommendations": []},
+            ),
+        ],
+        "There are no similar recommendations or category alternatives.",
+    )
+    assert evaluate_semantic_quarantine(grounded_then_fallback) is None
 
     cross_round = _extra(
         "Suggest products similar to the K3 Keyboard.",
@@ -731,8 +1033,8 @@ def test_rejects_non_user_facing_terminal_surfaces() -> None:
     )
     issue = evaluate_semantic_quarantine(product_id_leak)
     assert issue is not None
-    assert issue.reason_code == "terminal_exposes_opaque_product_id"
-    assert issue.hard_gate is False
+    assert issue.reason_code == "terminal_exposes_private_entity_id"
+    assert issue.hard_gate is True
 
     meta = _extra(
         "Where should I hike?",
@@ -1417,10 +1719,7 @@ def test_persisted_missing_function_unauthorized_mutation_is_hard() -> None:
         "scenario_type": "missing_function",
         "hidden_tools": ["chmod"],
         "source_chain_seed": ["symlink", "chmod"],
-        "query_mutation_evidence": [{
-            "capability": "chmod",
-            "query_span": "make it read-only",
-        }],
+        "missing_function_evidence": ["file.mode=readonly"],
         "clean_visible_tools": [{
             "name": "chown",
             "annotations": {"readonly": False, "mutating": True},
@@ -1441,9 +1740,103 @@ def test_persisted_missing_function_unauthorized_mutation_is_hard() -> None:
 
     issue = evaluate_semantic_quarantine(extra)
     assert issue is not None
-    assert issue.reason_code == "missing_function_nonprefix_mutation"
+    assert issue.reason_code == "missing_function_mutation"
     assert issue.hard_gate is True
     assert issue.trace_evidence["unauthorized_calls"] == ["chown"]
+
+
+def test_persisted_missing_function_clarification_still_checks_mutations() -> None:
+    extra = {
+        "domain": "filesystem",
+        "scenario_type": "clarification_required",
+        "has_missing_function": True,
+        "hidden_tools": ["chmod"],
+        "source_chain_seed": ["symlink", "chmod"],
+        "missing_function_evidence": ["file.mode=readonly"],
+        "clean_visible_tools": [{
+            "name": "chown",
+            "annotations": {"readonly": False, "mutating": True},
+        }],
+        "oracle_calls": [
+            {"action": "tool_call", "tool_name": "chown"},
+            {"action": "ask_clarification", "arguments": {"question": "Alternative?"}},
+        ],
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Create a link and make it read-only.",
+            "oracle_calls": [],
+        }],
+    }
+
+    issue = evaluate_semantic_quarantine(extra)
+    assert issue is not None
+    assert issue.reason_code == "missing_function_mutation"
+
+
+def test_persisted_missing_function_requires_hidden_chain_final() -> None:
+    extra = {
+        "domain": "filesystem",
+        "scenario_type": "missing_function",
+        "has_missing_function": True,
+        "hidden_tools": ["symlink"],
+        "source_chain_seed": ["symlink", "chmod"],
+        "clean_visible_tools": [],
+        "oracle_calls": [{
+            "action": "report_error",
+            "arguments": {"text": "unavailable"},
+        }],
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Create a link and change its permissions.",
+            "oracle_calls": [],
+        }],
+    }
+
+    issue = evaluate_semantic_quarantine(extra)
+    assert issue is not None
+    assert issue.reason_code == "missing_function_hidden_target_mismatch"
+
+
+def test_persisted_missing_function_rejects_unresolved_execution_failure() -> None:
+    extra = {
+        "domain": "banking",
+        "scenario_type": "missing_function",
+        "has_missing_function": True,
+        "hidden_tools": ["get_statement"],
+        "source_chain_seed": ["list_accounts", "get_statement"],
+        "missing_function_evidence": ["statement.exists"],
+        "clean_visible_tools": [],
+        "oracle_calls": [{
+            "action": "report_error",
+            "arguments": {"text": "The requested capability is unavailable."},
+        }],
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Generate my account statement.",
+            "oracle_calls": [{
+                "action": "report_error",
+                "arguments": {
+                    "text": "The requested capability is unavailable.",
+                },
+            }],
+            "execution_history": [{
+                "tool_name": "list_accounts",
+                "arguments": {},
+                "success": False,
+                "state_changed": False,
+                "server_name": "banking",
+            }],
+        }],
+    }
+
+    issue = evaluate_semantic_quarantine(extra)
+    assert issue is not None
+    assert issue.reason_code == (
+        "missing_function_unresolved_execution_failure"
+    )
+    assert issue.trace_evidence["unresolved_failed_tools"] == [
+        "list_accounts"
+    ]
 
 
 def test_cross_domain_final_answer_requests_input_is_hard() -> None:
@@ -1510,7 +1903,7 @@ def test_cross_domain_courtesy_offer_is_not_an_input_request() -> None:
 
 def test_meta_user_analysis_is_soft_diagnostic() -> None:
     """Subjective-naturalness rule is soft: it records a diagnostic but never
-    hard-gates a row (OVAL-MCP.md §5)."""
+    hard-gates a row under the local semantic gate contract."""
     extra = _extra(
         "Find the K3 Keyboard.",
         [],
@@ -1545,3 +1938,117 @@ def test_row_tool_sequence_prove_vs_local_mode() -> None:
     # local mode embeds the source-chain length so variable-length chains do
     # not collide under the position-aware Jaccard (email/food fix).
     assert any("cl2" in t for t in local)
+
+
+def test_issue_tracker_bounded_followup_rejects_titles_outside_prior_list() -> None:
+    extra = {
+        "domain": "issue_tracker",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "List those bugs.",
+            "execution_history": [],
+            "oracle_calls": [{
+                "action": "final_answer",
+                "arguments": {"text": "1. Alpha bug\n2. Beta bug\n3. Gamma bug"},
+            }],
+        }, {
+            "round_idx": 1,
+            "user_query": "Which of these bugs are high priority?",
+            "execution_history": [],
+            "oracle_calls": [{
+                "action": "final_answer",
+                "arguments": {"text": "- Alpha bug\n- Unlisted bug"},
+            }],
+        }],
+    }
+
+    issue = evaluate_semantic_quarantine(extra)
+    assert issue is not None
+    assert issue.reason_code == "issue_tracker_bounded_set_terminal_expansion"
+    assert issue.trace_evidence["outside_prior_list"] == ["unlisted bug"]
+
+
+def test_issue_tracker_bounded_followup_accepts_subset_of_prior_list() -> None:
+    extra = {
+        "domain": "issue_tracker",
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "List those bugs.",
+            "execution_history": [],
+            "oracle_calls": [{
+                "action": "final_answer",
+                "arguments": {"text": "1. Alpha bug\n2. Beta bug\n3. Gamma bug"},
+            }],
+        }, {
+            "round_idx": 1,
+            "user_query": "Which of these bugs are high priority?",
+            "execution_history": [],
+            "oracle_calls": [{
+                "action": "final_answer",
+                "arguments": {"text": "- Alpha bug (critical)\n- Gamma bug"},
+            }],
+        }],
+    }
+
+    assert evaluate_semantic_quarantine(extra) is None
+
+
+def test_mutation_recovery_cannot_switch_resource_type() -> None:
+    extra = {
+        "domain": "crm",
+        "clean_visible_tools": [{
+            "name": "add_note", "annotations": {"mutating": True},
+        }],
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Add a note to that task.",
+            "execution_history": [{
+                "tool_name": "add_note",
+                "arguments": {"entity_type": "task", "entity_id": "task_1"},
+                "success": False,
+            }, {
+                "tool_name": "add_note",
+                "arguments": {"entity_type": "deal", "entity_id": "deal_1"},
+                "success": True,
+            }],
+            "oracle_calls": [{
+                "action": "tool_call", "tool_name": "add_note",
+                "arguments": {"entity_type": "deal", "entity_id": "deal_1"},
+            }, {
+                "action": "final_answer", "arguments": {"text": "Done."},
+            }],
+        }],
+    }
+
+    issue = evaluate_semantic_quarantine(extra)
+    assert issue is None
+
+
+def test_mutation_recovery_can_correct_id_without_switching_resource_type() -> None:
+    extra = {
+        "domain": "crm",
+        "clean_visible_tools": [{
+            "name": "add_note", "annotations": {"mutating": True},
+        }],
+        "teacher_round_trace": [{
+            "round_idx": 0,
+            "user_query": "Add a note to that deal.",
+            "execution_history": [{
+                "tool_name": "add_note",
+                "arguments": {"entity_type": "deal", "entity_id": "deal_bad"},
+                "success": False,
+            }, {
+                "tool_name": "add_note",
+                "arguments": {"entity_type": "deal", "entity_id": "deal_1"},
+                "success": True,
+            }],
+            "oracle_calls": [{
+                "action": "tool_call", "tool_name": "add_note",
+                "arguments": {"entity_type": "deal", "entity_id": "deal_1"},
+            }, {
+                "action": "final_answer", "arguments": {"text": "Done."},
+            }],
+        }],
+    }
+
+    assert evaluate_semantic_quarantine(extra) is None

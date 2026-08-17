@@ -1,4 +1,4 @@
-"""LATA: Length-Aware Token Allocation per OVAL-MCP §9.1.
+"""LATA: the OVAL Length-Aware Token Allocation extension.
 
 问题：
   GRPO 的 standard token allocation 是对 trajectory 内所有 token 分配相同的

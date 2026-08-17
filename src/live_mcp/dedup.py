@@ -10,10 +10,9 @@ from src.live_mcp.types import LiveTask
 def jaccard_similarity(a: LiveTask, b: LiveTask) -> float:
     """Jaccard similarity between two tasks' oracle tool-call sequences.
 
-    Each task is represented as an ordered list of oracle tool names. Position
-    is included so:
-      * [a, b] vs [b, a]    -> distinguishable
-      * [a, b] vs [a, a, b] -> distinguishable
+    Each task is represented by the set of plain oracle tool names, matching
+    the published Jaccard gate over tool-call sequences. Order, repetitions,
+    arguments, owners, and hidden generation metadata do not alter this gate.
 
     Arguments are intentionally ignored: two traces that execute the same tool
     sequence on different entity IDs are near-duplicates for dependency-skill
@@ -32,10 +31,8 @@ def jaccard_similarity(a: LiveTask, b: LiveTask) -> float:
     if not sigs_a or not sigs_b:
         return 0.0
 
-    # Position-aware sequence set: each entry tagged with its index so order and
-    # repeated calls matter while argument values do not.
-    set_a = {(i, tn) for i, tn in enumerate(sigs_a)}
-    set_b = {(i, tn) for i, tn in enumerate(sigs_b)}
+    set_a = set(sigs_a)
+    set_b = set(sigs_b)
 
     intersection = set_a & set_b
     union = set_a | set_b
@@ -73,11 +70,9 @@ def _call_sequence(task: LiveTask) -> list[str]:
     are omitted so deduplication measures the tool-call sequence.
     """
     calls = task.oracle_program.calls
-    primary_domain = str(task.target_servers[0]) if task.target_servers else ""
     sigs: list[str] = []
     for call in calls:
         if call.action != "tool_call":
             continue
-        owner = str(getattr(call, "server_name", "") or primary_domain)
-        sigs.append(f"{owner}::{call.tool_name}")
+        sigs.append(str(call.tool_name))
     return sigs

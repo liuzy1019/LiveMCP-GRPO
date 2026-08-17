@@ -1,6 +1,7 @@
 # configs/
 
-配置目录只描述入口和覆盖关系。项目进度见 `docs/PROJECT_STATUS.md`，训练参数的唯一代码来源是
+配置目录只描述入口和覆盖关系。运行进度以当前 manifest、artifact 和进程为准；
+训练参数的唯一代码来源是
 `src/training/trainer_config.py` 和 `src/training/hyperparams.py`。
 
 ## 配置入口
@@ -11,7 +12,6 @@
 | `live_mcp/ten_domain_suite.yaml` | 十域 subprocess suite 和支持的 reward profile |
 | `live_mcp/*.yaml` | 各 domain transport、session 和 server 命令 |
 | `verl/verl/trainer/config/ppo_trainer.yaml` | vendored verl Hydra 基础配置 |
-| `tests/per_domain/*.yaml` | 逐域 30+10 生成、PROVE rollout/reward 测试的不可变输入配置 |
 
 正式训练入口：
 
@@ -20,10 +20,6 @@ bash scripts/train_grpo.sh
 ```
 
 `TrainerConfig.from_env()` 生成 Hydra overrides，项目不维护第二套静态训练 YAML。
-
-`tests/per_domain/` 只保存测试输入，不保存动态结果。文件名必须与 `domain` 一致；每次运行生成
-唯一 `run_id`，结果事实写入 `generation_manifest.json` 和独立审计报告。配置不得写物理 GPU ID，
-GPU 由运行命令显式传入，避免把某台机器的占用状态固化进仓库。
 
 ## 十域 suite
 
@@ -65,7 +61,7 @@ Teacher model 和 classifier contract。
 | max assistant turns | 10 |
 | learning rate | `1e-6` |
 | strategy | `fsdp` |
-| reward profile | `oval_full` |
+| reward profile | `prove_baseline` |
 
 `data.max_prompt_length` 不得低于 10,240。真实运行参数以启动日志和实验目录中的 resolved
 overrides 为准，不能仅引用本表。
@@ -100,14 +96,11 @@ Reward profile 不是完整实验配置。正式训练必须同时选择 experim
 
 | Experiment profile | 作用 |
 |---|---|
-| `prove_local_v1` | 十域本地 PROVE baseline，冻结论文 Policy checkpoint、composition proxy、paper-shape 超参和标准 GRPO |
-| `prove_reward_gray_v1` | 固定 8-row 分层 view 的 PROVE 小样本 reward 灰度 |
 | `prove_reproduction_v1` | 20-domain / 13,517-row / external-abstention 严格复现；当前条件不满足时拒绝启动 |
-| `oval_local_v1` | 与 `prove_local_v1` 共用模型、数据和 sampler，只改变显式声明的 OVAL 组件 |
-| `oval_reward_gray_v1` | 与 PROVE 灰度使用同一 8-row view 的 OVAL 奖励对照 |
+| `custom` | 显式传入当前不可变 train/val artifact；用于本地认证与诊断，不继承任何历史数据路径 |
 
 四卡 diagnostic smoke 可以覆盖 steps 或 batch，但 resolved config 必须记录 override。
-正式对照不得使用 `data/train.parquet` 活动软链接，必须绑定不可变 artifact 路径和 SHA256。
+正式对照不得使用 `data/train.parquet` 活动发布副本，必须绑定不可变 artifact 路径和 SHA256。
 
 ## 约束
 

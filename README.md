@@ -13,25 +13,35 @@ LiveMCP-GRPO 是面向长程、多工具任务的可执行数据生成与 GRPO �
 十域 Live MCP、Teacher 五步生成、Parquet 合同、reward、Policy agent loop 和 GRPO 入口已实现。
 项目当前处于逐域数据质量准入和训练前验收阶段，尚未开始正式补产或完整训练。
 
-精确数据行数、逐域完成度、活动任务、卡点和下一步只在
-[项目进度](docs/PROJECT_STATUS.md) 维护。不要从 README、旧 run 名或生成日志推断现役状态。
+精确数据行数、逐域完成度、活动任务和卡点必须从当前 run manifest、artifact、
+进程与 GPU 状态核实。README 不保存会随运行变化的快照。
 
 ## 系统链路
 
 ```mermaid
 flowchart LR
-    A[Dependency Graph] --> B[Live-State Sampling]
-    B --> C[State-Machine Teacher]
-    C --> D[Robustness Plan]
-    D --> E[Live Execution]
-    E --> F[Fresh Replay + Provenance]
-    F --> G[Canonical Replay + Jaccard]
-    G --> H[Parquet]
-    H --> I[GRPO]
+    A[Domain Contracts] --> B[Dependency Graph]
+    B --> C[Live-State Sampling]
+    C --> D[Query Teacher]
+    D --> E[Action FSM]
+    E --> F[Live MCP]
+    F --> G[Profile-Boundary Validation]
+    G --> H[Fresh Replay + Provenance]
+    H --> I[Plain Jaccard]
+    I --> J[Parquet Contract]
+    J --> K[Policy Rollout + Reward]
 ```
 
 核心边界：
 
+- domain contract 和真实 MCP trace 决定可执行性；local profile 的引用可见性合同只负责阻止
+  sampler-private handle 出现在用户可见文本，Teacher
+  不能扩张系统事实；
+- opaque backend ID、tool name、raw arguments 和 observation 属于内部执行面，公开 query/continuation/
+  terminal 只能消费 public projection；
+- terminal 保留 Teacher 原始文本；确定性 private-reference / hidden-tool-name 边界在写入前 fail closed；
+- artifact 同时保留审计 provenance 和 canonical public row，训练 consumer 必须重新校验 purpose、hash
+  和 reward compatibility；
 - 依赖图按 domain 内全部无序工具 pair 由 Teacher 分类；
 - query 和参数绑定 session-scoped live state；
 - distractor、enum stripping、missing-function 和 irrelevance 在 Teacher 处理前固定；
@@ -139,7 +149,7 @@ git diff --check
 ```text
 configs/              MCP suite 与训练配置说明
 data/                 活动数据、不可变 run 和数据文档
-docs/                 进度、算法、已知问题和 changelog
+docs/                 版本化的现役算法与代码边界
 scripts/              生成、合并、审计、训练入口
 src/live_mcp/         环境、Teacher、Replay、数据生成
 src/oval_mcp/         rollout/reward 合同
@@ -152,22 +162,20 @@ verl/                 vendored verl 0.6.1
 
 | 文档 | 职责 |
 |---|---|
+| [当前状态](docs/PROJECT_STATUS.md) | 当前数据、验证结果、阻塞项和下一步 |
 | [算法方案](docs/OVAL-MCP.md) | PROVE 对齐边界、五步生成、reward、训练和评测设计 |
-| [项目进度](docs/PROJECT_STATUS.md) | 当前进度、数据目标、卡点和下一步；现役状态唯一来源 |
-| [逐域认证](docs/DOMAIN_SEMANTIC_AUDIT.md) | 十域依赖图、Teacher、artifact 与 rollout 的当前认证状态 |
+| [代码架构](docs/PROVE_ARCHITECTURE.md) | 生产调用链、依赖方向和语义合同边界 |
+| [域语义准入](docs/DOMAIN_SEMANTIC_AUDIT.md) | 十域事实逻辑的认证标准和当前矩阵 |
 | [数据说明](data/README.md) | 数据 artifact、生成、审计、发布与消费 |
 | [脚本说明](scripts/README.md) | 脚本职责、生成命令和 CI 入口 |
 | [配置说明](configs/README.md) | 配置入口、默认值和环境变量覆盖方式 |
 
-| [约束约定](AGENTS.md) | AI agent 工程约束、红线、Git 约定 |
-
 
 ### 阅读顺序
 
-1. 新接手项目先读 `docs/PROJECT_STATUS.md`；
+1. 先读 `docs/PROJECT_STATUS.md`，再按需读算法、架构或域语义准入文档；
 2. 运行数据任务前读 `data/README.md` 和 `scripts/README.md`；
-3. 修改算法或合同前读 `docs/OVAL-MCP.md`；
-4. 逐域认证时读 `docs/DOMAIN_SEMANTIC_AUDIT.md`。
+3. 涉及当前运行时，仍需现场核实 manifest、artifact、进程和 GPU。
 
 状态事实不得同时在多个文档中展开维护。已完成历史只从 Git 追溯，不在现役文档中重复。
 

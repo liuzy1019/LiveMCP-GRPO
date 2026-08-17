@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from src.live_mcp.task_planner import ContinuationPolicy
+from src.live_mcp.generation.teacher_contracts import ContinuationPolicy
 from src.live_mcp.generation.robustness import zero_tool_terminal_is_valid as _zero_tool_terminal_is_valid
 from src.live_mcp.live_state_query_view import (
     compact_sampling_context as _compact_sampling_context,
@@ -24,7 +24,6 @@ from src.live_mcp.types import OracleProgram, to_plain
 
 @dataclass
 class FinalizationContext:
-    generation_succeeded: Any
     max_task_attempts: Any
     server_name: Any
     all_oracle_calls: Any
@@ -49,6 +48,7 @@ class FinalizationContext:
     initial_state_snapshot: Any
     source_chain_seed: Any
     source_chain_edges: Any
+    realized_chain_edges: Any
     initial_state_hashes: Any
     local_seed: Any
     reference_date: Any
@@ -62,10 +62,6 @@ class FinalizationContext:
     generated_query: Any
     continuation_goal_specs: Any
     verified_dependency_evidence: Any
-    requested_decision_stratum: Any
-    selected_decision_stratum: Any
-    difficulty_vector: Any
-    task_spec: Any
     valid: Any
     criteria_ok: Any
     error_rate: Any
@@ -85,7 +81,6 @@ class FinalizationContext:
 def finalize_generated_task(
     orchestrator: Any, ctx: FinalizationContext,
 ):
-    generation_succeeded = ctx.generation_succeeded
     max_task_attempts = ctx.max_task_attempts
     server_name = ctx.server_name
     all_oracle_calls = ctx.all_oracle_calls
@@ -110,6 +105,7 @@ def finalize_generated_task(
     initial_state_snapshot = ctx.initial_state_snapshot
     source_chain_seed = ctx.source_chain_seed
     source_chain_edges = ctx.source_chain_edges
+    realized_chain_edges = ctx.realized_chain_edges
     initial_state_hashes = ctx.initial_state_hashes
     local_seed = ctx.local_seed
     reference_date = ctx.reference_date
@@ -123,10 +119,6 @@ def finalize_generated_task(
     generated_query = ctx.generated_query
     continuation_goal_specs = ctx.continuation_goal_specs
     verified_dependency_evidence = ctx.verified_dependency_evidence
-    requested_decision_stratum = ctx.requested_decision_stratum
-    selected_decision_stratum = ctx.selected_decision_stratum
-    difficulty_vector = ctx.difficulty_vector
-    task_spec = ctx.task_spec
     valid = ctx.valid
     criteria_ok = ctx.criteria_ok
     error_rate = ctx.error_rate
@@ -141,12 +133,6 @@ def finalize_generated_task(
     success_criteria_provenance = ctx.success_criteria_provenance
     conversation_fsm = ctx.conversation_fsm
     scenario_type = ctx.scenario_type
-
-    if not generation_succeeded:
-        raise RuntimeError(
-            f"Teacher generation exhausted {max_task_attempts} attempt(s) for {server_name} "
-            f"without a replay-valid completed user goal"
-        )
 
     # ── Final guard: ensure the oracle matches the task type ──
     # Exception: difficulty="missing" expects clarification-only behavior
@@ -266,6 +252,7 @@ def finalize_generated_task(
         "chain_seed": list(reward_dependency_chain),
         "source_chain_seed": list(source_chain_seed),
         "source_chain_edges": list(source_chain_edges),
+        "realized_chain_edges": list(realized_chain_edges),
         "initial_round_realized_tool_sequence": realized_tool_sequence,
         "initial_round_dependency_call_indices": dependency_call_indices,
         "initial_round_auxiliary_call_indices": auxiliary_call_indices,
@@ -278,49 +265,9 @@ def finalize_generated_task(
         "chain_sampling_jaccard_novel": chain_sampling_jaccard_novel,
         "query_generation_attempts": generated_query.attempts,
         "query_target_capability": generated_query.target_capability,
-        "query_chain_supported": generated_query.chain_supported,
-        "query_chain_support_status": (
-            "verified_by_query_contract"
-            if generated_query.chain_supported is True
-            else (
-                "rejected_by_query_contract"
-                if generated_query.chain_supported is False
-                else "unverified_paper_baseline"
-            )
-        ),
-        "query_dependency_evidence": list(
-            generated_query.dependency_evidence
-        ),
-        "query_mutation_evidence": list(
-            generated_query.mutation_evidence
-        ),
-        "initial_goal_spec": {
-            "user_goal": generated_query.initial_goal,
-            "grounding_basis": list(
-                generated_query.initial_goal_grounding_basis
-            ),
-            "causal_steps": list(
-                generated_query.initial_goal_causal_steps
-            ),
-            "planning_attempts": (
-                generated_query.initial_goal_planning_attempts
-            ),
-        },
         "continuation_goal_specs": list(continuation_goal_specs),
         "verified_dependency_evidence": verified_dependency_evidence,
         "prompt_profile": orchestrator.prompt_profile.name,
-        "requested_decision_stratum": requested_decision_stratum,
-        "decision_stratum": selected_decision_stratum,
-        "difficulty_vector": (
-            difficulty_vector.__dict__
-            if difficulty_vector is not None else {}
-        ),
-        "task_spec": (
-            task_spec.to_dict() if task_spec is not None else {}
-        ),
-        "task_spec_fingerprint": (
-            task_spec.fingerprint() if task_spec is not None else ""
-        ),
         "generation_mode": "chain_seeded",
         # Replay and final-state validation signals.
         # Replay acceptance requires schema/execution error rate <= 30%.
@@ -381,6 +328,11 @@ def finalize_generated_task(
         "distractor_count": len(plan.distractor_tools),
         "strip_enums": plan.strip_enums,
         "has_missing_function": plan.missing_function,
+        "missing_function_requested": plan.missing_function_requested,
+        "missing_function_evidence": list(plan.missing_function_evidence),
+        "missing_function_binding_failure": (
+            plan.missing_function_binding_failure
+        ),
         # Continuation-decision schedule.
         "continuation_min_rounds": ContinuationPolicy.MIN_CONVERSATION_ROUNDS,
         "continuation_max_rounds": ContinuationPolicy.MAX_CONVERSATION_ROUNDS,

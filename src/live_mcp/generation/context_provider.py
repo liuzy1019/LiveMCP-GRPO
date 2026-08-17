@@ -42,8 +42,9 @@ class GenerationContextMixin:
         IDs the teacher can ground tool arguments on, so an infeasible chain must
         be removed before query/action generation. Returning the original chains
         when all checks fail reintroduces hallucination pressure, so this method
-        deliberately returns [] in that case and lets generation proceed without
-        a forced dependency chain.
+        deliberately returns [] in that case; the candidate preparation layer
+        then fails the chain-required candidate closed and lets the batch
+        coordinator retry with a fresh candidate identity/state seed.
         """
         if not chains:
             return chains

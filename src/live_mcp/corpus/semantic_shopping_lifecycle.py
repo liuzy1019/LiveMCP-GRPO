@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 
 import re
 
-from dataclasses import asdict, dataclass
 
 from typing import Any
 
@@ -291,6 +289,13 @@ def _shopping_order_status_filter_issue(
                 r"\borders?\s+(?:that\s+(?:are|is|were|was|have\s+been|has\s+been)\s+|currently\s+|with\s+(?:the\s+)?status\s+)(pending|processing|placed|shipped|delivered|cancelled|refunded|returned|returning)\b",
                 # "order status is shipped" / "status of shipped"
                 r"\b(?:order\s+)?status\s+(?:is\s+|of\s+)?(pending|processing|placed|shipped|delivered|cancelled|refunded|returned|returning)\b",
+                # "the item I'm currently returning" / "products we returned"
+                r"\b(?:items?|products?|purchases?|things?)\s+"
+                r"(?:(?:that|which)\s+)?"
+                r"(?:i(?:'m|\s+am|\s+was|\s+have)?|"
+                r"we(?:'re|\s+are|\s+were|\s+have)?)\s+"
+                r"(?:currently\s+)?"
+                r"(pending|processing|placed|shipped|delivered|cancelled|refunded|returned|returning)\b",
             ):
                 for match in re.finditer(pattern, visible_user_text, re.IGNORECASE):
                     user_statuses.add(_normalize(match.group(1)))
@@ -483,7 +488,7 @@ def _shopping_terminal_surface_issue(
     input, terminal leaking an internal tool name) run in semantic_core's
     Layer 0 for every domain.  This shopping-only rule keeps the subjective
     meta-analysis check as a soft diagnostic: it never drops a row, per
-    OVAL-MCP.md §5 (naturalness is grayscale audit, not a hard gate).
+    local semantic gate contract (naturalness is grayscale audit, not a hard gate).
     """
     action, terminal_text = _terminal(round_trace)
     if action and _META_TERMINAL_RE.search(terminal_text):

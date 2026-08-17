@@ -2,7 +2,7 @@
   "cache_version": 8,
   "dependency_semantics_version": 30,
   "server_name": "filesystem",
-  "schema_hash": "e0cac09692fde182",
+  "schema_hash": "305b4bff01ab9375",
   "tool_names": [
     "awk",
     "cat",
@@ -69,19 +69,10 @@
     "cp": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
         "cut",
         "diff",
-        "file_info",
         "head",
         "join",
-        "md5sum",
-        "mv",
-        "readlink",
         "rm",
         "sed",
         "sha256sum",
@@ -89,7 +80,6 @@
         "split",
         "stat",
         "tail",
-        "tar_extract",
         "truncate",
         "uniq",
         "unzip",
@@ -144,11 +134,6 @@
     "mkdir": {
       "explicit": [],
       "implicit": [
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "mv",
         "rm",
         "stat",
         "tar_extract",
@@ -158,31 +143,7 @@
     "mv": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
-        "xxd"
+        "stat"
       ]
     },
     "pwd": {
@@ -219,17 +180,7 @@
     },
     "symlink": {
       "explicit": [],
-      "implicit": [
-        "chmod",
-        "chown",
-        "cp",
-        "mv",
-        "readlink",
-        "rm",
-        "stat",
-        "tar_extract",
-        "unzip"
-      ]
+      "implicit": []
     },
     "tail": {
       "explicit": [],
@@ -238,33 +189,7 @@
     "tar_create": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
-        "xxd"
+        "tar_extract"
       ]
     },
     "tar_extract": {
@@ -274,29 +199,8 @@
     "touch": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
         "truncate",
         "uniq",
-        "unzip",
         "wc",
         "xxd"
       ]
@@ -331,35 +235,7 @@
     },
     "zip": {
       "explicit": [],
-      "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
-        "xxd"
-      ]
+      "implicit": []
     }
   },
   "raw_graph": {
@@ -386,19 +262,10 @@
     "cp": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
         "cut",
         "diff",
-        "file_info",
         "head",
         "join",
-        "md5sum",
-        "mv",
-        "readlink",
         "rm",
         "sed",
         "sha256sum",
@@ -406,7 +273,6 @@
         "split",
         "stat",
         "tail",
-        "tar_extract",
         "truncate",
         "uniq",
         "unzip",
@@ -436,8 +302,6 @@
     },
     "find": {
       "explicit": [
-        "grep",
-        "head",
         "join",
         "ls",
         "md5sum",
@@ -451,6 +315,9 @@
         "symlink",
         "tail",
         "tar_create",
+        "uniq",
+        "unzip",
+        "wc",
         "xxd",
         "zip"
       ],
@@ -479,65 +346,17 @@
     "mkdir": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "readlink",
         "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
         "stat",
-        "symlink",
-        "tail",
         "tar_extract",
         "touch",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
-        "xxd"
+        "unzip"
       ]
     },
     "mv": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
-        "xxd"
+        "stat"
       ]
     },
     "pwd": {
@@ -574,9 +393,11 @@
       "explicit": [
         "stat",
         "tail",
+        "tar_create",
         "uniq",
         "wc",
-        "xxd"
+        "xxd",
+        "zip"
       ],
       "implicit": []
     },
@@ -587,32 +408,6 @@
     "symlink": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
         "xxd",
         "zip"
       ]
@@ -622,35 +417,11 @@
       "implicit": []
     },
     "tar_create": {
-      "explicit": [],
-      "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
+      "explicit": [
         "xxd"
+      ],
+      "implicit": [
+        "tar_extract"
       ]
     },
     "tar_extract": {
@@ -659,38 +430,16 @@
         "truncate",
         "uniq",
         "wc",
-        "xxd"
+        "xxd",
+        "zip"
       ],
       "implicit": []
     },
     "touch": {
       "explicit": [],
       "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
         "truncate",
         "uniq",
-        "unzip",
         "wc",
         "xxd",
         "zip"
@@ -715,7 +464,8 @@
     "unzip": {
       "explicit": [
         "wc",
-        "xxd"
+        "xxd",
+        "zip"
       ],
       "implicit": []
     },
@@ -729,35 +479,7 @@
     },
     "zip": {
       "explicit": [],
-      "implicit": [
-        "awk",
-        "cat",
-        "cd",
-        "chmod",
-        "chown",
-        "cp",
-        "cut",
-        "diff",
-        "file_info",
-        "head",
-        "join",
-        "md5sum",
-        "mv",
-        "readlink",
-        "rm",
-        "sed",
-        "sha256sum",
-        "sort",
-        "split",
-        "stat",
-        "tail",
-        "tar_extract",
-        "truncate",
-        "uniq",
-        "unzip",
-        "wc",
-        "xxd"
-      ]
+      "implicit": []
     }
   },
   "pair_classifications": [
@@ -802,9 +524,9 @@
         "awk",
         "cp"
       ],
-      "source": "cp",
-      "target": "awk",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -910,18 +632,18 @@
         "awk",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "awk",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "awk",
         "mv"
       ],
-      "source": "mv",
-      "target": "awk",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1000,9 +722,9 @@
         "awk",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "awk",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1018,9 +740,9 @@
         "awk",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "awk",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1036,9 +758,9 @@
         "awk",
         "touch"
       ],
-      "source": "touch",
-      "target": "awk",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1108,9 +830,9 @@
         "awk",
         "zip"
       ],
-      "source": "zip",
-      "target": "awk",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1144,9 +866,9 @@
         "cat",
         "cp"
       ],
-      "source": "cp",
-      "target": "cat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1252,18 +974,18 @@
         "cat",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "cat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cat",
         "mv"
       ],
-      "source": "mv",
-      "target": "cat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1342,9 +1064,9 @@
         "cat",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "cat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1360,9 +1082,9 @@
         "cat",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "cat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1378,9 +1100,9 @@
         "cat",
         "touch"
       ],
-      "source": "touch",
-      "target": "cat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1450,9 +1172,9 @@
         "cat",
         "zip"
       ],
-      "source": "zip",
-      "target": "cat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1477,9 +1199,9 @@
         "cd",
         "cp"
       ],
-      "source": "cp",
-      "target": "cd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1585,18 +1307,18 @@
         "cd",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "cd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cd",
         "mv"
       ],
-      "source": "mv",
-      "target": "cd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1675,9 +1397,9 @@
         "cd",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "cd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1693,9 +1415,9 @@
         "cd",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "cd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1711,9 +1433,9 @@
         "cd",
         "touch"
       ],
-      "source": "touch",
-      "target": "cd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1783,9 +1505,9 @@
         "cd",
         "zip"
       ],
-      "source": "zip",
-      "target": "cd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1801,9 +1523,9 @@
         "chmod",
         "cp"
       ],
-      "source": "cp",
-      "target": "chmod",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1909,18 +1631,18 @@
         "chmod",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "chmod",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "chmod",
         "mv"
       ],
-      "source": "mv",
-      "target": "chmod",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -1999,9 +1721,9 @@
         "chmod",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "chmod",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2017,9 +1739,9 @@
         "chmod",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "chmod",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2035,9 +1757,9 @@
         "chmod",
         "touch"
       ],
-      "source": "touch",
-      "target": "chmod",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2107,18 +1829,18 @@
         "chmod",
         "zip"
       ],
-      "source": "zip",
-      "target": "chmod",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "chown",
         "cp"
       ],
-      "source": "cp",
-      "target": "chown",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2224,18 +1946,18 @@
         "chown",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "chown",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "chown",
         "mv"
       ],
-      "source": "mv",
-      "target": "chown",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2314,9 +2036,9 @@
         "chown",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "chown",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2332,9 +2054,9 @@
         "chown",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "chown",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2350,9 +2072,9 @@
         "chown",
         "touch"
       ],
-      "source": "touch",
-      "target": "chown",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2422,9 +2144,9 @@
         "chown",
         "zip"
       ],
-      "source": "zip",
-      "target": "chown",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2467,9 +2189,9 @@
         "cp",
         "file_info"
       ],
-      "source": "cp",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2521,27 +2243,27 @@
         "cp",
         "md5sum"
       ],
-      "source": "cp",
-      "target": "md5sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cp",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "cp",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cp",
         "mv"
       ],
-      "source": "cp",
-      "target": "mv",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2557,9 +2279,9 @@
         "cp",
         "readlink"
       ],
-      "source": "cp",
-      "target": "readlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2620,9 +2342,9 @@
         "cp",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "cp",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2638,27 +2360,27 @@
         "cp",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "cp",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cp",
         "tar_extract"
       ],
-      "source": "cp",
-      "target": "tar_extract",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cp",
         "touch"
       ],
-      "source": "touch",
-      "target": "cp",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2728,9 +2450,9 @@
         "cp",
         "zip"
       ],
-      "source": "zip",
-      "target": "cp",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2827,18 +2549,18 @@
         "cut",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "cut",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "cut",
         "mv"
       ],
-      "source": "mv",
-      "target": "cut",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2917,9 +2639,9 @@
         "cut",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "cut",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2935,9 +2657,9 @@
         "cut",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "cut",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -2953,9 +2675,9 @@
         "cut",
         "touch"
       ],
-      "source": "touch",
-      "target": "cut",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -3025,9 +2747,9 @@
         "cut",
         "zip"
       ],
-      "source": "zip",
-      "target": "cut",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -3394,18 +3116,18 @@
         "diff",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "diff",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "diff",
         "mv"
       ],
-      "source": "mv",
-      "target": "diff",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -3484,9 +3206,9 @@
         "diff",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "diff",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -3502,9 +3224,9 @@
         "diff",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "diff",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -3520,9 +3242,9 @@
         "diff",
         "touch"
       ],
-      "source": "touch",
-      "target": "diff",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -3592,9 +3314,9 @@
         "diff",
         "zip"
       ],
-      "source": "zip",
-      "target": "diff",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -3925,18 +3647,18 @@
         "file_info",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "file_info",
         "mv"
       ],
-      "source": "mv",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4015,9 +3737,9 @@
         "file_info",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4033,9 +3755,9 @@
         "file_info",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4051,9 +3773,9 @@
         "file_info",
         "touch"
       ],
-      "source": "touch",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4123,27 +3845,27 @@
         "file_info",
         "zip"
       ],
-      "source": "zip",
-      "target": "file_info",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "find",
         "grep"
       ],
-      "source": "find",
-      "target": "grep",
-      "relation": "explicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "find",
         "head"
       ],
-      "source": "find",
-      "target": "head",
-      "relation": "explicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4339,27 +4061,27 @@
         "find",
         "uniq"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "find",
+      "target": "uniq",
+      "relation": "explicit"
     },
     {
       "pair": [
         "find",
         "unzip"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "find",
+      "target": "unzip",
+      "relation": "explicit"
     },
     {
       "pair": [
         "find",
         "wc"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
+      "source": "find",
+      "target": "wc",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -4654,18 +4376,18 @@
         "head",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "head",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "head",
         "mv"
       ],
-      "source": "mv",
-      "target": "head",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4744,9 +4466,9 @@
         "head",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "head",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4762,9 +4484,9 @@
         "head",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "head",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4780,9 +4502,9 @@
         "head",
         "touch"
       ],
-      "source": "touch",
-      "target": "head",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4852,9 +4574,9 @@
         "head",
         "zip"
       ],
-      "source": "zip",
-      "target": "head",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4879,18 +4601,18 @@
         "join",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "join",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "join",
         "mv"
       ],
-      "source": "mv",
-      "target": "join",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4969,9 +4691,9 @@
         "join",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "join",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -4987,9 +4709,9 @@
         "join",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "join",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5005,9 +4727,9 @@
         "join",
         "touch"
       ],
-      "source": "touch",
-      "target": "join",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5077,9 +4799,9 @@
         "join",
         "zip"
       ],
-      "source": "zip",
-      "target": "join",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5302,18 +5024,18 @@
         "md5sum",
         "mkdir"
       ],
-      "source": "mkdir",
-      "target": "md5sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "md5sum",
         "mv"
       ],
-      "source": "mv",
-      "target": "md5sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5392,9 +5114,9 @@
         "md5sum",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "md5sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5410,9 +5132,9 @@
         "md5sum",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "md5sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5428,9 +5150,9 @@
         "md5sum",
         "touch"
       ],
-      "source": "touch",
-      "target": "md5sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5500,18 +5222,18 @@
         "md5sum",
         "zip"
       ],
-      "source": "zip",
-      "target": "md5sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mkdir",
         "mv"
       ],
-      "source": "mkdir",
-      "target": "mv",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5527,9 +5249,9 @@
         "mkdir",
         "readlink"
       ],
-      "source": "mkdir",
-      "target": "readlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5545,36 +5267,36 @@
         "mkdir",
         "sed"
       ],
-      "source": "mkdir",
-      "target": "sed",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mkdir",
         "sha256sum"
       ],
-      "source": "mkdir",
-      "target": "sha256sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mkdir",
         "sort"
       ],
-      "source": "mkdir",
-      "target": "sort",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mkdir",
         "split"
       ],
-      "source": "mkdir",
-      "target": "split",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5590,18 +5312,18 @@
         "mkdir",
         "symlink"
       ],
-      "source": "mkdir",
-      "target": "symlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mkdir",
         "tail"
       ],
-      "source": "mkdir",
-      "target": "tail",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5644,9 +5366,9 @@
         "mkdir",
         "truncate"
       ],
-      "source": "mkdir",
-      "target": "truncate",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5662,9 +5384,9 @@
         "mkdir",
         "uniq"
       ],
-      "source": "mkdir",
-      "target": "uniq",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5680,18 +5402,18 @@
         "mkdir",
         "wc"
       ],
-      "source": "mkdir",
-      "target": "wc",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mkdir",
         "xxd"
       ],
-      "source": "mkdir",
-      "target": "xxd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5716,54 +5438,54 @@
         "mv",
         "readlink"
       ],
-      "source": "mv",
-      "target": "readlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "rm"
       ],
-      "source": "mv",
-      "target": "rm",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "sed"
       ],
-      "source": "mv",
-      "target": "sed",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "sha256sum"
       ],
-      "source": "mv",
-      "target": "sha256sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "sort"
       ],
-      "source": "mv",
-      "target": "sort",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "split"
       ],
-      "source": "mv",
-      "target": "split",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5779,45 +5501,45 @@
         "mv",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "mv",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "tail"
       ],
-      "source": "mv",
-      "target": "tail",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "mv",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "tar_extract"
       ],
-      "source": "mv",
-      "target": "tar_extract",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "touch"
       ],
-      "source": "touch",
-      "target": "mv",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5833,9 +5555,9 @@
         "mv",
         "truncate"
       ],
-      "source": "mv",
-      "target": "truncate",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -5851,45 +5573,45 @@
         "mv",
         "uniq"
       ],
-      "source": "mv",
-      "target": "uniq",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "unzip"
       ],
-      "source": "mv",
-      "target": "unzip",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "wc"
       ],
-      "source": "mv",
-      "target": "wc",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "xxd"
       ],
-      "source": "mv",
-      "target": "xxd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "mv",
         "zip"
       ],
-      "source": "zip",
-      "target": "mv",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6130,9 +5852,9 @@
         "readlink",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "readlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6148,9 +5870,9 @@
         "readlink",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "readlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6166,9 +5888,9 @@
         "readlink",
         "touch"
       ],
-      "source": "touch",
-      "target": "readlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6238,9 +5960,9 @@
         "readlink",
         "zip"
       ],
-      "source": "zip",
-      "target": "readlink",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6292,9 +6014,9 @@
         "rm",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "rm",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6310,9 +6032,9 @@
         "rm",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "rm",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6328,9 +6050,9 @@
         "rm",
         "touch"
       ],
-      "source": "touch",
-      "target": "rm",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6400,9 +6122,9 @@
         "rm",
         "zip"
       ],
-      "source": "zip",
-      "target": "rm",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6445,9 +6167,9 @@
         "sed",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "sed",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6463,9 +6185,9 @@
         "sed",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "sed",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6481,9 +6203,9 @@
         "sed",
         "touch"
       ],
-      "source": "touch",
-      "target": "sed",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6553,9 +6275,9 @@
         "sed",
         "zip"
       ],
-      "source": "zip",
-      "target": "sed",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6589,9 +6311,9 @@
         "sha256sum",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "sha256sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6607,9 +6329,9 @@
         "sha256sum",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "sha256sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6625,9 +6347,9 @@
         "sha256sum",
         "touch"
       ],
-      "source": "touch",
-      "target": "sha256sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6697,9 +6419,9 @@
         "sha256sum",
         "zip"
       ],
-      "source": "zip",
-      "target": "sha256sum",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6724,9 +6446,9 @@
         "sort",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "sort",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6742,9 +6464,9 @@
         "sort",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "sort",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6760,9 +6482,9 @@
         "sort",
         "touch"
       ],
-      "source": "touch",
-      "target": "sort",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6832,9 +6554,9 @@
         "sort",
         "zip"
       ],
-      "source": "zip",
-      "target": "sort",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6850,9 +6572,9 @@
         "split",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "split",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6868,9 +6590,9 @@
         "split",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "split",
-      "relation": "implicit"
+      "source": "split",
+      "target": "tar_create",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -6886,9 +6608,9 @@
         "split",
         "touch"
       ],
-      "source": "touch",
-      "target": "split",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6958,18 +6680,18 @@
         "split",
         "zip"
       ],
-      "source": "zip",
-      "target": "split",
-      "relation": "implicit"
+      "source": "split",
+      "target": "zip",
+      "relation": "explicit"
     },
     {
       "pair": [
         "stat",
         "symlink"
       ],
-      "source": "symlink",
-      "target": "stat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -6985,9 +6707,9 @@
         "stat",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "stat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7003,9 +6725,9 @@
         "stat",
         "touch"
       ],
-      "source": "touch",
-      "target": "stat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7075,18 +6797,18 @@
         "stat",
         "zip"
       ],
-      "source": "zip",
-      "target": "stat",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "symlink",
         "tail"
       ],
-      "source": "symlink",
-      "target": "tail",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7102,9 +6824,9 @@
         "symlink",
         "tar_extract"
       ],
-      "source": "symlink",
-      "target": "tar_extract",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7129,9 +6851,9 @@
         "symlink",
         "truncate"
       ],
-      "source": "symlink",
-      "target": "truncate",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7147,27 +6869,27 @@
         "symlink",
         "uniq"
       ],
-      "source": "symlink",
-      "target": "uniq",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "symlink",
         "unzip"
       ],
-      "source": "symlink",
-      "target": "unzip",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "symlink",
         "wc"
       ],
-      "source": "symlink",
-      "target": "wc",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7192,9 +6914,9 @@
         "tail",
         "tar_create"
       ],
-      "source": "tar_create",
-      "target": "tail",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7210,9 +6932,9 @@
         "tail",
         "touch"
       ],
-      "source": "touch",
-      "target": "tail",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7282,9 +7004,9 @@
         "tail",
         "zip"
       ],
-      "source": "zip",
-      "target": "tail",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7318,9 +7040,9 @@
         "tar_create",
         "truncate"
       ],
-      "source": "tar_create",
-      "target": "truncate",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7336,27 +7058,27 @@
         "tar_create",
         "uniq"
       ],
-      "source": "tar_create",
-      "target": "uniq",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "tar_create",
         "unzip"
       ],
-      "source": "tar_create",
-      "target": "unzip",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "tar_create",
         "wc"
       ],
-      "source": "tar_create",
-      "target": "wc",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7365,7 +7087,7 @@
       ],
       "source": "tar_create",
       "target": "xxd",
-      "relation": "implicit"
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -7381,9 +7103,9 @@
         "tar_extract",
         "touch"
       ],
-      "source": "touch",
-      "target": "tar_extract",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7453,9 +7175,9 @@
         "tar_extract",
         "zip"
       ],
-      "source": "zip",
-      "target": "tar_extract",
-      "relation": "implicit"
+      "source": "tar_extract",
+      "target": "zip",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -7498,9 +7220,9 @@
         "touch",
         "unzip"
       ],
-      "source": "touch",
-      "target": "unzip",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7642,9 +7364,9 @@
         "truncate",
         "zip"
       ],
-      "source": "zip",
-      "target": "truncate",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7723,9 +7445,9 @@
         "uniq",
         "zip"
       ],
-      "source": "zip",
-      "target": "uniq",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
@@ -7750,9 +7472,9 @@
         "unzip",
         "zip"
       ],
-      "source": "zip",
-      "target": "unzip",
-      "relation": "implicit"
+      "source": "unzip",
+      "target": "zip",
+      "relation": "explicit"
     },
     {
       "pair": [
@@ -7768,18 +7490,18 @@
         "wc",
         "zip"
       ],
-      "source": "zip",
-      "target": "wc",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     },
     {
       "pair": [
         "xxd",
         "zip"
       ],
-      "source": "zip",
-      "target": "xxd",
-      "relation": "implicit"
+      "source": "",
+      "target": "",
+      "relation": "none"
     }
   ],
   "pair_audits": [],
@@ -7862,13 +7584,13 @@
         "cp"
       ],
       "raw": {
-        "source": "cp",
-        "target": "awk",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -8083,13 +7805,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "awk",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -8101,13 +7823,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "awk",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -8268,13 +7990,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "awk",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -8304,20 +8026,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "awk",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "awk"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -8345,13 +8062,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "awk",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -8494,20 +8211,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "awk",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "awk"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -8571,13 +8283,13 @@
         "cp"
       ],
       "raw": {
-        "source": "cp",
-        "target": "cat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -8792,13 +8504,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "cat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -8810,13 +8522,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "cat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -8977,13 +8689,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "cat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -9013,20 +8725,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "cat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "cat"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -9054,13 +8761,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "cat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -9203,20 +8910,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "cat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "cat"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -9262,13 +8964,13 @@
         "cp"
       ],
       "raw": {
-        "source": "cp",
-        "target": "cd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -9483,13 +9185,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "cd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -9506,13 +9208,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "cd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -9673,13 +9375,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "cd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -9709,20 +9411,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "cd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "cd"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -9750,13 +9447,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "cd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -9894,20 +9591,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "cd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "cd"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -9935,13 +9627,13 @@
         "cp"
       ],
       "raw": {
-        "source": "cp",
-        "target": "chmod",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10156,13 +9848,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "chmod",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10179,13 +9871,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "chmod",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10346,13 +10038,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "chmod",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10387,13 +10079,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "chmod",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10428,13 +10120,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "chmod",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10577,13 +10269,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "chmod",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10600,13 +10292,13 @@
         "cp"
       ],
       "raw": {
-        "source": "cp",
-        "target": "chown",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10821,13 +10513,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "chown",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -10844,13 +10536,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "chown",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11011,13 +10703,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "chown",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11052,13 +10744,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "chown",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11093,13 +10785,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "chown",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11242,13 +10934,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "chown",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11347,13 +11039,13 @@
         "file_info"
       ],
       "raw": {
-        "source": "cp",
-        "target": "file_info",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11470,13 +11162,13 @@
         "md5sum"
       ],
       "raw": {
-        "source": "cp",
-        "target": "md5sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11493,13 +11185,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "cp",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11516,13 +11208,13 @@
         "mv"
       ],
       "raw": {
-        "source": "cp",
-        "target": "mv",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11561,13 +11253,13 @@
         "readlink"
       ],
       "raw": {
-        "source": "cp",
-        "target": "readlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11722,13 +11414,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "cp",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11768,13 +11460,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "cp",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11791,13 +11483,13 @@
         "tar_extract"
       ],
       "raw": {
-        "source": "cp",
-        "target": "tar_extract",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11814,13 +11506,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "cp",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -11988,13 +11680,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "cp",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -12191,13 +11883,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "cut",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -12209,13 +11901,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "cut",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -12376,13 +12068,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "cut",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -12412,20 +12104,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "cut",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "cut"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -12453,13 +12140,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "cut",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -12602,20 +12289,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "cut",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "cut"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -13345,13 +13027,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "diff",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -13363,13 +13045,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "diff",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -13530,13 +13212,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "diff",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -13566,20 +13248,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "diff",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "diff"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -13607,13 +13284,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "diff",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -13756,20 +13433,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "diff",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "diff"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -14427,13 +14099,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "file_info",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -14445,13 +14117,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "file_info",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -14612,13 +14284,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "file_info",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -14648,13 +14320,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "file_info",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -14689,13 +14361,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "file_info",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -14838,13 +14510,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "file_info",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -14861,13 +14533,13 @@
         "grep"
       ],
       "raw": {
-        "source": "find",
-        "target": "grep",
-        "relation": "explicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -14879,13 +14551,13 @@
         "head"
       ],
       "raw": {
-        "source": "find",
-        "target": "head",
-        "relation": "explicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -15275,13 +14947,13 @@
         "uniq"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
+        "source": "find",
+        "target": "uniq",
+        "relation": "explicit"
       },
-      "verdict": "supported",
+      "verdict": "contradicted",
       "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -15293,13 +14965,13 @@
         "unzip"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
+        "source": "find",
+        "target": "unzip",
+        "relation": "explicit"
       },
-      "verdict": "supported",
+      "verdict": "contradicted",
       "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -15311,13 +14983,13 @@
         "wc"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
+        "source": "find",
+        "target": "wc",
+        "relation": "explicit"
       },
-      "verdict": "supported",
+      "verdict": "contradicted",
       "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -15905,13 +15577,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "head",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -15923,13 +15595,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "head",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -16090,13 +15762,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "head",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -16126,20 +15798,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "head",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "head"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -16167,13 +15834,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "head",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -16316,20 +15983,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "head",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "head"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -16375,13 +16037,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "join",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -16393,13 +16055,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "join",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -16560,13 +16222,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "join",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -16596,20 +16258,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "join",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "join"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -16637,13 +16294,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "join",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -16786,20 +16443,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "join",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "join"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -17241,13 +16893,13 @@
         "mkdir"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "md5sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17259,13 +16911,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mv",
-        "target": "md5sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -17426,13 +17078,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "md5sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17462,13 +17114,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "md5sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -17503,13 +17155,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "md5sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -17652,13 +17304,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "md5sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -17675,13 +17327,13 @@
         "mv"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "mv",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -17716,13 +17368,13 @@
         "readlink"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "readlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17757,13 +17409,13 @@
         "sed"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "sed",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17775,13 +17427,13 @@
         "sha256sum"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "sha256sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17793,13 +17445,13 @@
         "sort"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "sort",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17811,13 +17463,13 @@
         "split"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "split",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17852,13 +17504,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "symlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17870,13 +17522,13 @@
         "tail"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "tail",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -17965,13 +17617,13 @@
         "truncate"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "truncate",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -18001,13 +17653,13 @@
         "uniq"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "uniq",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -18042,13 +17694,13 @@
         "wc"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "wc",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -18060,13 +17712,13 @@
         "xxd"
       ],
       "raw": {
-        "source": "mkdir",
-        "target": "xxd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -18114,13 +17766,13 @@
         "readlink"
       ],
       "raw": {
-        "source": "mv",
-        "target": "readlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18137,13 +17789,13 @@
         "rm"
       ],
       "raw": {
-        "source": "mv",
-        "target": "rm",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18160,13 +17812,13 @@
         "sed"
       ],
       "raw": {
-        "source": "mv",
-        "target": "sed",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18183,13 +17835,13 @@
         "sha256sum"
       ],
       "raw": {
-        "source": "mv",
-        "target": "sha256sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18206,13 +17858,13 @@
         "sort"
       ],
       "raw": {
-        "source": "mv",
-        "target": "sort",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18229,13 +17881,13 @@
         "split"
       ],
       "raw": {
-        "source": "mv",
-        "target": "split",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18275,13 +17927,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "mv",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18298,13 +17950,13 @@
         "tail"
       ],
       "raw": {
-        "source": "mv",
-        "target": "tail",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18321,13 +17973,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "mv",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18344,13 +17996,13 @@
         "tar_extract"
       ],
       "raw": {
-        "source": "mv",
-        "target": "tar_extract",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18367,13 +18019,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "mv",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18408,13 +18060,13 @@
         "truncate"
       ],
       "raw": {
-        "source": "mv",
-        "target": "truncate",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18449,13 +18101,13 @@
         "uniq"
       ],
       "raw": {
-        "source": "mv",
-        "target": "uniq",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18472,13 +18124,13 @@
         "unzip"
       ],
       "raw": {
-        "source": "mv",
-        "target": "unzip",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18495,13 +18147,13 @@
         "wc"
       ],
       "raw": {
-        "source": "mv",
-        "target": "wc",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18518,13 +18170,13 @@
         "xxd"
       ],
       "raw": {
-        "source": "mv",
-        "target": "xxd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -18541,13 +18193,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "mv",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -19032,13 +18684,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "readlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -19073,20 +18725,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "readlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "readlink"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -19114,13 +18761,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "readlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -19258,20 +18905,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "readlink",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "readlink"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -19371,13 +19013,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "rm",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -19412,13 +19054,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "rm",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -19453,13 +19095,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "rm",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -19602,13 +19244,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "rm",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -19697,13 +19339,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "sed",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -19733,20 +19375,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "sed",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "sed"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -19774,13 +19411,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "sed",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -19923,20 +19560,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "sed",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "sed"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -20000,13 +19632,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "sha256sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -20036,13 +19668,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "sha256sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -20077,13 +19709,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "sha256sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -20226,13 +19858,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "sha256sum",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -20285,13 +19917,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "sort",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -20321,20 +19953,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "sort",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "sort"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -20362,13 +19989,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "sort",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -20511,20 +20138,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "sort",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "sort"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -20552,13 +20174,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "split",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -20588,20 +20210,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "split",
-        "relation": "implicit"
+        "source": "split",
+        "target": "tar_create",
+        "relation": "explicit"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "split"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -20629,13 +20246,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "split",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -20778,20 +20395,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "split",
-        "relation": "implicit"
+        "source": "split",
+        "target": "zip",
+        "relation": "explicit"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "split"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -20801,13 +20413,13 @@
         "symlink"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "stat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -20842,13 +20454,13 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "stat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -20883,13 +20495,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "stat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -21032,13 +20644,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "stat",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -21055,13 +20667,13 @@
         "tail"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "tail",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -21091,13 +20703,13 @@
         "tar_extract"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "tar_extract",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -21150,13 +20762,13 @@
         "truncate"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "truncate",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -21186,13 +20798,13 @@
         "uniq"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "uniq",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -21204,13 +20816,13 @@
         "unzip"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "unzip",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -21227,13 +20839,13 @@
         "wc"
       ],
       "raw": {
-        "source": "symlink",
-        "target": "wc",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "contradicted",
+      "verdict": "supported",
       "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [],
       "output_contract_complete": true,
@@ -21281,20 +20893,15 @@
         "tar_create"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "tail",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "tail"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21322,13 +20929,13 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "tail",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -21471,20 +21078,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "tail",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "tail"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21553,20 +21155,15 @@
         "truncate"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "truncate",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "truncate"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21594,20 +21191,15 @@
         "uniq"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "uniq",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "uniq"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21617,20 +21209,15 @@
         "unzip"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "unzip",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "unzip"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21640,20 +21227,15 @@
         "wc"
       ],
       "raw": {
-        "source": "tar_create",
-        "target": "wc",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "tar_create",
-          "wc"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21665,11 +21247,11 @@
       "raw": {
         "source": "tar_create",
         "target": "xxd",
-        "relation": "implicit"
+        "relation": "explicit"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -21704,20 +21286,15 @@
         "touch"
       ],
       "raw": {
-        "source": "touch",
-        "target": "tar_extract",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "touch",
-          "tar_extract"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21853,20 +21430,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "tar_extract",
-        "relation": "implicit"
+        "source": "tar_extract",
+        "target": "zip",
+        "relation": "explicit"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "tar_extract"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -21958,20 +21530,15 @@
         "unzip"
       ],
       "raw": {
-        "source": "touch",
-        "target": "unzip",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "touch",
-          "unzip"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -22261,20 +21828,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "truncate",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "truncate"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -22428,20 +21990,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "uniq",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "uniq"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -22487,13 +22044,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "unzip",
-        "relation": "implicit"
+        "source": "unzip",
+        "target": "zip",
+        "relation": "explicit"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -22528,20 +22085,15 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "wc",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
       "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
       "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "zip",
-          "wc"
-        ]
-      ],
+      "certified_implicit_directions": [],
       "output_contract_complete": true,
       "state_contract_complete": true
     },
@@ -22551,13 +22103,13 @@
         "zip"
       ],
       "raw": {
-        "source": "zip",
-        "target": "xxd",
-        "relation": "implicit"
+        "source": "",
+        "target": "",
+        "relation": "none"
       },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw none misses a locally certified dependency",
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
@@ -22569,14 +22121,14 @@
       "state_contract_complete": true
     }
   ],
-  "classifier_contract_hash": "0d231f73ad18054b",
+  "classifier_contract_hash": "614bb08280510c4e",
   "teacher_model_id": "models/Google/Gemma-4-31B-it",
   "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
   "raw_graph_source": "first_structurally_valid_classification",
   "graph_source": "local_relation_audit_supported_subset",
   "review_policy": "not_required_for_paper_baseline",
   "tie_break_policy": "disabled",
-  "output_field_contract_sha256": "226fa2345c29a9b9b9c5945f8fd336acffb48229ee351a97fde6f4684f332842",
+  "output_field_contract_sha256": "3db0f0a52c3b3b32b68cf74e55e82e376ef9c8d587f01300a2fc33970b35e2e8",
   "tool_count": 40,
   "expected_pair_count": 780,
   "classified_pair_count": 780,
@@ -22584,11 +22136,11 @@
   "relation_audited_pair_count": 780,
   "review_disagreement_count": 0,
   "relation_audit_counts": {
-    "supported": 705,
-    "contradicted": 75
+    "supported": 651,
+    "contradicted": 129
   },
   "classification_complete": true,
   "audit_complete": false,
   "relation_audit_complete": true,
-  "created_at_utc": "2026-08-09T13:37:44Z"
+  "created_at_utc": "2026-08-12T00:20:49Z"
 }

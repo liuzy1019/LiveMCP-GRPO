@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.live_mcp.contracts.abstract_state import AbstractState, simulate_contract_chain
 from src.live_mcp.contracts.models import (
     ArgumentValue,
     EntityBinding,
@@ -14,11 +13,12 @@ from src.live_mcp.contracts.models import (
     ToolContract,
 )
 from src.live_mcp.contracts.registry import ContractRegistry
+from src.live_mcp.contracts.record_evaluator import record_state_is_known
 from src.live_mcp.contracts.chain_simulator import simulate_symbolic_chain
 from src.live_mcp.contracts.factory import build_contract_registry
+from src.live_mcp.contracts.value_flow import chain_novel_output_fields
 from src.live_mcp.domain_contracts.states import DOMAIN_STATE_FACTS
 from src.live_mcp.dependency_value_flow import (
-    _difficulty_vector_for_chain,
     _operational_dependency_contracts,
 )
 from src.live_mcp.generation.chain_scheduler import ChainSchedulerMixin
@@ -28,6 +28,83 @@ DOMAINS = (
     "banking", "calendar", "crm", "email", "filesystem",
     "food_delivery", "issue_tracker", "payments", "shopping", "team_chat",
 )
+
+
+def _domain_registry(*domains: str) -> ContractRegistry:
+    return build_contract_registry({
+        domain: importlib.import_module(
+            f"src.live_mcp.servers.{domain}.server"
+        ).TOOLS
+        for domain in domains
+    })
+
+
+def test_state_sensitive_target_fails_closed_when_field_is_missing() -> None:
+    contract = _domain_registry("food_delivery").get(
+        "food_delivery", "create_order",
+    )
+    assert not record_state_is_known(
+        "food_delivery", contract, "restaurant", {"name": "Cafe"},
+    )
+
+
+def test_equivalent_observation_field_marks_state_as_known() -> None:
+    contract = _domain_registry("food_delivery").get(
+        "food_delivery", "create_order",
+    )
+    assert record_state_is_known(
+        "food_delivery", contract, "restaurant", {"items": []},
+    )
+
+
+def test_existence_only_target_does_not_invent_state_requirement() -> None:
+    contract = _domain_registry("crm").get("crm", "update_contact")
+    assert record_state_is_known("crm", contract, "contact", {})
+
+
+def test_chain_novel_outputs_preserve_typed_state_created_identity() -> None:
+    prior = ToolContract(
+        domain="probe",
+        name="inspect_optional_thread",
+        readonly=True,
+        mutating=False,
+        arguments=frozenset({"thread_id"}),
+        input_entities=(EntityBinding("thread", "thread_id"),),
+    )
+    creator = ToolContract(
+        domain="probe",
+        name="create_thread",
+        readonly=False,
+        mutating=True,
+        arguments=frozenset({"message_id"}),
+        output_entities=(EntityBinding("thread", "thread_id", "output"),),
+        output_fields=frozenset({"thread_id"}),
+        created_output_fields=frozenset({"thread_id"}),
+    )
+
+    assert chain_novel_output_fields([prior, creator], 1) == {"thread_id"}
+
+
+def test_chain_novel_outputs_still_remove_readonly_prefix_echo() -> None:
+    prior = ToolContract(
+        domain="probe",
+        name="select_thread",
+        readonly=True,
+        mutating=False,
+        arguments=frozenset({"thread_id"}),
+        input_entities=(EntityBinding("thread", "thread_id"),),
+    )
+    detail = ToolContract(
+        domain="probe",
+        name="get_thread",
+        readonly=True,
+        mutating=False,
+        arguments=frozenset({"channel_id"}),
+        output_entities=(EntityBinding("thread", "thread_id", "output"),),
+        output_fields=frozenset({"thread_id"}),
+    )
+
+    assert chain_novel_output_fields([prior, detail], 1) == set()
 
 
 def _order_status(value: str, source: str = "argument") -> StatePredicate:
@@ -46,6 +123,7 @@ def test_state_simulator_rejects_conflicting_downstream_precondition() -> None:
         mutating=True,
         output_entities=(EntityBinding("order", "order_id", "output"),),
         output_fields=frozenset({"order_id"}),
+        created_output_fields=frozenset({"order_id"}),
         postconditions=(_order_status("placed", "output"),),
     )
     return_order = ToolContract(
@@ -53,14 +131,16 @@ def test_state_simulator_rejects_conflicting_downstream_precondition() -> None:
         name="return_order",
         readonly=False,
         mutating=True,
+        arguments=frozenset({"order_id"}),
         required_arguments=frozenset({"order_id"}),
         input_entities=(EntityBinding("order", "order_id"),),
         preconditions=(_order_status("shipped"),),
     )
 
-    _, issues = simulate_contract_chain(
-        [create, return_order],
-        [{"order_id": "symbol:created-order"}, {"order_id": "symbol:created-order"}],
+    _, issues = simulate_symbolic_chain(
+        ContractRegistry([create, return_order]),
+        "probe",
+        ["create_order", "return_order"],
     )
 
     assert len(issues) == 1
@@ -75,6 +155,7 @@ def test_state_simulator_accepts_matching_transition() -> None:
         mutating=True,
         output_entities=(EntityBinding("order", "order_id", "output"),),
         output_fields=frozenset({"order_id"}),
+        created_output_fields=frozenset({"order_id"}),
         postconditions=(_order_status("shipped", "output"),),
     )
     return_order = ToolContract(
@@ -82,14 +163,16 @@ def test_state_simulator_accepts_matching_transition() -> None:
         name="return_order",
         readonly=False,
         mutating=True,
+        arguments=frozenset({"order_id"}),
         required_arguments=frozenset({"order_id"}),
         input_entities=(EntityBinding("order", "order_id"),),
         preconditions=(_order_status("shipped"),),
     )
 
-    _, issues = simulate_contract_chain(
-        [create, return_order],
-        [{"order_id": "symbol:created-order"}, {"order_id": "symbol:created-order"}],
+    _, issues = simulate_symbolic_chain(
+        ContractRegistry([create, return_order]),
+        "probe",
+        ["create_order", "return_order"],
     )
 
     assert issues == ()
@@ -125,37 +208,6 @@ def test_symbolic_simulator_keeps_argument_driven_transition_unknown() -> None:
     assert issues == ()
 
 
-def test_concrete_simulator_resolves_argument_driven_transition() -> None:
-    update = ToolContract(
-        domain="probe",
-        name="update_order_status",
-        readonly=False,
-        mutating=True,
-        postconditions=(StatePredicate(
-            slot="order.status",
-            subject=EntityBinding("order", "order_id"),
-            value=ArgumentValue("status"),
-        ),),
-    )
-    track = ToolContract(
-        domain="probe",
-        name="track_rider",
-        readonly=True,
-        mutating=False,
-        preconditions=(_order_status("delivering"),),
-    )
-
-    _, issues = simulate_contract_chain(
-        [update, track],
-        [
-            {"order_id": "order:1", "argument:status": "delivering"},
-            {"order_id": "order:1"},
-        ],
-    )
-
-    assert issues == ()
-
-
 def test_registry_fails_closed_on_missing_or_duplicate_contract() -> None:
     contract = ToolContract(
         domain="probe", name="read", readonly=True, mutating=False,
@@ -186,7 +238,7 @@ def test_registry_audits_live_schema_annotations_and_required_arguments() -> Non
     }]) == ()
 
 
-def test_all_190_tools_have_one_registered_state_contract() -> None:
+def test_all_191_tools_have_one_registered_state_contract() -> None:
     domain_tools = {
         domain: importlib.import_module(
             f"src.live_mcp.servers.{domain}.server"
@@ -195,14 +247,14 @@ def test_all_190_tools_have_one_registered_state_contract() -> None:
     }
     registry = build_contract_registry(domain_tools)
 
-    assert sum(registry.coverage().values()) == 190
+    assert sum(registry.coverage().values()) == 191
     for domain, tools in domain_tools.items():
         names = {tool["name"] for tool in tools}
         assert set(DOMAIN_STATE_FACTS[domain]) == names
         assert registry.audit_schema(domain, tools) == ()
 
 
-def test_prove_dependency_vector_consumes_the_supplied_live_schemas() -> None:
+def test_operational_dependency_contracts_consume_supplied_live_schemas() -> None:
     tools = importlib.import_module(
         "src.live_mcp.servers.food_delivery.server"
     ).TOOLS
@@ -213,17 +265,8 @@ def test_prove_dependency_vector_consumes_the_supplied_live_schemas() -> None:
     contracts = _operational_dependency_contracts(
         chain, "food_delivery", tools,
     )
-    vector = _difficulty_vector_for_chain(
-        chain=chain,
-        server_name="food_delivery",
-        server_tools=tools,
-        chain_context={"entity_records": [], "opaque_id_hidden_types": []},
-        feasible_chains=[chain],
-        distractor_count=0,
-    )
 
     assert isinstance(contracts, list)
-    assert vector.oracle_tool_count == len(chain)
 
 
 def test_operational_dependency_excludes_optional_argument_echoes() -> None:
@@ -237,6 +280,84 @@ def test_operational_dependency_excludes_optional_argument_echoes() -> None:
     assert _operational_dependency_contracts(
         ["tar_create", "tar_extract"], "filesystem", tools,
     ) == []
+
+
+@pytest.mark.parametrize("archive_creator", ("tar_create", "zip"))
+@pytest.mark.parametrize(
+    "text_tool",
+    (
+        "cat", "head", "tail", "wc", "sort", "uniq", "cut", "sed",
+        "awk", "truncate", "split", "diff", "join",
+    ),
+)
+def test_filesystem_archive_creator_cannot_feed_text_tool(
+    archive_creator: str,
+    text_tool: str,
+) -> None:
+    tools = {
+        domain: importlib.import_module(
+            f"src.live_mcp.servers.{domain}.server"
+        ).TOOLS
+        for domain in DOMAINS
+    }
+    registry = build_contract_registry(tools)
+
+    _, issues = simulate_symbolic_chain(
+        registry, "filesystem", [archive_creator, text_tool],
+    )
+
+    assert issues
+    assert issues[0].tool_name == text_tool
+    assert issues[0].predicate.slot == "filesystem.archive"
+    assert issues[0].reason == "contradicted"
+
+
+def test_filesystem_plain_file_creator_can_feed_text_tool() -> None:
+    tools = {
+        domain: importlib.import_module(
+            f"src.live_mcp.servers.{domain}.server"
+        ).TOOLS
+        for domain in DOMAINS
+    }
+    registry = build_contract_registry(tools)
+
+    _, issues = simulate_symbolic_chain(
+        registry, "filesystem", ["touch", "sort"],
+    )
+
+    assert issues == ()
+
+
+@pytest.mark.parametrize(
+    ("archive_creator", "extractor", "expect_issue"),
+    (
+        ("tar_create", "tar_extract", False),
+        ("zip", "unzip", False),
+        ("tar_create", "unzip", True),
+        ("zip", "tar_extract", True),
+    ),
+)
+def test_filesystem_archive_format_controls_extractor_dependency(
+    archive_creator: str,
+    extractor: str,
+    expect_issue: bool,
+) -> None:
+    tools = {
+        domain: importlib.import_module(
+            f"src.live_mcp.servers.{domain}.server"
+        ).TOOLS
+        for domain in DOMAINS
+    }
+    registry = build_contract_registry(tools)
+
+    _, issues = simulate_symbolic_chain(
+        registry, "filesystem", [archive_creator, extractor],
+    )
+
+    assert bool(issues) is expect_issue
+    if issues:
+        assert issues[0].predicate.slot == "filesystem.archive_format"
+        assert issues[0].reason == "contradicted"
 
 
 def test_paper_chain_scheduler_binds_static_fingerprint_correctly() -> None:

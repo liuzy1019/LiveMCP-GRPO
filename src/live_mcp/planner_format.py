@@ -82,6 +82,15 @@ def format_state_compact(state: dict[str, Any], max_entities: int = 20) -> str:
     if not isinstance(state, dict) or not state:
         return "(empty state)"
 
+    public_summaries = state.get("public_entity_summaries")
+    if isinstance(public_summaries, list):
+        rendered = [str(item) for item in public_summaries[:max_entities]]
+        if len(public_summaries) > max_entities:
+            rendered.append(
+                f"... ({len(public_summaries)} total public candidates)"
+            )
+        return "\n".join(rendered) if rendered else "(empty public state)"
+
     lines: list[str] = []
     groups: list[tuple[str, list[tuple[str, Any]]]] = []
     for entity_type, entities in sorted(state.items()):

@@ -5,29 +5,15 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
 from loguru import logger
 
-from src.live_mcp.task_planner import DOMAIN_DESCRIPTIONS
-from src.live_mcp.planner_format import format_tools
-from src.live_mcp.prompt_profiles import PROMPT_PROFILES, resolve_prompt_profile
-from src.live_mcp.registry.tool_semantics import (
-    SELF_CONTAINED_WRITE_TOOLS,
-    is_mutating_tool,
-    resolve_tool_execution_semantics,
-)
 from src.live_mcp.dedup import dedup_tasks
-from src.live_mcp.dependency_trace import (
-    align_sampled_chain, auxiliary_tool_call_indices,
-    dependency_edges_from_alignment,
-)
 
 from src.live_mcp.corpus.shard_oracle import (
     _filter_required_tool_tasks,
@@ -50,7 +36,7 @@ def _accepted_generation_deficits(
     configured stratum is full (for example, later Jaccard-capacity top-up),
     the original mix remains the least biased request distribution.
     """
-    from src.live_mcp.generation.batch import largest_remainder_mix_quotas
+    from src.live_mcp.generation.mix_policy import largest_remainder_mix_quotas
 
     if configured_irrelevance_count is None:
         irrelevance_target = round(pool_target * configured_irrelevance_ratio)
@@ -193,6 +179,9 @@ def _checkpoint_config(args: argparse.Namespace) -> dict:
         ),
         "semantic_gate_profile": getattr(
             args, "semantic_gate_profile", "diagnostic_only"
+        ),
+        "fixed_attempt_budget": bool(
+            getattr(args, "fixed_attempt_budget", False)
         ),
         "require_tool_calls": bool(getattr(args, "require_tool_calls", False)),
     }

@@ -11,10 +11,15 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from src.live_mcp.generation.teacher_contracts import (
+    reference_entity_types,
     _final_answer_requests_user_input,
+    typed_entity_reference_visibility_from_rounds,
+    user_visible_private_id_exposure,
+    user_visible_terminal_tool_name_exposure,
 )
 from src.live_mcp.generation.robustness import (
-    missing_function_has_nonprefix_mutation,
+    missing_function_has_mutation,
+    missing_function_unresolved_failures,
 )
 
 _ASSISTANT_ROLE_USER_QUERY_RE = re.compile(
@@ -55,11 +60,6 @@ _SHOPPING_EXACT_SUBTYPE_PATTERNS: dict[str, re.Pattern[str]] = {
     "webcam": re.compile(r"\bwebcams?\b", re.I),
 }
 
-_SYNTHETIC_BACKEND_ID_RE = re.compile(
-    r"(?<![A-Za-z0-9_])[A-Za-z][A-Za-z0-9]*_s\d+_\d+"
-    r"(?![A-Za-z0-9_])"
-)
-
 def resolve_semantic_gate_profile(extra: dict[str, Any]) -> str:
     """Resolve the orthogonal semantic-gate profile for one row.
 
@@ -83,6 +83,8 @@ def resolve_semantic_gate_profile(extra: dict[str, Any]) -> str:
 
 def expected_artifact_purpose(extra: dict[str, Any]) -> str:
     """Derive the only valid artifact purpose for a profile pair."""
+    if extra.get("fixed_attempt_budget") is True:
+        return "experiment"
     prompt_profile = str(extra.get("prompt_profile") or "")
     semantic_profile = resolve_semantic_gate_profile(extra)
     if (
@@ -121,7 +123,7 @@ def validate_artifact_purpose(
 class SemanticQuarantineIssue:
     """One fact-backed reason why a Teacher candidate cannot be training GT.
 
-    Per OVAL-MCP.md §5, semantic quarantine is a LOCAL trainability contract
+    Semantic quarantine is a LOCAL trainability contract
     and must be reported separately from the three PROVE hard gates
     (fresh replay ≤30%, sensitive provenance, Jaccard 0.70).
     """
@@ -167,6 +169,7 @@ def _json_dict(value: Any) -> dict[str, Any]:
 def _normalize(value: Any) -> str:
     return " ".join(str(value or "").casefold().split())
 
+
 def _rounds(extra: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         _json_dict(value)
@@ -174,21 +177,110 @@ def _rounds(extra: dict[str, Any]) -> list[dict[str, Any]]:
         if _json_dict(value)
     ]
 
-def _initial_query_backend_id_issue(
-    rounds: list[dict[str, Any]],
+
+def _user_visible_backend_id_issue(
+    extra: dict[str, Any], rounds: list[dict[str, Any]],
 ) -> SemanticQuarantineIssue | None:
-    """Reject sampler-private seeded IDs leaked into the initial user turn."""
-    if not rounds:
+    """Enforce the local natural-selector contract, not PROVE Step 2."""
+    prompt_profile = str(extra.get("prompt_profile") or "")
+    if prompt_profile and prompt_profile != "local_trainable_v1":
         return None
-    query = str(rounds[0].get("user_query") or rounds[0].get("query") or "")
-    leaked = sorted(set(_SYNTHETIC_BACKEND_ID_RE.findall(query)))
-    if not leaked:
+    domain = str(extra.get("domain") or "")
+    queries = [
+        str(item.get("user_query") or item.get("query") or "")
+        for item in rounds
+    ]
+    calls = [_json_list(item.get("oracle_calls")) for item in rounds]
+    fact_calls: list[list[dict[str, Any]]] = []
+    observations: list[list[Any]] = []
+    for round_trace in rounds:
+        successful_events = _successful_history(round_trace)
+        fact_calls.append([
+            {
+                "action": "tool_call",
+                "tool_name": str(event.get("tool_name") or ""),
+                "arguments": _json_dict(event.get("arguments")),
+            }
+            for event in successful_events
+            if str(event.get("tool_name") or "")
+        ])
+        observations.append([
+            event.get("observation") or {}
+            for event in successful_events
+            if str(event.get("tool_name") or "")
+        ])
+    entity_types = reference_entity_types(domain, [
+        _json_dict(value)
+        for value in _json_list(extra.get("clean_visible_tools"))
+        if _json_dict(value)
+    ])
+    private_entity_ids, public_entity_ids = (
+        typed_entity_reference_visibility_from_rounds(
+        domain=domain,
+        calls_per_round=fact_calls,
+        observations_per_round=observations,
+        server_tools=[
+            _json_dict(value)
+            for value in _json_list(extra.get("clean_visible_tools"))
+            if _json_dict(value)
+        ],
+        entity_types=entity_types,
+        )
+    )
+    exposure = user_visible_private_id_exposure(
+        queries,
+        calls,
+        private_entity_ids=private_entity_ids,
+        public_entity_ids=public_entity_ids,
+    )
+    if exposure is None:
+        return None
+    if exposure.surface == "user_query" and exposure.round_idx == 0:
+        reason_code = "initial_query_exposes_private_entity_id"
+    elif exposure.surface == "user_query":
+        reason_code = "continuation_query_exposes_private_entity_id"
+    else:
+        reason_code = "terminal_exposes_private_entity_id"
+    return SemanticQuarantineIssue(
+        reason_code=reason_code,
+        round_idx=exposure.round_idx,
+        user_evidence=queries[exposure.round_idx],
+        trace_evidence={
+            "surface": exposure.surface,
+            "surface_text": exposure.text,
+            "leaked_ids": list(exposure.leaked_ids),
+        },
+    )
+
+
+def _irrelevance_capability_issue(
+    extra: dict[str, Any], rounds: list[dict[str, Any]],
+) -> SemanticQuarantineIssue | None:
+    """Recompute the deterministic no-tool capability proof."""
+    if not _json_dict(extra.get("irrelevance_capability_proof")):
+        return None
+    from src.live_mcp.generation.irrelevance import (
+        validate_irrelevance_capability_proof,
+    )
+
+    issue = validate_irrelevance_capability_proof(
+        query=str(extra.get("user_query") or ""),
+        proof=_json_dict(extra.get("irrelevance_capability_proof")),
+        tool_schemas=[
+            _json_dict(item)
+            for item in _json_list(extra.get("clean_visible_tools"))
+        ],
+    )
+    if issue is None:
         return None
     return SemanticQuarantineIssue(
-        reason_code="initial_query_exposes_sampler_private_id",
-        round_idx=int(rounds[0].get("round_idx", 0)),
-        user_evidence=query,
-        trace_evidence={"leaked_ids": leaked},
+        reason_code=issue,
+        round_idx=0,
+        user_evidence=str(extra.get("user_query") or ""),
+        trace_evidence={
+            "proof": _json_dict(extra.get("irrelevance_capability_proof")),
+            "rounds": len(rounds),
+        },
     )
 
 def _successful_history(round_trace: dict[str, Any]) -> list[dict[str, Any]]:
@@ -197,50 +289,6 @@ def _successful_history(round_trace: dict[str, Any]) -> list[dict[str, Any]]:
         for raw in _json_list(round_trace.get("execution_history"))
         if (event := _json_dict(raw)) and event.get("success") is True
     ]
-
-def _successful_trace_source_target_issue(
-    extra: dict[str, Any],
-    rounds: list[dict[str, Any]],
-) -> SemanticQuarantineIssue | None:
-    """Mirror the online source-target contract on persisted traces."""
-    scenario_type = str(extra.get("scenario_type") or "")
-    if scenario_type not in {"normal_safe_success", "tool_error_recovery"}:
-        return None
-    source_chain = [
-        str(value or "")
-        for value in _json_list(extra.get("source_chain_seed"))
-        if str(value or "")
-    ]
-    if not source_chain:
-        return None
-    target = source_chain[-1]
-    primary_domain = str(extra.get("domain") or "")
-    realized_tools: list[str] = []
-    for round_trace in rounds:
-        for raw_call in _json_list(round_trace.get("oracle_calls")):
-            call = _json_dict(raw_call)
-            if str(call.get("action") or "tool_call") != "tool_call":
-                continue
-            server_name = str(call.get("server_name") or primary_domain)
-            if server_name != primary_domain:
-                continue
-            realized_tools.append(str(call.get("tool_name") or ""))
-    if target in realized_tools:
-        return None
-    return SemanticQuarantineIssue(
-        reason_code="successful_trace_missing_source_target",
-        round_idx=0,
-        user_evidence="\n".join(
-            str(round_trace.get("user_query") or round_trace.get("query") or "")
-            for round_trace in rounds
-        ),
-        trace_evidence={
-            "source_chain_seed": source_chain,
-            "missing_target": target,
-            "realized_tools": realized_tools,
-            "scenario_type": scenario_type,
-        },
-    )
 
 def _terminal(round_trace: dict[str, Any]) -> tuple[str, str]:
     for raw in reversed(_json_list(round_trace.get("oracle_calls"))):
@@ -268,7 +316,7 @@ def _terminal_final_answer_requests_user_input_issue(
 
     A terminal final_answer that asks the user to provide/confirm/choose
     something violates the terminal contract and is provable from the
-    terminal text alone (OVAL-MCP.md §5).
+    terminal text alone under the local semantic gate contract.
     """
     action, terminal_text = _terminal(round_trace)
     if action == "final_answer" and _final_answer_requests_user_input(terminal_text):
@@ -292,60 +340,93 @@ def _terminal_exposes_private_tool_name_issue(
 
     Tool names are sampler-internal identifiers; surfacing them verbatim in
     a terminal answer is provable from the terminal text plus the visible
-    schema (OVAL-MCP.md §5).
+    schema under the local reference-visibility contract.
     """
-    action, terminal_text = _terminal(round_trace)
-    if not action:
-        return None
-    hidden_tool_names = hidden_tool_names or set()
-    exposed: list[str] = []
-    for tool_name in sorted(tool_names):
-        bounded = rf"(?<![A-Za-z0-9_]){re.escape(tool_name)}(?![A-Za-z0-9_])"
-        if "_" in tool_name and re.search(
-            bounded, terminal_text, re.IGNORECASE,
-        ):
-            exposed.append(tool_name)
-            continue
-        if tool_name not in hidden_tool_names:
-            continue
-        code_like = (
-            rf"(?:`{re.escape(tool_name)}`|\({re.escape(tool_name)}\)|"
-            rf"\b{re.escape(tool_name)}\s+(?:tool|command|function)\b)"
-        )
-        if re.search(code_like, terminal_text, re.IGNORECASE):
-            exposed.append(tool_name)
-    if exposed:
+    exposure = user_visible_terminal_tool_name_exposure(
+        [_json_list(round_trace.get("oracle_calls"))],
+        tool_names=tool_names,
+        hidden_tool_names=hidden_tool_names,
+    )
+    if exposure is not None:
         return SemanticQuarantineIssue(
             reason_code="terminal_exposes_private_tool_name",
             round_idx=round_idx,
             user_evidence=str(round_trace.get("user_query") or ""),
             trace_evidence={
-                "terminal_text": terminal_text,
-                "exposed_tool_names": exposed,
+                "terminal_text": exposure.text,
+                "exposed_tool_names": list(exposure.exposed_tool_names),
             },
         )
     return None
 
 
-def _missing_function_nonprefix_mutation_issue(
+def _missing_function_contract_issue(
     extra: dict[str, Any],
     rounds: list[dict[str, Any]],
 ) -> SemanticQuarantineIssue | None:
-    """Reject a persisted missing-function trace with an unauthorized write."""
-    if str(extra.get("scenario_type") or "") != "missing_function":
+    """Reject a persisted missing-function contract contradiction."""
+    scenario_type = str(extra.get("scenario_type") or "")
+    explicit_missing_function = bool(
+        extra.get("has_missing_function")
+    ) or scenario_type == "missing_function"
+    if not explicit_missing_function and scenario_type not in {
+        "missing_function", "clarification_required",
+    }:
         return None
     hidden_tools = [
         str(value) for value in _json_list(extra.get("hidden_tools"))
         if str(value or "")
     ]
-    if len(hidden_tools) != 1:
+    if not explicit_missing_function and not hidden_tools:
         return None
+    if len(hidden_tools) != 1:
+        return SemanticQuarantineIssue(
+            reason_code="missing_function_hidden_target_mismatch",
+            round_idx=0,
+            user_evidence="\n".join(
+                str(item.get("user_query") or item.get("query") or "")
+                for item in rounds
+            ),
+            trace_evidence={
+                "hidden_tools": hidden_tools,
+                "source_chain_seed": _json_list(
+                    extra.get("source_chain_seed")
+                ),
+            },
+        )
     source_chain = [
         str(value) for value in _json_list(extra.get("source_chain_seed"))
         if str(value or "")
     ]
-    if hidden_tools[0] not in source_chain:
-        return None
+    if not source_chain or hidden_tools[0] != source_chain[-1]:
+        return SemanticQuarantineIssue(
+            reason_code="missing_function_hidden_target_mismatch",
+            round_idx=0,
+            user_evidence="\n".join(
+                str(item.get("user_query") or item.get("query") or "")
+                for item in rounds
+            ),
+            trace_evidence={
+                "hidden_tool": hidden_tools[0],
+                "source_chain_seed": source_chain,
+            },
+        )
+    evidence = [
+        str(value) for value in _json_list(
+            extra.get("missing_function_evidence")
+        ) if str(value or "")
+    ]
+    prompt_profile = str(extra.get("prompt_profile") or "")
+    if prompt_profile != "paper_generation_baseline_v1" and not evidence:
+        return SemanticQuarantineIssue(
+            reason_code="missing_function_capability_evidence_missing",
+            round_idx=0,
+            user_evidence="\n".join(
+                str(item.get("user_query") or item.get("query") or "")
+                for item in rounds
+            ),
+            trace_evidence={"hidden_tool": hidden_tools[0]},
+        )
     oracle_calls = [
         _json_dict(value) for value in _json_list(extra.get("oracle_calls"))
         if _json_dict(value)
@@ -354,25 +435,33 @@ def _missing_function_nonprefix_mutation_issue(
         _json_dict(value) for value in _json_list(extra.get("clean_visible_tools"))
         if _json_dict(value)
     ]
-    mutation_evidence = [
-        _json_dict(value)
-        for value in _json_list(extra.get("query_mutation_evidence"))
-        if _json_dict(value)
+    execution_history = [
+        event
+        for round_trace in rounds
+        for event in _json_list(round_trace.get("execution_history"))
+        if isinstance(event, dict)
     ]
-    authorized = {
-        str(item.get("capability") or "")
-        for item in mutation_evidence
-        if str(item.get("capability") or "") != hidden_tools[0]
-    }
-    hidden_position = source_chain.index(hidden_tools[0])
-    authorized.update(source_chain[:hidden_position])
-    if not missing_function_has_nonprefix_mutation(
+    unresolved_failures = missing_function_unresolved_failures(
+        True, execution_history,
+    )
+    if unresolved_failures:
+        return SemanticQuarantineIssue(
+            reason_code="missing_function_unresolved_execution_failure",
+            round_idx=0,
+            user_evidence="\n".join(
+                str(item.get("user_query") or item.get("query") or "")
+                for item in rounds
+            ),
+            trace_evidence={
+                "hidden_tool": hidden_tools[0],
+                "source_chain_seed": source_chain,
+                "unresolved_failed_tools": sorted(unresolved_failures),
+            },
+        )
+    if not missing_function_has_mutation(
         True,
         oracle_calls,
-        source_chain,
-        hidden_tools[0],
         tool_schemas,
-        authorized,
     ):
         return None
     schema_by_name = {
@@ -387,10 +476,9 @@ def _missing_function_nonprefix_mutation_issue(
                 "annotations"
             ) or {}
         ).get("mutating") is True
-        and str(call.get("tool_name") or "") not in authorized
     ]
     return SemanticQuarantineIssue(
-        reason_code="missing_function_nonprefix_mutation",
+        reason_code="missing_function_mutation",
         round_idx=0,
         user_evidence="\n".join(
             str(item.get("user_query") or item.get("query") or "")

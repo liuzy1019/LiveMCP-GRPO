@@ -4,12 +4,15 @@ from src.live_mcp.corpus.profile import (
     _largest_remainder_ratio_quotas,
     _max_capacity_ratio_quotas,
 )
-from src.live_mcp.corpus.merge import (
-    _dedup_jaccard,
+from src.live_mcp.corpus.merge_allocation import (
+    _capacity_weighted_domain_quotas,
     _proportional_stratum_order,
+    _suggest_topup_count,
     _stratified_head,
 )
-from src.live_mcp.corpus.shard import _accepted_generation_deficits
+from src.live_mcp.corpus.merge_dedup import _dedup_jaccard
+from src.live_mcp.domain_allocation import jaccard_unique_sequence_count
+from src.live_mcp.corpus.shard_recovery import _accepted_generation_deficits
 from src.live_mcp.generation.batch import (
     _difficulty_attempt_schedule,
     largest_remainder_mix_quotas,
@@ -18,6 +21,15 @@ from src.live_mcp.generation.batch import (
 import pandas as pd
 from collections import Counter
 from types import SimpleNamespace
+
+
+def test_merge_capacity_wrapper_uses_shared_allocator() -> None:
+    assert _capacity_weighted_domain_quotas(
+        6,
+        ["calendar", "email"],
+        {"calendar": 1, "email": 3},
+        minimum_per_domain=1,
+    ) == {"calendar": 2, "email": 4}
 
 
 def test_largest_remainder_quotas_are_exact_and_capacity_bounded() -> None:
@@ -34,6 +46,14 @@ def test_largest_remainder_quotas_are_exact_and_capacity_bounded() -> None:
         ("crm", "missing_function"): 1,
         ("email", "no_tool_or_abstention"): 1,
     }
+
+
+def test_topup_candidate_budget_uses_observed_low_retention() -> None:
+    assert _suggest_topup_count(
+        missing=2,
+        available=305,
+        candidates=1000,
+    ) == 9
 
 
 def test_prove_ratio_quotas_match_published_composition() -> None:
@@ -79,6 +99,121 @@ def test_accepted_difficulty_quotas_are_exact() -> None:
     schedule = _difficulty_attempt_schedule(quotas)
     assert set(schedule) == set(quotas)
     assert all(schedule.count(key) > value for key, value in quotas.items())
+
+    fixed_schedule = _difficulty_attempt_schedule(
+        quotas, fill_shortfalls=False,
+    )
+    assert Counter(fixed_schedule) == quotas
+
+
+def test_fixed_attempt_budget_does_not_replace_failed_candidates(
+    monkeypatch,
+) -> None:
+    class Harness:
+        from src.live_mcp.generation.batch import BatchGenerationMixin
+
+    class FakeGenerator(Harness.BatchGenerationMixin):
+        CHAIN_SAMPLING_JACCARD_THRESHOLD = 0.70
+        SAMPLING_CONTEXT_REFRESH_K = 10
+
+        def __init__(self) -> None:
+            self.manager = SimpleNamespace(server_names=["banking"])
+            self.attempts = 0
+
+        def _generate_task_with_postprocess(
+            self, server_name, seed, state_seed, difficulty,
+            distractor_rate, missing_function_rate,
+        ):
+            self.attempts += 1
+            if self.attempts <= 2:
+                return None
+            return SimpleNamespace(metadata={"difficulty": difficulty})
+
+        def _generate_irrelevant_tasks(
+            self, count, seed, servers, *, failure_callback=None,
+            max_candidate_attempts=None,
+        ):
+            assert count == 1
+            assert max_candidate_attempts == 1
+            return []
+
+    monkeypatch.setenv("LIVEMCP_FIXED_ATTEMPT_BUDGET", "1")
+    generator = FakeGenerator()
+    tasks = generator.generate_many(
+        "banking",
+        count=6,
+        seed=42,
+        difficulty_mix={"complete": 0.6, "missing": 0.2, "minimal": 0.2},
+        irrelevance_count=1,
+        failure_callback=lambda _record: None,
+    )
+
+    assert generator.attempts == 5
+    assert len(tasks) == 3
+    assert all(task.metadata["fixed_attempt_budget"] is True for task in tasks)
+
+
+def test_fixed_attempt_budget_limits_irrelevance_without_failure_callback(
+    monkeypatch,
+) -> None:
+    class Harness:
+        from src.live_mcp.generation.batch import BatchGenerationMixin
+
+    class FakeGenerator(Harness.BatchGenerationMixin):
+        CHAIN_SAMPLING_JACCARD_THRESHOLD = 0.70
+        SAMPLING_CONTEXT_REFRESH_K = 10
+
+        def __init__(self) -> None:
+            self.manager = SimpleNamespace(server_names=["banking"])
+
+        def _generate_task_with_postprocess(self, *args, **kwargs):
+            return SimpleNamespace(metadata={"difficulty": args[3]})
+
+        def _generate_irrelevant_tasks(
+            self, count, seed, servers, *, max_candidate_attempts=None,
+        ):
+            assert count == 1
+            assert max_candidate_attempts == 1
+            return []
+
+    monkeypatch.setenv("LIVEMCP_FIXED_ATTEMPT_BUDGET", "1")
+    tasks = FakeGenerator().generate_many(
+        "banking", count=4, seed=42, irrelevance_count=1,
+    )
+    assert len(tasks) == 3
+    assert all(task.metadata["fixed_attempt_budget"] is True for task in tasks)
+
+
+def test_explicit_attempt_budget_contract_overrides_process_environment(
+    monkeypatch,
+) -> None:
+    class Harness:
+        from src.live_mcp.generation.batch import BatchGenerationMixin
+
+    class FakeGenerator(Harness.BatchGenerationMixin):
+        CHAIN_SAMPLING_JACCARD_THRESHOLD = 0.70
+        SAMPLING_CONTEXT_REFRESH_K = 10
+
+        def __init__(self) -> None:
+            self.manager = SimpleNamespace(server_names=["banking"])
+
+        def _generate_task_with_postprocess(self, *args, **kwargs):
+            return SimpleNamespace(metadata={"difficulty": args[3]})
+
+        def _generate_irrelevant_tasks(self, count, seed, servers):
+            assert count == 0
+            return []
+
+    monkeypatch.setenv("LIVEMCP_FIXED_ATTEMPT_BUDGET", "1")
+    tasks = FakeGenerator().generate_many(
+        "banking",
+        count=3,
+        seed=42,
+        irrelevance_ratio=0.0,
+        fixed_attempt_budget=False,
+    )
+    assert len(tasks) == 3
+    assert all(task.metadata["fixed_attempt_budget"] is False for task in tasks)
 
 
 def test_merge_selection_preserves_population_ratio_not_equal_scenarios() -> None:
@@ -153,6 +288,33 @@ def test_prove_jaccard_ignores_hidden_source_chain_length() -> None:
     local_retained, local_removed = _dedup_jaccard(frame, mode="local")
     assert len(local_retained) == 2
     assert local_removed == 0
+
+
+def test_prove_jaccard_is_plain_tool_name_set_not_position_aware() -> None:
+    frame = pd.DataFrame([
+        {"uid": "forward", "extra_info": {"domain": "email", "oracle_calls": [
+            {"action": "tool_call", "tool_name": "search_emails"},
+            {"action": "tool_call", "tool_name": "get_email"},
+        ]}},
+        {"uid": "reverse", "extra_info": {"domain": "email", "oracle_calls": [
+            {"action": "tool_call", "tool_name": "get_email"},
+            {"action": "tool_call", "tool_name": "search_emails"},
+        ]}},
+    ])
+    retained, removed = _dedup_jaccard(frame, mode="prove")
+    assert retained["uid"].tolist() == ["forward"]
+    assert removed == 1
+
+    local_retained, local_removed = _dedup_jaccard(frame, mode="local")
+    assert local_retained["uid"].tolist() == ["forward", "reverse"]
+    assert local_removed == 0
+
+
+def test_capacity_estimate_uses_same_plain_jaccard_as_merge() -> None:
+    assert jaccard_unique_sequence_count([
+        ["search_emails", "get_email"],
+        ["get_email", "search_emails"],
+    ]) == 1
 
 
 def test_recovery_targets_accepted_difficulty_and_irrelevance_deficits() -> None:

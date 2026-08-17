@@ -2,28 +2,17 @@
 
 from __future__ import annotations
 
-import argparse
 import json
-import math
-import os
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-import pandas as pd
 from loguru import logger
 
-from src.live_mcp.task_planner import DOMAIN_DESCRIPTIONS
+from src.live_mcp.generation.teacher_contracts import DOMAIN_DESCRIPTIONS
 from src.live_mcp.planner_format import format_tools
-from src.live_mcp.prompt_profiles import PROMPT_PROFILES, resolve_prompt_profile
-from src.live_mcp.registry.tool_semantics import (
-    SELF_CONTAINED_WRITE_TOOLS,
-    is_mutating_tool,
-    resolve_tool_execution_semantics,
-)
-from src.live_mcp.dedup import dedup_tasks
 from src.live_mcp.dependency_trace import (
     align_sampled_chain, auxiliary_tool_call_indices,
     dependency_edges_from_alignment,
@@ -119,35 +108,6 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
                 f"task={task.task_id!r}"
             )
 
-        query_chain_supported = task.metadata.get("query_chain_supported")
-        if query_chain_supported is not None and not isinstance(
-            query_chain_supported, bool
-        ):
-            raise RuntimeError(
-                "query_chain_supported must be true, false, or null: "
-                f"task={task.task_id!r}, value={query_chain_supported!r}"
-            )
-        expected_query_chain_status = (
-            "verified_by_query_contract"
-            if query_chain_supported is True
-            else (
-                "rejected_by_query_contract"
-                if query_chain_supported is False
-                else "unverified_paper_baseline"
-            )
-        )
-        query_chain_support_status = str(
-            task.metadata.get("query_chain_support_status")
-            or expected_query_chain_status
-        )
-        if query_chain_support_status != expected_query_chain_status:
-            raise RuntimeError(
-                "query-chain support value/status mismatch: "
-                f"task={task.task_id!r}, value={query_chain_supported!r}, "
-                f"status={query_chain_support_status!r}, "
-                f"expected={expected_query_chain_status!r}"
-            )
-
         # Determine visible tools — use task-provided tools, fall back to required
         visible_tools = task.visible_tools if task.visible_tools else []
         if not visible_tools:
@@ -177,9 +137,16 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
         semantic_gate_profile = str(
             task.metadata.get("semantic_gate_profile", "diagnostic_only")
         )
+        fixed_attempt_budget = task.metadata.get("fixed_attempt_budget")
+        if not isinstance(fixed_attempt_budget, bool):
+            raise RuntimeError(
+                "generated task is missing frozen fixed-attempt provenance: "
+                f"task={task.task_id!r}, value={fixed_attempt_budget!r}"
+            )
         artifact_purpose = expected_artifact_purpose({
             "prompt_profile": prompt_profile,
             "semantic_gate_profile": semantic_gate_profile,
+            "fixed_attempt_budget": fixed_attempt_budget,
         })
         initial_action_context = (
             task.sampling_context.get("initial_action_context", {})
@@ -392,6 +359,15 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "uid": task.task_id,
             "has_distractors": has_distractors,
             "has_missing_function": has_missing_func,
+            "missing_function_requested": bool(
+                task.metadata.get("missing_function_requested", False)
+            ),
+            "missing_function_evidence": list(
+                task.metadata.get("missing_function_evidence", [])
+            ),
+            "missing_function_binding_failure": str(
+                task.metadata.get("missing_function_binding_failure", "")
+            ),
             "enum_stripped": task.metadata.get("strip_enums", False),
             "identity_policy": task.metadata.get("identity_policy", _identity_policy(domain)),
             "target_resource_ids": task.metadata.get("target_resource_ids", []),
@@ -413,6 +389,11 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             ),
             "source_chain_edges": json.dumps(
                 task.metadata.get("source_chain_edges", []) if task.metadata else [],
+                ensure_ascii=False,
+                default=str,
+            ),
+            "realized_chain_edges": json.dumps(
+                task.metadata.get("realized_chain_edges", []) if task.metadata else [],
                 ensure_ascii=False,
                 default=str,
             ),
@@ -455,19 +436,16 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             "query_target_capability": str(
                 task.metadata.get("query_target_capability", "")
             ),
-            # This is deliberately tri-state.  PROVE's published baseline does
-            # not define the local query-chain contract, so ``None`` means
-            # "not evaluated", not "evaluated and rejected".
-            "query_chain_supported": query_chain_supported,
-            "query_chain_support_status": query_chain_support_status,
-            "query_dependency_evidence": json.dumps(
-                task.metadata.get("query_dependency_evidence", []),
+            "continuation_goal_specs": json.dumps(
+                task.metadata.get("continuation_goal_specs", []),
                 ensure_ascii=False,
+                sort_keys=True,
                 default=str,
             ),
-            "query_mutation_evidence": json.dumps(
-                task.metadata.get("query_mutation_evidence", []),
+            "irrelevance_capability_proof": json.dumps(
+                task.metadata.get("irrelevance_capability_proof", {}),
                 ensure_ascii=False,
+                sort_keys=True,
                 default=str,
             ),
             "verified_dependency_evidence": json.dumps(
@@ -477,21 +455,13 @@ def _tasks_to_rows(tasks: list, _base_seed: int) -> list[dict]:
             ),
             "prompt_profile": prompt_profile,
             "semantic_gate_profile": semantic_gate_profile,
+            "fixed_attempt_budget": fixed_attempt_budget,
             "artifact_purpose": artifact_purpose,
             "generation_seed": int(
                 task.metadata.get("generation_seed", task.session_seed)
             ),
             "sampling_state_seed": int(
                 task.metadata.get("sampling_state_seed", task.session_seed)
-            ),
-            "task_spec": json.dumps(
-                task.metadata.get("task_spec", {}),
-                ensure_ascii=False,
-                sort_keys=True,
-                default=str,
-            ),
-            "task_spec_fingerprint": str(
-                task.metadata.get("task_spec_fingerprint", "")
             ),
             "difficulty": str(task.difficulty),
             # Preserve the completed Teacher conversation sequence for rollout.

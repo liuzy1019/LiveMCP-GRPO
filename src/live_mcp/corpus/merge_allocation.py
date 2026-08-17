@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-import argparse
-import hashlib
 import json
 import math
-import os
-import re
 import sys
-from collections import defaultdict
 from collections.abc import Hashable
-from datetime import date
-from functools import lru_cache
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 
@@ -22,23 +15,13 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.live_mcp.protocol.observation import (
-    TRAJECTORY_SCHEMA_VERSION, OBSERVATION_SCHEMA_VERSION,
-    OBSERVATION_PROJECTION_VERSION, compute_server_schema_hash,
-)
-from src.live_mcp.domain_allocation import (
-    capacity_weighted_domain_quotas, position_aware_jaccard,
-)
-from src.live_mcp.registry.tool_semantics import (
-    is_mutating_tool, unresolved_failed_tool_names,
-)
-from src.live_mcp.corpus.semantic_quarantine import evaluate_semantic_quarantine
-from src.live_mcp.domain_contracts.semantic_policies import evaluate_domain_label_issue
-
 from src.live_mcp.corpus.merge_validation import (
     _as_extra,
-    _as_json_list,
     _row_tool_sequence,
+)
+from src.live_mcp.domain_allocation import (
+    capacity_weighted_domain_quotas,
+    plain_tool_jaccard,
 )
 
 def _proportional_stratum_order(df: pd.DataFrame) -> pd.DataFrame:
@@ -275,7 +258,7 @@ def _availability_constrained_split_quotas(
     return adjusted_train, adjusted_val, changed
 
 def _sequence_jaccard(a: list[str], b: list[str]) -> float:
-    return position_aware_jaccard(a, b)
+    return plain_tool_jaccard(a, b)
 
 def _domain_unique_chain_capacity(
     pool: pd.DataFrame,

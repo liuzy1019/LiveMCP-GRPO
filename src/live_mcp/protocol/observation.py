@@ -10,8 +10,8 @@ from src.live_mcp.types import ToolExecutionResult
 
 
 OBSERVATION_SCHEMA_VERSION = "live-mcp-observation-v1"
-OBSERVATION_PROJECTION_VERSION = "loss-aware-v1"
-TRAJECTORY_SCHEMA_VERSION = "live-mcp-canonical-replay-trajectory-v1"
+OBSERVATION_PROJECTION_VERSION = "loss-aware-v2"
+TRAJECTORY_SCHEMA_VERSION = "live-mcp-fact-contract-trajectory-v2"
 DEFAULT_OBSERVATION_CHARS = 4096
 # Teacher and Policy share one projection contract.  Call sites may still pass
 # an explicit larger budget, but component-specific implicit defaults are not
@@ -26,6 +26,11 @@ _FACT_KEYS = (
     "status", "state", "amount", "balance", "remaining",
     "remaining_refundable", "name", "title", "subject", "type",
 )
+
+# The canonical MCP envelope plus one nested entity collection reaches an
+# entity record at container depth five. Preserve that record's scalar facts;
+# only containers nested inside the record cross this boundary.
+_MAX_CONTAINER_DEPTH = 6
 
 
 def compute_server_schema_hash(tools: list[dict[str, Any]]) -> str:
@@ -49,7 +54,21 @@ def project_observation(observation: Any, max_chars: int) -> str:
     original = json.dumps(observation, ensure_ascii=False, default=str)
 
     def compact(value: Any, depth: int = 0) -> Any:
-        if depth >= 5:
+        # Depth limits protect recursive containers, not scalar facts. Checking
+        # scalars first prevents a complete entity record from turning all of
+        # its IDs and fields into ``_truncated_depth`` markers.
+        if isinstance(value, str):
+            if len(value) > 500:
+                omitted = len(value) - 480
+                return (
+                    value[:240]
+                    + f"... [truncated {omitted} chars] ..."
+                    + value[-240:]
+                )
+            return value
+        if not isinstance(value, (dict, list)):
+            return value
+        if depth >= _MAX_CONTAINER_DEPTH:
             return {"_truncated_depth": True}
         if isinstance(value, dict):
             keys = list(value)
@@ -74,10 +93,7 @@ def project_observation(observation: Any, max_chars: int) -> str:
                 {"_omitted_items": len(value) - 24},
                 *[compact(item, depth + 1) for item in value[-12:]],
             ]
-        if isinstance(value, str) and len(value) > 500:
-            omitted = len(value) - 480
-            return value[:240] + f"... [truncated {omitted} chars] ..." + value[-240:]
-        return value
+        raise AssertionError("unreachable observation container type")
 
     projected = compact(observation)
     rendered = json.dumps(projected, ensure_ascii=False, default=str)

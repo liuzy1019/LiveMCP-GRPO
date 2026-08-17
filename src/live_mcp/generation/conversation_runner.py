@@ -12,8 +12,10 @@ from src.live_mcp.generation.robustness import (
     missing_function_original_round_should_abort as _missing_function_original_round_should_abort,
     zero_tool_terminal_is_valid as _zero_tool_terminal_is_valid,
 )
-from src.live_mcp.live_state_query_view import live_context_to_prompt_state as _live_context_to_prompt_state
-from src.live_mcp.task_planner import ContinuationPolicy
+from src.live_mcp.live_state_query_view import (
+    generation_query_prompt_state as _generation_query_prompt_state,
+)
+from src.live_mcp.generation.teacher_contracts import ContinuationPolicy
 
 
 @dataclass
@@ -27,8 +29,8 @@ class ConversationResult:
     required_tools: set[str]
     conversation_queries: list[str]
     oracle_calls_per_round: list[list[Any]]
+    oracle_observations_per_round: list[list[Any]]
     execution_history_per_round: list[list[Any]]
-    continuation_goal_specs: list[dict[str, Any]]
     task_id: str
     initial_action_entity_summaries: list[Any]
 
@@ -56,8 +58,8 @@ def run_candidate_conversation(
     all_required_tools = set()
     conversation_queries = [user_query]  # track all user messages
     oracle_calls_per_round = []  # per-round for prompt construction
+    oracle_observations_per_round = []
     execution_history_per_round = []
-    continuation_goal_specs: list[dict[str, Any]] = []
     task_id = f"{server_name}_{local_seed}_{local_rng.randint(0, 99999)}"
     retry_label = f" (retry {retry_attempt})" if retry_attempt > 0 else ""
 
@@ -88,9 +90,9 @@ def run_candidate_conversation(
     decision = "follow_up"  # dummy, overwritten on round_idx==0 path below
     continuation_grounding_state: dict[str, Any] = {}
     while True:
-        # The Action Teacher receives the same public facts used to
-        # formulate the current query, but never sampler-private IDs.
-        # The sampled chain itself remains hidden.
+        # Production profiles keep the sampled state private from the Action
+        # Teacher. It receives the user query, schemas, public conversation and
+        # real execution observations; the sampled chain itself remains hidden.
         round_action_context: dict[str, Any] = (
             {}
             if orchestrator.prompt_profile.policy_private
@@ -116,7 +118,7 @@ def run_candidate_conversation(
                     conversation_context=completed_conversation_context,
                 )
             else:
-                current_query = teacher.generate_followup(
+                generated_followup = teacher.generate_followup(
                     tool_schemas=teacher_visible_tools,
                     grounded_state=continuation_grounding_state,
                     previous_query=current_query,
@@ -128,8 +130,11 @@ def run_candidate_conversation(
                     chain_progress=0,
                     previous_response=previous_assistant_response,
                     conversation_context=completed_conversation_context,
-                    goal_spec=None,
                 )
+                if isinstance(generated_followup, str):
+                    current_query = generated_followup
+                else:
+                    current_query = generated_followup.user_query
             conversation_queries.append(current_query)
             conversation_fsm.transition(
                 FSMStateGroup.TURN,
@@ -170,7 +175,7 @@ def run_candidate_conversation(
             session_id=session_id,
             difficulty=difficulty,
             round_idx=round_idx,
-    turn_budget=teacher_tool_call_budget(
+            turn_budget=teacher_tool_call_budget(
                 max_turns,
                 source_chain_seed if round_idx == 0 else None,
             ),
@@ -179,24 +184,13 @@ def run_candidate_conversation(
             chain_context=round_action_context,
             blocked_tools=blocked_tools_set,
             missing_function_contract=plan.missing_function,
-            allowed_missing_mutations={
-                str(item.get("capability") or "")
-                for item in generated_query.mutation_evidence
-                if str(item.get("capability") or "")
-                != plan.hidden_tool
-            },
             prior_execution_history=all_execution_history,
             conversation_context=completed_conversation_context,
             allow_direct_answer=(
                 round_idx > 0 and decision == "clarification"
             ),
-            dependency_plan=(
-                list(generated_query.dependency_evidence)
-                if (
-                    round_idx == 0
-                    and orchestrator.prompt_profile.dependency_necessary
-                )
-                else []
+            authorized_mutating_tools=(
+                set(source_chain_seed or []) if round_idx == 0 else None
             ),
             fsm=conversation_fsm,
         )
@@ -249,6 +243,7 @@ def run_candidate_conversation(
         )
         all_required_tools |= round_reqs
         oracle_calls_per_round.append(list(filtered_round_ocs))
+        oracle_observations_per_round.append(list(filtered_round_obs))
         execution_history_per_round.append(list(round_hist))
 
         round_terminals = [
@@ -334,8 +329,10 @@ def run_candidate_conversation(
                 force_refresh=True,
             )
         )
-        continuation_grounding_state = _live_context_to_prompt_state(
-            refreshed_continuation_context
+        continuation_grounding_state = _generation_query_prompt_state(
+            refreshed_continuation_context,
+            server_name,
+            natural_selector=orchestrator.prompt_profile.natural_selector,
         )
         trace_generation(
             "continuation_live_state_refresh",
@@ -363,8 +360,8 @@ def run_candidate_conversation(
         required_tools=all_required_tools,
         conversation_queries=conversation_queries,
         oracle_calls_per_round=oracle_calls_per_round,
+        oracle_observations_per_round=oracle_observations_per_round,
         execution_history_per_round=execution_history_per_round,
-        continuation_goal_specs=continuation_goal_specs,
         task_id=task_id,
         initial_action_entity_summaries=initial_action_entity_summaries,
     )

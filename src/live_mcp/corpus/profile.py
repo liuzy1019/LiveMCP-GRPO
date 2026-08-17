@@ -19,11 +19,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 
-from src.live_mcp.corpus.shard import _validate_parquet_readback
-from src.live_mcp.artifact.reward_task import build_reward_task
-from src.live_mcp.registry.environment_metadata import (
-    validate_training_artifact_evidence,
-)
+from src.live_mcp.artifact.readback import validate_parquet_readback
+from src.live_mcp.artifact.validation import validate_artifact_contract
 from src.utils import normalize_extra_info, sha256_file
 
 
@@ -37,8 +34,7 @@ PROVE_PUBLISHED_TOTAL = sum(PROVE_PUBLISHED_COUNTS.values())
 
 def _is_no_tool(extra_info: Any) -> bool:
     normalized = normalize_extra_info(extra_info)
-    validate_training_artifact_evidence(normalized)
-    task = build_reward_task(normalized)
+    task = validate_artifact_contract(normalized, require_training=True)
     required = task.get("required_tool_calls")
     if not isinstance(required, list):
         raise RuntimeError("production reward parser returned invalid required_tool_calls")
@@ -98,8 +94,7 @@ def _max_capacity_ratio_quotas(
 
 def _prove_proxy_bucket(extra_info: Any) -> tuple[str | None, int]:
     extra = normalize_extra_info(extra_info)
-    validate_training_artifact_evidence(extra)
-    task = build_reward_task(extra)
+    task = validate_artifact_contract(extra, require_training=True)
     required = task.get("required_tool_calls")
     if not isinstance(required, list):
         raise RuntimeError("production reward parser returned invalid required_tool_calls")
@@ -277,8 +272,8 @@ def build_prove_composition_proxy(
         val_output = staging / "val.parquet"
         selected_train.to_parquet(train_output, index=False)
         shutil.copy2(val_input, val_output)
-        _validate_parquet_readback(train_output)
-        _validate_parquet_readback(val_output)
+        validate_parquet_readback(train_output)
+        validate_parquet_readback(val_output)
 
         selected_rows = len(selected_train)
         report = {
@@ -419,8 +414,8 @@ def build_training_mix(
         val_output = staging / "val.parquet"
         selected_train.to_parquet(train_output, index=False)
         shutil.copy2(val_input, val_output)
-        _validate_parquet_readback(train_output)
-        _validate_parquet_readback(val_output)
+        validate_parquet_readback(train_output)
+        validate_parquet_readback(val_output)
 
         report = {
             "status": "passed",

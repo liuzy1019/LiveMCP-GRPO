@@ -1,12 +1,19 @@
-# Bytecode
+# Python build and cache
 __pycache__/
 *.py[cod]
-*.pyo
 *.egg-info/
 *.egg
 dist/
 build/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Virtual environments
 .venv/
@@ -16,6 +23,7 @@ env/
 # IDE
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -27,17 +35,19 @@ Thumbs.db
 # Logs
 /logs/*
 !/logs/.gitkeep
+*.log
 
-# Data output (keep directory structure, ignore generated data)
+# Generated data
 /data/*.parquet
 /data/*.json
-/data/*.log
 /data/*.csv
 /data/runs/
 
 # Training artifacts
 checkpoints/
 wandb/
+ray_results/
+outputs/
 *.pt
 *.bin
 *.safetensors
@@ -54,13 +64,14 @@ wandb/
 
 # Misc
 tmp_*
+*.tmp
+*.bak
 /.runtime_cache/
 /.generation-trace-viewer/
 
-# Internal project docs (not for public repo)
+# Local agent instructions
 /AGENTS.md
 /CLAUDE.md
-/docs/
 修复记录.MD
 *.修复记录.*
 

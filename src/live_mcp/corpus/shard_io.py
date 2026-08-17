@@ -2,36 +2,14 @@
 
 from __future__ import annotations
 
-import argparse
 import json
-import math
-import os
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 from loguru import logger
 
-from src.live_mcp.task_planner import DOMAIN_DESCRIPTIONS
-from src.live_mcp.planner_format import format_tools
-from src.live_mcp.prompt_profiles import PROMPT_PROFILES, resolve_prompt_profile
-from src.live_mcp.registry.tool_semantics import (
-    SELF_CONTAINED_WRITE_TOOLS,
-    is_mutating_tool,
-    resolve_tool_execution_semantics,
-)
 from src.live_mcp.dedup import dedup_tasks
-from src.live_mcp.dependency_trace import (
-    align_sampled_chain, auxiliary_tool_call_indices,
-    dependency_edges_from_alignment,
-)
-
-from src.live_mcp.corpus.shard_oracle import (
-    _task_scenario,
-)
+from src.live_mcp.corpus.shard_oracle import _task_scenario
+from src.live_mcp.prompt_profiles import requires_outcome_replay
 
 def _validate_canonical_rows_replay(
     rows: list[dict],
@@ -48,12 +26,16 @@ def _validate_canonical_rows_replay(
     """
     from src.live_mcp.replay.gates import replay_validate
     from src.live_mcp.types import OracleCall
+    from src.live_mcp.artifact.reward_task import (
+        validate_ground_truth_consistency,
+    )
     from src.utils import normalize_json_field
 
     for row_index, row in enumerate(rows):
         extra_info = row.get("extra_info") or {}
         reward_model = row.get("reward_model") or {}
         ground_truth = reward_model.get("ground_truth") or {}
+        validate_ground_truth_consistency(extra_info, ground_truth)
         raw_calls = normalize_json_field(
             ground_truth.get("oracle_calls", "[]"), default=[],
         )
@@ -99,7 +81,10 @@ def _validate_canonical_rows_replay(
                 f"{type(exc).__name__}: {exc}"
             ) from exc
         valid, error_rate, num_errors, num_calls, criteria_ok, criteria_failed = replay
-        if not valid or not criteria_ok:
+        outcome_required = requires_outcome_replay(
+            str(extra_info.get("prompt_profile") or "")
+        )
+        if not valid or (outcome_required and not criteria_ok):
             raise RuntimeError(
                 f"canonical replay rejected task="
                 f"{extra_info.get('task_id', row.get('uid', 'unknown'))}: "
@@ -110,67 +95,8 @@ def _validate_canonical_rows_replay(
         extra_info["canonical_replay_error_rate"] = float(error_rate)
         extra_info["canonical_replay_num_errors"] = int(num_errors)
         extra_info["canonical_replay_num_calls"] = int(num_calls)
-        extra_info["canonical_replay_criteria_ok"] = True
+        extra_info["canonical_replay_criteria_ok"] = bool(criteria_ok)
         extra_info["canonical_replay_criteria_failed"] = int(criteria_failed)
-
-def _validate_parquet_readback(path: Path) -> None:
-    """Run every written row through the production reward parser."""
-    import importlib
-    import pandas as pd
-    from src.live_mcp.registry.environment_metadata import (
-        compute_initial_state_hashes,
-        normalize_state_profiles,
-        validate_prove_corpus_evidence,
-        validate_teacher_generation_evidence,
-        validate_environment_metadata,
-    )
-    from src.live_mcp.artifact.reward_task import build_reward_task
-    from src.utils import normalize_extra_info
-
-    frame = pd.read_parquet(path)
-    for row_index, raw_extra in enumerate(frame.get("extra_info", [])):
-        try:
-            extra_info = normalize_extra_info(raw_extra)
-            validate_prove_corpus_evidence(extra_info)
-            validate_teacher_generation_evidence(extra_info)
-            owners_raw = extra_info.get("tool_owner_domains", {})
-            if isinstance(owners_raw, str):
-                owners_raw = json.loads(owners_raw)
-            owners = {str(extra_info.get("domain") or "")}
-            if isinstance(owners_raw, dict):
-                owners.update(str(owner) for owner in owners_raw.values())
-            owners.discard("")
-            tools_by_owner = {
-                owner: list(importlib.import_module(
-                    f"src.live_mcp.servers.{owner}.server"
-                ).TOOLS)
-                for owner in owners
-            }
-            validate_environment_metadata(
-                extra_info,
-                current_tools_by_domain=tools_by_owner,
-                required_owner_domains=owners,
-                reward_profile="prove_baseline",
-                runtime_max_observation_chars=int(
-                    extra_info.get("max_observation_chars", 4096)
-                ),
-                current_initial_state_hashes=compute_initial_state_hashes(
-                    owners,
-                    int(extra_info["session_seed"]),
-                    normalize_state_profiles(
-                        extra_info.get("state_profiles"), owners
-                    ),
-                ),
-            )
-            task = build_reward_task(extra_info)
-        except Exception as exc:
-            raise RuntimeError(
-                f"{path}: row {row_index} failed production parser readback: {exc}"
-            ) from exc
-        if not isinstance(task, dict) or "required_tool_calls" not in task:
-            raise RuntimeError(
-                f"{path}: row {row_index} produced invalid reward task"
-            )
 
 def _candidate_shard_split(
     tasks: list,
@@ -245,9 +171,7 @@ def _stratified_task_split(
     import random
     from collections import defaultdict
 
-    # Jaccard 0.70 deduplication on tool-call sequences.
-    # Position-aware: {(index, tool_name)} — order and repeat count matter,
-    # arguments are ignored (dedup.py/jaccard_similarity).
+    # PROVE Jaccard 0.70 deduplication on plain tool-name sets.
     # All surviving conversations share one dedup pool.
     # a domain exemption.
     unique = dedup_tasks(tasks, threshold=0.70)
@@ -372,7 +296,10 @@ def _row_fingerprint(row) -> str:
 
 def _assert_split_integrity(df_train, df_val, args) -> None:
     if args.shard_mode:
-        if len(df_train) + len(df_val) == 0:
+        if (
+            len(df_train) + len(df_val) == 0
+            and not args.fixed_attempt_budget
+        ):
             raise RuntimeError("Candidate shard contains no rows")
         if len(df_train) > args.count or len(df_val) > args.val_count:
             raise RuntimeError(

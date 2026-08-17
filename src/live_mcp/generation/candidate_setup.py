@@ -77,7 +77,13 @@ def setup_candidate_attempt(
             distractor_tools=list(robustness_plan.distractor_tools),
             strip_enums=robustness_plan.strip_enums,
             missing_function=robustness_plan.missing_function,
+            missing_function_requested=(
+                robustness_plan.missing_function_requested
+                or robustness_plan.missing_function
+            ),
             hidden_tool=None,
+            missing_function_evidence=(),
+            missing_function_binding_failure="",
             irrelevance=robustness_plan.irrelevance,
         )
     teacher_visible_tools = _build_teacher_visible_tools(server_tools, plan)

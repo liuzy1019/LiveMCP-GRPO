@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.live_mcp.dependency_trace import align_sampled_chain
 from src.live_mcp.fsm import RobustnessPlan
+from src.live_mcp.contracts.state_relations import render_predicate
 from src.live_mcp.registry.tool_semantics import resolve_tool_execution_semantics
+from src.live_mcp.registry.tool_semantics import unresolved_failed_tool_names
+from src.live_mcp.contracts.factory import build_contract_registry
+from src.live_mcp.dependency_chain_policy import missing_function_chain_issue
 
 
 def profile_scenario_is_valid(
@@ -23,21 +26,6 @@ def profile_scenario_is_valid(
 
 def normalized_policy_query(text: Any) -> str:
     return " ".join(str(text or "").casefold().split())
-
-
-def has_successful_state_transition_noop(
-    execution_history: list[dict[str, Any]], domain: str,
-) -> bool:
-    return any(
-        isinstance(event, dict)
-        and event.get("success") is True
-        and event.get("state_changed") is False
-        and resolve_tool_execution_semantics(
-            str(event.get("tool_name") or ""),
-            str(event.get("server_name") or domain),
-        ) == "state_transition"
-        for event in execution_history
-    )
 
 
 def single_round_clarification_with_successful_mutation(
@@ -101,10 +89,9 @@ def hallucinated_report_error(
         the environment state advanced but the terminal action denies
         it.
 
-    (b) No tool call in the history has ``success == False``.  Since
-        ``report_error`` is meant to surface a real execution failure,
-        emitting it without any failed call means the Teacher fabricated
-        the error narrative.
+    (b) Neither a failed call nor a successful read with an explicitly empty
+        or partial result appears in history.  Empty discovery results are
+        factual inability evidence even though the MCP transport succeeded.
 
     Abstention-flavoured scenarios (``missing_function``, ``irrelevant``,
     ``no_tool_or_abstention``) are exempt because they are defined as
@@ -132,7 +119,17 @@ def hallucinated_report_error(
         and event.get("tool_name") != "__reject__"
         for event in execution_history
     )
-    return not has_failed_tool_call
+    has_empty_result_evidence = any(
+        isinstance(event, dict)
+        and event.get("success") is True
+        and event.get("execution_status") == "PARTIAL_SUCCESS"
+        and resolve_tool_execution_semantics(
+            str(event.get("tool_name") or ""),
+            str(event.get("server_name") or domain),
+        ) != "state_transition"
+        for event in execution_history
+    )
+    return not (has_failed_tool_call or has_empty_result_evidence)
 
 
 def successful_distractor_names(
@@ -148,25 +145,6 @@ def successful_distractor_names(
         if getattr(call, "action", "tool_call") == "tool_call"
         and str(getattr(call, "tool_name", "") or "") in distractor_names
     }
-
-
-def successful_conversation_realizes_source_chain(
-    *, scenario_type: str, source_chain_seed: list[str] | None,
-    oracle_calls: list[Any], primary_domain: str,
-) -> bool:
-    if not scenario_type:
-        raise ValueError("scenario must be classified before source-chain validation")
-    if scenario_type not in {"normal_safe_success", "tool_error_recovery"}:
-        return True
-    chain = list(source_chain_seed or [])
-    if not chain:
-        return False
-    primary_calls = [
-        call for call in oracle_calls
-        if getattr(call, "action", "tool_call") != "tool_call"
-        or str(getattr(call, "server_name", "") or primary_domain) == primary_domain
-    ]
-    return align_sampled_chain(primary_calls, chain) is not None
 
 
 def missing_function_original_round_should_abort(
@@ -190,21 +168,14 @@ def zero_tool_terminal_is_valid(
     return difficulty in ("missing", "minimal") and "ask_clarification" in actions
 
 
-def missing_function_has_nonprefix_mutation(
+def missing_function_has_mutation(
     missing_function: bool,
     oracle_calls: list[Any],
-    source_chain_seed: list[str] | None,
-    hidden_tool: str,
     tool_schemas: list[dict[str, Any]],
-    authorized_mutations: set[str] | None = None,
 ) -> bool:
-    if not missing_function or not hidden_tool or not source_chain_seed:
+    """Return whether a missing-capability trace changed server state."""
+    if not missing_function:
         return False
-    if hidden_tool not in source_chain_seed:
-        return False
-    hidden_position = source_chain_seed.index(hidden_tool)
-    authorized = set(source_chain_seed[:hidden_position])
-    authorized.update(authorized_mutations or set())
     schemas = {str(item.get("name") or ""): item for item in tool_schemas}
 
     def call_field(call: Any, field: str, default: Any = "") -> Any:
@@ -217,9 +188,75 @@ def missing_function_has_nonprefix_mutation(
         and (schemas.get(str(call_field(call, "tool_name") or ""), {}).get(
             "annotations"
         ) or {}).get("mutating") is True
-        and str(call_field(call, "tool_name") or "") not in authorized
         for call in oracle_calls
     )
+
+
+def bind_missing_function_contract(
+    *, domain: str, source_chain_seed: list[str] | None,
+    tool_schemas: list[dict[str, Any]], plan: RobustnessPlan,
+    require_capability_evidence: bool = True,
+) -> tuple[RobustnessPlan | None, str]:
+    """Bind a sampled missing-function knob to audited state-effect evidence.
+
+    Tool-name absence alone does not prove capability absence.  Until readonly
+    information facets are declared, only a mutating target with at least one
+    postcondition not produced by any remaining visible tool is eligible.
+    """
+    if not plan.missing_function:
+        return plan, ""
+    chain = list(source_chain_seed or [])
+    if not chain:
+        return None, "missing_function_without_dependency_chain"
+    hidden_tool = chain[-1]
+    schema_by_name = {
+        str(schema.get("name") or ""): schema for schema in tool_schemas
+    }
+    hidden_schema = schema_by_name.get(hidden_tool)
+    if not hidden_schema:
+        return None, "missing_function_hidden_target_unknown"
+    if not require_capability_evidence:
+        plan.hidden_tool = hidden_tool
+        return plan, ""
+    registry = build_contract_registry({domain: tool_schemas})
+    contract_issue = missing_function_chain_issue(registry, domain, chain)
+    if contract_issue:
+        return None, contract_issue
+    target_postconditions = registry.get(domain, hidden_tool).postconditions
+    visible_effects = {
+        render_predicate(predicate)
+        for contract in registry.domain(domain)
+        if contract.name != hidden_tool
+        for predicate in contract.postconditions
+    }
+    unique_effects = tuple(sorted(
+        render_predicate(predicate)
+        for predicate in target_postconditions
+        if render_predicate(predicate) not in visible_effects
+    ))
+    if not unique_effects:
+        return None, "missing_function_unique_state_effect_unproven"
+    plan.hidden_tool = hidden_tool
+    plan.missing_function_evidence = unique_effects
+    return plan, ""
+
+
+def missing_function_unresolved_failures(
+    missing_function: bool,
+    execution_history: list[dict[str, Any]],
+) -> set[str]:
+    """Return real execution failures that confound a missing-function row.
+
+    Missing-function is a controlled robustness variant whose unavailable
+    final capability is the intended blocker.  A visible call that failed and
+    was never repaired introduces a second, observed cause of incompletion.
+    """
+    if not missing_function:
+        return set()
+    return {
+        name for name in unresolved_failed_tool_names(execution_history)
+        if name != "__reject__"
+    }
 
 
 def strip_enums_from_schemas(tools: list[dict]) -> list[dict]:

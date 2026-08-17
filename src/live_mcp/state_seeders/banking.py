@@ -7,7 +7,6 @@ import random
 from typing import Any
 
 from src.live_mcp.state_seeders.common import (
-    _reference_datetime,
     _sample_entities,
     _seed_scoped_id,
 )
@@ -35,7 +34,7 @@ _BANKING_ACCOUNT_TEMPLATES: list[tuple[str, str, float, str, str]] = [
 ]
 
 def _banking_state(seed: int) -> dict[str, Any]:
-    from src.live_mcp.task_planner import reference_datetime_for_seed
+    from src.live_mcp.generation.teacher_contracts import reference_datetime_for_seed
 
     rng = random.Random(seed)
     selected = _sample_entities(rng, _BANKING_ACCOUNT_TEMPLATES, target_count=20, id_prefix="acc")
@@ -49,6 +48,7 @@ def _banking_state(seed: int) -> dict[str, Any]:
         accounts[scoped_aid] = {
             "account_id": scoped_aid, "owner": owner, "balance": round(balance + rng.randint(-200, 200), 2),
             "currency": "USD", "type": atype, "frozen": is_frozen,
+            "account_last4": f"{1000 + ((seed % 8000 + idx * 379) % 9000):04d}",
             "opened_date": opened,
         }
     account_ids = list(accounts)
@@ -58,17 +58,17 @@ def _banking_state(seed: int) -> dict[str, Any]:
     transaction_seeds = [
         # (from_account_idx, to_account_idx, amount, txn_type, memo)
         (0, 1, 500.0, "transfer", "Rent payment"),
-        (2, None, 2500.0, "deposit", "Salary"),
-        (None, 3, 120.0, "bill_pay", "Electric bill"),
+        (None, 2, 2500.0, "deposit", "Salary"),
+        (3, None, 120.0, "bill_pay", "Electric bill"),
         (4, None, 75.5, "withdrawal", "ATM withdrawal"),
         (0, 3, 300.0, "transfer", "Shared expenses"),
         (None, 1, 1800.0, "deposit", "Freelance payment"),
         (5, 6, 1200.0, "transfer", "Investment transfer"),
-        (None, 2, 350.0, "bill_pay", "Internet bill"),
+        (2, None, 350.0, "bill_pay", "Internet bill"),
         (7, None, 200.0, "withdrawal", "Cash withdrawal"),
         (None, 8, 950.0, "deposit", "Tax refund"),
         (9, 10, 400.0, "transfer", "Monthly savings"),
-        (None, 11, 80.0, "bill_pay", "Phone bill"),
+        (11, None, 80.0, "bill_pay", "Phone bill"),
         (12, None, 150.0, "withdrawal", "Groceries"),
         (None, 13, 2200.0, "deposit", "Bonus payment"),
         (14, 15, 85.0, "transfer", "Dinner split"),

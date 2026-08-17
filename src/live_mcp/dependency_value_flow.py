@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 import re
@@ -10,15 +9,15 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from src.live_mcp.contracts.factory import build_contract_registry
-from src.live_mcp.contracts.value_flow import novel_output_fields
+from src.live_mcp.contracts.value_flow import (
+    chain_novel_output_fields,
+    novel_output_fields,
+)
 from src.live_mcp.domain_contracts.dependency import (
     _DEPENDENCY_TOOL_OUTPUT_FIELDS,
 )
 from src.live_mcp.domain_contracts.value_bindings import OUTPUT_ARGUMENT_ALIASES
-from src.live_mcp.domain_contracts.entities import _CREATED_ENTITY_BY_TOOL
 from src.live_mcp.domain_contracts.states import DOMAIN_STATE_FACTS
-from src.live_mcp.registry.tool_semantics import resolve_tool_execution_semantics
-from src.live_mcp.task_spec import DifficultyVector
 from src.live_mcp.types import OracleCall
 
 def _dependency_value_key(value: Any) -> str:
@@ -228,15 +227,15 @@ def _operational_dependency_contracts(
     profiles. It does not change the cached PROVE-style pair classifications.
     """
     required_by_tool = _required_arguments_by_tool(tool_schemas)
-    tools_by_name = {
-        str(tool.get("name") or ""): tool for tool in tool_schemas
-    }
     contract_registry = build_contract_registry({server_name: tool_schemas})
+    chain_contracts = [
+        contract_registry.get(server_name, name) for name in chain
+    ]
     contracts: list[dict[str, str]] = []
     for source_index, source_name in enumerate(chain[:-1]):
-        source_fields = _novel_dependency_output_fields(
-            server_name, source_name, tools_by_name,
-        )
+        source_fields = set(chain_novel_output_fields(
+            chain_contracts, source_index,
+        ))
         if not source_fields:
             continue
         for target_name in chain[source_index + 1:]:
@@ -254,87 +253,58 @@ def _operational_dependency_contracts(
     return contracts
 
 
-def _difficulty_vector_for_chain(
-    *,
-    chain: list[str],
+def _filter_relation_verifiable_chains(
+    chains: list[list[str]],
+    graph: dict[str, Any],
     server_name: str,
-    server_tools: list[dict[str, Any]],
-    chain_context: dict[str, Any],
-    feasible_chains: list[list[str]],
-    distractor_count: int,
-) -> DifficultyVector:
-    """Measure decision structure before Query/Action Teacher generation."""
-    contracts = _operational_dependency_contracts(
-        chain, server_name, server_tools,
-    )
-    contract_registry = build_contract_registry({server_name: server_tools})
-    hidden_types = {
-        str(value)
-        for value in chain_context.get("opaque_id_hidden_types", [])
-        if str(value)
-    }
-    selector_candidates = {
-        (str(record.get("type") or ""), str(record.get("id") or ""))
-        for record in chain_context.get("entity_records", [])
-        if isinstance(record, dict)
-        and str(record.get("type") or "") in hidden_types
-        and str(record.get("id") or "")
-    }
-    observation_arguments = {
-        (
-            str(item.get("target_capability") or ""),
-            str(item.get("target_argument") or ""),
+    tool_schemas: list[dict[str, Any]],
+) -> tuple[list[list[str]], dict[str, int]]:
+    """Keep chains whose adjacent relations have a verification path.
+
+    An explicit classifier edge must have a deterministic observation-to-
+    argument contract for the same adjacent source and target.  An implicit
+    edge deliberately has no such requirement: it is verified after execution
+    by ``verify_implicit_edges_counterfactually``.  Requiring every chain to
+    contain an explicit value-flow contract would erase valid state-dependent
+    PROVE chains, including the filesystem domain.
+    """
+    retained: list[list[str]] = []
+    issue_counts: dict[str, int] = {}
+    for chain in chains:
+        try:
+            sampled_edges = _sampled_chain_edges(chain, graph)
+        except RuntimeError as exc:
+            reason = f"relation_metadata_invalid:{exc}"
+            issue_counts[reason] = issue_counts.get(reason, 0) + 1
+            continue
+        contracts = _operational_dependency_contracts(
+            chain, server_name, tool_schemas,
         )
-        for item in contracts
-        if item.get("target_capability") and item.get("target_argument")
-    }
-    tools_by_name = {
-        str(tool.get("name") or ""): tool
-        for tool in server_tools
-        if isinstance(tool, dict)
-    }
-    post_mutation_rechecks = 0
-    mutated_entity_types: set[str] = set()
-    for tool_name in chain:
-        semantics = resolve_tool_execution_semantics(tool_name, server_name)
-        contract = contract_registry.get(server_name, tool_name)
-        entity_types = set(contract.required_entity_types) | {
-            binding.entity_type for binding in contract.output_entities
-        }
-        if semantics == "readonly" and mutated_entity_types & entity_types:
-            post_mutation_rechecks += 1
-        if semantics == "state_transition":
-            mutated_entity_types.update(entity_types)
-        # Fail closed on schemas that claim mutation even when the local
-        # semantic registry has not classified the capability yet.
-        annotations = tools_by_name.get(tool_name, {}).get("annotations") or {}
-        if annotations.get("mutating") is True:
-            mutated_entity_types.update(entity_types)
-    final_capability = chain[-1] if chain else ""
-    viable_same_outcome = sum(
-        1 for candidate in feasible_chains
-        if candidate and candidate[-1] == final_capability
-    )
-    return DifficultyVector(
-        selector_candidate_count=len(selector_candidates),
-        viable_chain_count=max(1, viable_same_outcome),
-        operational_dependency_count=len(contracts),
-        observation_derived_argument_count=len(observation_arguments),
-        post_mutation_recheck_count=post_mutation_rechecks,
-        distractor_count=max(0, int(distractor_count)),
-        oracle_tool_count=len(chain),
-    )
-
-
-def _decision_stratum(vector: DifficultyVector) -> str:
-    """Map a static vector to one mutually exclusive gray-test stratum."""
-    if vector.post_mutation_recheck_count > 0:
-        return "stateful"
-    if vector.observation_derived_argument_count >= 2:
-        return "dependent"
-    if vector.selector_candidate_count >= 2:
-        return "discovery"
-    return "direct"
+        missing_explicit_edges = [
+            (
+                str(edge.get("source_capability") or ""),
+                str(edge.get("target_capability") or ""),
+            )
+            for edge in sampled_edges
+            if edge.get("relation") == "explicit"
+            and not any(
+                contract.get("source_capability")
+                == edge.get("source_capability")
+                and contract.get("target_capability")
+                == edge.get("target_capability")
+                for contract in contracts
+            )
+        ]
+        if missing_explicit_edges:
+            for source_name, target_name in missing_explicit_edges:
+                reason = (
+                    "explicit_edge_without_value_contract:"
+                    f"{source_name}->{target_name}"
+                )
+                issue_counts[reason] = issue_counts.get(reason, 0) + 1
+            continue
+        retained.append(chain)
+    return retained, dict(sorted(issue_counts.items()))
 
 
 def _verify_dependency_evidence(
@@ -408,10 +378,6 @@ def _verify_dependency_evidence(
                         "\n".join(sorted(target_keys)).encode("utf-8")
                     ).hexdigest(),
                 })
-                break
-            else:
-                continue
-            break
     return verified
 
 

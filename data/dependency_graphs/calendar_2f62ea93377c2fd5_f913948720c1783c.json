@@ -1,223 +1,290 @@
 {
   "cache_version": 8,
   "dependency_semantics_version": 30,
-  "server_name": "banking",
-  "schema_hash": "f5af6c2d2121d709",
+  "server_name": "calendar",
+  "schema_hash": "2f62ea93377c2fd5",
   "tool_names": [
-    "apply_loan",
-    "bill_pay",
-    "cancel_transfer",
-    "deposit",
-    "freeze_account",
-    "get_account_info",
-    "get_balance",
-    "get_exchange_rate",
-    "get_history",
-    "get_statement",
-    "list_accounts",
-    "list_scheduled_transfers",
-    "schedule_transfer",
-    "transfer",
-    "unfreeze_account",
-    "verify_account",
-    "wire_transfer",
-    "withdraw"
+    "add_attendee",
+    "change_timezone",
+    "check_conflicts",
+    "create_event",
+    "create_recurring",
+    "delete_event",
+    "export_calendar",
+    "get_event",
+    "get_free_busy",
+    "get_recurring_info",
+    "get_working_hours",
+    "list_events",
+    "remove_attendee",
+    "respond_to_event",
+    "search_events",
+    "set_reminder",
+    "update_event"
   ],
   "graph": {
-    "apply_loan": {
-      "explicit": [],
-      "implicit": []
-    },
-    "bill_pay": {
-      "explicit": [],
-      "implicit": []
-    },
-    "cancel_transfer": {
-      "explicit": [],
-      "implicit": []
-    },
-    "deposit": {
-      "explicit": [],
-      "implicit": []
-    },
-    "freeze_account": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_account_info": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_balance": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_exchange_rate": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_history": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_statement": {
-      "explicit": [],
-      "implicit": []
-    },
-    "list_accounts": {
+    "add_attendee": {
       "explicit": [
-        "apply_loan",
-        "bill_pay",
-        "deposit",
-        "freeze_account",
-        "get_account_info",
-        "get_balance",
-        "get_history",
-        "get_statement",
-        "schedule_transfer",
-        "transfer",
-        "unfreeze_account",
-        "verify_account",
-        "wire_transfer",
-        "withdraw"
+        "respond_to_event"
       ],
-      "implicit": []
-    },
-    "list_scheduled_transfers": {
-      "explicit": [
-        "cancel_transfer"
-      ],
-      "implicit": []
-    },
-    "schedule_transfer": {
-      "explicit": [
-        "cancel_transfer"
-      ],
-      "implicit": []
-    },
-    "transfer": {
-      "explicit": [],
-      "implicit": []
-    },
-    "unfreeze_account": {
-      "explicit": [],
       "implicit": [
-        "deposit",
-        "wire_transfer",
-        "withdraw"
+        "remove_attendee"
       ]
     },
-    "verify_account": {
+    "change_timezone": {
       "explicit": [],
       "implicit": []
     },
-    "wire_transfer": {
+    "check_conflicts": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "create_event": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "create_recurring": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "delete_event": {
       "explicit": [],
       "implicit": []
     },
-    "withdraw": {
+    "export_calendar": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "get_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_free_busy": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_recurring_info": {
+      "explicit": [],
+      "implicit": []
+    },
+    "get_working_hours": {
+      "explicit": [
+        "change_timezone"
+      ],
+      "implicit": []
+    },
+    "list_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "remove_attendee": {
+      "explicit": [],
+      "implicit": []
+    },
+    "respond_to_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "set_reminder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_event": {
       "explicit": [],
       "implicit": []
     }
   },
   "raw_graph": {
-    "apply_loan": {
-      "explicit": [],
-      "implicit": []
-    },
-    "bill_pay": {
-      "explicit": [],
-      "implicit": []
-    },
-    "cancel_transfer": {
-      "explicit": [],
-      "implicit": []
-    },
-    "deposit": {
-      "explicit": [],
-      "implicit": [
-        "apply_loan"
-      ]
-    },
-    "freeze_account": {
-      "explicit": [],
-      "implicit": [
-        "unfreeze_account"
-      ]
-    },
-    "get_account_info": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_balance": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_exchange_rate": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_history": {
-      "explicit": [],
-      "implicit": []
-    },
-    "get_statement": {
-      "explicit": [],
-      "implicit": []
-    },
-    "list_accounts": {
+    "add_attendee": {
       "explicit": [
-        "apply_loan",
-        "bill_pay",
-        "deposit",
-        "freeze_account",
-        "get_account_info",
-        "get_balance",
-        "get_history",
-        "get_statement",
-        "list_scheduled_transfers",
-        "schedule_transfer",
-        "transfer",
-        "unfreeze_account",
-        "verify_account",
-        "wire_transfer",
-        "withdraw"
+        "respond_to_event"
+      ],
+      "implicit": [
+        "remove_attendee"
+      ]
+    },
+    "change_timezone": {
+      "explicit": [],
+      "implicit": []
+    },
+    "check_conflicts": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
-    "list_scheduled_transfers": {
+    "create_event": {
       "explicit": [
-        "cancel_transfer"
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
-    "schedule_transfer": {
+    "create_recurring": {
       "explicit": [
-        "cancel_transfer"
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
       ],
       "implicit": []
     },
-    "transfer": {
+    "delete_event": {
       "explicit": [],
       "implicit": []
     },
-    "unfreeze_account": {
-      "explicit": [],
-      "implicit": [
-        "deposit",
-        "wire_transfer",
-        "withdraw"
-      ]
+    "export_calendar": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
     },
-    "verify_account": {
+    "get_event": {
       "explicit": [],
       "implicit": []
     },
-    "wire_transfer": {
+    "get_free_busy": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "get_recurring_info": {
       "explicit": [],
       "implicit": []
     },
-    "withdraw": {
+    "get_working_hours": {
+      "explicit": [
+        "change_timezone"
+      ],
+      "implicit": []
+    },
+    "list_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "remove_attendee": {
+      "explicit": [],
+      "implicit": []
+    },
+    "respond_to_event": {
+      "explicit": [],
+      "implicit": []
+    },
+    "search_events": {
+      "explicit": [
+        "add_attendee",
+        "delete_event",
+        "get_event",
+        "get_recurring_info",
+        "remove_attendee",
+        "respond_to_event",
+        "set_reminder",
+        "update_event"
+      ],
+      "implicit": []
+    },
+    "set_reminder": {
+      "explicit": [],
+      "implicit": []
+    },
+    "update_event": {
       "explicit": [],
       "implicit": []
     }
@@ -225,8 +292,8 @@
   "pair_classifications": [
     {
       "pair": [
-        "apply_loan",
-        "bill_pay"
+        "add_attendee",
+        "change_timezone"
       ],
       "source": "",
       "target": "",
@@ -234,8 +301,35 @@
     },
     {
       "pair": [
-        "apply_loan",
-        "cancel_transfer"
+        "add_attendee",
+        "check_conflicts"
+      ],
+      "source": "check_conflicts",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "create_event"
+      ],
+      "source": "create_event",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "create_recurring"
+      ],
+      "source": "create_recurring",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "delete_event"
       ],
       "source": "",
       "target": "",
@@ -243,224 +337,89 @@
     },
     {
       "pair": [
-        "apply_loan",
-        "deposit"
+        "add_attendee",
+        "export_calendar"
       ],
-      "source": "deposit",
-      "target": "apply_loan",
+      "source": "export_calendar",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_free_busy"
+      ],
+      "source": "get_free_busy",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "add_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "remove_attendee"
+      ],
+      "source": "add_attendee",
+      "target": "remove_attendee",
       "relation": "implicit"
     },
     {
       "pair": [
-        "apply_loan",
-        "freeze_account"
+        "add_attendee",
+        "respond_to_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_account_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_balance"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_exchange_rate"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "apply_loan",
+      "source": "add_attendee",
+      "target": "respond_to_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "apply_loan",
-        "list_scheduled_transfers"
+        "add_attendee",
+        "search_events"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "schedule_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "unfreeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "cancel_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "deposit"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "freeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_account_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_balance"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_exchange_rate"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "bill_pay",
+      "source": "search_events",
+      "target": "add_attendee",
       "relation": "explicit"
     },
     {
       "pair": [
-        "bill_pay",
-        "list_scheduled_transfers"
+        "add_attendee",
+        "set_reminder"
       ],
       "source": "",
       "target": "",
@@ -468,8 +427,8 @@
     },
     {
       "pair": [
-        "bill_pay",
-        "schedule_transfer"
+        "add_attendee",
+        "update_event"
       ],
       "source": "",
       "target": "",
@@ -477,8 +436,8 @@
     },
     {
       "pair": [
-        "bill_pay",
-        "transfer"
+        "change_timezone",
+        "check_conflicts"
       ],
       "source": "",
       "target": "",
@@ -486,8 +445,8 @@
     },
     {
       "pair": [
-        "bill_pay",
-        "unfreeze_account"
+        "change_timezone",
+        "create_event"
       ],
       "source": "",
       "target": "",
@@ -495,8 +454,8 @@
     },
     {
       "pair": [
-        "bill_pay",
-        "verify_account"
+        "change_timezone",
+        "create_recurring"
       ],
       "source": "",
       "target": "",
@@ -504,8 +463,8 @@
     },
     {
       "pair": [
-        "bill_pay",
-        "wire_transfer"
+        "change_timezone",
+        "delete_event"
       ],
       "source": "",
       "target": "",
@@ -513,8 +472,8 @@
     },
     {
       "pair": [
-        "bill_pay",
-        "withdraw"
+        "change_timezone",
+        "export_calendar"
       ],
       "source": "",
       "target": "",
@@ -522,8 +481,8 @@
     },
     {
       "pair": [
-        "cancel_transfer",
-        "deposit"
+        "change_timezone",
+        "get_event"
       ],
       "source": "",
       "target": "",
@@ -531,8 +490,8 @@
     },
     {
       "pair": [
-        "cancel_transfer",
-        "freeze_account"
+        "change_timezone",
+        "get_free_busy"
       ],
       "source": "",
       "target": "",
@@ -540,8 +499,8 @@
     },
     {
       "pair": [
-        "cancel_transfer",
-        "get_account_info"
+        "change_timezone",
+        "get_recurring_info"
       ],
       "source": "",
       "target": "",
@@ -549,71 +508,98 @@
     },
     {
       "pair": [
-        "cancel_transfer",
-        "get_balance"
+        "change_timezone",
+        "get_working_hours"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_exchange_rate"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "list_accounts"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "list_scheduled_transfers"
-      ],
-      "source": "list_scheduled_transfers",
-      "target": "cancel_transfer",
+      "source": "get_working_hours",
+      "target": "change_timezone",
       "relation": "explicit"
     },
     {
       "pair": [
-        "cancel_transfer",
-        "schedule_transfer"
+        "change_timezone",
+        "list_events"
       ],
-      "source": "schedule_transfer",
-      "target": "cancel_transfer",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_recurring"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "delete_event"
+      ],
+      "source": "check_conflicts",
+      "target": "delete_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "cancel_transfer",
-        "transfer"
+        "check_conflicts",
+        "export_calendar"
       ],
       "source": "",
       "target": "",
@@ -621,107 +607,17 @@
     },
     {
       "pair": [
-        "cancel_transfer",
-        "unfreeze_account"
+        "check_conflicts",
+        "get_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "freeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_account_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_balance"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_exchange_rate"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "deposit",
+      "source": "check_conflicts",
+      "target": "get_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "deposit",
-        "list_scheduled_transfers"
+        "check_conflicts",
+        "get_free_busy"
       ],
       "source": "",
       "target": "",
@@ -729,116 +625,17 @@
     },
     {
       "pair": [
-        "deposit",
-        "schedule_transfer"
+        "check_conflicts",
+        "get_recurring_info"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "unfreeze_account"
-      ],
-      "source": "unfreeze_account",
-      "target": "deposit",
-      "relation": "implicit"
-    },
-    {
-      "pair": [
-        "deposit",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "deposit",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_account_info"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_balance"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_exchange_rate"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "freeze_account",
+      "source": "check_conflicts",
+      "target": "get_recurring_info",
       "relation": "explicit"
     },
     {
       "pair": [
-        "freeze_account",
-        "list_scheduled_transfers"
+        "check_conflicts",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -846,8 +643,8 @@
     },
     {
       "pair": [
-        "freeze_account",
-        "schedule_transfer"
+        "check_conflicts",
+        "list_events"
       ],
       "source": "",
       "target": "",
@@ -855,197 +652,26 @@
     },
     {
       "pair": [
-        "freeze_account",
-        "transfer"
+        "check_conflicts",
+        "remove_attendee"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "unfreeze_account"
-      ],
-      "source": "freeze_account",
-      "target": "unfreeze_account",
-      "relation": "implicit"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_balance"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_exchange_rate"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "get_account_info",
+      "source": "check_conflicts",
+      "target": "remove_attendee",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_account_info",
-        "list_scheduled_transfers"
+        "check_conflicts",
+        "respond_to_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "schedule_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "unfreeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "get_exchange_rate"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "get_balance",
+      "source": "check_conflicts",
+      "target": "respond_to_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_balance",
-        "list_scheduled_transfers"
+        "check_conflicts",
+        "search_events"
       ],
       "source": "",
       "target": "",
@@ -1053,242 +679,26 @@
     },
     {
       "pair": [
-        "get_balance",
-        "schedule_transfer"
+        "check_conflicts",
+        "set_reminder"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "unfreeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_balance",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "get_history"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "list_accounts"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "list_scheduled_transfers"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "schedule_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "unfreeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "get_statement"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "get_history",
+      "source": "check_conflicts",
+      "target": "set_reminder",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_history",
-        "list_scheduled_transfers"
+        "check_conflicts",
+        "update_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "schedule_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "unfreeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_history",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_statement",
-        "list_accounts"
-      ],
-      "source": "list_accounts",
-      "target": "get_statement",
+      "source": "check_conflicts",
+      "target": "update_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "get_statement",
-        "list_scheduled_transfers"
+        "create_event",
+        "create_recurring"
       ],
       "source": "",
       "target": "",
@@ -1296,125 +706,125 @@
     },
     {
       "pair": [
-        "get_statement",
-        "schedule_transfer"
+        "create_event",
+        "delete_event"
       ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_statement",
-        "transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_statement",
-        "unfreeze_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_statement",
-        "verify_account"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_statement",
-        "wire_transfer"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "get_statement",
-        "withdraw"
-      ],
-      "source": "",
-      "target": "",
-      "relation": "none"
-    },
-    {
-      "pair": [
-        "list_accounts",
-        "list_scheduled_transfers"
-      ],
-      "source": "list_accounts",
-      "target": "list_scheduled_transfers",
+      "source": "create_event",
+      "target": "delete_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_accounts",
-        "schedule_transfer"
+        "create_event",
+        "export_calendar"
       ],
-      "source": "list_accounts",
-      "target": "schedule_transfer",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_event"
+      ],
+      "source": "create_event",
+      "target": "get_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_accounts",
-        "transfer"
+        "create_event",
+        "get_free_busy"
       ],
-      "source": "list_accounts",
-      "target": "transfer",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_recurring_info"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "remove_attendee"
+      ],
+      "source": "create_event",
+      "target": "remove_attendee",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_accounts",
-        "unfreeze_account"
+        "create_event",
+        "respond_to_event"
       ],
-      "source": "list_accounts",
-      "target": "unfreeze_account",
+      "source": "create_event",
+      "target": "respond_to_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_accounts",
-        "verify_account"
+        "create_event",
+        "search_events"
       ],
-      "source": "list_accounts",
-      "target": "verify_account",
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "create_event",
+        "set_reminder"
+      ],
+      "source": "create_event",
+      "target": "set_reminder",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_accounts",
-        "wire_transfer"
+        "create_event",
+        "update_event"
       ],
-      "source": "list_accounts",
-      "target": "wire_transfer",
+      "source": "create_event",
+      "target": "update_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_accounts",
-        "withdraw"
+        "create_recurring",
+        "delete_event"
       ],
-      "source": "list_accounts",
-      "target": "withdraw",
+      "source": "create_recurring",
+      "target": "delete_event",
       "relation": "explicit"
     },
     {
       "pair": [
-        "list_scheduled_transfers",
-        "schedule_transfer"
+        "create_recurring",
+        "export_calendar"
       ],
       "source": "",
       "target": "",
@@ -1422,8 +832,17 @@
     },
     {
       "pair": [
-        "list_scheduled_transfers",
-        "transfer"
+        "create_recurring",
+        "get_event"
+      ],
+      "source": "create_recurring",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_free_busy"
       ],
       "source": "",
       "target": "",
@@ -1431,8 +850,17 @@
     },
     {
       "pair": [
-        "list_scheduled_transfers",
-        "unfreeze_account"
+        "create_recurring",
+        "get_recurring_info"
+      ],
+      "source": "create_recurring",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -1440,8 +868,8 @@
     },
     {
       "pair": [
-        "list_scheduled_transfers",
-        "verify_account"
+        "create_recurring",
+        "list_events"
       ],
       "source": "",
       "target": "",
@@ -1449,8 +877,26 @@
     },
     {
       "pair": [
-        "list_scheduled_transfers",
-        "wire_transfer"
+        "create_recurring",
+        "remove_attendee"
+      ],
+      "source": "create_recurring",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "respond_to_event"
+      ],
+      "source": "create_recurring",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "search_events"
       ],
       "source": "",
       "target": "",
@@ -1458,8 +904,35 @@
     },
     {
       "pair": [
-        "list_scheduled_transfers",
-        "withdraw"
+        "create_recurring",
+        "set_reminder"
+      ],
+      "source": "create_recurring",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "update_event"
+      ],
+      "source": "create_recurring",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "export_calendar"
+      ],
+      "source": "export_calendar",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_event"
       ],
       "source": "",
       "target": "",
@@ -1467,8 +940,17 @@
     },
     {
       "pair": [
-        "schedule_transfer",
-        "transfer"
+        "delete_event",
+        "get_free_busy"
+      ],
+      "source": "get_free_busy",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_recurring_info"
       ],
       "source": "",
       "target": "",
@@ -1476,8 +958,8 @@
     },
     {
       "pair": [
-        "schedule_transfer",
-        "unfreeze_account"
+        "delete_event",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -1485,8 +967,17 @@
     },
     {
       "pair": [
-        "schedule_transfer",
-        "verify_account"
+        "delete_event",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "remove_attendee"
       ],
       "source": "",
       "target": "",
@@ -1494,8 +985,8 @@
     },
     {
       "pair": [
-        "schedule_transfer",
-        "wire_transfer"
+        "delete_event",
+        "respond_to_event"
       ],
       "source": "",
       "target": "",
@@ -1503,8 +994,17 @@
     },
     {
       "pair": [
-        "schedule_transfer",
-        "withdraw"
+        "delete_event",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "delete_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "delete_event",
+        "set_reminder"
       ],
       "source": "",
       "target": "",
@@ -1512,8 +1012,8 @@
     },
     {
       "pair": [
-        "transfer",
-        "unfreeze_account"
+        "delete_event",
+        "update_event"
       ],
       "source": "",
       "target": "",
@@ -1521,8 +1021,17 @@
     },
     {
       "pair": [
-        "transfer",
-        "verify_account"
+        "export_calendar",
+        "get_event"
+      ],
+      "source": "export_calendar",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_free_busy"
       ],
       "source": "",
       "target": "",
@@ -1530,8 +1039,17 @@
     },
     {
       "pair": [
-        "transfer",
-        "wire_transfer"
+        "export_calendar",
+        "get_recurring_info"
+      ],
+      "source": "export_calendar",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -1539,8 +1057,8 @@
     },
     {
       "pair": [
-        "transfer",
-        "withdraw"
+        "export_calendar",
+        "list_events"
       ],
       "source": "",
       "target": "",
@@ -1548,8 +1066,26 @@
     },
     {
       "pair": [
-        "unfreeze_account",
-        "verify_account"
+        "export_calendar",
+        "remove_attendee"
+      ],
+      "source": "export_calendar",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "respond_to_event"
+      ],
+      "source": "export_calendar",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "search_events"
       ],
       "source": "",
       "target": "",
@@ -1557,26 +1093,35 @@
     },
     {
       "pair": [
-        "unfreeze_account",
-        "wire_transfer"
+        "export_calendar",
+        "set_reminder"
       ],
-      "source": "unfreeze_account",
-      "target": "wire_transfer",
-      "relation": "implicit"
+      "source": "export_calendar",
+      "target": "set_reminder",
+      "relation": "explicit"
     },
     {
       "pair": [
-        "unfreeze_account",
-        "withdraw"
+        "export_calendar",
+        "update_event"
       ],
-      "source": "unfreeze_account",
-      "target": "withdraw",
-      "relation": "implicit"
+      "source": "export_calendar",
+      "target": "update_event",
+      "relation": "explicit"
     },
     {
       "pair": [
-        "verify_account",
-        "wire_transfer"
+        "get_event",
+        "get_free_busy"
+      ],
+      "source": "get_free_busy",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_recurring_info"
       ],
       "source": "",
       "target": "",
@@ -1584,8 +1129,8 @@
     },
     {
       "pair": [
-        "verify_account",
-        "withdraw"
+        "get_event",
+        "get_working_hours"
       ],
       "source": "",
       "target": "",
@@ -1593,8 +1138,377 @@
     },
     {
       "pair": [
-        "wire_transfer",
-        "withdraw"
+        "get_event",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_event",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "get_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_event",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_event",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_recurring_info"
+      ],
+      "source": "get_free_busy",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "remove_attendee"
+      ],
+      "source": "get_free_busy",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "respond_to_event"
+      ],
+      "source": "get_free_busy",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "set_reminder"
+      ],
+      "source": "get_free_busy",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "update_event"
+      ],
+      "source": "get_free_busy",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "get_working_hours"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "list_events"
+      ],
+      "source": "list_events",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "get_recurring_info",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "list_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "remove_attendee"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_events",
+        "remove_attendee"
+      ],
+      "source": "list_events",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "respond_to_event"
+      ],
+      "source": "list_events",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "search_events"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "list_events",
+        "set_reminder"
+      ],
+      "source": "list_events",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "list_events",
+        "update_event"
+      ],
+      "source": "list_events",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "respond_to_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "remove_attendee",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "search_events"
+      ],
+      "source": "search_events",
+      "target": "respond_to_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "set_reminder"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "update_event"
+      ],
+      "source": "",
+      "target": "",
+      "relation": "none"
+    },
+    {
+      "pair": [
+        "search_events",
+        "set_reminder"
+      ],
+      "source": "search_events",
+      "target": "set_reminder",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "search_events",
+        "update_event"
+      ],
+      "source": "search_events",
+      "target": "update_event",
+      "relation": "explicit"
+    },
+    {
+      "pair": [
+        "set_reminder",
+        "update_event"
       ],
       "source": "",
       "target": "",
@@ -1605,8 +1519,8 @@
   "relation_audits": [
     {
       "pair": [
-        "apply_loan",
-        "bill_pay"
+        "add_attendee",
+        "change_timezone"
       ],
       "raw": {
         "source": "",
@@ -1623,156 +1537,12 @@
     },
     {
       "pair": [
-        "apply_loan",
-        "cancel_transfer"
+        "add_attendee",
+        "check_conflicts"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "deposit"
-      ],
-      "raw": {
-        "source": "deposit",
-        "target": "apply_loan",
-        "relation": "implicit"
-      },
-      "verdict": "contradicted",
-      "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "freeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_account_info"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_balance"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_exchange_rate"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "apply_loan",
+        "source": "check_conflicts",
+        "target": "add_attendee",
         "relation": "explicit"
       },
       "verdict": "supported",
@@ -1780,8 +1550,8 @@
       "reason": "novel output binds a required target input",
       "certified_explicit_directions": [
         [
-          "list_accounts",
-          "apply_loan"
+          "check_conflicts",
+          "add_attendee"
         ]
       ],
       "certified_implicit_directions": [],
@@ -1790,282 +1560,12 @@
     },
     {
       "pair": [
-        "apply_loan",
-        "list_scheduled_transfers"
+        "add_attendee",
+        "create_event"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "apply_loan",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "cancel_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "deposit"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "freeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_account_info"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_balance"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_exchange_rate"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "bill_pay",
+        "source": "create_event",
+        "target": "add_attendee",
         "relation": "explicit"
       },
       "verdict": "supported",
@@ -2073,335 +1573,14 @@
       "reason": "novel output binds a required target input",
       "certified_explicit_directions": [
         [
-          "list_accounts",
-          "bill_pay"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "contradicted",
-      "eligible": false,
-      "reason": "raw none misses a locally certified dependency",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "unfreeze_account",
-          "bill_pay"
-        ]
-      ],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "bill_pay",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "deposit"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "freeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_account_info"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_balance"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_exchange_rate"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "list_scheduled_transfers",
-        "target": "cancel_transfer",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_scheduled_transfers",
-          "cancel_transfer"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "schedule_transfer",
-        "target": "cancel_transfer",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "schedule_transfer",
-          "cancel_transfer"
+          "create_event",
+          "add_attendee"
         ]
       ],
       "certified_implicit_directions": [
         [
-          "schedule_transfer",
-          "cancel_transfer"
+          "create_event",
+          "add_attendee"
         ]
       ],
       "output_contract_complete": true,
@@ -2409,210 +1588,12 @@
     },
     {
       "pair": [
-        "cancel_transfer",
-        "transfer"
+        "add_attendee",
+        "create_recurring"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "cancel_transfer",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "freeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_account_info"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_balance"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_exchange_rate"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "deposit",
+        "source": "create_recurring",
+        "target": "add_attendee",
         "relation": "explicit"
       },
       "verdict": "supported",
@@ -2620,86 +1601,14 @@
       "reason": "novel output binds a required target input",
       "certified_explicit_directions": [
         [
-          "list_accounts",
-          "deposit"
+          "create_recurring",
+          "add_attendee"
         ]
       ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "unfreeze_account",
-        "target": "deposit",
-        "relation": "implicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
-      "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
-          "unfreeze_account",
-          "deposit"
+          "create_recurring",
+          "add_attendee"
         ]
       ],
       "output_contract_complete": true,
@@ -2707,8 +1616,8 @@
     },
     {
       "pair": [
-        "deposit",
-        "verify_account"
+        "add_attendee",
+        "delete_event"
       ],
       "raw": {
         "source": "",
@@ -2725,138 +1634,12 @@
     },
     {
       "pair": [
-        "deposit",
-        "wire_transfer"
+        "add_attendee",
+        "export_calendar"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "deposit",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_account_info"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_balance"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_exchange_rate"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "freeze_account",
+        "source": "export_calendar",
+        "target": "add_attendee",
         "relation": "explicit"
       },
       "verdict": "supported",
@@ -2864,8 +1647,8 @@
       "reason": "novel output binds a required target input",
       "certified_explicit_directions": [
         [
-          "list_accounts",
-          "freeze_account"
+          "export_calendar",
+          "add_attendee"
         ]
       ],
       "certified_implicit_directions": [],
@@ -2874,8 +1657,8 @@
     },
     {
       "pair": [
-        "freeze_account",
-        "list_scheduled_transfers"
+        "add_attendee",
+        "get_event"
       ],
       "raw": {
         "source": "",
@@ -2892,1040 +1675,12 @@
     },
     {
       "pair": [
-        "freeze_account",
-        "schedule_transfer"
+        "add_attendee",
+        "get_free_busy"
       ],
       "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "freeze_account",
-        "target": "unfreeze_account",
-        "relation": "implicit"
-      },
-      "verdict": "contradicted",
-      "eligible": false,
-      "reason": "source postconditions do not establish any target precondition",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "freeze_account",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_balance"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_exchange_rate"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "get_account_info",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "get_account_info"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_account_info",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "get_exchange_rate"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "get_balance",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "get_balance"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_balance",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "get_history"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_exchange_rate",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "get_statement"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "get_history",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "get_history"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_history",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "list_accounts"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "get_statement",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "get_statement"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "get_statement",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_accounts",
-        "list_scheduled_transfers"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "list_scheduled_transfers",
+        "source": "get_free_busy",
+        "target": "add_attendee",
         "relation": "explicit"
       },
       "verdict": "contradicted",
@@ -3938,12 +1693,48 @@
     },
     {
       "pair": [
-        "list_accounts",
-        "schedule_transfer"
+        "add_attendee",
+        "get_recurring_info"
       ],
       "raw": {
-        "source": "list_accounts",
-        "target": "schedule_transfer",
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "add_attendee",
         "relation": "explicit"
       },
       "verdict": "supported",
@@ -3951,8 +1742,8 @@
       "reason": "novel output binds a required target input",
       "certified_explicit_directions": [
         [
-          "list_accounts",
-          "schedule_transfer"
+          "list_events",
+          "add_attendee"
         ]
       ],
       "certified_implicit_directions": [],
@@ -3961,425 +1752,12 @@
     },
     {
       "pair": [
-        "list_accounts",
-        "transfer"
+        "add_attendee",
+        "remove_attendee"
       ],
       "raw": {
-        "source": "list_accounts",
-        "target": "transfer",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "transfer"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_accounts",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "unfreeze_account",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "unfreeze_account"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_accounts",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "verify_account",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "verify_account"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_accounts",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "wire_transfer",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "wire_transfer"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_accounts",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "list_accounts",
-        "target": "withdraw",
-        "relation": "explicit"
-      },
-      "verdict": "supported",
-      "eligible": true,
-      "reason": "novel output binds a required target input",
-      "certified_explicit_directions": [
-        [
-          "list_accounts",
-          "withdraw"
-        ]
-      ],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_scheduled_transfers",
-        "schedule_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_scheduled_transfers",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_scheduled_transfers",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_scheduled_transfers",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_scheduled_transfers",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "list_scheduled_transfers",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "schedule_transfer",
-        "transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "schedule_transfer",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "contradicted",
-      "eligible": false,
-      "reason": "raw none misses a locally certified dependency",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "unfreeze_account",
-          "schedule_transfer"
-        ]
-      ],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "schedule_transfer",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "schedule_transfer",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "schedule_transfer",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "transfer",
-        "unfreeze_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "contradicted",
-      "eligible": false,
-      "reason": "raw none misses a locally certified dependency",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [
-        [
-          "unfreeze_account",
-          "transfer"
-        ]
-      ],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "transfer",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "transfer",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "transfer",
-        "withdraw"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "unfreeze_account",
-        "verify_account"
-      ],
-      "raw": {
-        "source": "",
-        "target": "",
-        "relation": "none"
-      },
-      "verdict": "supported",
-      "eligible": false,
-      "reason": "both directions are covered and no dependency is certified",
-      "certified_explicit_directions": [],
-      "certified_implicit_directions": [],
-      "output_contract_complete": true,
-      "state_contract_complete": true
-    },
-    {
-      "pair": [
-        "unfreeze_account",
-        "wire_transfer"
-      ],
-      "raw": {
-        "source": "unfreeze_account",
-        "target": "wire_transfer",
+        "source": "add_attendee",
+        "target": "remove_attendee",
         "relation": "implicit"
       },
       "verdict": "supported",
@@ -4388,8 +1766,8 @@
       "certified_explicit_directions": [],
       "certified_implicit_directions": [
         [
-          "unfreeze_account",
-          "wire_transfer"
+          "add_attendee",
+          "remove_attendee"
         ]
       ],
       "output_contract_complete": true,
@@ -4397,22 +1775,27 @@
     },
     {
       "pair": [
-        "unfreeze_account",
-        "withdraw"
+        "add_attendee",
+        "respond_to_event"
       ],
       "raw": {
-        "source": "unfreeze_account",
-        "target": "withdraw",
-        "relation": "implicit"
+        "source": "add_attendee",
+        "target": "respond_to_event",
+        "relation": "explicit"
       },
       "verdict": "supported",
       "eligible": true,
-      "reason": "source postcondition establishes a target precondition",
-      "certified_explicit_directions": [],
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "add_attendee",
+          "respond_to_event"
+        ]
+      ],
       "certified_implicit_directions": [
         [
-          "unfreeze_account",
-          "withdraw"
+          "add_attendee",
+          "respond_to_event"
         ]
       ],
       "output_contract_complete": true,
@@ -4420,8 +1803,31 @@
     },
     {
       "pair": [
-        "verify_account",
-        "wire_transfer"
+        "add_attendee",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "add_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "add_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "add_attendee",
+        "set_reminder"
       ],
       "raw": {
         "source": "",
@@ -4438,8 +1844,8 @@
     },
     {
       "pair": [
-        "verify_account",
-        "withdraw"
+        "add_attendee",
+        "update_event"
       ],
       "raw": {
         "source": "",
@@ -4456,8 +1862,2429 @@
     },
     {
       "pair": [
-        "wire_transfer",
-        "withdraw"
+        "change_timezone",
+        "check_conflicts"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "create_recurring"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "get_working_hours",
+        "target": "change_timezone",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "get_working_hours",
+          "change_timezone"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "change_timezone",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "create_recurring"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "check_conflicts",
+        "update_event"
+      ],
+      "raw": {
+        "source": "check_conflicts",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "check_conflicts",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "create_recurring"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "delete_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "get_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "remove_attendee"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "respond_to_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "set_reminder"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "create_event",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_event",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_event",
+          "update_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "delete_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "delete_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "get_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "get_recurring_info"
+        ],
+        [
+          "get_recurring_info",
+          "create_recurring"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "get_recurring_info"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "remove_attendee"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "respond_to_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "set_reminder"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "create_recurring",
+        "update_event"
+      ],
+      "raw": {
+        "source": "create_recurring",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "create_recurring",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [
+        [
+          "create_recurring",
+          "update_event"
+        ]
+      ],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "export_calendar"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "delete_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "delete_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "delete_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_event"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "export_calendar",
+        "update_event"
+      ],
+      "raw": {
+        "source": "export_calendar",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "export_calendar",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_free_busy"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "get_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "get_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_recurring_info"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_free_busy",
+        "update_event"
+      ],
+      "raw": {
+        "source": "get_free_busy",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "contradicted",
+      "eligible": false,
+      "reason": "raw explicit direction has no certified novel-output binding or violates a fixed target precondition",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "get_working_hours"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "list_events"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "get_recurring_info",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "get_recurring_info"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_recurring_info",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "list_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "get_working_hours",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "remove_attendee"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "search_events"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "list_events",
+        "update_event"
+      ],
+      "raw": {
+        "source": "list_events",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "list_events",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "respond_to_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "remove_attendee",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "remove_attendee"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "remove_attendee",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "search_events"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "respond_to_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "respond_to_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "respond_to_event",
+        "update_event"
+      ],
+      "raw": {
+        "source": "",
+        "target": "",
+        "relation": "none"
+      },
+      "verdict": "supported",
+      "eligible": false,
+      "reason": "both directions are covered and no dependency is certified",
+      "certified_explicit_directions": [],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_events",
+        "set_reminder"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "set_reminder",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "set_reminder"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "search_events",
+        "update_event"
+      ],
+      "raw": {
+        "source": "search_events",
+        "target": "update_event",
+        "relation": "explicit"
+      },
+      "verdict": "supported",
+      "eligible": true,
+      "reason": "novel output binds a required target input",
+      "certified_explicit_directions": [
+        [
+          "search_events",
+          "update_event"
+        ]
+      ],
+      "certified_implicit_directions": [],
+      "output_contract_complete": true,
+      "state_contract_complete": true
+    },
+    {
+      "pair": [
+        "set_reminder",
+        "update_event"
       ],
       "raw": {
         "source": "",
@@ -4473,26 +4300,26 @@
       "state_contract_complete": true
     }
   ],
-  "classifier_contract_hash": "cb2136258a2ca6b6",
+  "classifier_contract_hash": "f913948720c1783c",
   "teacher_model_id": "models/Google/Gemma-4-31B-it",
   "classifier_prompt_sha256": "111d830195de64ab5ebfcd8c043f9d7b322e0e0424ad51cca8f92dbcdaea18a0",
   "raw_graph_source": "first_structurally_valid_classification",
   "graph_source": "local_relation_audit_supported_subset",
   "review_policy": "not_required_for_paper_baseline",
   "tie_break_policy": "disabled",
-  "output_field_contract_sha256": "8e29a8eee18c791962fb8480eb67a79622d5d9758ee195adc003c16025d6c7c3",
-  "tool_count": 18,
-  "expected_pair_count": 153,
-  "classified_pair_count": 153,
+  "output_field_contract_sha256": "fc62151497b473079787a41afc791693ac5b6e00aff7d7c17027f3ab8d3f8560",
+  "tool_count": 17,
+  "expected_pair_count": 136,
+  "classified_pair_count": 136,
   "audited_pair_count": 0,
-  "relation_audited_pair_count": 153,
+  "relation_audited_pair_count": 136,
   "review_disagreement_count": 0,
   "relation_audit_counts": {
-    "supported": 147,
-    "contradicted": 6
+    "supported": 128,
+    "contradicted": 8
   },
   "classification_complete": true,
   "audit_complete": false,
   "relation_audit_complete": true,
-  "created_at_utc": "2026-08-09T13:37:42Z"
+  "created_at_utc": "2026-08-13T14:16:59Z"
 }

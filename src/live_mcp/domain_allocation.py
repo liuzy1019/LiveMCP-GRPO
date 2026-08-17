@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 
 def position_aware_jaccard(a: Sequence[str], b: Sequence[str]) -> float:
-    """Compare ordered sequences by matching tool names at the same position."""
+    """Local scheduling diagnostic; not the PROVE corpus gate."""
     if not a or not b:
         return 0.0
     pos_a = set(enumerate(a))
@@ -15,19 +15,28 @@ def position_aware_jaccard(a: Sequence[str], b: Sequence[str]) -> float:
     return len(pos_a & pos_b) / len(pos_a | pos_b)
 
 
+def plain_tool_jaccard(a: Sequence[str], b: Sequence[str]) -> float:
+    """PROVE Jaccard over the sets of executed tool names."""
+    set_a = {str(item) for item in a if str(item)}
+    set_b = {str(item) for item in b if str(item)}
+    if not set_a or not set_b:
+        return 0.0
+    return len(set_a & set_b) / len(set_a | set_b)
+
+
 def jaccard_unique_sequence_count(
     sequences: Sequence[Sequence[str]],
     *,
     threshold: float = 0.70,
 ) -> int:
-    """Count sequences retained by the corpus position-aware Jaccard rule."""
+    """Count sequences retained by the canonical PROVE Jaccard gate."""
     kept: list[tuple[str, ...]] = []
     for raw_sequence in sequences:
         sequence = tuple(str(item) for item in raw_sequence if str(item))
         if not sequence:
             continue
         if any(
-            position_aware_jaccard(sequence, prior) >= threshold
+            plain_tool_jaccard(sequence, prior) >= threshold
             for prior in kept
         ):
             continue

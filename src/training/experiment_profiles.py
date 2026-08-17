@@ -26,75 +26,7 @@ class ExperimentProfile:
     unavailable_reason: str = ""
 
 
-_LOCAL_COMMON = {
-    "model_path": "models/Qwen/Qwen3-4B-Instruct-2507",
-    "train_file": (
-        "data/runs/"
-        "20260728_gt_v1_prove_composition_proxy_r48dee_train3221_val500/"
-        "train.parquet"
-    ),
-    "val_file": (
-        "data/runs/"
-        "20260728_gt_v1_prove_composition_proxy_r48dee_train3221_val500/"
-        "val.parquet"
-    ),
-    "total_steps": 350,
-    "train_batch_size": 16,
-    "rollout_n": 16,
-    "rollout_tp": 2,
-    "max_prompt_length": 12384,
-    "max_response_length": 16384,
-    "max_user_turns": 5,
-    "max_assistant_turns": 10,
-    "lr": 1e-6,
-    "kl_coef": 0.01,
-    "ppo_epochs": 1,
-    "agent_loop": "livemcp_oval",
-}
-
-_LOCAL_ARTIFACT_SHA256 = {
-    "train_file": "e55d6e3bfe53b4478884079ce71083b64c5f23b9cdcffd10d2fe5b70345b598b",
-    "val_file": "09e0f953655e5e54d8ab172d840e218a3b7de42de930a22c18e3b440f555b4ec",
-    "model_config": "5beea1a4a34c62782bfb2f911c606741a3bab8f92d80a118fa053c28af12e8ba",
-}
-
-_GRAY_COMMON = {
-    **_LOCAL_COMMON,
-    "train_file": (
-        "data/runs/20260728_reward_gray_r48dee_v1_train8/train.parquet"
-    ),
-}
-
-_GRAY_ARTIFACT_SHA256 = {
-    **_LOCAL_ARTIFACT_SHA256,
-    "train_file": "4b12c1ee3e097321469d1962728a8017374b346626f8a0c4819335ddf94107eb",
-}
-
 PROFILES = {
-    "prove_local_v1": ExperimentProfile(
-        name="prove_local_v1",
-        reward_profile="prove_baseline",
-        frozen=dict(_LOCAL_COMMON),
-        artifact_sha256=dict(_LOCAL_ARTIFACT_SHA256),
-    ),
-    "oval_local_v1": ExperimentProfile(
-        name="oval_local_v1",
-        reward_profile="oval_full",
-        frozen=dict(_LOCAL_COMMON),
-        artifact_sha256=dict(_LOCAL_ARTIFACT_SHA256),
-    ),
-    "prove_reward_gray_v1": ExperimentProfile(
-        name="prove_reward_gray_v1",
-        reward_profile="prove_baseline",
-        frozen=dict(_GRAY_COMMON),
-        artifact_sha256=dict(_GRAY_ARTIFACT_SHA256),
-    ),
-    "oval_reward_gray_v1": ExperimentProfile(
-        name="oval_reward_gray_v1",
-        reward_profile="oval_full",
-        frozen=dict(_GRAY_COMMON),
-        artifact_sha256=dict(_GRAY_ARTIFACT_SHA256),
-    ),
     "prove_reproduction_v1": ExperimentProfile(
         name="prove_reproduction_v1",
         reward_profile="prove_baseline",
@@ -123,9 +55,8 @@ def get_experiment_profile(name: str) -> ExperimentProfile | None:
         return None
     if name not in PROFILES:
         raise ValueError(
-            "OVAL_EXPERIMENT_PROFILE must be custom, prove_local_v1, "
-            "oval_local_v1, prove_reward_gray_v1, oval_reward_gray_v1, "
-            f"or prove_reproduction_v1; got {name!r}"
+            "OVAL_EXPERIMENT_PROFILE must be custom or "
+            f"prove_reproduction_v1; got {name!r}"
         )
     profile = PROFILES[name]
     if profile.unavailable_reason:

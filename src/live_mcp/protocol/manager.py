@@ -38,12 +38,6 @@ class LiveMCPManager:
     def server_names(self) -> list[str]:
         return [cfg.name for cfg in self.suite_config.servers if cfg.enabled]
 
-    @property
-    def subprocess_stdio_used(self) -> bool:
-        return bool(self._transports) and all(
-            isinstance(transport, SubprocessStdioTransport) for transport in self._transports.values()
-        )
-
     def start_suite(self) -> None:
         root = project_root()
         try:

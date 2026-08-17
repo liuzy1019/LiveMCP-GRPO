@@ -14,7 +14,7 @@ Generation defaults:
 - Difficulty mix: complete=60%, missing=20%, minimal=20%
   - Irrelevance ratio: 5%
   - Distractor rate: 40% (injects 3-8 irrelevant tools)
-  - Missing function rate: 20% (hides one required tool)
+  - Missing function rate: 1500/(10895+1500) (derived local target; not a paper knob)
   - Enum stripping: 30% per domain
   - Jaccard dedup threshold: 0.70
   - Conversation rounds: 2-3 (turn-decay schedule)
@@ -37,66 +37,117 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import pandas as pd
 from loguru import logger
 
-from src.live_mcp.task_planner import (
-    DOMAIN_DESCRIPTIONS,
-)
-from src.live_mcp.planner_format import format_tools
-from src.live_mcp.prompt_profiles import PROMPT_PROFILES, resolve_prompt_profile
-from src.live_mcp.registry.tool_semantics import (
-    SELF_CONTAINED_WRITE_TOOLS,
-    is_mutating_tool,
-    resolve_tool_execution_semantics,
-)
+from src.live_mcp.prompt_profiles import PROMPT_PROFILES
 from src.live_mcp.dedup import dedup_tasks
-from src.live_mcp.dependency_trace import (
-    align_sampled_chain,
-    auxiliary_tool_call_indices,
-    dependency_edges_from_alignment,
-)
+from src.live_mcp.generation.mix_policy import default_difficulty_mix
 
 from src.live_mcp.corpus.shard_recovery import (
     _accepted_generation_deficits,
     _domain_recovery_requests,
     _generation_recovery_requests,
     _maybe_checkpoint_generation_progress,
-    _checkpoint_config,
     _write_generation_checkpoint,
     _load_generation_checkpoint,
-    _is_zero_yield_error,
     _zero_yield_is_recoverable,
 )
 from src.live_mcp.corpus.shard_oracle import (
-    _task_scenario,
-    _identity_policy,
-    _required_round_oracle_projection,
-    _required_round_oracle_calls,
-    _required_workflow_projection_summary,
-    _serialize_training_oracle,
-    _build_round_contracts,
-    _minimum_action_budget,
-    _task_success_criteria,
-    _validate_task_training_contract,
     _filter_training_eligible_tasks,
     _filter_required_tool_tasks,
 )
-from src.live_mcp.corpus.shard_row_projection import (
-    _compute_dependency_edges,
-    _tasks_to_rows,
-)
+from src.live_mcp.corpus.shard_row_projection import _tasks_to_rows
 from src.live_mcp.corpus.shard_io import (
     _validate_canonical_rows_replay,
-    _validate_parquet_readback,
     _candidate_shard_split,
     _domain_quotas,
-    _task_fingerprint,
     _stratified_task_split,
-    _fallback_task_split,
-    _row_fingerprint,
     _assert_split_integrity,
-    _domain_distribution,
-    _empty_success_criteria_counts,
     _print_stats,
 )
+from src.live_mcp.artifact.readback import validate_parquet_readback
+from src.live_mcp.corpus.local_quality import (
+    evaluate_persisted_candidate_quality,
+)
+
+
+def _filter_semantic_eligible_tasks(
+    tasks: list,
+    *,
+    failure_writer,
+    recovery_round: int,
+) -> list:
+    """Remove deterministic hard findings before shard accounting/writeout.
+
+    Row projection is the first point at which the complete persisted semantic
+    surface exists.  Consumer readback re-evaluates the same contract later,
+    but must not be the first place a known-bad row is discovered.
+    """
+    accepted = []
+    for task in tasks:
+        try:
+            rows = _tasks_to_rows([task], task.session_seed)
+        except ValueError as exc:
+            domain = str(
+                task.target_servers[0]
+                if getattr(task, "target_servers", None)
+                else ""
+            )
+            failure_writer.append({
+                "candidate_kind": "normal",
+                "stage": "training_contract",
+                "reason_code": "training_contract_invalid",
+                "domain": domain,
+                "generation_seed": int(
+                    task.metadata.get("generation_seed", task.session_seed)
+                ),
+                "state_seed": int(task.session_seed),
+                "difficulty": str(task.difficulty),
+                "task_id": str(task.task_id),
+                "recovery_round": recovery_round,
+                "exception_type": type(exc).__name__,
+                "message": str(exc),
+            })
+            logger.warning(
+                "Prewrite training contract rejected task {}: {}",
+                task.task_id,
+                exc,
+            )
+            continue
+        if len(rows) != 1:
+            raise RuntimeError(
+                "semantic prewrite projection must produce exactly one row: "
+                f"task={task.task_id!r}, rows={len(rows)}"
+            )
+        extra = rows[0]["extra_info"]
+        finding = evaluate_persisted_candidate_quality(extra)
+        if finding is None:
+            accepted.append(task)
+            continue
+        failure_writer.append({
+            "candidate_kind": "normal",
+            "stage": finding.stage,
+            "reason_code": finding.reason_code,
+            "domain": str(extra.get("domain") or ""),
+            "generation_seed": int(
+                task.metadata.get("generation_seed", task.session_seed)
+            ),
+            "state_seed": int(task.session_seed),
+            "difficulty": str(task.difficulty),
+            "task_id": str(task.task_id),
+            "recovery_round": recovery_round,
+            "message": finding.quality_issue,
+            "details": {
+                "semantic_gate_profile": str(
+                    extra.get("semantic_gate_profile") or ""
+                ),
+                "quality_issue": finding.quality_issue,
+            },
+        })
+        logger.warning(
+            "Prewrite local quality rejected task {}: {}",
+            task.task_id,
+            finding.quality_issue,
+        )
+    return accepted
 
 
 
@@ -143,6 +194,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         ),
         choices=("diagnostic_only", "deterministic_v1"),
         help="Orthogonal completed-trace semantic audit disposition",
+    )
+    p.add_argument(
+        "--fixed-attempt-budget",
+        action="store_true",
+        default=os.environ.get("LIVEMCP_FIXED_ATTEMPT_BUDGET", "0") == "1",
+        help=(
+            "Freeze diagnostic fixed-attempt semantics in checkpoints and "
+            "output artifacts (normally supplied by corpus CLI/launcher)"
+        ),
     )
     p.add_argument(
         "--retained-sequences-file",
@@ -196,6 +256,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--checkpoint-path", default=None,
                     help="Optional JSON checkpoint; resumes automatically when it exists")
     p.add_argument(
+        "--failure-records-path",
+        default=None,
+        help=(
+            "Append-only generation failure JSONL. Defaults beside the "
+            "checkpoint, or beside --output when checkpointing is disabled."
+        ),
+    )
+    p.add_argument(
         "--checkpoint-interval",
         type=int,
         default=25,
@@ -215,6 +283,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def generate_data(args: argparse.Namespace):
     """Generate GRPO training data with LLM teacher."""
     from src.live_mcp.generation_runtime import TeacherGenerationRuntime
+    from src.live_mcp.corpus.failure_records import GenerationFailureWriter
 
     # ── Validate parameters ──
     if args.count < 1:
@@ -268,6 +337,18 @@ def generate_data(args: argparse.Namespace):
     logger.info(f"  Semantic gate profile: {args.semantic_gate_profile}")
 
     branch = TeacherGenerationRuntime.from_suite(args.suite)
+    configured_failure_path = getattr(args, "failure_records_path", None)
+    if configured_failure_path:
+        failure_records_path = Path(configured_failure_path)
+    elif args.checkpoint_path:
+        checkpoint_path = Path(args.checkpoint_path)
+        failure_records_path = checkpoint_path.with_name(
+            f"{checkpoint_path.stem}_failures.jsonl"
+        )
+    else:
+        failure_records_path = Path(f"{args.output}.failures.jsonl")
+    failure_writer = GenerationFailureWriter(failure_records_path)
+    logger.info(f"Generation failure evidence: {failure_records_path}")
     if args.retained_sequences_file:
         retained_report = json.loads(
             Path(args.retained_sequences_file).read_text(encoding="utf-8")
@@ -284,7 +365,7 @@ def generate_data(args: argparse.Namespace):
     difficulty_mix = (
         {args.difficulty: 1.0}
         if args.difficulty
-        else {"complete": 0.6, "missing": 0.2, "minimal": 0.2}
+        else default_difficulty_mix()
     )
 
     try:
@@ -324,6 +405,11 @@ def generate_data(args: argparse.Namespace):
             all_tasks, start_round, round_requests = _load_generation_checkpoint(
                 Path(args.checkpoint_path), args
             )
+            all_tasks = _filter_semantic_eligible_tasks(
+                all_tasks,
+                failure_writer=failure_writer,
+                recovery_round=max(0, start_round - 1),
+            )
             logger.info(
                 f"Resumed generation checkpoint: {len(all_tasks)} tasks, "
                 f"completed_rounds={start_round}, next requests={round_requests}"
@@ -353,12 +439,48 @@ def generate_data(args: argparse.Namespace):
                     request_count, irrelevance_deficit,
                 )
                 last_checkpoint_size = len(checkpoint_prefix)
+                semantic_dispositions: dict[str, bool] = {}
+
+                def filter_request_tasks(tasks: list) -> list:
+                    unseen = [
+                        task for task in tasks
+                        if str(task.task_id) not in semantic_dispositions
+                    ]
+                    for task in unseen:
+                        task.metadata["semantic_gate_profile"] = (
+                            args.semantic_gate_profile
+                        )
+                        if task.metadata.get("fixed_attempt_budget") is not (
+                            args.fixed_attempt_budget
+                        ):
+                            raise RuntimeError(
+                                "generated task/run fixed-attempt contract "
+                                f"mismatch: task={task.task_id!r}, task_value="
+                                f"{task.metadata.get('fixed_attempt_budget')!r}, "
+                                f"run_value={args.fixed_attempt_budget!r}"
+                            )
+                    accepted_unseen = _filter_semantic_eligible_tasks(
+                        unseen,
+                        failure_writer=failure_writer,
+                        recovery_round=recovery_round,
+                    )
+                    accepted_ids = {
+                        str(task.task_id) for task in accepted_unseen
+                    }
+                    for task in unseen:
+                        semantic_dispositions[str(task.task_id)] = (
+                            str(task.task_id) in accepted_ids
+                        )
+                    return [
+                        task for task in tasks
+                        if semantic_dispositions[str(task.task_id)]
+                    ]
 
                 def checkpoint_progress(partial_tasks: list) -> None:
                     nonlocal last_checkpoint_size
                     last_checkpoint_size = _maybe_checkpoint_generation_progress(
                         checkpoint_prefix=checkpoint_prefix,
-                        partial_tasks=partial_tasks,
+                        partial_tasks=filter_request_tasks(partial_tasks),
                         last_checkpoint_size=last_checkpoint_size,
                         args=args,
                         requested_domains=requested_domains,
@@ -366,6 +488,16 @@ def generate_data(args: argparse.Namespace):
                         total_count=total_count,
                         recovery_round=recovery_round,
                     )
+
+                def record_failure(record: dict) -> None:
+                    failure_writer.append({
+                        "recovery_round": recovery_round,
+                        "request_index": request_index,
+                        "request_domain": request_domain,
+                        "request_count": request_count,
+                        "request_seed": round_seed + request_index * 10000,
+                        **record,
+                    })
 
                 try:
                     generated = branch.generate_tasks(
@@ -384,9 +516,11 @@ def generate_data(args: argparse.Namespace):
                         distractor_rate=args.distractor_rate,
                         missing_function_rate=args.missing_function_rate,
                         prompt_profile=args.prompt_profile,
+                        fixed_attempt_budget=args.fixed_attempt_budget,
                         progress_callback=(
                             checkpoint_progress if args.checkpoint_path else None
                         ),
+                        failure_callback=record_failure,
                     )
                 except RuntimeError as exc:
                     # The initial request failing completely usually means the
@@ -406,11 +540,7 @@ def generate_data(args: argparse.Namespace):
                         "the other deficient domains"
                     )
                     continue
-                for task in generated:
-                    task.metadata["semantic_gate_profile"] = (
-                        args.semantic_gate_profile
-                    )
-                round_tasks.extend(generated)
+                round_tasks.extend(filter_request_tasks(generated))
             all_tasks.extend(round_tasks)
             logger.info(
                 f"Round {recovery_round + 1}: got {len(round_tasks)} tasks "
@@ -497,19 +627,22 @@ def generate_data(args: argparse.Namespace):
                 eligible = _filter_required_tool_tasks(eligible)
             if args.shard_mode:
                 if not eligible:
-                    raise RuntimeError(
-                        "Shard exhausted recovery without any eligible candidates"
+                    if not args.fixed_attempt_budget:
+                        raise RuntimeError(
+                            "Shard exhausted recovery without any eligible candidates"
+                        )
+                    train_tasks, val_tasks = [], []
+                else:
+                    shard_train_count = min(args.count, len(eligible))
+                    shard_val_count = min(
+                        args.val_count, len(eligible) - shard_train_count,
                     )
-                shard_train_count = min(args.count, len(eligible))
-                shard_val_count = min(
-                    args.val_count, len(eligible) - shard_train_count,
-                )
-                train_tasks, val_tasks = _candidate_shard_split(
-                    eligible,
-                    train_count=shard_train_count,
-                    val_count=shard_val_count,
-                    seed=args.seed,
-                )
+                    train_tasks, val_tasks = _candidate_shard_split(
+                        eligible,
+                        train_count=shard_train_count,
+                        val_count=shard_val_count,
+                        seed=args.seed,
+                    )
             else:
                 train_tasks, val_tasks = _stratified_task_split(
                     eligible, train_count=args.count,
@@ -546,8 +679,8 @@ def generate_data(args: argparse.Namespace):
 
     df_train.to_parquet(Path(args.output), index=False)
     df_val.to_parquet(Path(args.val_output), index=False)
-    _validate_parquet_readback(Path(args.output))
-    _validate_parquet_readback(Path(args.val_output))
+    validate_parquet_readback(Path(args.output))
+    validate_parquet_readback(Path(args.val_output))
 
     _print_stats(df_train, df_val, Path(args.output), Path(args.val_output), args)
 

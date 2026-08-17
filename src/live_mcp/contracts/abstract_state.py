@@ -9,7 +9,6 @@ from src.live_mcp.contracts.models import (
     ArgumentValue,
     EntityBinding,
     StatePredicate,
-    ToolContract,
 )
 
 
@@ -75,47 +74,3 @@ class AbstractState:
         if isinstance(value, ArgumentValue) or isinstance(expected, ArgumentValue):
             return None
         return value == expected
-
-
-def simulate_contract_chain(
-    contracts: list[ToolContract],
-    step_bindings: list[dict[str, str]],
-    initial_state: AbstractState | None = None,
-    *,
-    unknown_is_failure: bool = True,
-) -> tuple[AbstractState, tuple[SimulationIssue, ...]]:
-    """Evaluate preconditions and apply postconditions in tool-call order."""
-    if len(contracts) != len(step_bindings):
-        raise ValueError("contracts and step_bindings must have equal length")
-    state = initial_state or AbstractState()
-    issues: list[SimulationIssue] = []
-    for index, (contract, bindings) in enumerate(zip(contracts, step_bindings)):
-        for predicate in contract.preconditions:
-            result = state.evaluate(predicate, bindings)
-            if result is False or (result is None and unknown_is_failure):
-                issues.append(SimulationIssue(
-                    step=index,
-                    tool_name=contract.name,
-                    predicate=predicate,
-                    reason="contradicted" if result is False else "unknown",
-                ))
-        for group in contract.precondition_groups:
-            results = tuple(state.evaluate(predicate, bindings) for predicate in group)
-            if True not in results and (
-                unknown_is_failure or all(result is False for result in results)
-            ):
-                issues.append(SimulationIssue(
-                    step=index,
-                    tool_name=contract.name,
-                    predicate=group[0],
-                    reason=(
-                        "contradicted"
-                        if all(result is False for result in results)
-                        else "unknown"
-                    ),
-                ))
-        if issues:
-            break
-        for predicate in contract.postconditions:
-            state.observe(predicate, bindings)
-    return state, tuple(issues)

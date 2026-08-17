@@ -1,6 +1,8 @@
 import pytest
 
-from src.live_mcp.artifact.dependency_contract import validate_dependency_artifact
+from src.live_mcp.artifact.dependency_contract import (
+    validate_dependency_artifact,
+)
 
 
 def _row() -> dict:
@@ -14,6 +16,11 @@ def _row() -> dict:
         ],
         "source_chain_seed": ["search", "mutate"],
         "source_chain_edges": [{
+            "source_capability": "search",
+            "target_capability": "mutate",
+            "relation": "explicit",
+        }],
+        "realized_chain_edges": [{
             "source_capability": "search",
             "target_capability": "mutate",
             "relation": "explicit",
@@ -59,8 +66,20 @@ def test_dependency_artifact_rejects_auxiliary_call_as_reward_edge() -> None:
     row["auxiliary_call_indices"] = []
     row["dependency_edges"] = [[0, 1], [1, 2]]
 
-    with pytest.raises(RuntimeError, match="preserve its sampled source chain"):
+    with pytest.raises(RuntimeError, match="realized_chain_edges count mismatch"):
         validate_dependency_artifact(row)
+
+
+def test_dependency_artifact_accepts_verified_alternative_read_path() -> None:
+    row = _row()
+    row["source_chain_seed"] = ["search_original", "mutate"]
+    row["source_chain_edges"] = [{
+        "source_capability": "search_original",
+        "target_capability": "mutate",
+        "relation": "explicit",
+    }]
+
+    validate_dependency_artifact(row)
 
 
 def test_non_success_artifact_cannot_carry_reward_dependency_edges() -> None:

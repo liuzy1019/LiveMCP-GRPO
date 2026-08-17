@@ -6,13 +6,8 @@ import random
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from loguru import logger
-
 from src.live_mcp.fsm import ConversationFSM, FSMStateGroup, RobustnessPlan
-from src.live_mcp.generation.robustness import (
-    build_teacher_visible_tools as _build_teacher_visible_tools,
-)
-from src.live_mcp.task_spec import TaskSpec
+from src.live_mcp.generation.robustness import build_teacher_visible_tools
 
 
 @dataclass
@@ -23,7 +18,7 @@ class GeneratedQueryContract:
     chain_seed: list[str] | None
     chain_context: dict[str, Any]
     teacher_visible_tools: list[dict[str, Any]]
-    retry_candidate: bool = False
+    plan: RobustnessPlan
 
 
 def generate_query_contract(
@@ -40,10 +35,8 @@ def generate_query_contract(
     reference_date: str,
     source_chain_seed: list[str] | None,
     query_chain_context: dict[str, Any],
-    task_spec: TaskSpec | None,
     plan: RobustnessPlan,
     server_tools: list[dict[str, Any]],
-    server_name: str,
     trace_generation: Callable[..., None],
 ) -> GeneratedQueryContract:
     generated_query = teacher.generate_query(
@@ -56,8 +49,6 @@ def generate_query_contract(
         reference_date=reference_date,
         chain_seed=source_chain_seed,
         chain_context=query_chain_context,
-        task_spec=(task_spec.to_prompt_contract() if task_spec is not None else None),
-        initial_goal_spec=None,
     )
     user_query = generated_query.user_query
     conversation_fsm.transition(
@@ -67,31 +58,18 @@ def generate_query_contract(
         difficulty=difficulty,
         query_generation_attempts=generated_query.attempts,
         query_target_capability=generated_query.target_capability,
-        query_chain_supported=generated_query.chain_supported,
     )
 
     blocked_tools: set[str] | None = None
     chain_seed = source_chain_seed
     chain_context = query_chain_context
     if plan.missing_function:
-        if not source_chain_seed:
-            logger.debug(
-                "Missing-function requires a dependency chain for {}; "
-                "retrying with a fresh seed.",
-                server_name,
+        hidden_tool = str(plan.hidden_tool)
+        if not hidden_tool:
+            raise RuntimeError(
+                "missing-function plan reached Query without a bound target"
             )
-            return GeneratedQueryContract(
-                generated_query=generated_query,
-                user_query=user_query,
-                blocked_tools=None,
-                chain_seed=None,
-                chain_context={},
-                teacher_visible_tools=teacher_visible_tools,
-                retry_candidate=True,
-            )
-        hidden_tool = source_chain_seed[-1]
-        plan.hidden_tool = hidden_tool
-        teacher_visible_tools = _build_teacher_visible_tools(server_tools, plan)
+        teacher_visible_tools = build_teacher_visible_tools(server_tools, plan)
         blocked_tools = {hidden_tool}
         chain_seed = None
         chain_context = {}
@@ -115,4 +93,5 @@ def generate_query_contract(
         chain_seed=chain_seed,
         chain_context=chain_context,
         teacher_visible_tools=teacher_visible_tools,
+        plan=plan,
     )

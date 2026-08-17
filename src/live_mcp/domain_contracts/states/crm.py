@@ -31,6 +31,7 @@ CRM_STATE_FACTS = {
     ),
     "list_leads": facts(),
     "create_contact": facts(post=(out("contact", "contact_id", "contact.exists"),)),
+    "list_contacts": facts(),
     "update_contact": facts(pre=(arg("contact", "contact_id", "contact.exists"),)),
     "delete_contact": facts(
         pre=(

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-import math
 import random
 import time
+import traceback
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Any
@@ -17,41 +17,17 @@ from src.live_mcp.domain_allocation import (
     jaccard_unique_sequence_count,
 )
 from src.live_mcp.fsm import RobustnessPlan
+from src.live_mcp.generation.mix_policy import (
+    default_difficulty_mix,
+    largest_remainder_mix_quotas,
+)
 from src.live_mcp.types import LiveTask
-
-
-def largest_remainder_mix_quotas(
-    target: int,
-    weights: dict[str, float],
-) -> dict[str, int]:
-    """Allocate an exact accepted-row target across configured mix weights."""
-    if target < 0:
-        raise ValueError("target must be non-negative")
-    if not weights:
-        raise ValueError("mix weights must not be empty")
-    normalized = {str(key): float(value) for key, value in weights.items()}
-    if any(value < 0 for value in normalized.values()):
-        raise ValueError("mix weights must be non-negative")
-    total = sum(normalized.values())
-    if total <= 0:
-        raise ValueError("mix weights must sum to a positive value")
-    exact = {
-        key: target * value / total
-        for key, value in normalized.items()
-    }
-    quotas = {key: math.floor(value) for key, value in exact.items()}
-    remaining = target - sum(quotas.values())
-    order = sorted(
-        normalized,
-        key=lambda key: (-(exact[key] - math.floor(exact[key])), key),
-    )
-    for key in order[:remaining]:
-        quotas[key] += 1
-    return quotas
 
 
 def _difficulty_attempt_schedule(
     quotas: dict[str, int],
+    *,
+    fill_shortfalls: bool = True,
 ) -> list[str]:
     """Interleave quota-specific attempts without allowing stratum substitution.
 
@@ -61,7 +37,11 @@ def _difficulty_attempt_schedule(
     """
     import math as _math
     attempts = {
-        difficulty: quota + max(_math.ceil(quota * 0.5), 2)
+        difficulty: (
+            quota + max(_math.ceil(quota * 0.5), 2)
+            if fill_shortfalls
+            else quota
+        )
         for difficulty, quota in quotas.items()
         if quota > 0
     }
@@ -85,7 +65,9 @@ class BatchGenerationMixin:
         irrelevance_count: int | None = None,
         distractor_rate: float = 0.40,
         missing_function_rate: float = 1500 / (10895 + 1500),
+        fixed_attempt_budget: bool | None = None,
         progress_callback: Callable[[list[LiveTask]], None] | None = None,
+        failure_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> list[LiveTask]:
         tasks: list[LiveTask] = []
         if server_name == "all":
@@ -111,7 +93,19 @@ class BatchGenerationMixin:
             rotation = (seed // stride) % len(servers)
             servers = servers[rotation:] + servers[:rotation]
 
-        effective_mix = difficulty_mix or {"complete": 0.6, "missing": 0.2, "minimal": 0.2}
+        effective_mix = difficulty_mix or default_difficulty_mix()
+        if fixed_attempt_budget is None:
+            fixed_attempt_budget_raw = os.environ.get(
+                "LIVEMCP_FIXED_ATTEMPT_BUDGET", "0",
+            )
+            if fixed_attempt_budget_raw not in {"0", "1"}:
+                raise ValueError(
+                    "LIVEMCP_FIXED_ATTEMPT_BUDGET must be 0 or 1, got "
+                    f"{fixed_attempt_budget_raw!r}"
+                )
+            fixed_attempt_budget = fixed_attempt_budget_raw == "1"
+        elif not isinstance(fixed_attempt_budget, bool):
+            raise TypeError("fixed_attempt_budget must be bool or None")
 
         if irrelevance_count is not None:
             if not 0 <= irrelevance_count <= count:
@@ -183,9 +177,13 @@ class BatchGenerationMixin:
                 domain_target, effective_mix,
             )
             difficulty_quotas_by_domain[current_server] = difficulty_quotas
-            difficulty_schedule = _difficulty_attempt_schedule(difficulty_quotas)
+            difficulty_schedule = _difficulty_attempt_schedule(
+                difficulty_quotas,
+                fill_shortfalls=not fixed_attempt_budget,
+            )
             domain_max_failures[current_server] = (
-                len(difficulty_schedule) - domain_target
+                -1 if fixed_attempt_budget
+                else len(difficulty_schedule) - domain_target
             )
             specs = []
             domain_state_seed_base = seed + global_seed_offset
@@ -205,11 +203,11 @@ class BatchGenerationMixin:
             max_specs_per_domain = max(max_specs_per_domain, len(specs))
 
         # Round-robin interleave so workers pick up tasks from different domains
-        task_specs: list[tuple[str, int, int, str]] = []
+        candidate_specs: list[tuple[str, int, int, str]] = []
         for i in range(max_specs_per_domain):
             for s in servers:
                 if i < len(per_domain_specs[s]):
-                    task_specs.append(per_domain_specs[s][i])
+                    candidate_specs.append(per_domain_specs[s][i])
 
         # ── Parallel generation with ThreadPoolExecutor ──
         configured_workers_raw = os.environ.get("LIVEMCP_GENERATION_MAX_WORKERS", "8")
@@ -229,7 +227,7 @@ class BatchGenerationMixin:
         # demultiplexing.  Limiting workers to the number of domains made every
         # serial per-domain production run single-threaded, starving a batched
         # four-GPU Teacher endpoint.  Bound by candidate work, not domain count.
-        max_workers = min(configured_workers, max(1, len(task_specs)))
+        max_workers = min(configured_workers, max(1, len(candidate_specs)))
         domain_ok: dict[str, int] = {s: 0 for s in servers}
         difficulty_ok: dict[str, dict[str, int]] = {
             server: {difficulty: 0 for difficulty in quotas}
@@ -240,18 +238,21 @@ class BatchGenerationMixin:
         completed_futures = 0
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures: dict[Any, tuple[str, int, str]] = {}
+            futures: dict[Any, tuple[str, int, int, str]] = {}
             spec_index = 0
 
             def submit_until_full() -> None:
                 nonlocal spec_index, submitted_futures
-                while len(futures) < max_workers and spec_index < len(task_specs):
+                while (
+                    len(futures) < max_workers
+                    and spec_index < len(candidate_specs)
+                ):
                     (
                         current_server,
                         task_seed,
                         state_seed,
                         difficulty,
-                    ) = task_specs[spec_index]
+                    ) = candidate_specs[spec_index]
                     spec_index += 1
                     if domain_ok[current_server] >= domain_quotas[current_server]:
                         continue
@@ -260,14 +261,20 @@ class BatchGenerationMixin:
                         >= difficulty_quotas_by_domain[current_server][difficulty]
                     ):
                         continue
-                    if domain_failed_count[current_server] >= domain_max_failures[current_server]:
+                    if (
+                        domain_max_failures[current_server] >= 0
+                        and domain_failed_count[current_server]
+                        >= domain_max_failures[current_server]
+                    ):
                         continue
                     fut = executor.submit(
                         self._generate_task_with_postprocess,
                         current_server, task_seed, state_seed, difficulty,
                         distractor_rate, missing_function_rate,
                     )
-                    futures[fut] = (current_server, task_seed, difficulty)
+                    futures[fut] = (
+                        current_server, task_seed, state_seed, difficulty,
+                    )
                     submitted_futures += 1
 
             submit_until_full()
@@ -275,7 +282,12 @@ class BatchGenerationMixin:
                 done, _ = wait(tuple(futures), return_when=FIRST_COMPLETED)
                 for fut in done:
                     completed_futures += 1
-                    current_server, task_seed, difficulty = futures.pop(fut)
+                    (
+                        current_server,
+                        task_seed,
+                        state_seed,
+                        difficulty,
+                    ) = futures.pop(fut)
                     try:
                         task = fut.result()
                     except Exception as e:
@@ -285,10 +297,48 @@ class BatchGenerationMixin:
                             f"generate failed for {current_server} "
                             f"(seed={task_seed}, {domain_failed_count[current_server]}x): {e}"
                         )
+                        if failure_callback is not None:
+                            structured_reason = getattr(e, "reason", None)
+                            reason_code = (
+                                structured_reason
+                                if isinstance(structured_reason, str)
+                                and structured_reason
+                                else "candidate_exception"
+                            )
+                            failure_callback({
+                                "candidate_kind": "normal",
+                                "stage": str(
+                                    getattr(e, "stage", "candidate_generation")
+                                ),
+                                "reason_code": reason_code,
+                                "domain": current_server,
+                                "generation_seed": task_seed,
+                                "state_seed": state_seed,
+                                "difficulty": difficulty,
+                                "exception_type": type(e).__name__,
+                                "message": str(e),
+                                "traceback": "".join(
+                                    traceback.format_exception(e)
+                                ),
+                                "details": getattr(e, "details", {}),
+                                "rejection_history": getattr(
+                                    e, "rejection_history", [],
+                                ),
+                            })
                         continue
                     if task is None:
                         failed += 1
                         domain_failed_count[current_server] += 1
+                        if failure_callback is not None:
+                            failure_callback({
+                                "candidate_kind": "normal",
+                                "stage": "candidate_generation",
+                                "reason_code": "candidate_returned_none",
+                                "domain": current_server,
+                                "generation_seed": task_seed,
+                                "state_seed": state_seed,
+                                "difficulty": difficulty,
+                            })
                         continue
                     if domain_ok[current_server] >= domain_quotas[current_server]:
                         continue
@@ -297,6 +347,11 @@ class BatchGenerationMixin:
                         >= difficulty_quotas_by_domain[current_server][difficulty]
                     ):
                         continue
+                    # Freeze the run-level attempt-budget contract on every
+                    # accepted task before progress callbacks can checkpoint
+                    # it.  Downstream projection must not re-derive artifact
+                    # purpose from the environment of a later process.
+                    task.metadata["fixed_attempt_budget"] = fixed_attempt_budget
                     tasks.append(task)
                     domain_ok[current_server] += 1
                     difficulty_ok[current_server][difficulty] += 1
@@ -354,7 +409,32 @@ class BatchGenerationMixin:
                 )
 
         # ── irrelevance tasks (5%) ──
-        irr = self._generate_irrelevant_tasks(n_irrelevant, seed + 9999, servers)
+        try:
+            irrelevance_kwargs = {}
+            if failure_callback is not None:
+                irrelevance_kwargs["failure_callback"] = failure_callback
+            if fixed_attempt_budget:
+                irrelevance_kwargs["max_candidate_attempts"] = n_irrelevant
+            irr = self._generate_irrelevant_tasks(
+                n_irrelevant, seed + 9999, servers, **irrelevance_kwargs,
+            )
+        except Exception as exc:
+            if failure_callback is not None:
+                failure_callback({
+                    "candidate_kind": "irrelevance",
+                    "stage": "irrelevance_batch",
+                    "reason_code": "unhandled_batch_exception",
+                    "domain": ",".join(servers),
+                    "generation_seed": seed + 9999,
+                    "state_seed": seed + 9999,
+                    "difficulty": "minimal",
+                    "exception_type": type(exc).__name__,
+                    "message": str(exc),
+                    "traceback": "".join(traceback.format_exception(exc)),
+                })
+            raise
+        for task in irr:
+            task.metadata["fixed_attempt_budget"] = fixed_attempt_budget
         tasks.extend(irr)
 
         # ── Dedup is deferred to the corpus shard split stage ──
@@ -369,7 +449,7 @@ class BatchGenerationMixin:
         # raise at 0% so callers do not silently write empty Parquet files.
         # Skip the guard entirely when the caller explicitly asked for 0
         # tasks (e.g. val-only or train-only generation).
-        if count > 0 and not tasks:
+        if count > 0 and not tasks and not fixed_attempt_budget:
             raise RuntimeError(
                 f"generate_many produced 0 tasks (target {count}, "
                 f"failures={failed}, dedup_removed={removed}). "
@@ -427,8 +507,8 @@ class BatchGenerationMixin:
         Samples a robustness plan from seed, then passes it to generate_one
         so all perturbations are applied before Teacher processing and replay.
 
-        Returns None if generate_one raises, so the caller can count failures
-        and retry with a new seed.
+        Exceptions propagate to the coordinator, which records the failed
+        candidate before scheduling the next deterministic attempt.
         """
         all_tools_pool = self.manager.registry.all_tools_with_servers()
         domain_tools = self.manager.registry.server_tools(server_name)
@@ -445,19 +525,3 @@ class BatchGenerationMixin:
             server_name, seed=seed, difficulty=difficulty,
             robustness_plan=plan, state_seed=state_seed,
         )
-
-    @staticmethod
-    def _pick_difficulty(seed: int, difficulty_mix: dict[str, float]) -> str:
-        if not difficulty_mix:
-            return "complete"
-        rng = random.Random(seed)
-        threshold = rng.random()
-        cumulative = 0.0
-        for name, weight in sorted(difficulty_mix.items()):
-            cumulative += weight
-            if threshold <= cumulative:
-                return name
-        return next(iter(sorted(difficulty_mix)))
-
-
-

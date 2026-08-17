@@ -1,6 +1,5 @@
 from src.live_mcp.corpus.planning import (
     _batch_chain_quotas,
-    _generation_args,
     _select_bucket,
     _select_domain,
 )
@@ -28,20 +27,6 @@ def test_select_bucket_returns_none_without_native_gap() -> None:
         "missing_function": 0,
         "internal_abstention_proxy": 100,
     }) is None
-
-
-def test_mcp_generation_args_are_provenance_isolated() -> None:
-    args = _generation_args("mcp_conversation")
-    assert "--tool-required-only" in args
-    assert args[args.index("--missing-function-rate") + 1] == "0"
-    assert args[args.index("--irrelevance-ratio") + 1] == "0"
-
-
-def test_missing_generation_args_are_provenance_isolated() -> None:
-    args = _generation_args("missing_function")
-    assert "--tool-required-only" not in args
-    assert args[args.index("--missing-function-rate") + 1] == "1"
-    assert args[args.index("--irrelevance-ratio") + 1] == "0"
 
 
 def test_select_domain_uses_largest_gap_in_selected_bucket() -> None:

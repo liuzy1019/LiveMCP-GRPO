@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 
 import re
 
-from dataclasses import asdict, dataclass
 
 from typing import Any
 
@@ -705,6 +703,7 @@ def _shopping_relational_recommendation_issue(
             re.IGNORECASE,
         ))
         relational = current_relation or (prior_relation and anaphoric_followup)
+        grounded_relational_call_seen = False
         for event in _successful_history(round_trace):
             if event.get("tool_name") == "get_recommendations" and relational:
                 seed_id = _normalize(
@@ -719,9 +718,14 @@ def _shopping_relational_recommendation_issue(
                         re.IGNORECASE,
                     )
                 )
-                if not seed_id or (
-                    seed_id not in observed_product_ids and not user_exposes_seed
-                ):
+                seed_is_grounded = bool(
+                    seed_id
+                    and (
+                        seed_id in observed_product_ids
+                        or user_exposes_seed
+                    )
+                )
+                if not seed_is_grounded and not grounded_relational_call_seen:
                     return SemanticQuarantineIssue(
                         reason_code=(
                             "shopping_relational_recommendation_without_grounded_seed"
@@ -737,6 +741,9 @@ def _shopping_relational_recommendation_issue(
                         },
                         hard_gate=False,
                     )
+                grounded_relational_call_seen = (
+                    grounded_relational_call_seen or seed_is_grounded
+                )
             observe(event)
         prior_relation = prior_relation or current_relation
     return None

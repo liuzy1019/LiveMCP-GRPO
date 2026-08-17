@@ -6,7 +6,10 @@ from loguru import logger
 
 from src.live_mcp.contracts.chain_simulator import simulate_symbolic_chain
 from src.live_mcp.contracts.factory import build_contract_registry
-from src.live_mcp.dependency_chain_policy import chain_contract_issue
+from src.live_mcp.dependency_chain_policy import (
+    chain_contract_issue,
+    goal_coherence_issue,
+)
 
 
 class DependencyChainCatalogMixin:
@@ -54,15 +57,19 @@ class DependencyChainCatalogMixin:
             key = tuple(c)
             task_seed_issue = chain_contract_issue(server_name, c)
             if task_seed_issue is None and not self._uses_paper_baseline():
-                _, simulation_issues = simulate_symbolic_chain(
+                task_seed_issue = goal_coherence_issue(
                     contract_registry, server_name, c,
                 )
-                task_seed_issue = (
-                    f"{simulation_issues[0].tool_name}:"
-                    f"{simulation_issues[0].predicate.slot}:"
-                    f"{simulation_issues[0].reason}"
-                    if simulation_issues else None
-                )
+                if task_seed_issue is None:
+                    _, simulation_issues = simulate_symbolic_chain(
+                        contract_registry, server_name, c,
+                    )
+                    task_seed_issue = (
+                        f"{simulation_issues[0].tool_name}:"
+                        f"{simulation_issues[0].predicate.slot}:"
+                        f"{simulation_issues[0].reason}"
+                        if simulation_issues else None
+                    )
             if task_seed_issue:
                 task_seed_drop_reasons[task_seed_issue] = (
                     task_seed_drop_reasons.get(task_seed_issue, 0) + 1

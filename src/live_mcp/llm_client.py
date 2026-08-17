@@ -16,12 +16,7 @@ from __future__ import annotations
 import os
 import threading
 import re
-from typing import Any
-
 from loguru import logger
-
-from src.utils import extract_json
-
 
 _CONTEXT_LENGTH_ERROR_RE = re.compile(
     r"maximum context length is\s+(?P<context>\d+)\s+tokens.*?"
@@ -30,6 +25,7 @@ _CONTEXT_LENGTH_ERROR_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _MIN_CONTEXT_RETRY_TOKENS = 64
+_CONTEXT_RETRY_FRAMING_MARGIN = 8
 
 
 def _remaining_context_output_budget(
@@ -49,9 +45,12 @@ def _remaining_context_output_budget(
     context_tokens = int(match.group("context"))
     input_tokens = int(match.group("input"))
     remaining = context_tokens - input_tokens
-    if not (_MIN_CONTEXT_RETRY_TOKENS <= remaining < requested_max_tokens):
+    adjusted = remaining - _CONTEXT_RETRY_FRAMING_MARGIN
+    if not (
+        _MIN_CONTEXT_RETRY_TOKENS <= adjusted < requested_max_tokens
+    ):
         return None
-    return remaining
+    return adjusted
 
 # Lazy imports to avoid hard dependency on model packages
 _HAS_TRANSFORMERS = False
@@ -160,19 +159,6 @@ class LLMClient:
             )
             logger.info("Model loaded")
 
-    def generate(
-        self,
-        prompt: str,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-    ) -> str:
-        """Generate text from prompt (delegates to generate_chat for chat-template-aware generation)."""
-        return self.generate_chat(
-            [{"role": "user", "content": prompt}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-
     def generate_chat(
         self,
         messages: list[dict[str, str]],
@@ -235,19 +221,6 @@ class LLMClient:
             request_kwargs["max_tokens"] = adjusted_max_tokens
             response = self._client.chat.completions.create(**request_kwargs)
         return response.choices[0].message.content or ""
-
-    def generate_json(
-        self,
-        prompt: str,
-        temperature: float | None = None,
-    ) -> dict[str, Any]:
-        """Generate and parse JSON response."""
-        raw = self.generate_chat(
-            [{"role": "user", "content": prompt}],
-            temperature,
-            json_mode=True,
-        )
-        return extract_json(raw)
 
     def _generate_local(self, prompt: str, temperature: float, max_tokens: int) -> str:
         """Low-level local generation via transformers pipeline."""

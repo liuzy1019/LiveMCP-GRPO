@@ -68,3 +68,30 @@ def implicit_directions(
         ):
             directions.append((source_name, target_name))
     return directions
+
+
+def implicit_transition_bindings(
+    source: ToolContract,
+    target: ToolContract,
+) -> tuple[tuple[str, str, str], ...]:
+    """Return typed source-field to target-argument state transitions."""
+    target_predicates = (
+        *target.preconditions,
+        *(
+            predicate
+            for group in target.precondition_groups
+            for predicate in group
+        ),
+    )
+    return tuple(sorted({
+        (
+            source_predicate.subject.name,
+            target_predicate.subject.name,
+            source_predicate.slot,
+        )
+        for source_predicate in source.postconditions
+        for target_predicate in target_predicates
+        if source_predicate.subject.source in {"argument", "output"}
+        and target_predicate.subject.source == "argument"
+        and transition_matches(source_predicate, target_predicate)
+    }))

@@ -11,10 +11,7 @@ class PromptProfile:
     paper_baseline: bool = False
     policy_private: bool = False
     natural_selector: bool = False
-    flexible_expression: bool = False
     dependency_necessary: bool = False
-    task_spec: bool = False
-    decision_stratified: bool = False
 
 
 PAPER_GENERATION_BASELINE = PromptProfile(
@@ -30,10 +27,7 @@ PROMPT_PROFILES: dict[str, PromptProfile] = {
         name="local_trainable_v1",
         policy_private=True,
         natural_selector=True,
-        flexible_expression=True,
         dependency_necessary=True,
-        task_spec=True,
-        decision_stratified=True,
     ),
 }
 
@@ -49,3 +43,26 @@ def resolve_prompt_profile(value: str | PromptProfile) -> PromptProfile:
             f"unknown prompt profile {name!r}; "
             f"expected one of {sorted(PROMPT_PROFILES)}"
         ) from exc
+
+
+def requires_outcome_replay(value: str | PromptProfile) -> bool:
+    """Return whether replayed task outcomes are a profile hard gate.
+
+    PROVE's published replay filter counts schema and execution errors only.
+    Reproducing locally-derived success criteria is a training-consumability
+    extension owned by the local profile.
+    """
+    if not isinstance(value, PromptProfile) and not str(value or "").strip():
+        # Legacy artifacts did not persist a prompt profile. Keep their prior
+        # fail-closed outcome requirement; never infer paper semantics.
+        return True
+    return not resolve_prompt_profile(value).paper_baseline
+
+
+__all__ = [
+    "PAPER_GENERATION_BASELINE",
+    "PROMPT_PROFILES",
+    "PromptProfile",
+    "requires_outcome_replay",
+    "resolve_prompt_profile",
+]

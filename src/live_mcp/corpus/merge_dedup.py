@@ -2,38 +2,18 @@
 
 from __future__ import annotations
 
-import argparse
-import hashlib
 import json
-import math
-import os
-import re
 import sys
 from collections import defaultdict
 from collections.abc import Hashable
-from datetime import date
-from functools import lru_cache
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-from src.live_mcp.protocol.observation import (
-    TRAJECTORY_SCHEMA_VERSION, OBSERVATION_SCHEMA_VERSION,
-    OBSERVATION_PROJECTION_VERSION, compute_server_schema_hash,
-)
-from src.live_mcp.domain_allocation import (
-    capacity_weighted_domain_quotas, position_aware_jaccard,
-)
-from src.live_mcp.registry.tool_semantics import (
-    is_mutating_tool, unresolved_failed_tool_names,
-)
-from src.live_mcp.corpus.semantic_quarantine import evaluate_semantic_quarantine
-from src.live_mcp.domain_contracts.semantic_policies import evaluate_domain_label_issue
 
 from src.live_mcp.corpus.merge_allocation import (
     _stratified_head,
@@ -216,16 +196,6 @@ def _select_chain_bin_quotas(
     report["selected"] = dict(quotas)
     return result, report
 
-def _row_jaccard(a: pd.Series, b: pd.Series, mode: str = "prove") -> float:
-    seq_a, seq_b = _row_tool_sequence(a, mode=mode), _row_tool_sequence(b, mode=mode)
-    if not seq_a and not seq_b:
-        return 0.0
-    if not seq_a or not seq_b:
-        return 0.0
-    pos_a = set(enumerate(seq_a))
-    pos_b = set(enumerate(seq_b))
-    return len(pos_a & pos_b) / len(pos_a | pos_b)
-
 def _dedup_jaccard(
     df: pd.DataFrame,
     threshold: float = 0.70,
@@ -237,11 +207,16 @@ def _dedup_jaccard(
     enriched local mode exists only for separately labelled diagnostics.
     """
     kept: list[Hashable] = []
-    kept_sets: list[frozenset[tuple[int, str]]] = []
-    inverted: dict[tuple[int, str], list[int]] = defaultdict(list)
+    kept_sets: list[frozenset[Hashable]] = []
+    inverted: dict[Hashable, list[int]] = defaultdict(list)
     removed = 0
     for idx, row in df.iterrows():
-        sequence_set = frozenset(enumerate(_row_tool_sequence(row, mode=mode)))
+        sequence = _row_tool_sequence(row, mode=mode)
+        sequence_set: frozenset[Hashable] = (
+            frozenset(sequence)
+            if mode == "prove"
+            else frozenset(enumerate(sequence))
+        )
         if not sequence_set:
             kept.append(idx)
             kept_sets.append(sequence_set)
@@ -277,10 +252,10 @@ def _dedup_jaccard_with_fixed_rows(
         raise ValueError("fixed_mask length must match dataframe")
     fixed_flags = [bool(value) for value in fixed_mask.tolist()]
     kept: list[Hashable] = []
-    kept_sets: list[frozenset[tuple[int, str]]] = []
-    inverted: dict[tuple[int, str], list[int]] = defaultdict(list)
+    kept_sets: list[frozenset[Hashable]] = []
+    inverted: dict[Hashable, list[int]] = defaultdict(list)
 
-    def retain(idx: Hashable, sequence_set: frozenset[tuple[int, str]]) -> None:
+    def retain(idx: Hashable, sequence_set: frozenset[Hashable]) -> None:
         position = len(kept)
         kept.append(idx)
         kept_sets.append(sequence_set)
@@ -292,13 +267,24 @@ def _dedup_jaccard_with_fixed_rows(
     for position, (idx, row) in enumerate(df.iterrows()):
         if not fixed_flags[position]:
             continue
-        retain(idx, frozenset(enumerate(_row_tool_sequence(row, mode=mode))))
+        sequence = _row_tool_sequence(row, mode=mode)
+        retain(
+            idx,
+            frozenset(sequence)
+            if mode == "prove"
+            else frozenset(enumerate(sequence)),
+        )
 
     removed = 0
     for position, (idx, row) in enumerate(df.iterrows()):
         if fixed_flags[position]:
             continue
-        sequence_set = frozenset(enumerate(_row_tool_sequence(row, mode=mode)))
+        sequence = _row_tool_sequence(row, mode=mode)
+        sequence_set = (
+            frozenset(sequence)
+            if mode == "prove"
+            else frozenset(enumerate(sequence))
+        )
         if not sequence_set:
             retain(idx, sequence_set)
             continue

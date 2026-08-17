@@ -93,22 +93,19 @@ def _crm_state(seed: int) -> dict[str, Any]:
             "company": company, "lead_id": "",
         }
     contact_ids = list(contacts.keys())
-    # Seed 3 deletable contacts not linked to any deal so delete_contact
-    # chains are feasible. They must exist before the task loop so a task
-    # can reference them, making them discoverable via list_tasks.
+    # Seed 3 deletable contacts not linked to any other entity. list_contacts
+    # exposes them without creating a relationship that invalidates deletion.
     deletable_specs = [
         ("Vivian Voss", "vivian@freelance.io", "FreeLabs"),
         ("Walter Webb", "walter@webbconsulting.com", "Webb Consulting"),
         ("Xena Xu", "xena@startupx.co", "StartupX"),
     ]
-    deletable_contact_ids: list[str] = []
     for d_idx, (name, email, company) in enumerate(deletable_specs):
         cid = _seed_scoped_id("contact", seed, d_idx + 200, width=4)
         contacts[cid] = {
             "contact_id": cid, "name": name, "email": email, "phone": "",
             "company": company, "lead_id": "",
         }
-        deletable_contact_ids.append(cid)
     # contact_ids_for_deal excludes deletable contacts so deals never
     # reference them, keeping them eligible for deletion.
     contact_ids_for_deal = [c for c in contact_ids]
@@ -167,11 +164,6 @@ def _crm_state(seed: int) -> dict[str, Any]:
             "created_at": (reference_date - _datetime.timedelta(days=1)).isoformat(),
         },
     }
-    # Make one task reference a deletable contact so list_tasks discovers
-    # it and delete_contact chains become feasible.
-    if deletable_contact_ids:
-        last_task_key = list(tasks.keys())[-1]
-        tasks[last_task_key]["contact_id"] = deletable_contact_ids[0]
     return {"leads": leads, "contacts": contacts, "deals": deals,
             "tasks": tasks, "notes": notes,
             "next_lead_num": len(leads) + 1, "next_contact_num": 1,

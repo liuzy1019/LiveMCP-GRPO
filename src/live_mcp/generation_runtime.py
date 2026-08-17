@@ -5,9 +5,11 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from src.live_mcp.config import SuiteConfig, load_suite_config
 from src.live_mcp.executor import LiveMCPExecutor
+from src.live_mcp.generation.mix_policy import default_difficulty_mix
 from src.live_mcp.protocol.manager import LiveMCPManager
 from src.live_mcp.types import LiveTask
 from src.live_mcp.generation.chain_scheduler import chain_fingerprint
@@ -94,7 +96,9 @@ class TeacherGenerationRuntime:
         distractor_rate: float = 0.40,
         missing_function_rate: float = 1500 / (10895 + 1500),
         prompt_profile: str = "paper_generation_baseline_v1",
+        fixed_attempt_budget: bool | None = None,
         progress_callback: Callable[[list[LiveTask]], None] | None = None,
+        failure_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> list[LiveTask]:
         """Generate tasks with the two-phase teacher."""
         self._require_started()
@@ -132,12 +136,14 @@ class TeacherGenerationRuntime:
             server_name=server_name,
             count=count,
             seed=seed,
-            difficulty_mix=difficulty_mix or {"complete": 0.6, "missing": 0.2, "minimal": 0.2},
+            difficulty_mix=difficulty_mix or default_difficulty_mix(),
             distractor_rate=distractor_rate,
             missing_function_rate=missing_function_rate,
             irrelevance_ratio=irrelevance_ratio,
             irrelevance_count=irrelevance_count,
+            fixed_attempt_budget=fixed_attempt_budget,
             progress_callback=progress_callback,
+            failure_callback=failure_callback,
         )
 
     def _require_started(self) -> None:

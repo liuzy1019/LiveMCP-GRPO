@@ -31,6 +31,7 @@ _ENTITY_ID_FIELD_TYPES: dict[str, str] = {
 }
 
 _DOMAIN_ENTITY_ID_FIELD_TYPES: dict[str, dict[str, str]] = {
+    "banking": {"txn_id": "transaction"},
     "filesystem": {
         "path": "file", "source": "file", "target": "file",
         "file1": "file", "file2": "file", "archive": "file",

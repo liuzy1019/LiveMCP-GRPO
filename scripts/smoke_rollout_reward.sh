@@ -26,9 +26,7 @@ Usage:
 Required:
   --gpus IDS             Exact physical GPU IDs, for example 0,1,2,3 or 0,2,5,7
   --reward-profile NAME  prove_baseline or oval_full
-  --experiment-profile NAME  prove_local_v1, oval_local_v1,
-                             prove_reward_gray_v1, oval_reward_gray_v1,
-                             or custom for explicitly supplied diagnostic data
+  --experiment-profile NAME  custom; current artifact paths must be explicit
 
 Options:
   --seeds IDS            Comma-separated seeds (default: 41,42,43)
@@ -36,8 +34,8 @@ Options:
   --batch-size N         Prompt groups per step (default: 16)
   --rollout-n N          Rollouts per prompt group (default: 16)
   --model PATH           Policy model (default: paper Qwen3-4B-Instruct-2507)
-  --train-file PATH      Training parquet (default: immutable PROVE proxy)
-  --val-file PATH        Validation parquet (default: immutable PROVE proxy)
+  --train-file PATH      Current certified training parquet (required)
+  --val-file PATH        Current certified validation parquet (required)
   --artifact-id ID       Explicit owner ID for experiment and Ray temp paths
   --help                  Show this message
 
@@ -122,35 +120,13 @@ if [[ "${REWARD_PROFILE}" != "oval_full" && "${REWARD_PROFILE}" != "prove_baseli
     echo "ERROR: --reward-profile must be oval_full or prove_baseline." >&2
     exit 2
 fi
-if [[ "${EXPERIMENT_PROFILE}" != "prove_local_v1" \
-    && "${EXPERIMENT_PROFILE}" != "oval_local_v1" \
-    && "${EXPERIMENT_PROFILE}" != "prove_reward_gray_v1" \
-    && "${EXPERIMENT_PROFILE}" != "oval_reward_gray_v1" \
-    && "${EXPERIMENT_PROFILE}" != "custom" ]]; then
-    echo "ERROR: unsupported --experiment-profile for reward smoke." >&2
+if [[ "${EXPERIMENT_PROFILE}" != "custom" ]]; then
+    echo "ERROR: reward smoke accepts only custom with explicit current artifact paths." >&2
     exit 2
 fi
-if [[ ("${EXPERIMENT_PROFILE}" = "prove_local_v1" \
-    || "${EXPERIMENT_PROFILE}" = "prove_reward_gray_v1") \
-    && "${REWARD_PROFILE}" != "prove_baseline" ]]; then
-    echo "ERROR: PROVE experiment profiles require --reward-profile prove_baseline." >&2
+if [[ -z "${TRAIN_FILE}" || -z "${VAL_FILE}" ]]; then
+    echo "ERROR: --train-file and --val-file are required for current-artifact smoke." >&2
     exit 2
-fi
-if [[ ("${EXPERIMENT_PROFILE}" = "oval_local_v1" \
-    || "${EXPERIMENT_PROFILE}" = "oval_reward_gray_v1") \
-    && "${REWARD_PROFILE}" != "oval_full" ]]; then
-    echo "ERROR: OVAL experiment profiles require --reward-profile oval_full." >&2
-    exit 2
-fi
-if [[ -z "${TRAIN_FILE}" ]]; then
-    if [[ "${EXPERIMENT_PROFILE}" == *"_reward_gray_v1" ]]; then
-        TRAIN_FILE="data/runs/20260728_reward_gray_r48dee_v1_train8/train.parquet"
-    else
-        TRAIN_FILE="data/runs/20260728_gt_v1_prove_composition_proxy_r48dee_train3221_val500/train.parquet"
-    fi
-fi
-if [[ -z "${VAL_FILE}" ]]; then
-    VAL_FILE="data/runs/20260728_gt_v1_prove_composition_proxy_r48dee_train3221_val500/val.parquet"
 fi
 if [[ ! -f "${TRAIN_FILE}" || ! -f "${VAL_FILE}" ]]; then
     echo "ERROR: train/val parquet not found: ${TRAIN_FILE}, ${VAL_FILE}" >&2

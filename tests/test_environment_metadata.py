@@ -33,6 +33,7 @@ from src.live_mcp.protocol.observation import (
     OBSERVATION_SCHEMA_VERSION,
     OBSERVATION_PROJECTION_VERSION,
     compute_server_schema_hash,
+    project_observation,
     serialize_tool_result,
 )
 from src.live_mcp.registry.environment_metadata import (
@@ -44,6 +45,7 @@ from src.live_mcp.registry.environment_metadata import (
     state_profiles_for_suite,
 )
 from src.live_mcp.corpus.shard_row_projection import _tool_owner_domains
+from src.live_mcp.artifact.reward_task import build_reward_task
 from src.live_mcp.registry.environment_metadata import validate_tool_owner_contract
 from src.live_mcp.dependency_value_flow import _field_values
 from src.live_mcp.generation.scenario import (
@@ -127,6 +129,52 @@ def test_policy_result_serializer_preserves_structured_failure() -> None:
     assert len(rendered) <= 4096
 
 
+def test_observation_projection_preserves_nested_entity_scalar_facts() -> None:
+    rendered = project_observation({
+        "success": True,
+        "observation": {
+            "channel": {
+                "messages": [{
+                    "message_id": "msg_0028",
+                    "channel_id": "ch_002",
+                    "content": "Can someone take a look?",
+                    "author": "dana",
+                    "metadata": {"audit": {"source": "internal"}},
+                }],
+            },
+        },
+    }, max_chars=4096)
+    parsed = json.loads(rendered)
+    message = parsed["observation"]["channel"]["messages"][0]
+
+    assert message["message_id"] == "msg_0028"
+    assert message["channel_id"] == "ch_002"
+    assert message["content"] == "Can someone take a look?"
+    assert message["author"] == "dana"
+    assert message["metadata"]["audit"] == {"_truncated_depth": True}
+
+
+def test_observation_projection_keeps_budget_after_nested_fact_fix() -> None:
+    rendered = project_observation({
+        "success": True,
+        "observation": {
+            "channel": {
+                "messages": [
+                    {
+                        "message_id": f"msg_{index:04d}",
+                        "content": "x" * 600,
+                        "author": "dana",
+                    }
+                    for index in range(100)
+                ],
+            },
+        },
+    }, max_chars=512)
+
+    assert len(rendered) <= 512
+    assert "msg_0000" in rendered
+
+
 def test_strict_prove_profile_forces_pure_task_reward() -> None:
     cfg = LiveMCPHyperparams(
         reward_profile="prove_baseline",
@@ -165,6 +213,8 @@ def test_rollout_contract_controls_are_typed_and_exported(monkeypatch) -> None:
 
 def test_trainer_defaults_to_available_sdpa_attention_backend() -> None:
     config = TrainerConfig(train_file="missing.parquet")
+    assert config.reward_profile == "prove_baseline"
+    assert config.adv_estimator == "grpo"
     assert config.attn_implementation == "sdpa"
     assert config.use_remove_padding is True
     assert (
@@ -204,12 +254,24 @@ def test_reward_worker_import_honors_strict_prove_profile() -> None:
     })
     code = """
 from src.reward import oval_reward_fn as reward
+from src.live_mcp.artifact.reward_task import build_reward_task
 runtime = reward.RewardRuntime.from_environment()
 assert runtime.cfg.reward_profile == 'prove_baseline'
 assert runtime.cfg.i_shape == 0
 assert runtime.cfg.i_process == 0
 assert runtime.cfg.lambda_safe_default == 0.0
-result = reward.compute_score('live', '', {}, {
+ground_truth = {
+    'oracle_calls': '[{"action":"tool_call","tool_name":"list_events","arguments":{}}]',
+    'success_criteria': '[]',
+    'required_tools': ['list_events'],
+    'dependency_edges': '[]',
+}
+# This test isolates cross-process reward-profile loading. Canonical artifact
+# gate coverage is exercised separately with full serialized fixtures.
+reward.validate_artifact_contract = (
+    lambda extra_info, **_: build_reward_task(extra_info)
+)
+result = reward.compute_score('live', '', ground_truth, {
     'reward_profile': 'prove_baseline',
     'prompt_profile': 'local_trainable_v1',
     'semantic_gate_profile': 'deterministic_v1',
@@ -217,6 +279,8 @@ result = reward.compute_score('live', '', {}, {
     'domain': 'calendar',
     'oracle_calls': '[{\"action\":\"tool_call\",\"tool_name\":\"list_events\",\"arguments\":{}}]',
     'success_criteria': '[]',
+    'required_tools': ['list_events'],
+    'dependency_edges': '[]',
     'allowed_terminal_actions': ['final_answer'],
     'round_contracts': [{'round_idx': 0, 'required_tools': ['list_events'], 'allowed_terminal_actions': ['final_answer']}],
     'audit_events': [{
@@ -1039,6 +1103,26 @@ def test_reversible_targets_are_live_grounded_and_round_trip() -> None:
     })["success"]
 
 
+def test_banking_observations_expose_distinct_public_account_references() -> None:
+    banking = BankingServer()
+    sid = _reset(banking, seed=42)
+
+    result = banking._call_tool({
+        "session_id": sid,
+        "name": "list_accounts",
+        "arguments": {},
+    })
+    accounts = result["observation"]["accounts"]
+    references = [account["account_last4"] for account in accounts]
+
+    assert len(references) == len(set(references)) == len(accounts)
+    assert all(reference.isdigit() and len(reference) == 4 for reference in references)
+    assert all(
+        not account["account_id"].endswith(f"_{account['account_last4']}")
+        for account in accounts
+    )
+
+
 def test_mutating_tools_have_real_footprints() -> None:
     """Exercise representative mutating tools across all ten domains."""
     banking = BankingServer(); sid = _reset(banking)
@@ -1200,6 +1284,50 @@ def test_mutating_tools_have_real_footprints() -> None:
 def _reset(server, session_id: str = "test", seed: int = 123) -> str:
     server.handle_request("session/reset", {"session_id": session_id, "seed": seed})
     return session_id
+
+
+def test_banking_seed_transaction_directions_and_statement_totals() -> None:
+    server = BankingServer()
+    sid = _reset(server, seed=44)
+    transactions = server.sessions[sid]["transactions"]
+
+    for transaction in transactions:
+        txn_type = transaction["type"]
+        if txn_type == "deposit":
+            assert "to_account" in transaction
+            assert "from_account" not in transaction
+        elif txn_type in {"withdrawal", "bill_pay"}:
+            assert "from_account" in transaction
+            assert "to_account" not in transaction
+        elif txn_type == "transfer":
+            assert "from_account" in transaction
+            assert "to_account" in transaction
+
+    business_account = next(
+        account_id
+        for account_id, account in server.sessions[sid]["accounts"].items()
+        if account["type"] == "business"
+    )
+    assert server._call_tool({
+        "session_id": sid,
+        "name": "withdraw",
+        "arguments": {"account_id": business_account, "amount": 500},
+    })["success"]
+    statement = server._call_tool({
+        "session_id": sid,
+        "name": "get_statement",
+        "arguments": {
+            "account_id": business_account,
+            "year": 2026,
+            "month": 6,
+        },
+    })["observation"]
+
+    assert statement["total_debits"] == 500
+    assert statement["total_credits"] == 2500
+    assert statement["opening_balance"] == (
+        statement["closing_balance"] - 2500 + 500
+    )
 
 
 def test_unknown_or_closed_session_does_not_revive() -> None:
@@ -1681,6 +1809,110 @@ def test_filesystem_archive_round_trip_restores_removed_file() -> None:
     assert extract["success"] is True
     assert extract["state_changed"] is True
     assert state["fs"][source] == original
+
+
+def test_filesystem_archive_format_type_size_and_checksums_are_consistent() -> None:
+    server = FilesystemServer(); sid = _reset(server)
+    source = "/home/user/notes.txt"
+    for tool_name, archive in (
+        ("tar_create", "/home/user/notes.tar"),
+        ("zip", "/home/user/notes.zip"),
+    ):
+        result = server._call_tool({
+            "session_id": sid,
+            "name": tool_name,
+            "arguments": {"archive": archive, "paths": [source]},
+        })
+        assert result["success"] is True
+
+    tar_node = server.sessions[sid]["fs"]["/home/user/notes.tar"]
+    zip_node = server.sessions[sid]["fs"]["/home/user/notes.zip"]
+    assert tar_node["archive_format"] == "tar"
+    assert zip_node["archive_format"] == "zip"
+
+    def call(name: str, path: str) -> dict[str, Any]:
+        result = server._call_tool({
+            "session_id": sid, "name": name, "arguments": {"path": path},
+        })
+        assert result["success"] is True
+        return result["observation"]
+
+    assert call("file_info", "/home/user/notes.tar")["type"] == "POSIX tar archive"
+    assert call("file_info", "/home/user/notes.zip")["type"] == "Zip archive data"
+    assert call("stat", "/home/user/notes.tar")["size"] > 0
+    assert call("stat", "/home/user/notes.zip")["size"] > 0
+    tar_md5 = call("md5sum", "/home/user/notes.tar")["md5"]
+    zip_md5 = call("md5sum", "/home/user/notes.zip")["md5"]
+    assert tar_md5 != "d41d8cd98f00b204e9800998ecf8427e"
+    assert zip_md5 != "d41d8cd98f00b204e9800998ecf8427e"
+    assert tar_md5 != zip_md5
+    assert call("sha256sum", "/home/user/notes.tar")["sha256"] != (
+        "e3b0c44298fc1c149afbf4c8996fb924"
+        "27ae41e4649b934ca495991b7852b855"
+    )
+
+    wrong_extractor = server._call_tool({
+        "session_id": sid,
+        "name": "tar_extract",
+        "arguments": {
+            "archive": "/home/user/notes.zip", "target_dir": "/home/user",
+        },
+    })
+    assert wrong_extractor["success"] is False
+
+
+def test_filesystem_text_operations_reject_archives_but_byte_safe_reads_work() -> None:
+    server = FilesystemServer(); sid = _reset(server)
+    archive = "/home/user/notes.zip"
+    source = "/home/user/notes.txt"
+    created = server._call_tool({
+        "session_id": sid,
+        "name": "zip",
+        "arguments": {"archive": archive, "paths": [source]},
+    })
+    assert created["success"] is True
+
+    text_calls = {
+        "cat": {"path": archive},
+        "head": {"path": archive, "lines": 1},
+        "tail": {"path": archive, "lines": 1},
+        "wc": {"path": archive},
+        "grep": {"path": archive, "pattern": "notes"},
+        "diff": {"file1": archive, "file2": source},
+        "sort": {"path": archive},
+        "uniq": {"path": archive},
+        "cut": {"path": archive, "delimiter": " ", "fields": "1"},
+        "sed": {"path": archive, "expression": "s/a/b/g"},
+        "awk": {"path": archive, "script": "{print $1}"},
+        "truncate": {"path": archive, "size": 1},
+        "split": {"path": archive, "lines_per_file": 1},
+        "join": {"file1": archive, "file2": source, "field": 1},
+    }
+    for tool_name, arguments in text_calls.items():
+        result = server._call_tool({
+            "session_id": sid, "name": tool_name, "arguments": arguments,
+        })
+        assert result["success"] is False, tool_name
+        assert "archive is not a text file" in result["error_message"], tool_name
+
+    for tool_name in ("stat", "file_info", "md5sum", "sha256sum", "xxd"):
+        result = server._call_tool({
+            "session_id": sid,
+            "name": tool_name,
+            "arguments": {"path": archive},
+        })
+        assert result["success"] is True, tool_name
+
+
+def test_crm_add_note_schema_matches_handler_resource_types() -> None:
+    from src.live_mcp.servers.crm.server import TOOLS as CRM_TOOLS
+
+    add_note = next(tool for tool in CRM_TOOLS if tool["name"] == "add_note")
+    schema = add_note["input_schema"]
+    assert schema["properties"]["entity_type"]["enum"] == [
+        "lead", "contact", "deal",
+    ]
+    assert schema["additionalProperties"] is False
 
 
 def test_filesystem_path_boundaries_cwd_diff_and_join_are_consistent() -> None:
@@ -2461,20 +2693,40 @@ def test_reward_exception_fails_closed(monkeypatch) -> None:
         raise RuntimeError("reward contract exploded")
 
     monkeypatch.setattr(reward_module.TaskReward, "compute", boom)
+    monkeypatch.setattr(
+        reward_module,
+        "validate_artifact_contract",
+        lambda extra_info, **_: build_reward_task(extra_info),
+    )
     reward_profile = reward_module.get_config().reward_profile
     with pytest.raises(reward_module.RewardIntegrityError, match="reward contract exploded"):
         reward_module.compute_score(
             "live",
             "",
-            {"oracle_calls": json.dumps([{
-                "action": "tool_call", "tool_name": "list_accounts", "arguments": {},
-            }]), "success_criteria": "[]"},
+            {
+                "oracle_calls": json.dumps([{
+                    "action": "tool_call",
+                    "tool_name": "list_accounts",
+                    "arguments": {},
+                }]),
+                "success_criteria": "[]",
+                "required_tools": ["list_accounts"],
+                "dependency_edges": "[]",
+            },
             {
                 "reward_profile": reward_profile,
                 "prompt_profile": "local_trainable_v1",
                 "semantic_gate_profile": "deterministic_v1",
                 "artifact_purpose": "training_candidate",
                 "domain": "banking",
+                "oracle_calls": json.dumps([{
+                    "action": "tool_call",
+                    "tool_name": "list_accounts",
+                    "arguments": {},
+                }]),
+                "success_criteria": "[]",
+                "required_tools": ["list_accounts"],
+                "dependency_edges": "[]",
                 "allowed_terminal_actions": ["final_answer"],
                 "round_contracts": [{
                     "round_idx": 0,
@@ -2489,6 +2741,52 @@ def test_reward_exception_fails_closed(monkeypatch) -> None:
                     "terminal_action": "final_answer",
                 }],
             },
+        )
+
+
+def test_reward_rejects_divergent_ground_truth_before_scoring() -> None:
+    reward_profile = reward_module.get_config().reward_profile
+    extra_info = {
+        "reward_profile": reward_profile,
+        "prompt_profile": "local_trainable_v1",
+        "semantic_gate_profile": "deterministic_v1",
+        "artifact_purpose": "training_candidate",
+        "domain": "banking",
+        "oracle_calls": json.dumps([{
+            "action": "tool_call",
+            "tool_name": "list_accounts",
+            "arguments": {},
+        }]),
+        "success_criteria": "[]",
+        "required_tools": ["list_accounts"],
+        "dependency_edges": "[]",
+        "allowed_terminal_actions": ["final_answer"],
+        "round_contracts": [{
+            "round_idx": 0,
+            "required_tools": ["list_accounts"],
+            "allowed_terminal_actions": ["final_answer"],
+        }],
+        "audit_events": [{
+            "event_id": "terminal",
+            "session_id": "s",
+            "step": 0,
+            "action_type": "final_answer",
+            "terminal_action": "final_answer",
+        }],
+    }
+    ground_truth = {
+        "oracle_calls": extra_info["oracle_calls"],
+        "success_criteria": "[]",
+        "required_tools": [],
+        "dependency_edges": "[]",
+    }
+
+    with pytest.raises(
+        reward_module.RewardIntegrityError,
+        match="ground_truth mismatch for required_tools",
+    ):
+        reward_module.compute_score(
+            "live", "", ground_truth, extra_info,
         )
 
 

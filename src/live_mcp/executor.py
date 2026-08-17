@@ -140,33 +140,6 @@ class LiveMCPExecutor:
             },
         )
 
-    def execute_many(
-        self,
-        session_id: str,
-        tool_calls: list[ToolCall],
-        mode: str = "sequential",
-        blocked_tools: set[str] | None = None,
-        domain: str | None = None,
-    ) -> list[ToolExecutionResult]:
-        if mode != "sequential":
-            return [
-                ToolExecutionResult(
-                    success=False,
-                    tool_name=call.name,
-                    canonical_tool_name=self.schema_registry.canonical_name(call.name),
-                    call_id=call.call_id,
-                    session_id=session_id,
-                    observation=None,
-                    error_type=errors.PARALLEL_NOT_SUPPORTED,
-                    error_message=f"unsupported execute_many mode: {mode}",
-                    schema_valid=False,
-                    state_changed=False,
-                    latency_ms=0,
-                )
-                for call in tool_calls
-            ]
-        return [self.execute(session_id, call, blocked_tools=blocked_tools, domain=domain) for call in tool_calls]
-
     def _result(
         self,
         tool_call: ToolCall,
